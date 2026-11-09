@@ -1,7 +1,7 @@
 {
+  "scope": "OpenTelemetry source-clause inventory and gap provenance; this is source analysis, not an old eval execution dataset. Current execution results are in logging-remediation-results.json.",
   "baseline_commit": "4e1e51f300510b26114fdc1b5ef528b3b6f09760",
-  "scope": "All tracked Markdown under the two requested skills and shared skills/references. A match outside application-log policy is not automatically coverage. Zero matches prove only absence of these explicit concepts/identifiers, not model inability.",
-  "files": [
+  "baseline_files": [
     {
       "path": "skills/otel-audit/SKILL.md",
       "sha256": "fef834d77d8d6d0230228a4d8f52f277850cb8e6e9b56fd0b46c156ee3c9fa40"
@@ -83,7 +83,7 @@
       "sha256": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a"
     }
   ],
-  "searches": {
+  "baseline_source_searches": {
     "occurrence_vs_observed_time": {
       "pattern": "ObservedTimestamp|Observed.Timestamp",
       "hits": []
@@ -140,13 +140,10 @@
       ]
     }
   },
-  "claude_guidance_inventory_at_62e0391": {
+  "primary_source_inventory": {
     "route": "actual Claude Desktop",
-    "session": "app://localhost/cowork/local_828a6035-abb2-4866-9c6a-15329c004055",
-    "target_head": "62e0391350c9b3464b838465b669e52da615b966",
     "model": "Claude Opus 5 (visible app selection), configured Bedrock provider",
-    "instruction_paths": 13,
-    "raw_sha256": "b5280ddc57813209c439c6bab701bb0a60992d8d9e00b887114184f642590517",
+    "source_snapshot": "62e0391350c9b3464b838465b669e52da615b966",
     "counts": {
       "inventoried_clauses": 183,
       "applicable_to_skills": 148,
@@ -163,14 +160,7 @@
       "gap_count": 25,
       "invariant_checked": "applicable is true exactly when the instruction verdict is not not_applicable"
     },
-    "counts_independently_recomputed": {
-      "covered": 87,
-      "partial": 35,
-      "not_applicable": 35,
-      "missing": 26
-    },
-    "scope": "Instruction inventory at prior frozen62e, not application/SDK runtime proof or a final current-source review. Original verdicts preserved; Codex dispositions below describe follow-up corrections, not a fabricated Claude rereview.",
-    "source_ledger": {
+    "sources": {
       "read": [
         {
           "id": "S1",
@@ -4579,7 +4569,7 @@
         "note": "The clearest published precedent for LR:89 ('Unknown severity may remain 0/absent; do not invent an ERROR classification'): an official mapping deliberately chooses UNSPECIFIED over a guessed severity and keeps the source value for reversibility."
       }
     ],
-    "dispositions": [
+    "correction_dispositions": [
       {
         "id": "GAP-1",
         "candidate": "OTEL_CONFIG_FILE supersedes the environment variables the logs classification is built on \u2014 conditional on installed declarative-config support, and partial because substituted variables survive",
@@ -4961,7 +4951,7 @@
         "rule_or_section": "LOG-SPEC-CLOSURE"
       }
     ],
-    "codex_additional_source_reads": [
+    "additional_primary_source_reads": [
       {
         "url": "https://raw.githubusercontent.com/open-telemetry/opentelemetry-collector-contrib/main/receiver/filelogreceiver/README.md",
         "scope": "collection/parsing/offset/size/retry configuration; no production Collector run"
@@ -4988,7 +4978,7 @@
       }
     ]
   },
-  "codex_residual_clause_reconciliation": {
+  "remaining_clause_dispositions": {
     "scope": "Current candidate instruction corrections;independent Claude final-clause source/convention verification pending",
     "snapshot": "c89c166bdf8ad7e170b4b4864e2d90db87a24f394bc54085dcc45948ddc0b8fc",
     "original_noncovered_rows": 61,
@@ -5117,35 +5107,352 @@
     ],
     "full_current_source_coverage_not_yet_claimed": true
   },
-  "claude_final_clause_source_verification": {
-    "status": "complete for c89 source snapshot; changes pending independent delta verification",
+  "current_clause_verification": {
+    "report": {
+      "report": "clause-resource-context-final",
+      "pr": "PR352 bounded exact-clause verification",
+      "report_kind": "independent source/convention verification of the C1/C2/C3 delta against primary OTel guidance and the resolved public Python and JS instrumentation APIs",
+      "not_a": "combined PR review; three clean execution runs; runtime certification; any runtime claim",
+      "gating": "Precedes three clean runs and the combined review; neither is advanced or substituted by this report.",
+      "generated": "2026-11-09",
+      "identity": {
+        "prior_verified": "07a6809ad77e9d1d7243e11ec6f47be5593134775c75e802dfb6734e574ac1f3",
+        "prior_matches_my_reconstruction": true,
+        "current_declared": "60bb2505414661eebf5a45fc8846fe94a73229972b8c70ec72d9bb01d59c1565",
+        "current_recomputed_from_my_reconstruction": "60bb2505414661eebf5a45fc8846fe94a73229972b8c70ec72d9bb01d59c1565",
+        "bound": true,
+        "recipe": "sha256(json.dumps(files, sort_keys=True).encode('utf-8')) - prior recipe, unchanged",
+        "manifest_entries": 13
+      },
+      "reconstruction": {
+        "method": "Applied the supplied unified hunks to my byte-exact 07a6809a reconstruction with patch(1), then verified all 13 files against the packet's declared digest, line count and byte count.",
+        "all_13_sha256_match": true,
+        "all_13_line_counts_match": true,
+        "all_13_byte_counts_match": true,
+        "changed": [
+          "skills/references/logging-readiness.md",
+          "skills/references/languages/java.md",
+          "skills/references/languages/python.md",
+          "skills/references/languages/go.md",
+          "skills/references/languages/node.md"
+        ],
+        "changed_count": 5,
+        "declared_changed": 5,
+        "unchanged_count": 8,
+        "declared_unchanged": 8,
+        "counts_agree": true,
+        "hunks": {
+          "skills/references/logging-readiness.md": "4 hunks: resource-preservation block at :71-79, selected-context block at :233-238, delivery-evidence extension at :437-443, LOG-DELIVERY acceptance row at :557; 556->579 lines",
+          "skills/references/languages/java.md": "3 hunks: Docker identity prose at :427-431, removal of the baked ENV OTEL_SERVICE_NAME line, env table row at :670",
+          "skills/references/languages/python.md": "6 hunks: CLI default removals, wrapper prose at :244-250, OTELResourceDetector import at :356, _application_resource() at :436-441 and its use at :450, env table row at :794",
+          "skills/references/languages/go.md": "1 hunk: env table row at :771",
+          "skills/references/languages/node.md": "3 hunks: Express topology row at :20, env table row at :602, logging-readiness topology block at :669-674"
+        },
+        "limit": "None for reconstruction. All hunks applied cleanly and every one of the 13 digests, line counts and byte counts matches; the aggregate identity recomputed from my own reconstruction equals 60bb2505."
+      },
+      "carried_by_reference": {
+        "note": "The 183-row primary-source ledger and all previously settled checks are carried forward by hash. No replay is claimed and none was performed.",
+        "unchanged_paths_carried_by_hash": 8,
+        "ledger_rows": 183,
+        "ledger_rows_replayed": 0,
+        "settled_not_replayed": [
+          "F1-F5 resolutions",
+          "NC-1..NC-5",
+          "V2 operation.duration closure",
+          "D1 meaningful-empty-value closure",
+          "B1/B2/B3 verdicts",
+          "C1-C4 privacy/delivery closure from 07a6809a",
+          "D-1 withdrawn status suggestion"
+        ]
+      },
+      "verdict": {
+        "headline": "C1, C2 and C3 are all supported against primary guidance and the resolved public APIs. Two of the three changes remove invented requirements rather than adding any: the blanket SERVER-SpanId expectation and the '(must be set)' OTEL_SERVICE_NAME rows. All six negative checks pass. No verified defect in the inspected scope.",
+        "c1": "supported",
+        "c2": "supported",
+        "c3": "supported",
+        "negative_checks_passed": 6,
+        "negative_checks_total": 6,
+        "verified_defects": 0,
+        "invented_requirements_added": 0,
+        "invented_requirements_removed": 2,
+        "runtime_certified": false,
+        "combined_review_performed": false,
+        "repository_executed": false,
+        "subagents_used": false
+      },
+      "clauses": [
+        {
+          "id": "C1",
+          "area": "selected context: explicit caller capture vs unsupported SERVER-only expectation",
+          "verdict": "supported",
+          "anchors": [
+            "skills/references/logging-readiness.md:233-238",
+            "skills/references/languages/node.md:669-674",
+            "skills/references/languages/node.md:20"
+          ],
+          "quotes": [
+            "For each call, derive the expected SpanId from the bridge/API's selected context, including explicit caller-side capture when used. That span may be an INTERNAL framework/handler child. Verify its ancestry to the correct request separately; do not require the log to use a SERVER ancestor's SpanId or replace valid context merely to satisfy a test. A SERVER-only target needs evidence that this is the associated span on that path.",
+            "Inspect actual HTTP/Express topology: a supported framework layer may activate an INTERNAL handler span at the logging call. Match the bridge's selected context to that exact received span and check its ancestry to the correct request; the SERVER span may be an ancestor. Preserve verified propagation and permitted layer spans instead of forcing a SERVER-only log association."
+          ],
+          "strength": "upstream MUST on the SDK: trace context fields are populated from the resolved Context. No upstream source requires a SERVER SpanId on a log record.",
+          "owner": "SDK populates from resolved Context; the bridge/API selects it; the application may capture it explicitly",
+          "source": {
+            "id": "S2",
+            "title": "Logs SDK",
+            "url": "https://opentelemetry.io/docs/specs/otel/logs/sdk/",
+            "strength": "MUST (trace context fields populated from the resolved Context when emitted)",
+            "maturity": "Stable except where noted",
+            "owner": "SDK",
+            "retrieved": "2026-11-09"
+          },
+          "source2": {
+            "id": "S1",
+            "title": "Logs API",
+            "url": "https://opentelemetry.io/docs/specs/otel/logs/api/",
+            "strength": "implicit Context SHOULD be optional and if unspecified MUST use current Context; explicit Context SHOULD be required",
+            "maturity": "Stable except where noted",
+            "owner": "SDK / bridge",
+            "retrieved": "2026-11-09"
+          },
+          "basis": "Correct, and it removes an invented requirement rather than adding one. The Logs SDK requires trace context fields to be populated from the resolved Context - explicit or current - at emit, and the Logs API makes the implicit Context default to the current Context with explicit Context required where only explicit is supported. If a framework layer has activated an INTERNAL handler span at the log call, that span IS the resolved context, so recording its SpanId is exactly conformant. A blanket SERVER-only expectation could only be met by overriding the resolved context or manufacturing IDs, which the same guide already forbids at skills/references/logging-readiness.md:231-232. Keeping ancestry verification as a separate check preserves the real requirement (the log belongs to the right request) without dictating which span in that ancestry must be the association.",
+          "node_table": "The Express row was factually wrong before and is now correct. The official package README states the instrumentation 'relies on HTTP calls to also be instrumented' and that without both 'you will not see any spans', documents its layer types as router, middleware and request_handler, lists only http.route among collected attributes, and notes that it 'renames the root span from @opentelemetry/instrumentation-http'. So HTTP owns the SERVER span and Express contributes layer spans plus route enrichment; the old row's 'HTTP server spans with route, method, status code' attributed SERVER-span attributes to Express.",
+          "node_source": {
+            "id": "JS",
+            "title": "@opentelemetry/instrumentation-express README",
+            "url": "https://raw.githubusercontent.com/open-telemetry/opentelemetry-js-contrib/main/packages/instrumentation-express/README.md",
+            "strength": "official package documentation, main branch",
+            "maturity": "n/a",
+            "owner": "JS contrib instrumentation",
+            "retrieved": "2026-11-09"
+          },
+          "evidence_scope": "The supplied counterexample records log_span_kind INTERNAL on 'request handler - /logging-workflow/:slot' with a distinct server_span_id, which matches the request_handler layer naming. SpanKind itself is stated in that supplied observation, not in the README; I did not execute it."
+        },
+        {
+          "id": "C2",
+          "area": "operator resource-only service.name preservation",
+          "verdict": "supported",
+          "anchors": [
+            "skills/references/logging-readiness.md:71-79",
+            "skills/references/languages/java.md:427-431",
+            "skills/references/languages/python.md:244-250",
+            "skills/references/languages/python.md:356",
+            "skills/references/languages/python.md:436-441",
+            "skills/references/languages/java.md:670",
+            "skills/references/languages/python.md:794",
+            "skills/references/languages/go.md:771",
+            "skills/references/languages/node.md:602"
+          ],
+          "quotes": [
+            "An existing `service.name` in the effective resource configuration is valid operator identity even when `OTEL_SERVICE_NAME` is absent. Do not add a higher-precedence Make, shell, CLI, image or JVM fallback that replaces it. Resolve resource values with the installed SDK's supported detector/merge, apply new application defaults underneath supplied values, and inspect the actual merge order. Verify the normal launcher as well as the helper with resource-only identity, explicit service-name override and absent-identity controls. These preservation checks are local workflow; SDK configuration defines each setting's precedence, and an active file loader retains its own contract."
+          ],
+          "strength": "upstream MUST that OTEL_RESOURCE_ATTRIBUTES is merged as the SECONDARY resource with user-provided resource at higher priority; OTEL_SERVICE_NAME takes precedence over service.name within OTEL_RESOURCE_ATTRIBUTES; OTEL_SERVICE_NAME has no default and no requirement to be set",
+          "owner": "SDK merge and detectors; operator supplies identity; the skill decides only what application code adds",
+          "source": {
+            "id": "S19",
+            "title": "Resource SDK",
+            "url": "https://opentelemetry.io/docs/specs/otel/resource/sdk/",
+            "strength": "MUST (OTEL_RESOURCE_ATTRIBUTES merged as SECONDARY; user-provided resource has higher priority); MUST (SDK default resource associated with the provider); SHOULD (service detector fallback)",
+            "maturity": "Stable except where noted",
+            "owner": "SDK",
+            "retrieved": "2026-11-09"
+          },
+          "source2": {
+            "id": "S14",
+            "title": "Environment Variable Specification",
+            "url": "https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/",
+            "strength": "OTEL_SERVICE_NAME takes precedence over service.name in OTEL_RESOURCE_ATTRIBUTES; no default; not required to be set",
+            "maturity": "Stable except where noted",
+            "owner": "SDK / operator",
+            "retrieved": "2026-11-09"
+          },
+          "basis": "Sound, and it does not assert a universal env-over-code precedence. The specification in fact gives user-provided code HIGHER priority than OTEL_RESOURCE_ATTRIBUTES, and the clause is consistent with that rather than contrary to it: precisely because code wins, a hardcoded application default would clobber operator identity, so the clause places new application defaults underneath supplied values and defers precedence itself to SDK configuration, stating that an active file loader retains its own contract. The Java image rule is exactly sourced: baking OTEL_SERVICE_NAME into an image would override a runtime service.name supplied only through OTEL_RESOURCE_ATTRIBUTES, because OTEL_SERVICE_NAME takes precedence over that attribute; an explicitly selected override remains valid, so the variable is not forbidden. All four table rows replace an invented '(must be set)' with 'unset - optional override': no OpenTelemetry source requires OTEL_SERVICE_NAME to be set, it has no default in the environment specification, and the SDK supplies an unknown_service fallback when service.name is absent. That is removal of a mandatory-field claim, not creation of one.",
+          "python_api": "Verified against the resolved public API. In opentelemetry-python, Resource.create computes get_aggregated_resources(_build_resource_detectors(), _DEFAULT_RESOURCE).merge(Resource(attributes)), and merge documents that the updating resource overrides - so attributes passed to create() OUTRANK the detectors. That makes the previous recipe genuinely defective: Resource.create({'service.name': os.environ.get('OTEL_SERVICE_NAME', 'my-service')}) yields my-service whenever the operator supplies identity only through OTEL_RESOURCE_ATTRIBUTES, which matches the supplied observation. The adopted _application_resource() pre-resolves OTELResourceDetector().detect().attributes and splats it after the literal, so an operator-supplied service.name wins inside the passed dict and the application default applies only when none exists. OTELResourceDetector is a public name in opentelemetry.sdk.resources, contrast the underscore-private _HostResourceDetector; its detect() percent-decodes values with parse.unquote, which supports the encoded-name case, and applies OTEL_SERVICE_NAME last so it overrides service.name from OTEL_RESOURCE_ATTRIBUTES, matching the specification precedence. Absent any identity, Resource.create appends unknown_service:<executable>, which is the SDK fallback the clause relies on.",
+          "python_source": {
+            "id": "PY",
+            "title": "opentelemetry-python opentelemetry-sdk/src/opentelemetry/sdk/resources/__init__.py",
+            "url": "https://raw.githubusercontent.com/open-telemetry/opentelemetry-python/main/opentelemetry-sdk/src/opentelemetry/sdk/resources/__init__.py",
+            "strength": "public API / implementation behaviour, main branch",
+            "maturity": "n/a",
+            "owner": "Python SDK",
+            "retrieved": "2026-11-09"
+          },
+          "cli": "Removing the --service_name and --resource_attributes defaults cannot override anything, so the change is safe irrespective of the flag mechanism; the replacement guidance routes deployment identity through OTEL_RESOURCE_ATTRIBUTES instead. The specific claim that the old --resource_attributes flag discarded an operator service.version is a supplied observation about CLI flag-to-environment mapping that I did not verify in this pass.",
+          "skip_branch": "Checked directly in the reconstruction: the operator-owned skip branch at skills/references/languages/python.md:218-224 sets only shell state and OTEL_PYTHON_LOG_AUTO_INSTRUMENTATION, and the inline helper above it imports no OpenTelemetry SDK module. No new SDK dependency is introduced on a skip path."
+        },
+        {
+          "id": "C3",
+          "area": "legitimate unknown accepted counts after completed negative responses",
+          "verdict": "supported",
+          "anchors": [
+            "skills/references/logging-readiness.md:437-443",
+            "skills/references/logging-readiness.md:557"
+          ],
+          "quotes": [
+            "Unknown accepted counts can be valid after a completed negative response: the protocol does not always return per-record counts. They do not make a known failure response pending. Record the observed response and terminal retry decision separately, such as non-retryable HTTP 400 or a completed HTTP 503 whose server wait cannot fit the remaining export budget. Assess that evidence across the report and raw observations; do not invent zero acceptance or rejection counts merely to fill a field.",
+            "Name observed completed failure responses and terminal retry decisions separately from unresolved acceptance/persistence counts; a null count alone is not a failed response-classification check."
+          ],
+          "strength": "OTLP returns per-record rejected counts only inside a populated partial_success; a plain 4xx/5xx failure carries a Status message with no per-record accounting. HTTP 400 MUST NOT be retried. 429/502/503/504 SHOULD be retried, but each attempt and inter-retry wait MUST be bounded by the remaining exporter timeout, with an earlier caller deadline taking precedence.",
+          "owner": "OTLP client (SDK exporter) and server; the reviewer owns the evidence classification",
+          "source": {
+            "id": "S9",
+            "title": "OTLP Specification",
+            "url": "https://opentelemetry.io/docs/specs/otlp/",
+            "strength": "MUST NOT retry HTTP 400; 429/502/503/504 SHOULD be retried; partial_success carries rejected counts only",
+            "maturity": "Stable for logs (OTLP 1.11.1)",
+            "owner": "OTLP client / server",
+            "retrieved": "2026-11-09"
+          },
+          "source2": {
+            "id": "S16",
+            "title": "OpenTelemetry Protocol Exporter",
+            "url": "https://opentelemetry.io/docs/specs/otel/protocol/exporter/",
+            "strength": "MUST (each attempt and inter-retry wait bounded by the remaining exporter timeout; earlier caller deadline takes precedence)",
+            "maturity": "Stable",
+            "owner": "SDK exporter",
+            "retrieved": "2026-11-09"
+          },
+          "basis": "Correct on both halves. An unknown accepted count after a completed failure is a genuine protocol consequence rather than missing diligence, because only a partial-success response carries per-record counts; and the separate insistence that a known failure response is not pending repairs the conflation the earlier wording allowed. Both worked examples are precisely sourced: HTTP 400 is non-retryable by an explicit MUST NOT, and a completed 503 whose honoured server wait cannot fit the remaining export budget is a terminal decision under the exporter rule that waits are bounded by the remaining timeout. Forbidding invented zero counts is the right direction - fabricating a zero would assert an acceptance fact the protocol never supplied. The acceptance-row sentence keeps response classification and count resolution as separate obligations, which is what the Go raw-fault rows needed; it takes no position on the prior grader outcome.",
+          "prior_preserved": "The C4 protocol-unspecified case from the 07a6809a review is retained verbatim at skills/references/logging-readiness.md:412-415, so an oversized partial-success response failure still leaves acceptance unspecified rather than resolved."
+        }
+      ],
+      "negative_checks": [
+        {
+          "check": "no universal env-over-code precedence",
+          "result": "pass",
+          "detail": "The clause defers precedence to SDK configuration explicitly ('SDK configuration defines each setting's precedence, and an active file loader retains its own contract') and never claims the environment outranks code. It is consistent with the specification's own ordering, which gives user-provided code higher priority than OTEL_RESOURCE_ATTRIBUTES; the Python recipe compensates for that ordering by pre-resolving the detector rather than by asserting a different precedence."
+        },
+        {
+          "check": "no invented rejection or zero counts",
+          "result": "pass",
+          "detail": "The adopted wording forbids exactly this - 'do not invent zero acceptance or rejection counts merely to fill a field' - and legitimises an unknown count instead. The acceptance row adds that a null count alone is not a failed classification check."
+        },
+        {
+          "check": "no forced versions",
+          "result": "pass",
+          "detail": "No version is pinned anywhere in the delta. The Python change names a public SDK symbol rather than a release; the Node table row names package roles, not versions; the Java change removes an ENV line and adds no version requirement. The standing rule against pinning release recipes is untouched."
+        },
+        {
+          "check": "no mandatory optional fields",
+          "result": "pass",
+          "detail": "The delta moves in the opposite direction: all four OTEL_SERVICE_NAME rows change from '(must be set)' to 'unset - optional override', removing a requirement no OpenTelemetry source imposes. The Java prose keeps an explicitly selected override valid rather than forbidding the variable."
+        },
+        {
+          "check": "no new SDK dependency on CLI skip paths",
+          "result": "pass",
+          "detail": "Verified in the reconstruction. The skip branch at skills/references/languages/python.md:218-224 exports shell and OTEL_PYTHON_* values only, and the inline helper preceding it imports no OpenTelemetry SDK module, so the removed intermediate approach left no residue."
+        },
+        {
+          "check": "withdrawn status suggestion from 07a6809a preserved; no Blocked substituted for an executed failed probe",
+          "result": "pass",
+          "detail": "Checked across the reconstruction: the delta introduces no status token and no Blocked mapping. The escape wording at skills/references/logging-readiness.md:92-93 and skills/references/languages/java.md:807-808 is unchanged from 07a6809a, so the withdrawn suggestion stays withdrawn and an executed-and-failed probe is still not recorded as unattemptable."
+        }
+      ],
+      "verified_defects": [],
+      "supplied_not_executed": {
+        "note": "Runtime observations in the packet were supplied by the requester and are not results I executed, reproduced or confirmed.",
+        "items": [
+          "Python SDK programmatic old example yielding my-service against a resource-only operator - mechanism independently confirmed from public SDK source; the run itself not executed here",
+          "Old CLI overriding the operator name and discarding service.version through the resource_attributes flag - not verified here",
+          "Six new maintained SDK/CLI resource cases passing and 209 focused checks passing after repair - not verified here",
+          "An intermediate helper adding an SDK import on skip branches and failing 38 guard tests - the final state is verified free of such an import; the test outcome is not",
+          "Node SDK probe resolving a resource-only operator identity - not verified here",
+          "Four previous real Node log joins to an INTERNAL handler with their own request ancestry, with the hash-bound counterexample - not verified here",
+          "Go grader raw-fault rows using a null accepted count - not verified here, and this report takes no position on that grader or runtime outcome"
+        ]
+      },
+      "sources_relied_on": [
+        {
+          "id": "S19",
+          "title": "Resource SDK",
+          "url": "https://opentelemetry.io/docs/specs/otel/resource/sdk/",
+          "strength": "MUST (OTEL_RESOURCE_ATTRIBUTES merged as SECONDARY; user-provided resource has higher priority); MUST (SDK default resource associated with the provider); SHOULD (service detector fallback)",
+          "maturity": "Stable except where noted",
+          "owner": "SDK",
+          "retrieved": "2026-11-09"
+        },
+        {
+          "id": "S14",
+          "title": "Environment Variable Specification",
+          "url": "https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/",
+          "strength": "OTEL_SERVICE_NAME takes precedence over service.name in OTEL_RESOURCE_ATTRIBUTES; no default; not required to be set",
+          "maturity": "Stable except where noted",
+          "owner": "SDK / operator",
+          "retrieved": "2026-11-09"
+        },
+        {
+          "id": "S2",
+          "title": "Logs SDK",
+          "url": "https://opentelemetry.io/docs/specs/otel/logs/sdk/",
+          "strength": "MUST (trace context fields populated from the resolved Context when emitted)",
+          "maturity": "Stable except where noted",
+          "owner": "SDK",
+          "retrieved": "2026-11-09"
+        },
+        {
+          "id": "S1",
+          "title": "Logs API",
+          "url": "https://opentelemetry.io/docs/specs/otel/logs/api/",
+          "strength": "implicit Context SHOULD be optional and if unspecified MUST use current Context; explicit Context SHOULD be required",
+          "maturity": "Stable except where noted",
+          "owner": "SDK / bridge",
+          "retrieved": "2026-11-09"
+        },
+        {
+          "id": "S9",
+          "title": "OTLP Specification",
+          "url": "https://opentelemetry.io/docs/specs/otlp/",
+          "strength": "MUST NOT retry HTTP 400; 429/502/503/504 SHOULD be retried; partial_success carries rejected counts only",
+          "maturity": "Stable for logs (OTLP 1.11.1)",
+          "owner": "OTLP client / server",
+          "retrieved": "2026-11-09"
+        },
+        {
+          "id": "S16",
+          "title": "OpenTelemetry Protocol Exporter",
+          "url": "https://opentelemetry.io/docs/specs/otel/protocol/exporter/",
+          "strength": "MUST (each attempt and inter-retry wait bounded by the remaining exporter timeout; earlier caller deadline takes precedence)",
+          "maturity": "Stable",
+          "owner": "SDK exporter",
+          "retrieved": "2026-11-09"
+        },
+        {
+          "id": "PY",
+          "title": "opentelemetry-python opentelemetry-sdk/src/opentelemetry/sdk/resources/__init__.py",
+          "url": "https://raw.githubusercontent.com/open-telemetry/opentelemetry-python/main/opentelemetry-sdk/src/opentelemetry/sdk/resources/__init__.py",
+          "strength": "public API / implementation behaviour, main branch",
+          "maturity": "n/a",
+          "owner": "Python SDK",
+          "retrieved": "2026-11-09"
+        },
+        {
+          "id": "JS",
+          "title": "@opentelemetry/instrumentation-express README",
+          "url": "https://raw.githubusercontent.com/open-telemetry/opentelemetry-js-contrib/main/packages/instrumentation-express/README.md",
+          "strength": "official package documentation, main branch",
+          "maturity": "n/a",
+          "owner": "JS contrib instrumentation",
+          "retrieved": "2026-11-09"
+        }
+      ],
+      "limitations": [
+        "Bounded exact-clause verification of the C1/C2/C3 delta. No repository execution, probe, install, edit, push, comment, credential or settings change; no subagents; no runtime certification and no runtime claim.",
+        "This is not the combined PR review and does not stand in for the three clean execution runs that precede it.",
+        "Scope is the five changed files' adopted paragraphs and table rows. Other clauses in those files and the eight unchanged files are carried by hash and were not re-verified.",
+        "The Python SDK and Express instrumentation reads establish current main-branch behaviour and public API names on 2026-11-09. They are not evidence about any pinned or installed version, and the guide's own version-neutral capability discipline still applies.",
+        "The opentelemetry-instrument CLI flag-to-environment mapping was not read in this pass; the CLI change is a removal of defaults, which cannot override operator values regardless of that mapping.",
+        "SpanKind INTERNAL on the Express handler span comes from the supplied counterexample, not from the package documentation, which does not state SpanKind.",
+        "Upstream specification positions were established by direct reads earlier in this engagement and are cited rather than re-fetched.",
+        "No access or authentication failure occurred."
+      ]
+    },
+    "sha256": "0b0573f93728368a991efe67fad8fc5f3b5e8ff9e9a7e8d752065f567b1e8f0e",
+    "runtime_claim": false,
+    "whole_pr_review": false
+  },
+  "current_instruction_identity": "60bb2505414661eebf5a45fc8846fe94a73229972b8c70ec72d9bb01d59c1565",
+  "primary_source_corroboration": {
     "route": "desktop-app",
-    "model": "Claude Opus5",
-    "provider": "Bedrock",
-    "task": "local_e428c157-fd0d-47c7-9164-80533899b19f",
-    "snapshot": {
-      "declared_source_identity": "c89c166bdf8ad7e170b4b4864e2d90db87a24f394bc54085dcc45948ddc0b8fc",
-      "recomputed_source_identity": "c89c166bdf8ad7e170b4b4864e2d90db87a24f394bc54085dcc45948ddc0b8fc",
-      "source_identity_match": true,
-      "recipe": "sha256(json.dumps(manifest['files'], sort_keys=True).encode('utf-8'))",
-      "unchanged_from_pass_1": true,
-      "files_reverified": 13,
-      "all_sha256_match": true,
-      "all_line_counts_match": true,
-      "all_byte_counts_match": true,
-      "prior_git_head_not_used": "62e0391350c9b3464b838465b669e52da615b966",
-      "remote_pr_head_substituted": false
-    },
     "raw_report_sha256": "d806652de5d630c945a8d7b62f6ab1e8ad4ef377026647696d75a4ff3bdea886",
-    "lead_counts": {
-      "conditional": 7,
-      "gap-elevated": 5,
-      "mapped-local-policy": 4,
-      "mapped-official-recommendation": 17,
-      "mapped-optional-development": 15,
-      "mapped-upstream-normative": 110,
-      "not-applicable-owner": 25
-    },
     "corroboration_counts": {
       "direct primary source read (pass 1)": 92,
       "direct primary source read (pass 2)": 91
@@ -5210,106 +5517,6 @@
         "correction": "Both documents agree on the at-most-once-per-record cap, but state the emission itself at different strengths - SHOULD in the Logs SDK and MAY in the common spec. The lead is accurate on the cap.",
         "effect": "No defect. logging-readiness.md:428-430 pairs the cap with 'inspect installed support', which accommodates the divergence; recorded as a retention note."
       }
-    ],
-    "low_impact_dispositions": [
-      {
-        "lead_id": "E1",
-        "prior": "unmapped-low-impact",
-        "resolved_to": "not-applicable-owner",
-        "resolution": "Verbatim: 'AnyValues expressing an empty value, a numerical value of zero, an empty string, or an empty array are considered meaningful and MUST be stored and passed on to processors / exporters.' Resolution: the MUST binds the SDK, not application code. Relevance to the snapshot is test design only - an assertion treating an empty or zero attribute value as absent would contradict it. logging-readiness.md:130 and :170 already discourage presence/nonempty heuristics. Reclassified not-applicable-owner with a test-design note; no new clause required."
-      },
-      {
-        "lead_id": "E9",
-        "prior": "unmapped-low-impact",
-        "resolved_to": "mapped-upstream-normative",
-        "resolution": "'Resource attributes SHOULD be exempt from the limits described above'; metric attributes exempt at this time. Independently corroborated by Go sdk/log provider.go ('does not apply to Resource attributes or log record bodies'). Resolution: logging-readiness.md:282 already requires limits scenarios to exercise 'retained identity/context', which is exactly the exemption's observable effect, and :301 requires preserving the resource. Reclassified mapped-upstream-normative as behaviourally covered; no new clause required."
-      },
-      {
-        "lead_id": "K9",
-        "prior": "unmapped-low-impact",
-        "resolved_to": "mapped-upstream-normative",
-        "resolution": "Unrecognised enum: 'the implementation MUST generate a warning and gracefully ignore the setting'. Unparseable numeric: 'SHOULD generate a warning and gracefully ignore the setting, i.e., treat them as not set', qualified as SHOULD only to avoid breaking changes in stable implementations. Resolution: the snapshot already instructs the reviewer to distinguish an effective value from a merely present one - logging-readiness.md:55-57 and :62-63, and otel-audit/SKILL.md:332-333 'An ignored environment value is not an opt-out or proof of an exporter', which is a close match for 'gracefully ignored'. Reclassified mapped-upstream-normative; no new clause required."
-      },
-      {
-        "lead_id": "M10",
-        "prior": "unmapped-low-impact",
-        "resolved_to": "not-applicable-owner",
-        "resolution": "'Default: No value'; 'If no compression value is explicitly specified, SIGs can default to the value they deem most useful among the supported options'; supported values none and gzip. Resolution: with no specified default there is nothing for an application to assert, and compression is not part of the selected loopback log-path contract. Reclassified not-applicable-owner. Explicitly NOT elevated: adding a compression clause merely because the lead exists would make an optional feature mandatory."
-      },
-      {
-        "lead_id": "M12",
-        "prior": "unmapped-low-impact",
-        "resolved_to": "conditional",
-        "resolution": "All four MUST be available with signal-specific variants; Insecure applies only to OTLP/gRPC without an http/https scheme and MAY be omitted where the gRPC client does not support it. Resolution: the snapshot's default log destination is plaintext loopback http/protobuf, where these options have no role, and on the only branch where they could apply the endpoint is operator-owned and the snapshot deliberately refuses to interpret or rewrite it (logging-readiness.md:64-67; otel-instrument/SKILL.md:1586-1593 fail-closed). Reclassified conditional; no new clause required."
-      },
-      {
-        "lead_id": "P5",
-        "prior": "unmapped-low-impact",
-        "resolved_to": "mapped-upstream-normative",
-        "resolution": "'If a key exists on both the old and updating resource, the value of the updating resource MUST be picked (even if the updated value is empty)'; differing non-empty Schema URLs is 'a merging error ... The resulting resource is undefined, and its contents are implementation-specific.' Resolution: triggered only if the application contributes a resource whose Schema URL differs from the existing or detected one, which is precisely the action logging-readiness.md:60-63 and :301 already forbid (avoid conflicting code values, check actual merge order, preserve the existing provider and its resource). Reclassified mapped-upstream-normative as behaviourally covered. Retained note: the specific Schema-URL failure mode is not named, and Go's WithResource routes such a merge error to otel.Handle rather than failing loudly, so it can be silent."
-      },
-      {
-        "lead_id": "R6",
-        "prior": "unmapped-low-impact",
-        "resolved_to": "mapped-official-recommendation",
-        "resolution": "Singular for a single entity; pluralized with an array value type when it can represent multiple entities; both SHOULD. Resolution: this is naming-quality guidance for defining new attribute keys. logging-readiness.md:136-138 already governs new application keys and the guide cites the naming specification as a primary source at :38, delegating the detail. Reclassified mapped-official-recommendation as delegated; no new clause required."
-      }
-    ],
-    "candidate_reassessment": [
-      {
-        "id": "F1",
-        "status": "preserved - independently reinforced",
-        "impact_pass1": "medium",
-        "impact_now": "medium",
-        "basis": "OTLP partial-success MUST NOT retry, re-read verbatim in pass 1.",
-        "new_evidence": "SDK Metrics semconv (Development, retrieved 2026-11-09), otel.sdk.exporter.log.exported footnote: 'rejected log records MUST count as failed and only non-rejected log records count as success'. The official funnel model treats rejected records as a terminal failed outcome, which is consistent with the prohibition on retrying the request and reinforces that the snapshot's wording leaves a subset retry readable as permitted.",
-        "candidate_status": "Still a candidate correction. No working-source change has been supplied or applied."
-      },
-      {
-        "id": "F2",
-        "status": "preserved - independently reinforced",
-        "impact_pass1": "medium",
-        "impact_now": "medium",
-        "basis": "Attribute requirement levels apply to the instrumentation library (Stable), read in pass 1.",
-        "new_evidence": "Three further sources separate the roles the owner enumeration conflates. Logs API (Stable) and Logs README (unlabeled) distinguish log appender/bridge authors from instrumentation libraries from applications. Exceptions-in-logs (Stable) addresses instrumentations throughout while excluding logging bridges. Supplementary Guidelines (NOT a spec) adds appender-specific guidance that is explicitly not a requirement. Count unchanged: 36 of 183 leads carry an instrumentation owner.",
-        "candidate_status": "Still a candidate correction. No working-source change has been supplied or applied."
-      },
-      {
-        "id": "F3",
-        "status": "preserved but materially narrowed",
-        "impact_pass1": "low-medium",
-        "impact_now": "low",
-        "basis": "Logs Data Model Error Semantics recommendation, read in pass 1; the supplied lead C8 misstated it and has been corrected this pass.",
-        "new_evidence": "The Data Model Appendix ETW mapping, read this pass, is official precedent ON THE SNAPSHOT'S SIDE for the adjacent case: ETW Level 0 LOG_ALWAYS 'is not a severity - it is a filtering directive ... It carries no severity information, so SeverityNumber maps to UNSPECIFIED (0) rather than inventing a specific severity.' So upstream material both recommends ERROR 17 for an erroneous event from a source with no severity concept AND declines to invent a severity where the level carries no severity information. The snapshot's clause is correct for the second case and over-broad only for the first.",
-        "candidate_status": "Still a candidate, at reduced impact. The smallest correction from pass 1 remains the minimal fix; the case it addresses is narrower than first assessed and does not arise in any of the four detected stacks."
-      },
-      {
-        "id": "F4",
-        "status": "preserved - unchanged",
-        "impact_pass1": "low",
-        "impact_now": "low",
-        "basis": "Environment Variable Specification Boolean rules and the OTEL_SDK_DISABLED row, read in pass 1.",
-        "new_evidence": "None in this pass. The enum and numeric parsing rules re-read for lead K9 sit in the same Type-specific guidance section and are consistent, but add nothing to or against the finding.",
-        "candidate_status": "Still a candidate correction. No working-source change has been supplied or applied."
-      },
-      {
-        "id": "F5",
-        "status": "preserved - independently reinforced",
-        "impact_pass1": "low",
-        "impact_now": "low-medium",
-        "basis": "OTLP Known Limitations > Duplicate Data, re-read verbatim in pass 1.",
-        "new_evidence": "SDK Metrics semconv otel.sdk.exporter.log.exported footnote: 'Each log record MUST be counted exactly once per export operation: intermediate failed attempts that are followed by a retry MUST NOT increment the counter.' The official model deliberately separates per-export-operation accounting from per-attempt wire traffic, which is exactly the distinction the seven unqualified assertion sites collapse. Impact raised from low to low-medium because an official counting rule now shows the intended semantics, not merely a tolerated side effect.",
-        "candidate_status": "Still a candidate correction. No working-source change has been supplied or applied."
-      }
-    ],
-    "limitations": [
-      "Read-only source and convention review. No application, probe, test, install, build, repository write, credential or settings change was performed, in this pass or the previous one. No verdict here is evidence of runtime behaviour.",
-      "Every source named unopened in the pass-1 limitations has now been opened, with one declared partial: the SDK Metrics semconv page was read only in its Log metrics section plus table of contents, the same boundary the supplied leads flagged.",
-      "Lead V2's shared otel.sdk.exporter.operation.duration instrument remains unverified and is recorded as such rather than treated as checked.",
-      "Sources were read at their current published revision on 2026-11-09 via the opentelemetry.io markdown renderings. Specification version markers seen in references were v1.62.0 for the specification tree and OTLP 1.11.1; a later revision could change any clause recorded here.",
-      "The pass-1 named language SDK API checks were not replayed, per scope. They were made against main-branch source, not a pinned project version, and that caveat still stands.",
-      "No working-source correction has been supplied, so nothing in either report has been applied to the snapshot. The five candidates and two observations are proposals against a frozen snapshot.",
-      "Splunk Observability Studio receiver behaviour, Explorer query surfaces and consumers.json consumer contracts remain product-internal with no upstream counterpart and are out of scope for source verification."
     ],
     "ledger": [
       {
@@ -7719,68 +7926,11 @@
           "F3"
         ]
       }
-    ],
-    "codex_disposition": "F1-F5 independently verified against official sources and corrected in bb3 source; no raw Claude output altered. SDK/bridge ownership and optionality preserved. Source verification is not final PR review or runtime proof."
+    ]
   },
-  "claude_changed_clause_verification": {
+  "source_correction_closure": {
     "route": "desktop-app",
-    "model": "Claude Opus5",
-    "provider": "Bedrock",
-    "task": "local_e428c157-fd0d-47c7-9164-80533899b19f",
-    "raw_sha256": "e0144741e00f4aa91fc165bd19cbce1412034cc204d77de1ac670c6cb8712cbc",
-    "identity": {
-      "prior": "c89c166bdf8ad7e170b4b4864e2d90db87a24f394bc54085dcc45948ddc0b8fc",
-      "prior_matches_my_verified_snapshot": true,
-      "current_declared": "bb3d38c81f7f10ba3acb5395671a7241ebc3fcbd8d00dc20613ba2ac6cdb5ca6",
-      "current_recomputed_from_my_reconstruction": "bb3d38c81f7f10ba3acb5395671a7241ebc3fcbd8d00dc20613ba2ac6cdb5ca6",
-      "bound": true,
-      "recipe": "sha256(json.dumps(files,sort_keys=True).encode(utf-8)) with default Python separators,ensure_ascii=True,no trailing newline"
-    },
-    "reconstruction": {
-      "method": "Prior verified c89 scratch snapshot re-hashed intact, then the supplied full current common guide substituted for skills/references/logging-readiness.md and the supplied unified diff applied with patch(1) to the other six changed paths.",
-      "c89_scratch_still_intact": true,
-      "paths_total": 13,
-      "changed_paths": 7,
-      "unchanged_paths": 6,
-      "all_13_current_hashes_match": true,
-      "all_13_line_counts_match": true,
-      "all_13_byte_counts_match": true,
-      "unchanged_paths_identical_to_c89": [
-        "skills/otel-verify/SKILL.md",
-        "skills/references/consumers.json",
-        "skills/otel-instrument/references/languages/java.md",
-        "skills/otel-instrument/references/languages/python.md",
-        "skills/otel-instrument/references/languages/go.md",
-        "skills/otel-instrument/references/languages/node.md"
-      ],
-      "changed_paths_differ_from_c89": [
-        "skills/references/logging-readiness.md",
-        "skills/otel-audit/SKILL.md",
-        "skills/otel-instrument/SKILL.md",
-        "skills/references/languages/java.md",
-        "skills/references/languages/python.md",
-        "skills/references/languages/go.md",
-        "skills/references/languages/node.md"
-      ],
-      "changed_line_counts": {
-        "skills/references/logging-readiness.md": 47,
-        "skills/otel-audit/SKILL.md": 5,
-        "skills/otel-instrument/SKILL.md": 8,
-        "skills/references/languages/java.md": 11,
-        "skills/references/languages/python.md": 4,
-        "skills/references/languages/go.md": 6,
-        "skills/references/languages/node.md": 4
-      },
-      "coverage_limit": "None for reconstruction. Every one of the 13 current files reconstructs byte-exact against the supplied hashes, line counts and byte counts, and the identity recomputed from my own reconstruction equals bb3d38c8. The diff was therefore complete and no path is coverage-limited. Disclosed limit of a different kind: the supplied artifact provides the full current text only for the common guide; for the other six changed paths the current text is my reconstruction, which is hash-confirmed but derived rather than directly supplied."
-    },
-    "verdict": {
-      "headline": "All five prior candidates are resolved at the correct upstream strength, with no overstatement and no overcorrection. Of the five named new clause areas, four are fully supported and one - the meaningful-values list - carries a single low-impact inaccuracy. The previously unread V2 element is closed as an optional, SDK-owned, signal-shared instrument that applies to logs and must not be required.",
-      "candidates_resolved": 5,
-      "candidates_total": 5,
-      "new_verified_mismatches": 1,
-      "runtime_results_inferred": false,
-      "proposed_tests_treated_as_passing": false
-    },
+    "source_review_sha256": "e0144741e00f4aa91fc165bd19cbce1412034cc204d77de1ac670c6cb8712cbc",
     "prior_candidates": [
       {
         "id": "F1",
@@ -7878,7 +8028,7 @@
         "overstatement": "None. The duplicate-prevention requirement and its diagnostic purpose are preserved; only the scenario scope is bounded."
       }
     ],
-    "new_clause_checks": [
+    "additional_clause_checks": [
       {
         "id": "NC-1",
         "area": "meaningful zero/false/empty values",
@@ -7966,7 +8116,7 @@
         "caveat": "The hyperlink in the clause resolves to the main branch rather than a pinned tag. The clause says 'the installed version's Logback mapper', so the intent is correct, but a reader following the link lands on main. No correction proposed - naming a pinned release in the guide would contradict the guide's own rule against pinning library release recipes."
       }
     ],
-    "v2_closure": {
+    "sdk_duration_source_closure": {
       "element": "otel.sdk.exporter.operation.duration",
       "status": "closed - previously the one unread element of lead V2",
       "anchor_of_governing_instruction": "skills/references/logging-readiness.md:369-372",
@@ -7986,765 +8136,25 @@
       "effect_on_instructions": "No instruction change required, and none should be made. The existing clause at :369-372 is correctly framed - 'Where implemented, development SDK log metrics ... can supply creation, queue-pressure, processed and exported counts' plus 'Do not add duplicate application metrics or assume unavailable instruments exist' - which admits this instrument as an optional additional source without making any log clause contingent on it. Requiring it, or requiring metrics activation to satisfy a logging clause, would convert a Development recommended metric into an obligation.",
       "corroborating_note": "The instrument's once-per-export-operation, first-attempt-through-final-attempt-including-backoff definition independently mirrors the whole-export deadline contract the guide states at :391-397, and the emission/attempt/receipt separation the F5 edits introduce."
     },
-    "new_verified_mismatches": [
-      {
-        "id": "D1",
-        "severity": "low",
-        "kind": "enumerated-list inaccuracy in a new clause",
-        "anchor": "skills/references/logging-readiness.md:147",
-        "current_text": "Zero, false, empty strings and empty arrays are meaningful values.",
-        "source": {
-          "title": "Common specification concepts",
-          "url": "https://opentelemetry.io/docs/specs/otel/common/",
-          "section": "AnyValue",
-          "strength": "MUST (store and pass on)",
-          "maturity": "Stable",
-          "owner": "SDK",
-          "retrieved": "2026-11-09"
-        },
-        "problem": "Upstream enumerates four meaningful values: 'an empty value, a numerical value of zero, an empty string, or an empty array'. The clause lists zero, false, empty strings and empty arrays - substituting false for the spec's 'an empty value' (the language's null, None or nil). Adding false is harmless and sound, but dropping the empty value loses the one case upstream treats separately and most explicitly: null has its own requirement that 'null values within arrays MUST be preserved as-is', and exporters that cannot export null 'MAY replace those values by 0, false, or empty strings'. That permitted substitution is live in practice - the current official Logback appender skips null values outright - so a reviewer testing null round-tripping needs the exporter allowance in view.",
-        "smallest_correction": "Insert the empty value into the list: 'The language's empty value (null/None/nil), zero, false, empty strings and empty arrays are meaningful values.'",
-        "strength_preserved": "Purely additive to an enumeration. No requirement level changes, the SDK ownership of the upstream MUST is untouched, and the following bridge-conversion sentence already supplies the needed caveat for a bridge that drops such values.",
-        "conditional_test": "If a structured-field preservation scenario is selected, include one attribute whose value is the language's empty value alongside the zero, false, empty-string and empty-array cases; assert presence and type separately from truthiness, and record separately whether the selected bridge set the attribute at all and whether the exporter substituted a value, citing the exporter allowance rather than reporting a defect.",
-        "not_a_regression": "This is a new clause, so there is no prior wording to regress from; the pre-change guide said nothing about meaningful empty values at all."
+    "meaningful_empty_value_source_closure": {
+      "upstream_source": {
+        "url": "https://opentelemetry.io/docs/specs/otel/common/",
+        "section": "AnyValue",
+        "status": "Stable",
+        "owner": "SDK",
+        "scope": "Meaningful supported empty values;accepted null-array preservation;conditional exporter substitution. Positional assertion follows the specified paired-array index rationale."
+      },
+      "verification_note": "ActualClaude confirms exact D1 replacement andno remaining verified source mismatch;unaltered raw Markdown/JSON retained in local taskoutputs and copied byobservedpath.",
+      "verdict": {
+        "d1_status": "closed",
+        "headline": "The correction closes D1. All four upstream-enumerated meaningful values are now present, the language-support precondition is carried by the word 'supported', the null-array preservation duty is stated with its upstream 'accepted' condition and its index-sync rationale, and the exporter substitution allowance is reproduced at MAY with its own precondition. The allowance is gated twice and explicitly does not license dropping an index.",
+        "allowance_unconditional": false,
+        "allowance_permits_dropping_an_index": false,
+        "remaining_verified_mismatches": 0,
+        "runtime_results_inferred": false,
+        "proposed_tests_treated_as_passing": false
       }
-    ],
-    "limitations": [
-      "Bounded delta check only. No runtime execution, probe, install, repository edit, push, PR comment, credential or settings change was performed. No runtime result is inferred and no proposed test is treated as having passed or as having been run.",
-      "Current text for the six non-guide changed paths is my hash-confirmed reconstruction from the prior c89 scratch snapshot plus the supplied diff, not text supplied verbatim.",
-      "The Java LoggingEventMapper read establishes current main-branch behaviour on 2026-11-09 only. The class is marked internal and explicitly unstable, so this is not evidence of the behaviour of any pinned or installed version, and no installed support is assumed.",
-      "The SDK Metrics semantic conventions page was read for the shared operation-duration section in this pass and the log-metrics section previously; its span and metric sections remain unread, as declared earlier.",
-      "Clauses outside the delta were not re-verified; they rest on the prior 183-row ledger, which is reused by reference and not replayed.",
-      "No access or authentication failure occurred in this pass."
-    ],
-    "codex_disposition": "F1-F5 independently verified resolved. D1 independently confirmed and corrected in currentd9ae5700;Claude confirmsD1closed/no remaining verified mismatch in inspected source scope. No runtime or finalcombinedPRreview implied."
-  },
-  "claude_final_empty_value_verification": {
-    "route": "desktop-app",
-    "model": "Claude Opus5",
-    "provider": "Bedrock",
-    "task": "local_e428c157-fd0d-47c7-9164-80533899b19f",
-    "raw_sha256": "e8fad6e75ba2a501200aa9fb19f65f7858670a10bf11c7b3c33c54e1a7f3f4bb",
-    "scope_note": "Bounded D1-only source correction verification;unchanged F1-F5,otherclause checks,V2and183rowledger reused at verified exact file hashes,not runtime or finalcombinedPRreview.",
-    "identity": {
-      "prior_verified": "bb3d38c81f7f10ba3acb5395671a7241ebc3fcbd8d00dc20613ba2ac6cdb5ca6",
-      "current_declared": "d9ae570062149fe9aa3831fb027c5b901e6af3395ee2dde6c7d2909da40bad60",
-      "current_recomputed": "d9ae570062149fe9aa3831fb027c5b901e6af3395ee2dde6c7d2909da40bad60",
-      "bound": true,
-      "recipe": "sha256(json.dumps(files,sort_keys=True).encode(utf-8)) with default Python separators,ensure_ascii=True,no trailing newline",
-      "manifest_entries": 13,
-      "entries_updated": 1,
-      "entry_updated": "skills/references/logging-readiness.md"
     },
-    "reconstruction": {
-      "method": "Applied the specified replacement to the common guide in my verified bb3d38c8 reconstruction; the other twelve manifest files were carried over untouched.",
-      "replacement_target_occurrences": 1,
-      "replacement_target_unique": true,
-      "lines_replaced": 2,
-      "lines_inserted": 6,
-      "net_line_delta": 4,
-      "common_file": {
-        "sha256": "99385d445555da9f2e5822143f30afcc3395584f4f7aa87263ecaa8db4c5d105",
-        "lines": 529,
-        "bytes": 38063,
-        "expected_sha256": "99385d445555da9f2e5822143f30afcc3395584f4f7aa87263ecaa8db4c5d105",
-        "expected_lines": 529,
-        "expected_bytes": 38063,
-        "sha256_match": true,
-        "lines_match": true,
-        "bytes_match": true
-      },
-      "paths_differing_from_prior": [
-        "skills/references/logging-readiness.md"
-      ],
-      "other_twelve_byte_identical": true,
-      "single_contiguous_hunk": true,
-      "diff_region": "147,148c147,152 - the only change in the file; no other clause moved and no other manifest file changed.",
-      "bridge_caveat_retained_at": "skills/references/logging-readiness.md:152-154",
-      "limit": "None. The file reconstructs byte-exact on digest, line count and byte count, and the aggregate identity recomputed from my own reconstruction equals d9ae5700. The replacement target matched exactly once, so the edit location is unambiguous."
-    },
-    "verdict": {
-      "d1_status": "closed",
-      "headline": "The correction closes D1. All four upstream-enumerated meaningful values are now present, the language-support precondition is carried by the word 'supported', the null-array preservation duty is stated with its upstream 'accepted' condition and its index-sync rationale, and the exporter substitution allowance is reproduced at MAY with its own precondition. The allowance is gated twice and explicitly does not license dropping an index.",
-      "allowance_unconditional": false,
-      "allowance_permits_dropping_an_index": false,
-      "remaining_verified_mismatches": 0,
-      "runtime_results_inferred": false,
-      "proposed_tests_treated_as_passing": false
-    },
-    "remaining_verified_mismatches": [],
-    "limitations": [
-      "Bounded check of this one correction only. No runtime execution, probe, install, repository edit, push, comment, credential or settings change was performed. No runtime result is inferred and no proposed test is treated as having run or passed.",
-      "Only the Common specification concepts AnyValue section was re-read, because the correction is scoped to it. All other source checks are reused by reference and were not replayed.",
-      "Verification is textual and source-level: it establishes that the clause states the convention correctly, not that any bridge, SDK or exporter behaves this way at runtime. The previously recorded Logback appender behaviour (null values skipped, empty lists not serialised) remains a main-branch observation and is not evidence about any pinned or installed version.",
-      "No access or authentication failure occurred."
-    ],
-    "upstream_source": {
-      "url": "https://opentelemetry.io/docs/specs/otel/common/",
-      "section": "AnyValue",
-      "status": "Stable",
-      "owner": "SDK",
-      "scope": "Meaningful supported empty values;accepted null-array preservation;conditional exporter substitution. Positional assertion follows the specified paired-array index rationale."
-    },
-    "verification_note": "ActualClaude confirms exact D1 replacement andno remaining verified source mismatch;unaltered raw Markdown/JSON retained in local taskoutputs and copied byobservedpath."
-  },
-  "native_java_empty_array_counterexample": {
-    "classification": "Pinned upstream bridge limitation,not a repaired application defect or a passing gate case",
-    "fixture_context": "evals/java/logging-contract/src/test/java/LoggingContractTest.java",
-    "instructions": "In a disposable copy of that fixture add the method below,then run the selected method. Do not add an expected-failing test to the normal positive suite. Existing BeforeEach fixture setup and imports provide bridge,logger,provider,exporter,sink,AttributeKey,List andJUnitassertions.",
-    "test_method": "  @Test void selectedEmptyArrayMustSurviveTheBridge() {\n    provider.get(\"typed-control\").logRecordBuilder().setBody(\"typed-control\")\n        .setAttribute(AttributeKey.stringArrayKey(\"items\"), List.of()).emit();\n    assertTrue(exporter.getFinishedLogRecordItems().get(0).getAttributes().asMap()\n        .containsKey(AttributeKey.stringArrayKey(\"items\")));\n    bridge.stop();\n    bridge.setKeyValuePairAttributesIncluded(\"approved,items\");\n    bridge.start();\n    logger.atInfo().addKeyValue(\"approved\", true).addKeyValue(\"items\", List.of())\n        .log(\"bridge-empty-array\");\n    assertEquals(2, exporter.getFinishedLogRecordItems().size());\n    var attributes = exporter.getFinishedLogRecordItems().get(1).getAttributes();\n    assertEquals(true, attributes.get(AttributeKey.booleanKey(\"approved\")));\n    assertEquals(1, sink.list.size());\n    assertTrue(attributes.asMap().containsKey(AttributeKey.stringArrayKey(\"items\")),\n        \"Bridge lost the selected empty array while typed SDK and approved scalar controls passed: \" + attributes);\n  }\n",
-    "portable_command": "mvn -Dtest=LoggingContractTest#selectedEmptyArrayMustSurviveTheBridge test",
-    "executed_receipt": {
-      "status": "expected negative compatibility probe; not a passing clean-gate case or application defect",
-      "command": [
-        "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/toolchains/maven/apache-maven-3.9.11/bin/mvn",
-        "-q",
-        "-s",
-        "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/public-maven-settings.xml",
-        "-Dtest=LoggingContractTest#selectedEmptyArrayMustSurviveTheBridge",
-        "test"
-      ],
-      "cwd": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/java-empty-bridge-proof-a6wrg2an/fixture",
-      "exit_code": 1,
-      "testcase": "selectedEmptyArrayMustSurviveTheBridge",
-      "failure_message": "Bridge lost the selected empty array while typed SDK and approved scalar controls passed: {approved=true} ==> expected: <true> but was: <false>",
-      "pinned_appender": "2.33.1-alpha",
-      "official_source": "https://github.com/open-telemetry/opentelemetry-java-instrumentation/blob/v2.33.1/instrumentation/logback/logback-appender-1.0/library/src/main/java/io/opentelemetry/instrumentation/logback/appender/v1_0/internal/LoggingEventMapper.java",
-      "typed_sdk_control": "passes before bridge assertion",
-      "bridge_approved_scalar_control": "passes before emptyarray assertion",
-      "source_sha256": "cd6764d5476a4ca07983cb472e511d3f355dd906547113811eaba46b04b71202",
-      "xml_sha256": "44ef2f74a768cdaaab985ab999eea9f539a761b03e1dbb2638af61b14f4cf9de",
-      "source": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/java-empty-bridge-proof-a6wrg2an/fixture/src/test/java/LoggingContractTest.java",
-      "xml": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/java-empty-bridge-proof-a6wrg2an/fixture/target/surefire-reports/TEST-LoggingContractTest.xml",
-      "date": "2026-11-09T16:56:57.924176+00:00",
-      "repair_status": "Rule/evals classify selected required bridge field uncovered; upstream bridge not modified. Do not claim full meaningful-field bridge support from SDK test."
-    },
-    "expected_result": "Exit1,one assertion failure:typedSDKemptyarray andnativeapprovedscalar preserved,butselectedbridgeemptyarrayabsent. This is the actual observed outcome."
-  },
-  "claude_bare_workflow_clause_verification": {
-    "report": {
-      "report": "clause-bare-workflow-verification",
-      "pr": "PR352 / B117",
-      "report_kind": "bounded independent verification of B1, B2 and B3 only, against primary OpenTelemetry guidance",
-      "not_a": "combined PR review; whole-PR review; runtime verification or any runtime claim; repository execution",
-      "combined_review_status": "Awaits three clean execution passes. Nothing in this report advances or substitutes for that review.",
-      "continues": [
-        "final-clause-verification.(md|json)",
-        "final-clause-verification-sources-complete.(md|json)",
-        "clause-delta-verification.(md|json)",
-        "clause-null-verification.(md|json)"
-      ],
-      "generated": "2026-11-09",
-      "identity": {
-        "prior_verified_d9": "d9ae570062149fe9aa3831fb027c5b901e6af3395ee2dde6c7d2909da40bad60",
-        "prior_matches_my_d9_reconstruction": true,
-        "current_declared": "b117b9959784994311645676afef4c4161c860203b636d493f89c569d458b652",
-        "current_recomputed_from_my_reconstruction": "b117b9959784994311645676afef4c4161c860203b636d493f89c569d458b652",
-        "bound": true,
-        "recipe": "sha256(json.dumps(files, sort_keys=True).encode('utf-8')) - prior recipe, unchanged",
-        "manifest_entries": 13,
-        "reverified_after_metadata_correction": true
-      },
-      "reconstruction": {
-        "method": "Carried my byte-exact D9 reconstruction forward and overwrote the three paths the packet supplies in full, then verified every one of the 13 files against the packet's declared digest, line count and byte count.",
-        "all_13_sha256_match": true,
-        "all_13_line_counts_match": true,
-        "all_13_byte_counts_match": true,
-        "changed_vs_d9": [
-          "skills/references/logging-readiness.md",
-          "skills/otel-audit/SKILL.md",
-          "skills/references/languages/java.md"
-        ],
-        "changed_count": 3,
-        "unchanged_vs_d9_count": 10,
-        "declared_changed": 3,
-        "declared_unchanged": 10,
-        "counts_agree": true,
-        "changed_hunks": {
-          "skills/otel-audit/SKILL.md": "single hunk, +10 lines at :306-315",
-          "skills/references/logging-readiness.md": "single hunk, 1 line replaced by 4 at :302-305 (net +3)",
-          "skills/references/languages/java.md": "single hunk, 5 lines replaced by 9 at :787-795 (net +4)"
-        },
-        "limit": "None for reconstruction. All three changed files were supplied in full and every one of the 13 digests, line counts and byte counts matches; the aggregate identity recomputed from my own reconstruction equals b117b995.",
-        "line_count_ledger": {
-          "skills/otel-audit/SKILL.md": {
-            "d9_lines": 1888,
-            "b117_lines": 1898,
-            "net": 10,
-            "removed": 0,
-            "added": 10
-          },
-          "skills/references/logging-readiness.md": {
-            "d9_lines": 529,
-            "b117_lines": 532,
-            "net": 3,
-            "removed": 1,
-            "added": 4
-          },
-          "skills/references/languages/java.md": {
-            "d9_lines": 879,
-            "b117_lines": 883,
-            "net": 4,
-            "removed": 5,
-            "added": 9
-          }
-        },
-        "arithmetic_reverified": true,
-        "metadata_correction": {
-          "field": "reconstruction.changed_hunks['skills/references/logging-readiness.md']",
-          "was": "single hunk, 1 line replaced by 3 at :302-305 (net +2)",
-          "now": "single hunk, 1 line replaced by 4 at :302-305 (net +3)",
-          "basis": "Recomputed against the bound files. The common guide is 529 lines at D9 and 532 at B117, a net of +3, and the single hunk header is '@@ -299,7 +299,10 @@' with 1 removed line and 4 added lines occupying :302-305. The earlier entry said 1 replaced by 3 with net +2, which contradicted the bound line counts.",
-          "scope": "Metadata only. No file digest, line count, byte count, identity, anchor or verdict changes; the :302-305 anchor and the B2 verdict were already correct.",
-          "other_two_entries": "Re-verified and correct as written: otel-audit 0 removed / 10 added net +10 at :306-315; java.md 5 removed / 9 added net +4 at :787-795."
-        }
-      },
-      "carried_by_reference": {
-        "note": "The 183-row primary-source ledger and all previously settled checks are carried forward by hash and were not replayed.",
-        "unchanged_paths_carried": 10,
-        "ledger_rows": 183,
-        "ledger_rows_replayed": 0,
-        "settled_items_not_replayed": [
-          "F1-F5 resolutions (clause-delta-verification)",
-          "NC-1..NC-5 delta clause checks",
-          "V2 operation.duration closure",
-          "D1 meaningful-empty-value closure (clause-null-verification)"
-        ]
-      },
-      "verdict": {
-        "headline": "B1, B2 and B3 are all supported. Each is either a repository evidence-workflow decision, correctly and explicitly labelled non-normative, or a scoping correction that declines to invent a requirement upstream does not impose. No unsupported OTel requirement, no requirement-strength error and no ownership error was found in the three clauses.",
-        "b1": "supported",
-        "b2": "supported",
-        "b3": "supported; resolves the upstream-main provenance caveat recorded in the prior delta review",
-        "unsupported_requirements_found": 0,
-        "strength_errors_found": 0,
-        "ownership_errors_found": 0,
-        "verified_mismatches": 0,
-        "runtime_claims_made": false,
-        "repository_executed": false,
-        "subagents_used": false
-      },
-      "separations": {
-        "repository_workflow_versus_otel_requirement": "Cleanly maintained across all three clauses. The matrix, its field set, the completeness standard, the oversized-input tests and the omission-recording procedure are repository evidence workflow; B1 states that in terms ('not an additional OTel requirement'). The only upstream-facing assertions in the three clauses are negative - that no Body cap and no GenAI threshold is imposed on ordinary application logs - and both are accurate.",
-        "installed_capability_versus_upstream_main": "Cleanly established by B3, which is the point of the change. The clause now requires inspection of the resolved dependency's documentation and matching source plus actual appender tests, and states that another release or upstream main cannot establish installed behavior. My own prior main-branch LoggingEventMapper read is accordingly release-specific test evidence only and is not carried forward as a statement about installed capability."
-      },
-      "clauses": [
-        {
-          "id": "B1",
-          "path": "skills/otel-audit/SKILL.md",
-          "anchor": "skills/otel-audit/SKILL.md:306-315",
-          "summary": "Require the already-declared per-clause LOG-SPEC-CLOSURE matrix in canonical evidence rows; label it a repository audit-evidence contract rather than an OTel requirement; decline an arbitrary ordinary-log Body cap drawn from example or GenAI thresholds.",
-          "verdict": "supported",
-          "components": [
-            {
-              "part": "matrix requirement",
-              "text": "Before finalizing a logging audit, check the shared guide's LOG-SPEC-CLOSURE matrix in the canonical `evidence` rows. Each applicable clause needs its source/version, requirement strength, owner, disposition, source/config/default evidence, finding/scenario mapping when needed and proof boundary. A source list followed by LOG-* summaries without those decisions is incomplete.",
-              "classification": "repository evidence workflow",
-              "basis": "Not an OTel obligation and not claimed as one. The field set maps one-to-one onto fields the shared guide already declares: skills/references/logging-readiness.md:88-93 requires source URL, version/date or supplied snapshot, requirement level, applicability and owner; the LOG-SPEC-CLOSURE acceptance row at skills/references/logging-readiness.md:504 already requires requirement level, owner, source/config/default evidence, classification, selected finding/scenario mapping and explicit proof boundary. B1 restates that set as a pre-finalization check rather than adding a new obligation.",
-              "otel_requirement": false
-            },
-            {
-              "part": "explicit non-normative label",
-              "text": "This matrix is the repository's audit evidence contract, not an additional OTel requirement.",
-              "classification": "repository evidence workflow, explicitly self-labelled",
-              "basis": "Correct. No OpenTelemetry specification requires an audit evidence matrix, a report schema or any per-clause disposition record. The label is the distinction this review was asked to police, and the clause draws it itself rather than leaving it to the reader.",
-              "otel_requirement": false
-            },
-            {
-              "part": "no arbitrary ordinary-log Body cap",
-              "text": "For bounded fixed messages without an existing Body policy or a source-backed size problem, record no new Body cap is needed; do not turn an arbitrary example threshold or the separate GenAI capture defaults into a mandatory application-log repair.",
-              "classification": "consistent with upstream: declines to invent a requirement that upstream does not impose",
-              "basis": "No upstream Body size cap exists to be satisfied. Common specification concepts (Stable) states that attribute limits apply only to attribute collections and that value length and depth limits 'do not apply to values within other data structures such as LogRecord.Body'. The Logs Data Model (Stable) defines Body as an optional AnyValue with no size constraint. The 16 message / 64 part / 8192 byte figures are repository-proposed GenAI capture policy, visible in this same file at skills/otel-audit/SKILL.md:826-828 as 'propose redacted capture with ...', not an OTel requirement. Declining to import them into ordinary application logs removes an over-requirement rather than relaxing an upstream one.",
-              "otel_requirement": false
-            }
-          ],
-          "strength_owner": "No requirement level or owner is asserted upstream by B1. The only upstream-facing statement is the negative one about Body caps, which is accurate. Ownership of the matrix is the repository's audit process.",
-          "unsupported_requirement_found": false
-        },
-        {
-          "id": "B2",
-          "path": "skills/references/logging-readiness.md",
-          "anchor": "skills/references/logging-readiness.md:302-307 (changed lines :302-305)",
-          "summary": "Clarify LOG-LIMITS: bounded messages with no Body policy and no source-backed size need do not justify a new cap; no ordinary-log reuse of GenAI capture thresholds; oversized tests are per selected limit.",
-          "verdict": "supported",
-          "components": [
-            {
-              "part": "no new Body cap absent an established need",
-              "text": "When current messages are bounded and no Body policy or size problem is established, preserve them and record that a new Body cap is not applicable;",
-              "classification": "consistent with upstream",
-              "basis": "Reinforces the retained sentence at skills/references/logging-readiness.md:301-302 ('Avoid arbitrary new limits without a source-backed need') and matches the Stable position that no attribute limit reaches Body. Recording not-applicable is a disposition, not a relaxation: nothing upstream is left unsatisfied because nothing upstream caps Body.",
-              "otel_requirement": false
-            },
-            {
-              "part": "no GenAI threshold reuse",
-              "text": "do not import GenAI capture thresholds into ordinary logs.",
-              "classification": "consistent with upstream; scoping correction",
-              "basis": "The thresholds originate as repository-proposed GenAI capture policy, not as a logs-specification requirement. GenAI semantic conventions are also a separate, relocated convention set rather than part of the logs specification - see the disclosed limit below. Preventing their reuse on ordinary application logs asserts nothing about upstream and removes a potential over-requirement.",
-              "otel_requirement": false
-            },
-            {
-              "part": "selected oversized tests",
-              "text": "Exercise selected oversized attributes/body, retained identity/context, dropped-attribute accounting where supported, and privacy after processing.",
-              "classification": "repository evidence workflow, narrowed",
-              "basis": "Inserting 'selected' aligns this sentence with the LOG-LIMITS acceptance row, which already frames boundary inputs per selected limit ('For each selected limit, specify below-limit, exactly-at-limit and above-limit inputs'). Testing obligations are entirely repository workflow; upstream imposes none, so the narrowing cannot weaken an OTel requirement.",
-              "otel_requirement": false
-            }
-          ],
-          "strength_owner": "The clause makes no upstream strength claim. The adjacent Resource exemption at skills/references/logging-readiness.md:308-310 retains SHOULD and its SDK owner, and the Body exclusion at :299-301 is unchanged.",
-          "unsupported_requirement_found": false
-        },
-        {
-          "id": "B3",
-          "path": "skills/references/languages/java.md",
-          "anchor": "skills/references/languages/java.md:786-795",
-          "summary": "Replace the upstream-main Logback mapper link with version-neutral capability inspection of the resolved dependency's documentation, matching source and actual appender tests; another release or upstream main cannot establish installed behavior; release-specific findings remain test evidence only.",
-          "verdict": "supported; resolves the caveat recorded in the prior delta review",
-          "components": [
-            {
-              "part": "version-neutral capability inspection",
-              "text": "Inspect the resolved agent/bridge's public documentation and value conversion, then exercise selected values through the actual appender. Use source matching that resolved dependency when documentation is insufficient;",
-              "classification": "installed bridge capability (instrumentation-owned)",
-              "basis": "Correctly scoped to the resolved dependency. This is a capability question about an instrumentation library, not an SDK duty and not an application defect. Nothing upstream requires a logging bridge to map every source value: the Common specification MUST to store and pass meaningful values on binds the SDK once a value has been set, and the Logs Supplementary Guidelines that describe appender construction are explicitly not a specification and add no requirements.",
-              "otel_requirement": false
-            },
-            {
-              "part": "upstream main cannot establish installed behavior",
-              "text": "another release or the upstream main branch cannot establish installed behavior.",
-              "classification": "epistemic scoping - correct",
-              "basis": "This is the distinction this review was asked to enforce, and it is right. It also correctly reclassifies my own earlier reading: in the prior delta review I read the main-branch LoggingEventMapper and observed that it skips null values and omits empty lists. Under B3 that observation is release-specific test evidence about main on 2026-11-09 and is explicitly not evidence of whatever version a project resolves. The class is additionally marked internal and unstable in its own header, which supports the clause rather than contradicting it. Removing the main-branch hyperlink resolves the provenance caveat I recorded against the prior wording.",
-              "otel_requirement": false
-            },
-            {
-              "part": "omission recording and proof boundary",
-              "text": "If a selected required value, including an empty collection, is omitted, record the observed limitation; a direct typed-SDK pass does not close it. Resolve an authorized supported mapping or report it unverified/uncovered, preserving the sink and provider. Recheck capabilities after a dependency change rather than assuming either preservation or omission from a previous release.",
-              "classification": "repository evidence workflow plus retained SDK/bridge proof boundary and local policy",
-              "basis": "The SDK-versus-bridge proof boundary is retained verbatim in substance, so the clause still refuses to let a direct typed-SDK test stand in for bridge behaviour. Generalising from empty collections to 'a selected required value, including an empty collection' widens coverage but stays bounded by 'selected required', so it is not an open-ended obligation. Gaps remain recordable as unverified or uncovered, so nothing is suppressed. 'preserving the sink and provider' is unchanged local policy. The recheck-after-dependency-change instruction is consistent with the guide's standing rule to record checked library versions in task evidence rather than pinning release recipes.",
-              "otel_requirement": false
-            }
-          ],
-          "strength_owner": "Ownership is correct throughout: bridge and instrumentation capability, distinct from the SDK's storage duty and from any application defect. No upstream requirement is asserted against the appender.",
-          "unsupported_requirement_found": false
-        }
-      ],
-      "verified_mismatches": [],
-      "limits_and_observations": [
-        {
-          "id": "L1",
-          "kind": "scope limit outside the verified inventory",
-          "detail": "B1 directs the matrix into 'the canonical `evidence` rows'. Whether `evidence` is an existing canonical JSON key is owned by skills/references/report-flow-contract.md and skills/otel-verify/references/json-approval-handoff.md, which the changed files reference but which are not among the 13 manifest paths. I therefore cannot confirm from this inventory that B1 complies with the shared guide's own instruction at skills/references/logging-readiness.md:98-99 to use the existing report/evidence fields and 'not invent JSON keys'. This is a repository-schema question, not an OTel one, and it is recorded as a limit rather than a finding.",
-          "affects": "B1"
-        },
-        {
-          "id": "L2",
-          "kind": "relocated upstream source",
-          "detail": "The GenAI semantic conventions page on opentelemetry.io is now a moved stub: the conventions have relocated to a separate OpenTelemetry GenAI semantic conventions repository and that page is no longer maintained there. I did not audit the relocated repository, and did not need to: the 16/64/8192 figures are demonstrably repository-proposed policy at skills/otel-audit/SKILL.md:826-828, and the B1/B2 claims about them are negative (do not import into ordinary logs), so they do not depend on the content of the relocated conventions. The relocation is disclosed because it means GenAI conventions are a separate, independently versioned convention set rather than part of the logs specification.",
-          "affects": "B1, B2"
-        },
-        {
-          "id": "L3",
-          "kind": "vocabulary observation, not a defect",
-          "detail": "B1 lists 'requirement strength' where the shared guide says 'requirement level' at skills/references/logging-readiness.md:90 and :504. The two denote the same thing and the obligation is unchanged, so this is noted for consistency only and no correction is proposed.",
-          "affects": "B1"
-        }
-      ],
-      "limitations": [
-        "Bounded to B1, B2 and B3. No other clause in the three changed files was re-verified, and the ten unchanged files were carried by hash.",
-        "No repository execution, probe, install, edit, push, comment, credential or settings change. No subagents. No runtime claim: this is a source and convention check of instruction text only.",
-        "This is not the combined PR review, which awaits three clean execution passes.",
-        "Upstream positions relied on here (Common specification concepts attribute limits and Body exclusion, Logs Data Model Body field, Logs Supplementary Guidelines non-normative status, Attribute requirement levels ownership) were established in earlier passes of this engagement and are cited rather than re-fetched, except where noted.",
-        "Scope limits L1 and L2 are disclosed above: the canonical evidence-key question lies outside the 13-path inventory, and the GenAI conventions have relocated to a separate repository that I did not audit.",
-        "No access or authentication failure occurred."
-      ]
-    },
-    "sha256": "643630c36fb17612014fa41eac7580491692da207a6be0f506eeb7636c71b067",
-    "runtime_claim": false,
-    "whole_pr_review": false
-  },
-  "claude_final_privacy_delivery_verification": {
-    "report": {
-      "report": "clause-privacy-delivery-final",
-      "pr": "PR352 exact final-source delta verification",
-      "report_kind": "bounded exact-clause delta verification of the adopted privacy/delivery wording and the two new closure sentences",
-      "not_a": "combined PR review; three clean execution runs; runtime certification; any runtime claim",
-      "gating": "Precedes three clean runs and the combined review; neither is advanced or substituted by this report.",
-      "continues": [
-        "final-clause-verification.(md|json)",
-        "final-clause-verification-sources-complete.(md|json)",
-        "clause-delta-verification.(md|json)",
-        "clause-null-verification.(md|json)",
-        "clause-bare-workflow-verification.(md|json)",
-        "clause-privacy-delivery-proposal.(md|json)"
-      ],
-      "generated": "2026-11-09",
-      "identity": {
-        "prior_verified_b117": "b117b9959784994311645676afef4c4161c860203b636d493f89c569d458b652",
-        "prior_matches_my_b117": true,
-        "current_declared": "07a6809ad77e9d1d7243e11ec6f47be5593134775c75e802dfb6734e574ac1f3",
-        "current_recomputed_from_my_reconstruction": "07a6809ad77e9d1d7243e11ec6f47be5593134775c75e802dfb6734e574ac1f3",
-        "bound": true,
-        "recipe": "sha256(json.dumps(files, sort_keys=True).encode('utf-8')) - prior recipe, unchanged",
-        "manifest_entries": 13
-      },
-      "reconstruction": {
-        "method": "Applied the four supplied unified hunks to my byte-exact B117 reconstruction with patch(1), then verified all 13 files against the packet's declared digest, line count and byte count.",
-        "all_13_sha256_match": true,
-        "all_13_line_counts_match": true,
-        "all_13_byte_counts_match": true,
-        "changed_vs_b117": [
-          "skills/references/logging-readiness.md",
-          "skills/otel-instrument/SKILL.md",
-          "skills/otel-verify/SKILL.md",
-          "skills/references/languages/java.md"
-        ],
-        "changed_count": 4,
-        "declared_changed": 4,
-        "unchanged_vs_b117_count": 9,
-        "declared_unchanged": 9,
-        "counts_agree": true,
-        "hunks": {
-          "skills/references/logging-readiness.md": "2 hunks, +12 lines each: privacy block at :85-95 (after the existing boundary paragraph), delivery block at :410-420 (after the retained MUST NOT retry paragraph); 529->556 lines, net +24",
-          "skills/otel-instrument/SKILL.md": "1 hunk, +6 lines at :1560-1565; 2059->2065, net +6",
-          "skills/otel-verify/SKILL.md": "1 hunk, +4 lines at :34-37; 1052->1056, net +4",
-          "skills/references/languages/java.md": "1 hunk, +13 lines at :797-808 plus a blank line; 883->896, net +13"
-        },
-        "all_insertions_no_deletions": true,
-        "limit": "None for reconstruction. All four hunks applied cleanly against B117 and every one of the 13 digests, line counts and byte counts matches; the aggregate identity recomputed from my own reconstruction equals 07a6809a."
-      },
-      "carried_by_reference": {
-        "note": "The 183-row primary-source ledger and all previously settled checks are carried forward by hash. No replay is claimed and none was performed.",
-        "unchanged_paths_carried_by_hash": 9,
-        "ledger_rows": 183,
-        "ledger_rows_replayed": 0,
-        "settled_not_replayed": [
-          "F1-F5 resolutions",
-          "NC-1..NC-5 delta clause checks",
-          "V2 operation.duration closure",
-          "D1 meaningful-empty-value closure",
-          "B1/B2/B3 verdicts"
-        ]
-      },
-      "verdict": {
-        "headline": "All four corrections are closed in the adopted wording, two of them extended beyond what was asked, and the two new closure sentences are repository evidence workflow rather than invented OTel requirements. Requirement strength and ownership recheck clean against primary sources. After bounded triage, no exact-clause defect remains: D-1 is reclassified as optional wording clarity and its proposed Blocked mapping is withdrawn as unsafe.",
-        "c1": "closed",
-        "c2": "closed",
-        "c3": "closed and extended",
-        "c4": "closed",
-        "instrument_closure": "repository evidence workflow, confirmed",
-        "verify_closure": "repository evidence workflow, confirmed",
-        "invented_otel_requirements": 0,
-        "strength_errors": 0,
-        "ownership_errors": 0,
-        "remaining_defects": 0,
-        "remaining_informational": 2,
-        "runtime_certified": false,
-        "combined_review_performed": false,
-        "repository_executed": false,
-        "subagents_used": false,
-        "d1_triage": "reclassified informational; required-correction status and the Blocked mapping both withdrawn"
-      },
-      "corrections_closure": [
-        {
-          "id": "C1",
-          "requested": "Replace 'at the required pre-SDK/pre-writer boundary' with 'at the boundary the selected policy requires, naming it and proving the values at it'.",
-          "status": "closed",
-          "anchor": "skills/references/logging-readiness.md:88-90",
-          "adopted": "If a selected probe exposes it, inspect a supported native hook at the boundary the policy requires and rerun the probe; dependency ownership alone does not make that captured path unselected.",
-          "assessment": "Closed. 'at the boundary the policy requires' replaces the fixed pre-SDK/pre-writer phrasing, so the conditional boundary is restored. The naming-and-proving duty is not duplicated here because it already stands three lines above at skills/references/logging-readiness.md:82-83 ('Name the boundary and prove the values at it'), and the new paragraph was inserted immediately after that one at :85, so the two read contiguously. Not restating it is correct editing rather than an omission.",
-          "source": {
-            "id": "S15",
-            "title": "Handling sensitive data",
-            "url": "https://opentelemetry.io/docs/security/handling-sensitive-data/",
-            "strength": "no normative keywords on the page",
-            "maturity": "best-practice, non-normative",
-            "owner": "implementer (application/operator)",
-            "retrieved": "2026-11-09"
-          }
-        },
-        {
-          "id": "C2",
-          "requested": "Append an escape: if the resolved dependency offers no supported hook at that boundary, record the limitation and leave the probe unresolved rather than forcing an unsupported change.",
-          "status": "closed",
-          "anchor": "skills/references/logging-readiness.md:92-93 and skills/references/languages/java.md:807-808",
-          "adopted": "If no supported hook exists at that boundary, record the exact limitation and leave coverage unresolved. / If the installed stack cannot meet that boundary, leave it uncovered rather than forcing an upgrade or claiming an unsupported hook works.",
-          "assessment": "Closed in both files, and the java-side sentence additionally bars the two failure modes the correction named - forcing an upgrade and claiming an unsupported hook works. One residual: neither escape names a status from otel-verify's closed vocabulary. See defect D-1.",
-          "source": {
-            "id": "S15",
-            "title": "Handling sensitive data",
-            "url": "https://opentelemetry.io/docs/security/handling-sensitive-data/",
-            "strength": "no normative keywords on the page",
-            "maturity": "best-practice, non-normative",
-            "owner": "implementer (application/operator)",
-            "retrieved": "2026-11-09"
-          }
-        },
-        {
-          "id": "C3",
-          "requested": "Establish whether the resolved mechanism suppresses or rewrites; a decision-only filter cannot redact, and suppression must not be substituted for redaction where the diagnostic type/category is permitted.",
-          "status": "closed and extended",
-          "anchor": "skills/references/languages/java.md:797-808",
-          "adopted": "Establish whether it rewrites content or only decides accept/deny; a decision-only filter cannot redact. Where the diagnostic category is permitted, suppressing its record alone does not preserve it. A supported bounded replacement must retain that category, effective level and original sinks, and remove forbidden values at the selected policy boundary.",
-          "assessment": "Closed, and extended in a sound direction. Both halves of the correction are present verbatim in substance. The clause goes further by defining what a compliant remedy must retain (category, effective level, original sinks) and where forbidden values must be removed. Two further improvements beyond the correction: the link now points to Logback's own filters manual rather than to an OTel page, which is the right provenance for a vendor capability lead; and the proof list requires the redaction to hold 'in both native and OTLP output', closing the gap where a fix protects only the exported copy. The conditional structure is preserved - the reviewer is told to establish the mechanism's behaviour first, so 'a decision-only filter cannot redact' is a definitional statement about a decision-only mechanism, not an unverified capability claim about any resolved Logback version.",
-          "source": {
-            "id": "LB",
-            "title": "Logback filters manual (third-party capability reference, not OTel guidance)",
-            "url": "https://logback.qos.ch/manual/filters.html",
-            "strength": "n/a - vendor documentation",
-            "maturity": "n/a",
-            "owner": "Logback / resolved dependency",
-            "retrieved": "not fetched in this pass; cited as the link target adopted in the clause"
-          }
-        },
-        {
-          "id": "C4",
-          "requested": "Retain acceptance uncertainty where the protocol leaves it unspecified or evidence does not resolve it, naming the response-size failure case.",
-          "status": "closed",
-          "anchor": "skills/references/logging-readiness.md:412-415",
-          "adopted": "Keep acceptance uncertainty where the protocol leaves it unspecified or evidence does not resolve it: after an oversized partial-success response fails, OTLP explicitly leaves acceptance unspecified.",
-          "assessment": "Closed, with the concrete case named. The wording tracks the specification precisely: it is the partial-success RESPONSE that is oversized, not the request, and the spec states for both transports that after the server fails such a request - HTTP 500, or RESOURCE_EXHAUSTED on gRPC - 'whether any telemetry data from the request was accepted is unspecified'. Separating a protocol-unspecified outcome from an unproven one is exactly the distinction that was missing, and 'Record the response and any observed retry exhaustion' correctly conditions retry exhaustion on observation rather than assuming it.",
-          "source": {
-            "id": "S9",
-            "title": "OTLP Specification",
-            "url": "https://opentelemetry.io/docs/specs/otlp/",
-            "strength": "MUST / MUST NOT / SHOULD per element cited",
-            "maturity": "Stable for logs (OTLP 1.11.1)",
-            "owner": "OTLP client (SDK exporter) and server",
-            "retrieved": "2026-11-09"
-          }
-        }
-      ],
-      "adopted_elements": [
-        {
-          "el": "A1",
-          "area": "privacy block",
-          "anchor": "skills/references/logging-readiness.md:85-95",
-          "classification": "selected privacy workflow (repository policy) with non-normative upstream support",
-          "strength": "non-normative; the sensitive-data page carries no normative keywords",
-          "owner": "implementer (application/operator)",
-          "source": {
-            "id": "S15",
-            "title": "Handling sensitive data",
-            "url": "https://opentelemetry.io/docs/security/handling-sensitive-data/",
-            "strength": "no normative keywords on the page",
-            "maturity": "best-practice, non-normative",
-            "owner": "implementer (application/operator)",
-            "retrieved": "2026-11-09"
-          },
-          "verdict": "supported",
-          "basis": "The closing sentence labels the whole block explicitly: 'These are selected privacy workflow rules supported by the non-normative sensitive-data guidance, not a universal OTel payload prohibition.' That is accurate - no OpenTelemetry source prohibits any particular application log payload, and the nearest upstream mechanism is attribute-level and binds a different owner, since the Opt-In level says instrumentations SHOULD populate an attribute only if configured and instrumentation without configuration support MUST NOT populate Opt-In attributes. Extending the inventory to framework, access and error renderers is supported non-normatively by the implementer-responsibility statement covering 'telemetry data emitted by any instrumentation libraries you use'. 'Preserve application behavior and permitted diagnostics instead of disabling all framework logging or replacing the provider' is consistent with the error-handling posture that self-diagnostics be filterable rather than eliminated and that SDK behaviour not break the application.",
-          "source2": {
-            "id": "S20",
-            "title": "Attribute requirement levels",
-            "url": "https://opentelemetry.io/docs/specs/semconv/general/attribute-requirement-level/",
-            "strength": "SHOULD / MUST NOT within Opt-In",
-            "maturity": "Stable",
-            "owner": "instrumentation library",
-            "retrieved": "2026-11-09"
-          }
-        },
-        {
-          "el": "A2",
-          "area": "delivery block",
-          "anchor": "skills/references/logging-readiness.md:410-420",
-          "classification": "upstream-normative distinctions plus accounting, with persistence correctly excluded",
-          "strength": "MUST NOT retry on populated partial_success (retained at :405-406); MUST on the server to set rejected_<signal>; MUST that only non-rejected records count as success; protocol-unspecified acceptance after a response-size failure",
-          "owner": "OTLP client (SDK exporter), server, and the backend as a separate boundary",
-          "source": {
-            "id": "S9",
-            "title": "OTLP Specification",
-            "url": "https://opentelemetry.io/docs/specs/otlp/",
-            "strength": "MUST / MUST NOT / SHOULD per element cited",
-            "maturity": "Stable for logs (OTLP 1.11.1)",
-            "owner": "OTLP client (SDK exporter) and server",
-            "retrieved": "2026-11-09"
-          },
-          "source2": {
-            "id": "S24",
-            "title": "Semantic conventions for OpenTelemetry SDK metrics",
-            "url": "https://opentelemetry.io/docs/specs/semconv/otel/sdk-metrics/",
-            "strength": "MUST for the counting rules inside a recommended metric",
-            "maturity": "Development",
-            "owner": "SDK self-observability",
-            "retrieved": "2026-11-09"
-          },
-          "verdict": "supported",
-          "basis": "accepted = N - R follows from the server's duty to set the rejected count together with the SDK-metrics rule that rejected records count as failed and only non-rejected count as success; 'acknowledged' correctly scopes the count to that server rather than to persistence. 'Backend persistence is a separate boundary' is required by the protocol's own scope limit, since acknowledgements happen between a single client/server pair and do not span intermediary nodes. Both negatives are sound: a client failure result cannot prove persisted loss because a receiver can accept after the caller stops waiting and unacknowledged data is typically re-sent, and received bytes cannot prove success because acceptance is signalled by the response. The pre-existing MUST NOT retry sentence is retained unchanged at :405-406, so the new block adds accounting without duplicating or weakening it."
-        },
-        {
-          "el": "A3",
-          "area": "java native-hook block",
-          "anchor": "skills/references/languages/java.md:797-808",
-          "classification": "installed bridge/framework capability discipline; vendor capability lead",
-          "strength": "no upstream requirement asserted on the appender or the framework",
-          "owner": "instrumentation library and application configuration",
-          "source": {
-            "id": "LB",
-            "title": "Logback filters manual (third-party capability reference, not OTel guidance)",
-            "url": "https://logback.qos.ch/manual/filters.html",
-            "strength": "n/a - vendor documentation",
-            "maturity": "n/a",
-            "owner": "Logback / resolved dependency",
-            "retrieved": "not fetched in this pass; cited as the link target adopted in the clause"
-          },
-          "verdict": "supported",
-          "basis": "Ownership is correct throughout: this is a capability and configuration question about a resolved dependency, not an SDK duty and not an application defect, and nothing upstream requires a logging bridge or a framework to redact or to preserve any particular rendering. The block is consistent with the version-neutral discipline adopted in B117 at :786-795, and it adds recursion, finally-cleanup, unrelated-diagnostics and dual-output proofs that match the existing LOG-DIAGNOSTICS requirement to prove no recursive export storm. 'Check the actual logging call style, including fluent calls if used' replaces the vaguer earlier phrasing with a concrete instance."
-        },
-        {
-          "el": "A4",
-          "area": "instrument closure sentence",
-          "anchor": "skills/otel-instrument/SKILL.md:1560-1565",
-          "classification": "repository evidence workflow - not an invented OTel requirement",
-          "strength": "none asserted upstream",
-          "owner": "repository instrumentation report",
-          "source": null,
-          "verdict": "repository evidence workflow, confirmed",
-          "basis": "Located unambiguously in a repository artifact ('the normal instrumentation report'), it asserts nothing about OTel and invents no field. Every field it names is already declared in the shared guide: source/version and feature maturity at skills/references/logging-readiness.md:26-27 ('package versions, source URLs/date, applicable stability of the language's Logs signal and individual features'); requirement strength, applicability and owner at :101-103; proof boundary and evidence in the LOG-SPEC-CLOSURE matrix sentence at :110. The disposition vocabulary 'implemented/default/unsupported' is an instrumentation-report wording choice, which is repository-owned. Its second sentence requires the reporter to separate normative requirements from recommendations, optional or Development features and local destination/privacy policy - the same separation at :106 - so it reinforces rather than blurs the boundary this review polices."
-        },
-        {
-          "el": "A5",
-          "area": "verify closure sentence",
-          "anchor": "skills/otel-verify/SKILL.md:34-37",
-          "classification": "repository evidence workflow - not an invented OTel requirement",
-          "strength": "none asserted upstream",
-          "owner": "repository verification report",
-          "source": null,
-          "verdict": "repository evidence workflow, confirmed",
-          "basis": "Also located in a repository artifact ('the normal verification report') and references the shared LOG-SPEC-CLOSURE fields rather than creating any. 'citations alone do not classify upstream requirements, recommendations, optional capabilities and local policy or establish executed coverage' is correct on both halves, and the second half is the more important one: it stops a source citation from standing in for an execution result, which is consistent with this skill's read-only boundary restated immediately above at :31-33 and with the standing rule that unexecuted acceptance never becomes a passing runtime result."
-        }
-      ],
-      "remaining_defects": [
-        {
-          "id": "D-1",
-          "severity": "informational - optional wording clarity",
-          "kind": "reclassified on triage: not a required correction and not an OTel defect",
-          "status": "withdrawn as a required correction; proposed Blocked mapping withdrawn as unsafe",
-          "anchor": "skills/references/logging-readiness.md:92-93 and skills/references/languages/java.md:807-808",
-          "text": "If no supported hook exists at that boundary, record the exact limitation and leave coverage unresolved. / If the installed stack cannot meet that boundary, leave it uncovered rather than forcing an upgrade or claiming an unsupported hook works.",
-          "original_claim": "The C2 escape is adopted in prose terms - 'leave coverage unresolved' and 'leave it uncovered' - neither of which is a member of the closed status vocabulary that skills/otel-verify/SKILL.md defines at :504-519 (Verified: unit, Verified: OTLP, Verified: unit+OTLP, Verified: app test, Source only, Not emitted, Not run, Blocked, Not configured, Not applicable). That skill also requires one concrete reason when a row is not fully verified. A reporter following the escape literally has no defined status to emit, and `Blocked` is the natural fit, since its definition is 'verification could not be attempted due to a concrete local prerequisite, including unresolved declared dependencies' and a missing hook in the resolved dependency is exactly such a prerequisite. The pre-existing skills/references/languages/java.md:793 phrase 'report it unverified/uncovered' has the same looseness, so this is a consistency gap the new wording inherits rather than introduces.",
-          "original_proposed_correction": "In the shared guide, replace 'leave coverage unresolved' with 'leave coverage unresolved and record the row Blocked with the missing capability as its reason'. Optionally align skills/references/languages/java.md:807 the same way.",
-          "triage_outcome": "I agree with the challenge. D-1 is at most optional wording clarity. Two of my three supporting points do not hold, and the correction I proposed would have made classification less safe rather than more.",
-          "grounds": [
-            {
-              "id": "G1",
-              "verified_from": "bound snapshot",
-              "finding": "The prose is not a row-status instruction. The sentence sits in the shared guide, which all three skills read - skills/otel-audit/SKILL.md:301, skills/otel-instrument/SKILL.md:1555 and skills/otel-verify/SKILL.md:29 - and the three skills carry different disposition vocabularies: audit uses covered/partial/missing/unverified/not-applicable (skills/references/logging-readiness.md:505), verify uses the Verified:*/Source only/Not emitted/Not run/Blocked/Not configured/Not applicable list (skills/otel-verify/SKILL.md:504-519), and the instrumentation report uses implemented/default/unsupported (skills/otel-instrument/SKILL.md:1561-1562). 'Blocked' occurs zero times in skills/otel-audit/SKILL.md. A shared-guide sentence therefore cannot name one skill's row status without being wrong for the other two, so 'leave coverage unresolved' is correctly ordinary coverage prose."
-            },
-            {
-              "id": "G2",
-              "verified_from": "bound snapshot",
-              "finding": "My proposed correction was unsafe, and it contradicted the definition I had quoted in support of it. Verify's own vocabulary separates 'Not emitted' - 'scenario ran but expected telemetry did not appear' (skills/otel-verify/SKILL.md:511) - from 'Blocked' - 'verification could not be attempted due to a concrete local prerequisite' (:513-514). The motivating observation is a probe that executed and failed, since raw invalid path values were exported. Mapping that to Blocked after inspection later establishes that no repair hook exists would record an executed privacy failure as unattemptable, hiding it behind a prerequisite. The disposition must depend on whether the probe ran, which is precisely what a single blanket token cannot express."
-            },
-            {
-              "id": "G3",
-              "verified_from": "bound snapshot, consistent with the supplied schema detail",
-              "finding": "The cited sentence at skills/references/logging-readiness.md:110-112 constrains the evidence matrix - 'follow the canonical report schemas and do not invent JSON keys or new artifact types' - and continues into ordinary coverage prose at :112-115. It is not a directive to emit a literal row status, so it does not make 'unresolved' or 'uncovered' into schema tokens."
-            }
-          ],
-          "supplied_unverified": {
-            "note": "The challenge also cites report-flow-contract.md Status Rules (Fail for an executed scenario violating expected telemetry, Blocked when no meaningful proof can run, Partial when meaningful work passed with gaps) and json-approval-handoff.md:119-120 (canonical finding status working/not_working/not_proven/not_configured/deferred, canonical scenario status working/not_working/not_proven/not_configured/blocked).",
-            "status": "supplied by the requester and NOT verified here. Both files are referenced by the changed skills but are outside the 13-path manifest, which is the same scope limit recorded as L1 in the B117 review.",
-            "effect": "The triage outcome does not depend on them. G1 and G2 are established from the bound snapshot alone and are individually sufficient. The supplied detail is consistent with what I can see: distinct finding and scenario vocabularies, with deferred present for findings but not scenarios and blocked present for scenarios but not findings, would make a single shared-guide token a vocabulary-mixing hazard as well as a classification hazard."
-          },
-          "residual": "A reader could still wonder which disposition to emit. If uniformity is wanted, the fix is to say so per skill rather than in the shared guide - for example letting each skill map an unsupported-repair outcome within its own vocabulary, distinguishing an executed-and-failed probe from one that never ran. That is optional editorial clarity, not a correction, and no OpenTelemetry source bears on it.",
-          "smallest_correction": "None required.",
-          "strength_preserved": "n/a - no change proposed. No requirement level, owner or local-policy label is affected.",
-          "affects_c1_c4_closure": false
-        },
-        {
-          "id": "D-2",
-          "severity": "informational",
-          "kind": "consistency observation, no correction proposed",
-          "anchor": "skills/otel-instrument/SKILL.md:1560-1565 and skills/otel-verify/SKILL.md:34-37",
-          "text": "Before finalizing, include the shared LOG-SPEC-CLOSURE matrix in the normal instrumentation report ... / In the normal verification report, reconcile the shared LOG-SPEC-CLOSURE fields ...",
-          "problem": "Neither new closure sentence carries the explicit non-normative label that the audit counterpart carries at skills/otel-audit/SKILL.md:311-312 ('This matrix is the repository's audit evidence contract, not an additional OTel requirement'). Both are nonetheless unambiguously repository workflow: each names a repository report as its location and neither attributes anything upstream, and both instruct the reporter to separate normative from non-normative material. I record this as a consistency observation rather than a defect because no misreading as an OTel requirement is available from the text itself.",
-          "smallest_correction": "None required. If uniformity is wanted, append the same clause used in the audit skill to one or both sentences.",
-          "strength_preserved": "n/a - no change proposed.",
-          "affects_c1_c4_closure": false
-        }
-      ],
-      "sources_relied_on": [
-        {
-          "id": "S15",
-          "title": "Handling sensitive data",
-          "url": "https://opentelemetry.io/docs/security/handling-sensitive-data/",
-          "strength": "no normative keywords on the page",
-          "maturity": "best-practice, non-normative",
-          "owner": "implementer (application/operator)",
-          "retrieved": "2026-11-09"
-        },
-        {
-          "id": "S13",
-          "title": "Error handling in OpenTelemetry",
-          "url": "https://opentelemetry.io/docs/specs/otel/error-handling/",
-          "strength": "MUST NOT throw / MUST NOT fail the app later; self-diagnostics SHOULD be filterable",
-          "maturity": "unlabeled",
-          "owner": "SDK",
-          "retrieved": "2026-11-09"
-        },
-        {
-          "id": "S9",
-          "title": "OTLP Specification",
-          "url": "https://opentelemetry.io/docs/specs/otlp/",
-          "strength": "MUST / MUST NOT / SHOULD per element cited",
-          "maturity": "Stable for logs (OTLP 1.11.1)",
-          "owner": "OTLP client (SDK exporter) and server",
-          "retrieved": "2026-11-09"
-        },
-        {
-          "id": "S24",
-          "title": "Semantic conventions for OpenTelemetry SDK metrics",
-          "url": "https://opentelemetry.io/docs/specs/semconv/otel/sdk-metrics/",
-          "strength": "MUST for the counting rules inside a recommended metric",
-          "maturity": "Development",
-          "owner": "SDK self-observability",
-          "retrieved": "2026-11-09"
-        },
-        {
-          "id": "S20",
-          "title": "Attribute requirement levels",
-          "url": "https://opentelemetry.io/docs/specs/semconv/general/attribute-requirement-level/",
-          "strength": "SHOULD / MUST NOT within Opt-In",
-          "maturity": "Stable",
-          "owner": "instrumentation library",
-          "retrieved": "2026-11-09"
-        },
-        {
-          "id": "LB",
-          "title": "Logback filters manual (third-party capability reference, not OTel guidance)",
-          "url": "https://logback.qos.ch/manual/filters.html",
-          "strength": "n/a - vendor documentation",
-          "maturity": "n/a",
-          "owner": "Logback / resolved dependency",
-          "retrieved": "not fetched in this pass; cited as the link target adopted in the clause"
-        }
-      ],
-      "limitations": [
-        "Bounded exact-clause delta verification. No repository execution, probe, install, edit, push, comment, credential or settings change; no subagents; no runtime certification and no runtime claim.",
-        "This is not the combined PR review and does not stand in for the three clean execution runs that precede it.",
-        "Scope is the four changed files' adopted paragraphs plus the two closure sentences. Other clauses in those files and the nine unchanged files are carried by hash and were not re-verified.",
-        "Upstream positions cited here were established by direct reads earlier in this engagement - the OTLP specification including the retryable set, partial-success and response-size sections, SDK metrics log-export counting, the sensitive-data page, attribute requirement levels and error handling. They are cited rather than re-fetched.",
-        "The Logback filters manual is cited only as the link target the clause adopts. I did not fetch it in this pass and make no claim about what any resolved Logback version can do; establishing that is the inspection the clause itself requires.",
-        "D-1 concerns alignment with a repository status vocabulary, not conformance to any OpenTelemetry source.",
-        "No access or authentication failure occurred.",
-        "D-1 was reclassified on bounded triage after a requester challenge. The two canonical schema documents cited in that challenge remain outside the 13-path manifest and unverified here; the reclassification rests on bound-snapshot evidence that is independently sufficient."
-      ],
-      "amendments": [
-        {
-          "id": "AM-1",
-          "date": "2026-11-09",
-          "trigger": "Requester challenge to D-1 only; bounded triage, no whole-PR re-review.",
-          "change": "D-1 reclassified from a low-severity defect with a required smallest correction to informational optional wording clarity, with the proposed 'record the row Blocked' mapping explicitly withdrawn as unsafe. remaining_defects 1 -> 0; remaining_informational 1 -> 2; headline updated.",
-          "source_change": false,
-          "identity_preserved": true,
-          "identity": "07a6809ad77e9d1d7243e11ec6f47be5593134775c75e802dfb6734e574ac1f3",
-          "identity_reverified_after_amendment": true,
-          "unaffected": "C1-C4 closure, the five adopted-element strength/ownership verdicts, the two closure-sentence classifications, D-2, and all hash/line/byte bindings are unchanged.",
-          "self_correction": "The withdrawn mapping contradicted a definition quoted in its own support: verify's Blocked is for work that could not be attempted, while the motivating probe executed and failed. Recording an executed privacy failure as Blocked would have degraded classification safety."
-        }
-      ]
-    },
-    "sha256": "1f590cb004419a6ec3247a6a734e83ca8136a3fe31c6522a727ec153ee4491e7",
-    "runtime_claim": false,
-    "whole_pr_review": false,
-    "initial_report_preserved": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/final-clause-verification/07a6809a/initial"
+    "scope": "Source-verification provenance only; no superseded eval tasks or execution results."
   }
 }
