@@ -908,6 +908,21 @@ observed attempt/retry/caller deadlines before the proposal; preserve an
 adequate existing bound. Shutdown waits and receiver acceptance need separate
 proof, and these controlled fixture values are not production defaults.
 
+For selected final-record drain proof, exercise the normal launcher's configured
+logging path through shutdown. At the owned receiver, decode its actual OTLP payload
+and assert the selected final record, Resource and appropriate context, including
+an outside-span final log when applicable. An owned handler that only counts a
+request and returns HTTP 200 without decoding the body does not identify which
+record arrived. A successful `Shutdown` return alone supplies no record-level
+receipt either. For a conforming [OTLP full-success response](https://opentelemetry.io/docs/specs/otlp/)
+(HTTP 200 with `partial_success` unset), a known transmitted batch is acknowledged
+as accepted. Keep that protocol acknowledgement separate from this receiver's
+record-content assertion and from backend persistence.
+A focused exporter test also cannot establish the application's lifecycle path.
+Audit specifies this acceptance test without executing it; implementation and
+verification keep the application drain claim unproven until that path's receipt
+is saved. Studio's live snapshot and bounded cleanup remain separate evidence.
+
 ---
 
 ## Gotchas

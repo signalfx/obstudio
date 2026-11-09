@@ -544,13 +544,8 @@ it is not invoked by the default SIGTERM action. When no lifecycle owner
 exists, install one signal owner that requests the service to stop, wait for
 the serving loop to return, and then call `shutdown`. Do not create a second
 provider or signal handler during reloads or per worker request.
-Make repeated stop requests idempotent while final logging and provider drain
-run outside the signal handler. A handler that raises `SystemExit` on every
-signal can interrupt cleanup already in progress; do not count that as a
-successful drain. Use the server's supported stop mechanism and test repeated
-signals against the actual launcher, retaining final-record receipts separately
-from live explorer visibility. This is Python lifecycle guidance, not an OTel
-signal-handler API requirement; see Python's [signal handler exceptions](https://docs.python.org/3/library/signal.html#note-on-signal-handlers-and-exceptions).
+Follow the shared-role [lifecycle checks](#lifecycle-and-final-record-proof)
+for repeated stop requests and final-record proof.
 
 `LoggingInstrumentor` is the current stdlib-to-OTel bridge. Its handler is an
 additional path, and its guarded configuration wrappers let later application
@@ -957,6 +952,25 @@ its deadline; resolve the installed behavior, test a stalled receiver and
 separately bound flush/shutdown. Record observed attempt/retry/caller budgets
 before the proposal. Preserve an adequate existing bound; fixture values are
 not production defaults.
+
+### Lifecycle and final-record proof
+
+Make repeated stop requests idempotent while final logging and provider drain
+run outside the signal handler. A handler that raises `SystemExit` on every
+signal can interrupt cleanup already in progress; do not count that as a
+successful drain. Use the server's supported stop mechanism and test repeated
+signals against the actual launcher, retaining final-record receipts separately
+from live explorer visibility. This is Python lifecycle guidance, not an OTel
+signal-handler API requirement; see Python's [signal handler exceptions](https://docs.python.org/3/library/signal.html#note-on-signal-handlers-and-exceptions).
+
+Audit identifies an existing repeated-`SystemExit` handler and plans the
+acceptance case without executing or editing the service. For selected
+implementation/verification, test two stop requests on the same configured
+process, with the second arriving during final logging/provider drain. A
+single-signal receipt plus a separate repeated-stop test without the active
+provider does not prove that combined claim. Preserve final native output and
+decode the selected final OTLP record at the owned receiver; retain failures
+and incomplete proof in the normal report.
 
 ---
 

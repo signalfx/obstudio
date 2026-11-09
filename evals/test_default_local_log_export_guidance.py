@@ -65,6 +65,13 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
         assert guide.read_bytes() == canonical.read_bytes()
         text = _read(guide)
         assert "## Logging Readiness Checks" in text
+        readiness = text.split("## Logging Readiness Checks", 1)[1].split("\n## ", 1)[0]
+        if target == "languages/python.md":
+            assert "SystemExit" in readiness and "repeated" in readiness
+            assert "signal handler" in readiness and "drain" in readiness
+        if target == "languages/go.md":
+            assert "decode its actual OTLP payload" in readiness
+            assert "final record" in readiness
         for relative in re.findall(r"`((?:\.\.?/)[^`\s]+\.md)`", text):
             assert (guide.parent / relative).is_file(), (skill, target, relative)
         assert skill in consumers[target]
