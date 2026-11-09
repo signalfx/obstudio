@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-instrument",
-    "run_id": "20261109T175510579902Z",
+    "run_id": "20261109T180818423233Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-6-luna",
     "judge_model": "",
@@ -986,7 +986,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "a61ece2f2ec77086746a01a27c6c654eb80db9c4c8ee06ac3904c78b765e5372",
+    "digest": "aaaa7944e4e22c2b4c9041d44a10c2d7ef025b57f7b11d4bfa02fc9b42ebf0b6",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -1349,8 +1349,8 @@
       "skills/splunk-detector-publish/SKILL.md": "2a168cdea73b81e46ed39cb8bded81f83f5647bb0d65afd740b19b4fd5dec1ea",
       "skills/splunk-detector-publish/references/coverage-model.md": "9bca7ef0a57794f8d2f87173a51a4d9315dd4b4c311906ab90ba8014b43ccc92",
       "evals/go/chi-partial/eval/qual/instrument.json": "931f49ba387f6f2cfed899d6d7b8950cffec4f1f9a1d629b604551f74d217cad",
-      "evals/go/chi-partial/go.mod": "fe39c1b6feba0c99c87487940d3b95d86160c05dbea9827b2eaeda3e9cf4ca2c",
-      "evals/go/chi-partial/go.sum": "3b30f47a7b2c57e7383c97d58f067b23aac727f3d8cbec619ea8e73b802936ba",
+      "evals/go/chi-partial/go.mod": "05732d726428ccc8ab791081f88e45c9499210baf1d7725f067a3d4a1ccd35ed",
+      "evals/go/chi-partial/go.sum": "8a6f58c41411be526ca857ee21686ec404ab30f7955c748113cffb71c751148a",
       "evals/go/chi-partial/main.go": "e395c48e36e43de4537eb493003c9d682557d496304a2d680006a96bea35a7d3",
       "evals/go/chi-partial/eval/runtime/App.Dockerfile": "8b750bf45311e5a6c5d386a532546f76fb28dd0e7d52e73cb3d608a8c616fd16",
       "evals/go/chi-partial/eval/runtime/docker-compose.yml": "3723171b3919c33bf6789a6fab54bac040234901ab4b20da06464463994c0d65",
