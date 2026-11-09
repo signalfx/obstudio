@@ -555,6 +555,7 @@ describe("CloudTab", () => {
     vi.mocked(disconnectSplunkLogs).mockResolvedValueOnce(disconnectedLogs);
     vi.mocked(fetchSplunkLogsStatus).mockResolvedValue(disconnectedLogs);
     await user.click(screen.getByRole("button", { name: "Disconnect Splunk Platform" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Disconnect Splunk Platform?" })).getByRole("button", { name: "Disconnect Splunk Platform" }));
     await screen.findByRole("form", { name: "Logs connection" });
     expect(screen.getByRole("form", { name: "Cloud connection" })).toBeTruthy();
     expect(vi.mocked(disconnectSplunkLogs)).toHaveBeenCalledWith("logs-v1");

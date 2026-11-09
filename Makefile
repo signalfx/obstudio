@@ -68,8 +68,9 @@ sync-obstudio-plugin-skills: ## Refresh committed unified plugin skills from can
 check-obstudio-plugin-skills: ## Verify committed unified plugin skills match canonical skills
 	$(PYTHON) plugins/obstudio/scripts/stage_obstudio_plugin.py --check-plugin-skills
 
-check-plugin-manifest-versions: ## Verify plugin versions and Codex marketplace ref agree (and match RELEASE_TAG when set)
+check-plugin-manifest-versions: ## Verify plugin versions, Codex marketplace ref, and the pinned runtime manifest agree (and match RELEASE_TAG when set)
 	$(PYTHON) plugins/obstudio/scripts/stage_obstudio_plugin.py --check-manifest-versions $(RELEASE_TAG_ARG)
+	$(PYTHON) plugins/obstudio/scripts/stage_obstudio_plugin.py --check-runtime-manifest $(RELEASE_TAG_ARG)
 
 check-claude-plugin-validate: ## Validate the obstudio plugin and root marketplace manifest with the Claude CLI
 	claude plugin validate ./plugins/obstudio --strict

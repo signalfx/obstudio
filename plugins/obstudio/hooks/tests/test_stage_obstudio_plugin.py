@@ -612,6 +612,9 @@ class StageObstudioPluginTest(unittest.TestCase):
                 encoding="utf-8",
             )
 
+            (output / "hooks").mkdir(parents=True)
+            shutil.copy(STAGE.PLUGIN_ROOT / "hooks" / "runtime-manifest.json", output / "hooks")
+
             with self.assertRaisesRegex(RuntimeError, "defaultPrompt must contain at most 3 entries"):
                 STAGE.verify_staged_plugin(output)
 
@@ -636,6 +639,9 @@ class StageObstudioPluginTest(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+
+            (output / "hooks").mkdir(parents=True)
+            shutil.copy(STAGE.PLUGIN_ROOT / "hooks" / "runtime-manifest.json", output / "hooks")
 
             with self.assertRaisesRegex(RuntimeError, r"unknown skills: \$open-observer"):
                 STAGE.verify_staged_plugin(output)

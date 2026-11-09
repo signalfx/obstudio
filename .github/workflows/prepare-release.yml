@@ -44,6 +44,22 @@ jobs:
           python3 plugins/obstudio/scripts/stage_obstudio_plugin.py \
             --check-manifest-versions --release-tag "$RELEASE_TAG"
 
+      - name: Build runtime archives deterministically
+        uses: ./.github/actions/build-runtime-archives
+        with:
+          release_tag: ${{ steps.release.outputs.tag }}
+
+      - name: Write runtime manifest from the built archives
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          python3 plugins/obstudio/scripts/stage_obstudio_plugin.py \
+            --write-runtime-manifest --release-tag "$RELEASE_TAG" --dist-dir dist
+          python3 plugins/obstudio/scripts/stage_obstudio_plugin.py \
+            --verify-runtime-manifest --release-tag "$RELEASE_TAG" --dist-dir dist
+          git tag -d "$RELEASE_TAG"
+
       - name: Open release preparation PR
         uses: peter-evans/create-pull-request@v7
         with:
@@ -51,13 +67,20 @@ jobs:
           branch: bot/prepare-release-${{ steps.release.outputs.tag }}
           base: main
           delete-branch: true
+          add-paths: |
+            plugins/obstudio/.claude-plugin/plugin.json
+            plugins/obstudio/.codex-plugin/plugin.json
+            plugins/obstudio/hooks/runtime-manifest.json
           commit-message: "chore(release): prepare ${{ steps.release.outputs.tag }}"
           title: "Release ${{ steps.release.outputs.tag }}"
           body: |
-            Sets both plugin manifest versions to `${{ steps.release.outputs.tag }}` so the release tag and plugin ZIPs are created from manifests that already carry the release version.
+            Sets both plugin manifest versions to `${{ steps.release.outputs.tag }}` so the release tag and plugin ZIPs are created from manifests that already carry the release version. It also commits `plugins/obstudio/hooks/runtime-manifest.json`, the SHA256 of each runtime archive built from this commit. The plugin hook trusts only that manifest.
+
+            The release workflow rebuilds the runtime archives at the tag and refuses to publish unless every hash matches the manifest. If `main` changes the runtime inputs (`observer/`, `skills/`, `docs/`, build config) before this PR merges, the rebuild will not match: close this PR and run Prepare Release again.
 
             **Merging this PR cuts the release.** [tag-release.yml](${{ github.server_url }}/${{ github.repository }}/blob/main/.github/workflows/tag-release.yml) tags the merge commit `${{ steps.release.outputs.tag }}` and dispatches [release.yml](${{ github.server_url }}/${{ github.repository }}/blob/main/.github/workflows/release.yml). After the release publishes, a follow-up sync PR points the Claude and Codex marketplaces at it.
 
             Files updated:
             - `plugins/obstudio/.claude-plugin/plugin.json`
             - `plugins/obstudio/.codex-plugin/plugin.json`
+            - `plugins/obstudio/hooks/runtime-manifest.json`
