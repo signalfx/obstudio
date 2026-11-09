@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-audit",
-    "run_id": "20261109T184108787790Z",
+    "run_id": "20261109T190046814513Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-6-luna",
     "judge_model": "",
@@ -727,7 +727,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "2f93a8e98591ede435d35a0c8d3599437446095ca7c31f1ba41e1c7b48ebb1e0",
+    "digest": "8a1c0280a1e9f65b4467ce0bcbd3241b6f65aa4215072d3c55ca7fdc3dccf85b",
     "eval_kinds": [
       "rubric",
       "sanity"
@@ -738,7 +738,7 @@
       "evals/go/chi-basic/Makefile": "4fa7a1c389866c15986b27d22da0bee109bf6bc438f0d29e2b42d7f6d36ea68a",
       "evals/go/chi-basic/README.md": "6e17e9f1e65f52a9268ed19a4e4c7d449efdf4789c404232c98bf04777702688",
       "evals/go/chi-basic/eval/qual/audit.json": "e255cfa18954eeec98430cbba25f03b51be5622750a91bf50f5673023845a8aa",
-      "evals/go/chi-basic/go.mod": "3180c726d9dfb307fcbebbd0f02e93dc833a8df2f36cbef9101d681e5048ba00",
+      "evals/go/chi-basic/go.mod": "585e9c5a128baf66cc508e074aa3e019875979a6fad497fa892aa967c20ba62c",
       "evals/go/chi-basic/go.sum": "568d7c01fdccc1b581965e736138e294497e891d01ec8b78e3509479a6a52e2e",
       "evals/go/chi-basic/main.go": "bb8ca564254a9fc733166fccb1b60aacb3a2ee04d8fc5932a25b1a8cd31ba70b",
       "skills/otel-audit/SKILL.md": "145e93401d76ad0547f6d7babce6bff97c1b85d4668742016d61a6792454d339",
@@ -775,8 +775,8 @@
       "pytest-codex-evals/src/pytest_codex_evals/graders/shared.py": "f56238f0ea3a0dd52184391b3b76f5214a9bf354293bf68854bcffa175d357ba",
       "pytest-codex-evals/src/pytest_codex_evals/report.py": "82d78295d07cce02b6fb4a976c9ce3852b262a2fe63e99256c6ac034985b7cd4",
       "evals/go/chi-partial/eval/qual/audit.json": "f3ee529239047e5771c74fdf99feba0b1b3cdcc8a4a815bc8123dfd60b9476d9",
-      "evals/go/chi-partial/go.mod": "244c715a3ba6df3d65f09d0d71775db17e551ee2a9f6a0de70cc9ee64d8626c6",
-      "evals/go/chi-partial/go.sum": "4050499935ba75f7faef6e9ff6e29ab4bc1829376b1f9f38c5972ed63e78f916",
+      "evals/go/chi-partial/go.mod": "e2a557e6e1bcdf4a7ec5a3939a2d13980ad04e5c74ec81a650fb7fb99f1d2b8d",
+      "evals/go/chi-partial/go.sum": "5edf352b70793696c8c4fbcf38fcd6bb88cd5c4562cb50e435375e258818b6d1",
       "evals/go/chi-partial/main.go": "e395c48e36e43de4537eb493003c9d682557d496304a2d680006a96bea35a7d3",
       "evals/go/kvstore/.vscode/launch.json": "91385f78513beaadd967bbfddfe03e992f8d2fa54a7f86e6a17ef3562a1691c8",
       "evals/go/kvstore/Makefile": "557b16aa60d316634e43c3650f02c06305ddcc006e07ded16bee7452cabe9fa7",

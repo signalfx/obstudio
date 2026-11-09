@@ -33,7 +33,7 @@
     },
     {
       "check": "Runtime/startup",
-      "finding": "Go 1.23 module",
+      "finding": "Go 1.24 module",
       "source": "go.mod"
     },
     {
