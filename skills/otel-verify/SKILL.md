@@ -598,6 +598,21 @@ and their future assertion as Not proven. An automatic-recovery sentence alone
 does not assess these constraints, and source-only verification must not invent
 numeric runtime settings.
 Only exact fresh cloud trace readback proves end-to-end AO visibility.
+Apply the shared reference's **AO-Compatible Trace Root** contract to that
+readback: match the application's root, required operation/connecting-parent
+edges and native/external identities. A retained child with an absent parent,
+Partial trace placeholder or missing expected graph fails complete AO assembly
+even after HTTP 200 and zero reported rejections. Verify truthful same-span
+mapping and actual error outcomes locally; keep cloud proof unproven when
+unavailable. A synthetic root, captured diagnostic, marker flag or leaf-span
+inventory cannot substitute for the fresh application trace. Do not repair
+source or invent workflow/parent metadata during read-only verification.
+Read the entire shared root section. Verify the actual entrypoint's physical
+root and ancestors, not just a parentless direct-function test. A retained
+agent below an absent HTTP root fails that runtime's AO assembly even when
+forwarding works; identify that boundary separately from resource/API failures.
+For a conversation-state controller mapping, also prove typed content after
+sanitization, success/failure lifecycle and unchanged unrelated HTTP routes.
 
 For Galileo, verify its native project/log-stream client and actual consumed
 vendor configuration, then its installed native processor/logger/export path.

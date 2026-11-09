@@ -14,14 +14,21 @@ import {
 import { isLoopbackObserverHost } from './backend';
 
 export type ObserverHostCloudPayload = {
+	sessionOnly?: boolean;
+	platform?: string;
 	accessToken?: string;
+	reuseSavedToken?: boolean;
+	preserveEnabled?: boolean;
 	adminToken?: string;
+	clientId?: string;
+	clientSecret?: string;
 	destination?: string;
 	email?: string;
 	enabled?: boolean;
 	expectedVersion?: string;
 	firstName?: string;
 	lastName?: string;
+	orgId?: string;
 	realm?: string;
 	region?: string;
 	skill?: SkillDocsId;
@@ -41,6 +48,11 @@ export type ObserverHostRequest =
 		payload?: ObserverHostCloudPayload;
 	};
 
+export function isLogsMutation(request: ObserverHostRequest): boolean {
+	return request.kind === 'http' && request.method === 'POST'
+		&& (request.path === '/api/splunk/logs' || request.path.startsWith('/api/splunk/logs/'));
+}
+
 export type ObserverHostRequestEnvelope = {
 	request: ObserverHostRequest;
 	requestId: string;
@@ -54,6 +66,7 @@ export type ObserverHostCancelEnvelope = {
 
 export type ObserverHostResponseEnvelope = {
 	code?: string;
+	platform?: string;
 	error?: string;
 	ok: boolean;
 	requestId: string;
@@ -76,6 +89,9 @@ const observerStateVersionPattern = /^[A-Za-z0-9_-]{43}$/;
 const traceDetailPathPattern = /^\/api\/query\/traces\/[0-9a-fA-F]{32}$/;
 const allowedGetPaths = new Set([
 	'/api/audit/score',
+	'/api/config',
+	'/api/config/definitions',
+	'/api/config/status',
 	'/api/dashboards/preview',
 	'/api/health',
 	'/api/query/logs',
@@ -89,8 +105,9 @@ const allowedGetPaths = new Set([
 	'/api/query/validation/latest',
 	'/api/query/validation/summary',
 	'/api/splunk/export',
+	'/api/splunk/logs',
 ]);
-const allowedPostPaths = new Set(['/api/validation/run']);
+const allowedPostPaths = new Set(['/api/config', '/api/validation/run', '/api/splunk/logs', '/api/splunk/logs/enabled', '/api/splunk/logs/disconnect', '/api/splunk/logs/refresh']);
 
 export function observerHostResponseByteLimit(url: URL): number {
 	return isLoopbackObserverHost(url.hostname)
@@ -244,7 +261,7 @@ function isObserverHostCloudRequestPayload(action: CloudBridgeAction, value: unk
 	switch (action) {
 		case 'connect':
 			return isObserverHostCloudPayload(value)
-				&& hasOnlyCloudPayloadKeys(value, ['accessToken', 'expectedVersion', 'realm'])
+				&& hasOnlyCloudPayloadKeys(value, ['sessionOnly', 'accessToken', 'enabled', 'expectedVersion', 'realm', 'reuseSavedToken', 'preserveEnabled'])
 				&& typeof value.accessToken === 'string'
 				&& typeof value.realm === 'string';
 		case 'resolve-realm':
@@ -263,6 +280,25 @@ function isObserverHostCloudRequestPayload(action: CloudBridgeAction, value: unk
 				&& value.adminToken.trim().length > 0
 				&& typeof value.realm === 'string'
 				&& value.realm.trim().length > 0;
+		case 'login-o11y-oauth':
+			// expectedVersion is carried opportunistically, same rationale as
+			// register-o11y-oauth above.
+			return isObserverHostCloudPayload(value)
+				&& hasOnlyCloudPayloadKeys(value, ['clientId', 'clientSecret', 'expectedVersion', 'orgId', 'realm'])
+				&& typeof value.clientId === 'string'
+				&& value.clientId.trim().length > 0
+				&& typeof value.clientSecret === 'string'
+				&& value.clientSecret.trim().length > 0
+				&& typeof value.orgId === 'string'
+				&& value.orgId.trim().length > 0
+				&& typeof value.realm === 'string'
+				&& value.realm.trim().length > 0;
+		case 'get-o11y-oauth-session':
+		case 'disconnect-o11y-oauth':
+			// Carries no payload, same as disconnect-cimd below.
+			return value === undefined
+				|| (isObserverHostCloudPayload(value)
+					&& hasOnlyCloudPayloadKeys(value, ['expectedVersion']));
 		case 'create-free-account':
 			return isObserverHostCloudPayload(value)
 				&& hasOnlyCloudPayloadKeys(value, [
@@ -293,6 +329,8 @@ function isObserverHostCloudRequestPayload(action: CloudBridgeAction, value: unk
 				&& hasOnlyCloudPayloadKeys(value, ['skill'])
 				&& isSkillDocsId(value.skill);
 		case 'forget':
+			return value === undefined || (isObserverHostCloudPayload(value) && hasOnlyCloudPayloadKeys(value, ['expectedVersion', 'sessionOnly']));
+		case 'refresh':
 			return value === undefined
 				|| (isObserverHostCloudPayload(value)
 					&& hasOnlyCloudPayloadKeys(value, ['expectedVersion']));
@@ -305,12 +343,21 @@ function isObserverHostCloudRequestPayload(action: CloudBridgeAction, value: unk
 			return value === undefined
 				|| (isObserverHostCloudPayload(value)
 					&& hasOnlyCloudPayloadKeys(value, ['expectedVersion']));
+		case 'open-credential-storage-help':
+			return value === undefined || (isObserverHostCloudPayload(value) && hasOnlyCloudPayloadKeys(value, ['platform'])
+				&& (value.platform === undefined || ['darwin', 'linux', 'windows'].includes(value.platform)));
 		case 'detect-free-account-region':
 		case 'initialize':
 		case 'open-audit-report':
 		case 'open-free-edition':
 		case 'open-free-edition-terms':
 		case 'open-ingest-token-help':
+		case 'open-hec-token-help':
+		case 'open-splunk-platform-trial':
+		case 'open-observability-cloud':
+		case 'open-observability-metrics':
+		case 'open-observability-traces':
+		case 'open-splunk-search':
 		case 'open-realm-help':
 		case 'open-observability-cloud-demo':
 		case 'open-observability-data-course':
@@ -325,14 +372,21 @@ function isObserverHostCloudPayload(value: unknown): value is ObserverHostCloudP
 	}
 	const payload = value as Record<string, unknown>;
 	return Object.keys(payload).every((key) => [
+		'sessionOnly',
+		'platform',
 		'accessToken',
+		'reuseSavedToken',
+		'preserveEnabled',
 		'adminToken',
+		'clientId',
+		'clientSecret',
 		'destination',
 		'email',
 		'enabled',
 		'expectedVersion',
 		'firstName',
 		'lastName',
+		'orgId',
 		'realm',
 		'region',
 		'skill',
@@ -344,11 +398,23 @@ function isObserverHostCloudPayload(value: unknown): value is ObserverHostCloudP
 		&& (payload.adminToken === undefined
 			|| (typeof payload.adminToken === 'string'
 				&& Buffer.byteLength(payload.adminToken, 'utf8') <= maxCloudAccessTokenBytes))
+		&& (payload.clientId === undefined
+			|| (typeof payload.clientId === 'string'
+				&& Buffer.byteLength(payload.clientId, 'utf8') <= maxCloudAccessTokenBytes))
+		&& (payload.clientSecret === undefined
+			|| (typeof payload.clientSecret === 'string'
+				&& Buffer.byteLength(payload.clientSecret, 'utf8') <= maxCloudAccessTokenBytes))
+		&& (payload.orgId === undefined
+			|| (typeof payload.orgId === 'string' && payload.orgId.length <= 64))
 		&& (payload.destination === undefined
 			|| (typeof payload.destination === 'string'
 				&& Buffer.byteLength(payload.destination, 'utf8') <= maxCloudDestinationBytes))
 		&& (payload.email === undefined || typeof payload.email === 'string')
+		&& (payload.platform === undefined || typeof payload.platform === 'string')
+		&& (payload.sessionOnly === undefined || typeof payload.sessionOnly === 'boolean')
 		&& (payload.enabled === undefined || typeof payload.enabled === 'boolean')
+		&& (payload.reuseSavedToken === undefined || typeof payload.reuseSavedToken === 'boolean')
+		&& (payload.preserveEnabled === undefined || typeof payload.preserveEnabled === 'boolean')
 		&& (payload.expectedVersion === undefined
 			|| (typeof payload.expectedVersion === 'string'
 				&& observerStateVersionPattern.test(payload.expectedVersion)))

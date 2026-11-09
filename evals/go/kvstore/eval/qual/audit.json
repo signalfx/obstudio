@@ -13,7 +13,8 @@
   "judge_inputs": [
     "Inspect ./service for resulting files when present.",
     "Read ./last_message.md for the agent final response.",
-    "Read ./grade.json for run guard checks."
+    "Read ./grade.json for run guard checks.",
+    "Read ./.agents/skills/otel-audit/SKILL.md and inspect its allowed-tools frontmatter."
   ],
   "rubric": [
     "Identifies cmd/kvstore-server/main.go as the entry point and preserves the cmd/ plus library package boundary.",
@@ -21,6 +22,7 @@
     "Reports no OTel SDK initialization, no go.opentelemetry.io dependencies, and no OTLP exporter.",
     "Calls out filesystem I/O, background indexing, and LRU eviction as optional custom instrumentation candidates.",
     "Separates coverage gaps from anti-patterns and avoids inventing existing instrumentation.",
-    "Classifies a missing compatible Go application-log bridge and local Splunk Observability Studio exporter as a required default gap when the existing sink can be preserved, while retaining explicit opt-out/operator ownership and keeping cloud forwarding limited to traces and metrics."
+    "Classifies a missing compatible Go application-log bridge and local Splunk Observability Studio exporter as a required default gap when the existing sink can be preserved, while retaining explicit opt-out/operator ownership and keeping cloud forwarding limited to traces and metrics.",
+    "The skill's SKILL.md allowed-tools frontmatter grants file writes only to the audit artifact directory through the scoped rule Edit(**/.observe/**) instead of an unrestricted Write or Edit grant, and the run created or modified no file under ./service outside ./service/.observe/."
   ]
 }

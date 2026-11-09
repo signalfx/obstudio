@@ -69,12 +69,37 @@ current stack; fill missing GenAI operations with OTel and supported hooks.
 Record each native SDK `@log`, justified application-owned function-decorator,
 or preserved-producer decision in existing plan/report evidence; a manual
 context-manager scope alone does not instrument a fresh function by this gate.
+For selected AO work, apply the shared reference's **AO-Compatible Trace Root**
+contract before choosing root metadata or hooks. Map the real entrypoint and
+its transport/GenAI ancestry to a supported AO representation, enrich an
+existing genuine owner through public hooks, and preserve actual operation
+roles, parent IDs and kinds. Include positive root-mapping and missing-parent
+regressions; keep unsupported mappings and unavailable cloud assembly explicit
+in remaining gaps. Resource routing or a conversation-root marker alone cannot
+complete this contract.
+Read the entire shared root section. Record physical root versus outermost
+GenAI operation before implementation, and exercise the actual entrypoint for
+root acceptance. If selected scope omitted a root gap, expose it for the
+audit/selection flow instead of silently implementing it or declaring AO complete.
+Classify controller state/commit/rollback ownership using that section's
+conversation-controller case; one agent child does not make it transport-only.
 Always read `../references/local-otlp-receiver.md` before choosing exporter
 endpoints. Resolve the active local receiver once during instrumentation and
 persist standard OTel receiver configuration and supported AO SDK endpoint/auth
 configuration in the application/deployment environment; generated
 application startup must not query Studio-specific discovery APIs. Normal AO
 SDK calls to a configured cloud-compatible endpoint are allowed.
+
+## Credential Safety
+
+When the project uses or introduces env files:
+
+1. **Create or update the active `.env`**: When the project's dotenv launch needs configuration for selected instrumentation, create `.env` if it is absent; if it exists, merge only the required new or changed settings in place. Derive required inputs and their consumed variable names from the selected initialization, resource-resolution, and exporter code. Persist the separately discovered AO API origin when that path requires it; project and Agent Stream names alone do not configure a resolver that also needs an origin. Leave optional knobs at their existing defaults unless the selected work needs an override. Preserve credentials, unrelated values, unchanged settings, and existing comments. Add `.env` to `.gitignore` before writing local values. An existing file is not a reason to skip the configuration update, and a missing file is not a reason to provide only an example.
+2. **Document only added or changed settings in `.env`**: Add a short comment describing each new or modified variable and use the resolved non-secret value when known. Leave documentation for unchanged configuration untouched. Document an unknown credential or unresolved setting with a commented placeholder, such as `# API_KEY=<set locally>`, instead of an active fabricated value. Update an existing assignment rather than appending a duplicate.
+3. **Keep `.env.studio.example` as the safe Studio template**: When Studio configuration is selected, include only the selected producer's supported variables, descriptions, and safe local values. Do not copy credentials or unrelated application settings from `.env`. Discovered local endpoints may be active examples; leave unresolved endpoints commented and report the exact blocker. Keep direct-cloud credentials out of this template. Never add `.env.studio.example` or `.env.example` to application startup, dotenv fallback chains, shell sourcing, or launch arguments; persist supported values in the active `.env` instead.
+4. **Do not generate another dotenv file**: Do not create or update `.env.example`, or introduce `.env.studio` as a second runtime file. Preserve any pre-existing `.env.example` unchanged. An explicitly requested additional profile remains user-owned scope.
+5. **Prove that the actual launch consumes `.env`**: Before reporting dotenv configuration complete, verify that `.env` exists at the path the real launcher loads and contains the persisted selected settings, then exercise that existing runner or loader through the selected resolver/exporter configuration boundary. Clear inherited test overrides for the inputs under test so they cannot mask an incomplete file. A zero-exit local-only fallback does not prove selected AO configuration; show that the consumer receives every required input, using credential-free external-I/O stubs when live access is unavailable, and keep that proof separate from resource identity and delivery. Prove selected configuration still reaches the consumer when the example template is unavailable, using an isolated copy or a read guard; this must not depend on a second template-loading call. Record the active file path and configuration outcome in the instrumentation report; a template or a proposed launch command alone is insufficient. Explain that `.env.studio.example` is a template, not an automatically loaded runtime file. Keep one AO mode active and remove conflicting inherited mode variables from the launch environment. For a repository using a native configuration system instead of dotenv, preserve that system rather than adding a new dotenv loader.
+6. **Verify no tokens in tracked files**: Check generated or modified tracked configuration and reports without printing secret values. Neither the Studio template nor generated reports may contain live credentials.
 
 ## Workflow
 
@@ -86,7 +111,7 @@ Before editing anything, ground the plan with repo evidence:
 
 When `.observe/otel-audit.json` exists, treat it as the canonical audit.
 Executable scope may come from a selected-audit copy's `review_selection`,
-from a materialized `.observe/otel-selection.json`, or from exact IDs supplied
+from a valid current `.observe/otel-selection.json`, or from exact IDs supplied
 in the current request; when none are present and the user asks for bare or
 broad instrumentation, use deterministic `select --all`. `.observe/otel.html`
 is the audit and scope-planning surface. Never open or read an audit Markdown
@@ -112,18 +137,34 @@ selection exists, and finally bare/broad `select --all`. Unless current-request
 as an idempotent preflight step before reporting a missing selection. If the
 helper prints `PASS:` or `wrote`, immediately run `validate-flow` and continue
 the same `$otel-instrument` run; do not ask the user to move a download, save
-again, or rerun instrumentation. If no saved selection exists and the request is
+again, or rerun instrumentation. If no valid current selection exists and the request is
 bare/broad, run `select --all`; if it prints manual-decision options, stop
 before edits and present those exact `--decision OTEL-###=option-id` choices.
+Always drop stale selection and result artifacts from the active flow after
+validating the current audit. Move their original bytes into a unique
+`.observe/history/<run>/` folder and continue without asking whether to keep
+old scope or reuse old finding IDs. Follow the handoff reference's binding
+checks: stale selection invalidates its downstream results; stale results alone
+do not invalidate a valid current selection. Current exact `--ids` take
+precedence, then a valid current selection; otherwise a bare/broad request uses
+`select --all` against the current audit. `adopt-selection --all-if-empty` does
+not itself recover a no-match error: run `select --all` and continue this same
+run through `validate-flow` and required-input checks. Never restamp old proof
+or carry old answers, destinations or approval metadata onto a changed audit.
 Never choose between mutually exclusive telemetry owners or paths. Stop before
-edits only when the audit is invalid, stale, not broad enough to imply all
-eligible work, or the bound/created selection has empty `approved_ids`.
+edits when the current audit is invalid, not broad enough to imply all eligible
+work, the bound/created selection has empty `approved_ids`, or required inputs
+are unresolved. Follow the generic required-input preflight in the JSON handoff
+reference and ask for only missing values before continuing.
 Implement exactly the dependency-closed selected IDs.
 Bind `.observe/otel-instrumentation.json` to the entire normalized selection
 with `selection_sha256`, not only to its audit and executable IDs. This digest
 includes `decision_answers` and any schema-v3 `ao_target`; changing an answer
 or AO target invalidates older
 instrumentation even when `approved_ids` is unchanged.
+After every selection creation or update, including required-input answers,
+repeat the handoff's downstream binding checks against the resulting selection
+before application edits; archive newly stale results and retain matching proof.
 When no canonical audit exists, a direct request for the standard
 auto-instrumentation and default-local-log baseline may proceed after this
 preflight without fabricating audit IDs or selection artifacts. Keep that
@@ -230,11 +271,14 @@ Markdown reports.
   `../references/splunk-agent-observability.md`. Preserve explicit active
   destinations and prove mode isolation, resource-before-export ordering,
   and resource-resolution failure without live cloud credentials.
-  Consume supplied project/Agent Stream names or IDs and reuse-only behavior
-  from the validated selection's `ao_target`. If absent, preserve the
-  application's configured target; otherwise use the audit's disclosed stable
-  service-derived names and bind them through `select` before implementation.
-  Do not silently skip selected AO work when names are blank. Follow the
+  Request project and Agent Stream names for new destination inputs. Consume
+  names, legacy IDs, and any saved creation prohibition from the validated
+  selection's `ao_target`; follow the shared input compatibility contract.
+  Project and Agent Stream are
+  required whenever any AO work is selected. If either is missing, ask for the
+  missing values and wait; do not silently use application settings or proposed
+  service-derived names. Values already supplied in the current request or
+  validated selection satisfy the requirement without asking again. Follow the
   shared AO reference's Idempotent Resource Provisioning contract: reuse exact
   existing resources, create missing selected named resources, and recover
   duplicate races through bounded exact relookup. A resource input changes
@@ -246,27 +290,24 @@ Markdown reports.
   from one resolved pair. Preserve valid known bindings through a temporary
   disconnected Studio; neither a manual setup command nor restart is normal
   recovery. Keep SDK-owned routing and unrelated signal Resources intact.
-  Treat blank audit resource fields as an env/config fallback. Read the same
-  profile the real application launch uses, including native vendor aliases.
-  Galileo uses its supported GALILEO_* settings/constructor arguments; do not
-  translate them into SPLUNK_AO_* settings. On the AO SDK path, selectors are `SPLUNK_AO_PROJECT` or
-  `SPLUNK_AO_PROJECT_ID`, and `SPLUNK_AO_AGENT_STREAM` or
-  `SPLUNK_AO_AGENT_STREAM_ID`; supplied selection values override those
-  resource settings. Apply fallback independently to each resource: preserve
-  every configured selector and fill only a missing project or stream selector
-  with its audit-disclosed stable name. For example, keep an existing project
-  ID while adding the disclosed stream name. Create or update that launch
-  profile with those missing values and mirror safe values in its example
-  env file. Preserve
-  unrelated OTel settings, credentials, and the selected destination; do not
-  overwrite the env file from a template. Materialize the effective target in
-  the selection before provisioning. The bundled Python helper reads omitted
+  Use the application's real launch profile and native vendor aliases when
+  applying the accepted target. Galileo uses its supported GALILEO_* settings
+  and constructor arguments. The AO SDK uses `SPLUNK_AO_PROJECT` or
+  `SPLUNK_AO_PROJECT_ID` and `SPLUNK_AO_AGENT_STREAM` or
+  `SPLUNK_AO_AGENT_STREAM_ID`. Supplied selection values take precedence.
+  Preserve unrelated OTel settings, credentials and destination settings;
+  create the active `.env` if absent, or merge the selected configuration into
+  the existing file in place, with documented safe values. Keep
+  `.env.studio.example` as the safe Studio template. Materialize the accepted
+  complete target in the selection before provisioning. A destination pair
+  does not authorize unselected resource creation or routing changes.
+  The bundled Python helper reads omitted
   selectors from the process environment; load the env profile through the
   project's runner, such as `uv run --env-file .env`, or pass existing
   application-native alias values as explicit helper arguments. Do not add a
   new dotenv parser or gateway-specific config loader to application code.
   Validate that the actual launch reads the persisted target, and record its
-  source as supplied input, existing env, or disclosed default. No selected
+  source as the accepted supplied input. No selected
   AO work means no AO env additions or resource creation.
 - Detect incident-readiness surfaces. Search source and configuration for
   user-visible workflows, dependency clients, background jobs, queues/streams,
@@ -999,6 +1040,12 @@ Add the OpenTelemetry SDK and auto-instrumentation packages for the detected lan
 
 Apply auto-instrumentation first, then add manual spans for key business operations. Read the language-specific reference for exact patterns.
 
+Persist configuration required by the selected work through the actual launch
+mechanism. When that mechanism uses dotenv, apply the Credential Safety section:
+create `.env` if it does not exist, or merge the new settings into the existing
+file. A Studio template alone does not configure the application. Report the
+active file path and added or changed variable names without exposing secrets.
+
 **Critical for APM error tracking:**
 - Set `otel.status_code` to `ERROR` on failures -- this is how APM backends identify errors
 - For HTTP server spans, 5xx responses set ERROR automatically per OTel semantic conventions
@@ -1302,10 +1349,11 @@ Apply auto-instrumentation first, then add manual spans for key business operati
     isolation. An in-memory ordinary OTel exporter should still receive all
     operations. Do not call selected AO routing working when this test is
     absent or blocked.
-  - Ship a dedicated Studio-only profile, such as `.env.studio.example`, and
-    document how the repository's actual local launch selects it. A general
-    `.env.example` that mixes ordinary OTLP and AO placeholders is not that
-    profile. When a reachable Studio gateway was discovered, write its real
+  - Ship the safe Studio-only template `.env.studio.example` and populate
+    the actual dotenv launch configuration in `.env`, documenting each
+    introduced variable there. Do not create or update `.env.example`
+    or add a second runtime `.env.studio`; prove that the existing launcher
+    consumes `.env`. When a reachable Studio gateway was discovered, write its real
     API and console origins with their actual port into the dedicated profile
     and run an installed-SDK configuration/import check using that profile.
     Blank URL values, angle-bracket port placeholders, and an unselected
@@ -1931,6 +1979,12 @@ This step is REQUIRED whenever `.vscode/launch.json` exists.
   summary with added, modified, and removed traces/spans, metrics, logs/events,
   runtime/config, and dependencies. If no prior audit existed, state that the
   report establishes the implementation baseline.
+- Include local configuration files actually created or modified, including
+  gitignored `.env`, in `Files Changed` and the runtime/config change summary.
+  Build this list from performed edits as well as Git status; an ignored file
+  can change without appearing in a Git diff. State whether `.env` was created
+  or updated and name the added or changed variables without printing values
+  or copying secrets into the report. Do not claim an edit that did not occur.
 - In canonical flow, write and validate `.observe/otel-instrumentation.json`,
   render `.observe/otel-instrumentation.html` using
   `./references/json-approval-handoff.md`, and keep every selected finding
@@ -1984,14 +2038,6 @@ This step is REQUIRED whenever `.vscode/launch.json` exists.
   streaming, token/context, prompt/response, safety/policy, AI-derived data,
   model/config rollout, or AI-owned cache/session owner that still blocks
   detector-ready coverage.
-
-## Credential Safety
-
-When the project uses or introduces env files:
-
-1. **Ensure `.env` is gitignored before writing secrets**: Check `.gitignore` for `.env`. If it is missing, add it. Never allow a `.env` with access tokens to be committed.
-2. **Create or update `.env.example` with safe placeholders**: Do this whenever the instrumentation introduces env vars. `.env.example` must never contain real tokens.
-3. **Verify no tokens in tracked files**: Search tracked config files for access tokens and confirm no real token values appear in files that would be committed.
 
 ## Scope
 

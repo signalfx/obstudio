@@ -24,6 +24,7 @@
     "Keeps OTLP endpoint and service name configurable through environment variables.",
     "Scopes implementation to approved OTEL-001 and does not add the unselected OTEL-002 task.created business metric or other drive-by signals.",
     "Writes canonical .observe/otel-selection.json preserving requested ID OTEL-001 separately from dependency-closed approved IDs, then writes bound .observe/otel-instrumentation.json that records selected finding ID OTEL-001, implementation status, changed signals, validation evidence, and verification handoff without rewriting the audit baseline.",
-    "Retains .observe/otel-instrumentation.md as the complete compatibility report, renders .observe/otel-instrumentation.html with one concise verification status followed by every selected finding's change, observability improvement, item proof, and coverage, leaves .observe/otel.html audit-only, and runs otel-verify or records the exact blocker."
+    "Retains .observe/otel-instrumentation.md as the complete compatibility report, renders .observe/otel-instrumentation.html with one concise verification status followed by every selected finding's change, observability improvement, item proof, and coverage, leaves .observe/otel.html audit-only, and runs otel-verify or records the exact blocker.",
+    "Produces the .observe artifacts by running the bundled report tool from its skill directory, so its observe_report_core.py and observe_report_html.py siblings stay beside observe_report.py; leaves no copy of observe_report.py or either sibling inside ./service and does not describe relocating the report tool in the final response."
   ]
 }

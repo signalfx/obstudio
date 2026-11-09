@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -76,8 +77,36 @@ func TestRegisterO11yOAuthClientSucceedsOnNewClient(t *testing.T) {
 	if gotAdminToken != "the-admin-token" {
 		t.Fatalf("admin token not forwarded correctly: %q", gotAdminToken)
 	}
-	if gotName != o11yOAuthClientName || gotDescription != o11yOAuthClientDescription || gotCallbackURL != o11yOAuthRegistrationCallbackURL {
+	if gotName != o11yOAuthClientName {
+		t.Fatalf("client name should be the fixed %q by default, got %q", o11yOAuthClientName, gotName)
+	}
+	if gotDescription != o11yOAuthClientDescription || gotCallbackURL != o11yOAuthRegistrationCallbackURL {
 		t.Fatalf("unexpected registration payload: name=%q description=%q callbackUrl=%q", gotName, gotDescription, gotCallbackURL)
+	}
+}
+
+func TestRegisterO11yOAuthClientUsesRandomNameWhenDevEnvSet(t *testing.T) {
+	var gotName string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload o11yOAuthClientPayload
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		gotName = payload.Name
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]string{"clientId": "c", "clientSecret": "s"})
+	}))
+	defer upstream.Close()
+	t.Setenv("OBSTUDIO_O11Y_OAUTH_REGISTRATION_URL", upstream.URL)
+	t.Setenv(o11yOAuthRandomClientNameEnv, "1")
+
+	response := splunkExportRequest(t, newO11yOAuthTestMux(), http.MethodPost, "/api/splunk/o11y-oauth/register",
+		`{"realm":"lab0","adminToken":"the-admin-token"}`)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if !regexp.MustCompile(`^obstudio-[a-z0-9]{6}$`).MatchString(gotName) {
+		t.Fatalf("client name should be obstudio-<6 random chars>, got %q", gotName)
 	}
 }
 
@@ -160,4 +189,26 @@ func TestRegisterO11yOAuthClientDefaultsToLocalMockWithoutOverride(t *testing.T)
 
 func containsSecret(body string) bool {
 	return strings.Contains(strings.ToLower(body), "secret")
+}
+
+func TestRegisterO11yOAuthClientDoesNotFollowRedirectsWithAdminToken(t *testing.T) {
+	targetHit := false
+	target := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		targetHit = true
+	}))
+	defer target.Close()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL, http.StatusTemporaryRedirect)
+	}))
+	defer upstream.Close()
+	t.Setenv("OBSTUDIO_O11Y_OAUTH_REGISTRATION_URL", upstream.URL)
+
+	response := splunkExportRequest(t, newO11yOAuthTestMux(), http.MethodPost, "/api/splunk/o11y-oauth/register",
+		`{"realm":"lab0","adminToken":"the-admin-token"}`)
+	if response.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if targetHit {
+		t.Fatal("redirect target must never receive the admin token")
+	}
 }

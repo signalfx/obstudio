@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { EmptyState } from "../components/EmptyState";
+import { TelemetryEmptyState, type EmptyStateSkeleton } from "../components/EmptyState";
 import { fetchMetricFilterValues, fetchMetrics, type MetricsQuery } from "../api/client";
 import { FilterBar, type FilterClause, type FilterDefinition } from "../FilterBar";
 import { TimeSeriesChart } from "./TimeSeriesChart";
@@ -23,6 +23,17 @@ const METRIC_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: "scopeName", label: "Scope", kind: "text", placeholder: "otel.http" },
 ];
 const METRIC_SUGGESTIBLE_FIELDS = new Set(["metricName", "serviceName", "scopeName"]);
+// Matches the metric list head below.
+const METRICS_SKELETON: EmptyStateSkeleton = {
+  headClassName: "data-table__head data-table__head--metrics",
+  rowClassName: "data-table__row data-table__row--metrics",
+  columns: [
+    { label: "Metric name" },
+    { label: "Service" },
+    { label: "Description", className: "data-table__th--metric-description" },
+    { label: "Type / Unit" },
+  ],
+};
 
 function assignQueryFilter(query: MetricsQuery, clause: FilterClause): void {
   const targetKey = clause.op === "neq" ? "notFilters" : "filters";
@@ -242,10 +253,7 @@ export function MetricsTab({ metrics, telemetryError, onInteract }: MetricsTabPr
           ) : null}
 
           {visibleMetricList.length === 0 && liveMetrics.length === 0 && !hasActiveFilter ? (
-            <EmptyState
-              title="No metrics received yet."
-              hint="Send OTLP telemetry to port 4318 to begin exploring."
-            />
+            <TelemetryEmptyState title="No metrics received yet." skeleton={METRICS_SKELETON} />
           ) : isFiltering && hasActiveFilter && visibleMetricList.length === 0 ? (
             <p className="metrics-explorer__empty">
               Updating filtered metrics...
@@ -259,7 +267,8 @@ export function MetricsTab({ metrics, telemetryError, onInteract }: MetricsTabPr
           {visibleMetricList.length > 0 ? (
             <div className="data-table__head data-table__head--metrics metrics-card-list__head">
               <span className="data-table__th">Metric name</span>
-              <span className="data-table__th">Description</span>
+              <span className="data-table__th">Service</span>
+              <span className="data-table__th data-table__th--metric-description">Description</span>
               <span className="data-table__th">Type / Unit</span>
             </div>
           ) : null}
@@ -284,6 +293,9 @@ export function MetricsTab({ metrics, telemetryError, onInteract }: MetricsTabPr
                   >
                     <span className="data-table__td data-table__td--metric-name metric-card__info">
                       <span className="metric-card__name explorer-row__primary">{metric.name}</span>
+                    </span>
+                    <span className="data-table__td data-table__td--metric-service">
+                      <span className="explorer-row__secondary">{metric.serviceName && metric.serviceName !== "unknown" ? metric.serviceName : "--"}</span>
                     </span>
                     <span className="data-table__td data-table__td--metric-description">
                       <span className="metric-card__description explorer-row__secondary">{formatMetricDescription(metric)}</span>
@@ -466,14 +478,10 @@ function formatNumber(value: number): string {
   return value % 1 === 0 ? String(value) : value.toFixed(2);
 }
 
-function formatMetricDescription(metric: { description: string; serviceName: string; scopeName: string }): string {
+function formatMetricDescription(metric: { description: string; scopeName: string }): string {
   const parts: string[] = [];
-  const hasService = metric.serviceName && metric.serviceName !== "unknown";
   if (metric.description) {
     parts.push(metric.description);
-  }
-  if (hasService) {
-    parts.push(metric.serviceName);
   }
   if (metric.scopeName) {
     parts.push(metric.scopeName);

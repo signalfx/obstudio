@@ -18,18 +18,37 @@ builds:
         goarch: arm64
       - goos: windows
         goarch: arm64
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+      - -buildvcs=false
     ldflags:
       - -s -w -X main.version={{.Version}}
+    # Fixed constant (2026-01-01T00:00:00Z), not CommitTimestamp: the prepare-release PR commit and the merge commit differ.
+    mod_timestamp: "1767225600"
 
 archives:
   - formats:
       - zip
     wrap_in_directory: true
+    builds_info:
+      mode: 0755
+      mtime: "2026-01-01T00:00:00Z"
     files:
       - src: .release/weaver/{{ .Os }}-{{ .Arch }}/weaver*
         strip_parent: true
-      - docs/USER.md
-      - docs/examples.md
+        info:
+          mode: 0755
+          mtime: "2026-01-01T00:00:00Z"
+      - src: docs/USER.md
+        info:
+          mode: 0644
+          mtime: "2026-01-01T00:00:00Z"
+      - src: docs/examples.md
+        info:
+          mode: 0644
+          mtime: "2026-01-01T00:00:00Z"
 
 checksum:
   name_template: checksums.txt

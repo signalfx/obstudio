@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { observerFetch } from "../host/transport";
 import type { ValidationFinding, ValidationIssue, ValidationSeverity, ValidationSummary } from "../api/types";
 import { DetailPanel, ResizablePanel, useAnimatedPanel } from "../layout";
+import { EmptyState } from "./EmptyState";
 import {
   filterValidationIssues,
   issueVariantKey,
@@ -171,11 +172,24 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
     }
   };
 
+  const validateButton = (
+    <button
+      type="button"
+      className="findings-tab__action"
+      onClick={() => { void triggerValidation(); }}
+      disabled={isRunning || isSubmitting || !summary?.enabled}
+      title={summary?.enabled === false ? "Validator is not available — weaver binary may be missing" : undefined}
+    >
+      {isRunning || isSubmitting ? "Validating..." : actionLabel}
+    </button>
+  );
+
   return (
     <section id="panel-validation" className="tab-panel findings-tab" role="tabpanel" aria-label="Validation">
       <div className={`signal-view${hasDetail ? " signal-view--with-panel" : ""}`}>
         <div className="signal-view__content">
-          <div className="explorer__toolbar findings-tab__header">
+          {/* Nothing to count or filter until a run has results. */}
+          <div className="explorer__toolbar findings-tab__header" hidden={!showResultState}>
             <div className="findings-tab__header-meta">
               {showResultState ? <span className="findings-tab__header-count">{filteredIssues.length} {filteredIssues.length === 1 ? "issue" : "issues"}</span> : null}
               {showResultState && completedAt ? <span className="findings-tab__header-separator" aria-hidden="true">·</span> : null}
@@ -185,18 +199,10 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
                 </span>
               ) : null}
             </div>
-            <button
-              type="button"
-              className="findings-tab__action"
-              onClick={() => { void triggerValidation(); }}
-              disabled={isRunning || isSubmitting || !summary?.enabled}
-              title={summary?.enabled === false ? "Validator is not available — weaver binary may be missing" : undefined}
-            >
-              {isRunning || isSubmitting ? "Validating..." : actionLabel}
-            </button>
+            {validateButton}
           </div>
 
-          <div className="findings-tab__filters">
+          <div className="findings-tab__filters" hidden={!showResultState}>
             <select
               aria-label="Filter by severity"
               className="validation-panel__select"
@@ -249,9 +255,6 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
             <p className="explorer__status">{summary.message ?? "Validator unavailable."}</p>
           ) : (
             <>
-              {summary?.status === "idle" && !summary.hasResult ? (
-                <p className="explorer__status">Validation has not been run yet. Run validation to analyze the current telemetry snapshot.</p>
-              ) : null}
               {summary?.status === "running" ? (
                 <p className="explorer__status">
                   Validation is running{isMeaningfulTimestamp(summary?.lastRunStartedAt) ? ` since ${formatTimestamp(summary.lastRunStartedAt)}` : ""}.
@@ -262,6 +265,18 @@ export function FindingsTab({ issues, summary }: ValidationTabProps): React.Reac
               ) : null}
               {runError ? (
                 <p className="explorer__status explorer__status--error">{runError}</p>
+              ) : null}
+              {/* A failed first run keeps the button, since it is the only retry. */}
+              {summary && !summary.hasResult && !isRunning ? (
+                summary.status === "error" || runError ? (
+                  <EmptyState title="Validation failed." hint="See the error above, then try again." actions={validateButton} />
+                ) : (
+                  <EmptyState
+                    title="Validation has not been run yet."
+                    hint="Run validation to analyze the current telemetry snapshot."
+                    actions={validateButton}
+                  />
+                )
               ) : null}
               {summary?.hasResult ? (
                 filteredIssues.length === 0 ? (

@@ -8,10 +8,12 @@ package api
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"os"
 	"strings"
@@ -19,8 +21,13 @@ import (
 )
 
 const (
-	o11yOAuthClientName        = "Splunk Observability Studio"
-	o11yOAuthClientDescription = "MCP client registration for Splunk Observability Studio (obstudio)"
+	// lab0 rejects duplicate client names with a 409. For repeated manual testing only,
+	// setting o11yOAuthRandomClientNameEnv=1 appends a random suffix ("obstudio-7fklo9").
+	// By default the fixed name is used so customer orgs don't accumulate orphaned clients.
+	o11yOAuthRandomClientNameEnv = "OBSTUDIO_O11Y_OAUTH_RANDOM_CLIENT_NAME"
+	o11yOAuthClientName          = "obstudio"
+	o11yOAuthClientNameSuffixLen = 6
+	o11yOAuthClientDescription   = "MCP client registration for Splunk Observability Studio (obstudio)"
 	// Intentionally the same loopback port CIMD's fixed callback (sisCIMDRedirectURI)
 	// uses -- the two protocols are mutually exclusive via
 	// OBSTUDIO_REGISTRATION_AND_AUTH_PROTOCOL and never run at once, so there is no
@@ -101,9 +108,33 @@ func registerO11yOAuthClientHandler(w http.ResponseWriter, r *http.Request) {
 	writeSameOriginJSON(w, result)
 }
 
+func o11yOAuthRegistrationClientName() (string, error) {
+	if os.Getenv(o11yOAuthRandomClientNameEnv) != "1" {
+		return o11yOAuthClientName, nil
+	}
+	return uniqueO11yOAuthClientName()
+}
+
+func uniqueO11yOAuthClientName() (string, error) {
+	const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
+	suffix := make([]byte, o11yOAuthClientNameSuffixLen)
+	for i := range suffix {
+		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(alphabet))))
+		if err != nil {
+			return "", err
+		}
+		suffix[i] = alphabet[n.Int64()]
+	}
+	return o11yOAuthClientName + "-" + string(suffix), nil
+}
+
 func registerO11yOAuthClient(ctx context.Context, realm, adminToken string) (*o11yOAuthRegisterResult, error) {
+	clientName, err := o11yOAuthRegistrationClientName()
+	if err != nil {
+		return nil, fmt.Errorf("build registration request: %w", err)
+	}
 	body, err := json.Marshal(o11yOAuthClientPayload{
-		Name:        o11yOAuthClientName,
+		Name:        clientName,
 		Description: o11yOAuthClientDescription,
 		CallbackURL: o11yOAuthRegistrationCallbackURL,
 	})
@@ -125,7 +156,8 @@ func registerO11yOAuthClient(ctx context.Context, realm, adminToken string) (*o1
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("X-SF-TOKEN", adminToken)
 
-	response, err := http.DefaultClient.Do(request)
+	// Never follow redirects: the admin X-SF-TOKEN header would be forwarded with them.
+	response, err := newO11yOAuthHTTPClient().Do(request)
 	if err != nil {
 		return nil, errors.New("could not reach the O11y OAuth registration server")
 	}

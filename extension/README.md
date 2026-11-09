@@ -135,9 +135,21 @@ Extension settings use the `observability-studio.` prefix:
 ## Data and permissions
 
 An extension-managed Splunk Observability Studio instance keeps received
-telemetry local unless you enable Cloud export. A separately managed local
-instance follows its own configuration. Cloud export sends traces and metrics,
-not logs, and the extension stores its access token in IDE secret storage.
+telemetry local unless you enable the destination export switch in Cloud.
+Observability Cloud exports metrics and traces;
+[Splunk Platform exports logs through HEC](../docs/USER.md#splunk-platform-logs-hec).
+Both tokens stay in the operating system credential store.
+`~/.obstudio/connections.json` contains connection settings and token references.
+Existing editor connections move from IDE secret storage after a successful secure save. Linux requires an
+unlocked Secret Service provider.
+
+### Rolling back to an earlier version
+
+- Keep your access token available, or prepare a replacement token for reconnecting.
+- Disconnect saved connections in the current Studio, then stop Studio before
+  installing the earlier extension. Reconnect in that version to restore export.
+- When returning to the current version, reconnect manually; the editor-credential
+  import runs only once.
 
 For the bundled Codex and Claude Code plugin, see its
 [security](https://github.com/signalfx/obstudio/blob/main/plugins/obstudio/SECURITY.md)

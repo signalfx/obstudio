@@ -4,6 +4,8 @@ import (
 	"archive/tar"
 	"archive/zip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -29,15 +31,16 @@ type target struct {
 	goos              string
 	goarch            string
 	asset             string
+	sha256            string
 	archiveBinaryName string
 	bundledBinaryName string
 }
 
 var supportedTargets = []target{
-	{goos: "darwin", goarch: "arm64", asset: "weaver-aarch64-apple-darwin.tar.xz", archiveBinaryName: "weaver", bundledBinaryName: "weaver"},
-	{goos: "darwin", goarch: "amd64", asset: "weaver-x86_64-apple-darwin.tar.xz", archiveBinaryName: "weaver", bundledBinaryName: "weaver"},
-	{goos: "linux", goarch: "amd64", asset: "weaver-x86_64-unknown-linux-gnu.tar.xz", archiveBinaryName: "weaver", bundledBinaryName: "weaver"},
-	{goos: "windows", goarch: "amd64", asset: "weaver-x86_64-pc-windows-msvc.zip", archiveBinaryName: "weaver.exe", bundledBinaryName: "weaver.exe"},
+	{goos: "darwin", goarch: "arm64", asset: "weaver-aarch64-apple-darwin.tar.xz", sha256: "d9e0c301077648c83c22bd17d0bfc7688ec134085ec5f673c0db69f3052a9ec5", archiveBinaryName: "weaver", bundledBinaryName: "weaver"},
+	{goos: "darwin", goarch: "amd64", asset: "weaver-x86_64-apple-darwin.tar.xz", sha256: "4185ff7b57e9de46ad602df2412d3ada12d67be35d97e2c2f52007e302b7fc90", archiveBinaryName: "weaver", bundledBinaryName: "weaver"},
+	{goos: "linux", goarch: "amd64", asset: "weaver-x86_64-unknown-linux-gnu.tar.xz", sha256: "a24f8fc17f120c3bca8ef540b907984a93875a4c4d5c9fc0604d1317be08b7bf", archiveBinaryName: "weaver", bundledBinaryName: "weaver"},
+	{goos: "windows", goarch: "amd64", asset: "weaver-x86_64-pc-windows-msvc.zip", sha256: "5301b60a7c66beec6b260139849fd58777201a2e7ee62ca7e6e5e8db357ac88e", archiveBinaryName: "weaver.exe", bundledBinaryName: "weaver.exe"},
 }
 
 func main() {
@@ -130,7 +133,7 @@ func ensureCachedBinary(ctx context.Context, target target) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	cacheDir := filepath.Join(cacheRoot, target.goos+"-"+target.goarch)
+	cacheDir := targetCacheDir(cacheRoot, target)
 	cachedBinary := filepath.Join(cacheDir, target.bundledBinaryName)
 	if _, err := os.Stat(cachedBinary); err == nil {
 		return cachedBinary, nil
@@ -145,6 +148,9 @@ func ensureCachedBinary(ctx context.Context, target target) (string, error) {
 	archivePath := filepath.Join(tmpDir, target.asset)
 	if err := downloadFile(ctx, downloadBase+"/"+target.asset, archivePath); err != nil {
 		return "", err
+	}
+	if err := verifyFileSHA256(archivePath, target.sha256); err != nil {
+		return "", fmt.Errorf("verify %s: %w", target.asset, err)
 	}
 	extractedBinary, err := extractBinary(archivePath, tmpDir, target.archiveBinaryName)
 	if err != nil {
@@ -165,6 +171,17 @@ func ensureCachedBinary(ctx context.Context, target target) (string, error) {
 		return "", fmt.Errorf("finalize cache binary: %w", err)
 	}
 	return cachedBinary, nil
+}
+
+// targetCacheDir keys the cache on the pinned archive hash as well as the
+// platform. A binary cached before verification existed, or under a previous
+// pin, lives in a different directory and is never reused unverified.
+func targetCacheDir(versionRoot string, target target) string {
+	pin := target.sha256
+	if len(pin) > 12 {
+		pin = pin[:12]
+	}
+	return filepath.Join(versionRoot, target.goos+"-"+target.goarch+"-"+pin)
 }
 
 func weaverCacheDir() (string, error) {
@@ -203,6 +220,23 @@ func downloadFile(ctx context.Context, url, destination string) error {
 
 	if _, err := io.Copy(out, resp.Body); err != nil {
 		return fmt.Errorf("write archive file: %w", err)
+	}
+	return nil
+}
+
+func verifyFileSHA256(path, want string) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("open archive for checksum: %w", err)
+	}
+	defer file.Close()
+
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return fmt.Errorf("hash archive: %w", err)
+	}
+	if got := hex.EncodeToString(hash.Sum(nil)); got != want {
+		return fmt.Errorf("sha256 mismatch: got %s, want %s", got, want)
 	}
 	return nil
 }

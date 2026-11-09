@@ -1,20 +1,32 @@
 // @vitest-environment happy-dom
 
 import React from "react";
-import { readFileSync } from "fs";
-import { resolve } from "path";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { RegistrationAndAuthProtocol, SISCIMDSessionStatus, SplunkExportStatus } from "../api/types";
+import type { O11yOAuthSessionStatus, RegistrationAndAuthProtocol, SISCIMDSessionStatus, SplunkExportStatus } from "../api/types";
 import { CloudTab } from "./CloudTab";
+import { CLOUD_CONNECT_DESCRIPTION } from "./copy";
+import { cloudHostRequestTimeoutMs } from "../../../../shared/connection-limits.cjs";
+import { isSplunkExportStatus } from "./bridge";
+import { disconnectSplunkLogs, fetchSplunkLogsStatus, setSplunkLogsEnabled } from "../api/client";
 
 const disconnectedVersion = "D".repeat(43);
 const connectedVersion = "C".repeat(43);
 const enabledVersion = "E".repeat(43);
 
+vi.mock("../api/client", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../api/client")>(),
+  setSplunkLogsEnabled: vi.fn(),
+  disconnectSplunkLogs: vi.fn(),
+  fetchSplunkLogsStatus: vi.fn(async () => ({ version: "logs-test", configured: false, connected: false, enabled: false, endpoint: "", index: "", source: "otel", sourcetype: "otel:logs", insecureSkipVerify: false, tokenConfigured: false, exportedRecords: 0, failedBatches: 0 })),
+}));
+
 afterEach(() => {
   cleanup();
+  vi.mocked(fetchSplunkLogsStatus).mockReset().mockResolvedValue({ version: "logs-test", configured: false, connected: false, enabled: false, endpoint: "", index: "", source: "otel", sourcetype: "otel:logs", insecureSkipVerify: false, tokenConfigured: false, exportedRecords: 0, failedBatches: 0 });
+  vi.mocked(setSplunkLogsEnabled).mockReset();
+  vi.mocked(disconnectSplunkLogs).mockReset();
   vi.useRealTimers();
   vi.unstubAllGlobals();
   window.sessionStorage.clear();
@@ -22,6 +34,542 @@ afterEach(() => {
 });
 
 describe("CloudTab", () => {
+  it.each(["browser", "IDE"] as const)("enables export when replacing an unavailable Cloud credential (%s)", async (host) => {
+    const initial = disconnectedStatus();
+    initial.metrics.configured = initial.traces.configured = true;
+    const bridge = host === "IDE" ? installBridge() : null;
+    const posts: Record<string, unknown>[] = [];
+    if (!bridge) vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        posts.push(JSON.parse(String(init.body)));
+        return jsonResponse(connectedStatus(true, "us1"));
+      }
+      return jsonResponse(initial);
+    }));
+    const user = userEvent.setup();
+    render(<CloudTab />);
+    if (bridge) bridge.respond(await bridge.next("initialize"), { status: initial });
+    await user.click(await screen.findByRole("button", { name: "Edit token for Observability Cloud" }));
+    await user.type(screen.getByLabelText("Realm or Observability Cloud URL"), "us1");
+    await user.type(screen.getByLabelText("Access token"), "replacement-token");
+    await user.click(screen.getByRole("button", { name: "Save Observability Cloud changes" }));
+    const request = bridge ? await bridge.next("connect") : null;
+    const payload = request?.payload ?? posts.at(-1);
+    expect(payload).toMatchObject({ realm: "us1", accessToken: "replacement-token", enabled: true });
+    expect(payload).not.toHaveProperty("preserveEnabled", true);
+    if (bridge && request) bridge.respond(request, { status: connectedStatus(true, "us1") });
+    await screen.findByRole("switch", { name: "Remote telemetry export is on" });
+  });
+
+  it.each((["browser", "IDE"] as const).flatMap(host => (["connect", "refresh"] as const).map(action => ({ host, action }))))("keeps focus in logs when a pending Cloud $action succeeds ($host)", async ({ host, action }) => {
+    let finishConnect!: (response: Response) => void;
+    const initial = { ...disconnectedStatus(), cleanupPending: action === "refresh" };
+    const bridge = host === "IDE" ? installBridge() : null;
+    if (!bridge) vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "POST") return new Promise<Response>((resolve) => { finishConnect = resolve; });
+      return jsonResponse(initial);
+    }));
+    const user = userEvent.setup();
+    render(<CloudTab />);
+    if (bridge) bridge.respond(await bridge.next("initialize"), { status: initial });
+    if (action === "connect") {
+      fireEvent.change(await screen.findByLabelText("Realm or Observability Cloud URL"), { target: { value: "us1" } });
+      fireEvent.change(screen.getByLabelText("Access token"), { target: { value: "synthetic-token" } });
+    }
+    await user.click(await screen.findByRole("button", { name: action === "connect" ? "Connect" : "Retry credential cleanup" }));
+    const pending = bridge ? await bridge.next(action) : null;
+    const endpoint = screen.getByLabelText("HEC endpoint");
+    await user.type(endpoint, "https://logs.example/services/collector");
+    if (bridge && pending) bridge.respond(pending, { status: connectedStatus(true, "us1") });
+    else finishConnect(jsonResponse(connectedStatus(true, "us1")));
+    await screen.findByRole("switch", { name: "Remote telemetry export is on" });
+    await act(async () => { await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve())); });
+    expect(document.activeElement).toBe(endpoint);
+    expect((endpoint as HTMLInputElement).value).toBe("https://logs.example/services/collector");
+  });
+
+  it.each([
+    { protocol: "CIMD", action: "setup-cimd", button: "Register OAuth client with CIMD" },
+    { protocol: "CIMD", action: "login-cimd", button: "Sign in to SIS" },
+    { protocol: "O11Y_OAUTH", action: "register-o11y-oauth", button: "Register MCP client" },
+  ] as const)("keeps $action recovery within its own sign-in controls", async ({ protocol, action, button }) => {
+    const bridge = installBridge();
+    render(<CloudTab />);
+    bridge.respond(await bridge.next("initialize"), { registrationAndAuthProtocol: protocol, status: disconnectedStatus() });
+    if (action === "login-cimd") {
+      fireEvent.click(await screen.findByRole("button", { name: "Register OAuth client with CIMD" }));
+      bridge.respond(await bridge.next("setup-cimd"), { cimdRegistrationVerified: true });
+    }
+    await screen.findByRole("button", { name: button });
+    if (protocol === "O11Y_OAUTH") {
+      fireEvent.change(screen.getByLabelText("Realm"), { target: { value: "us1" } });
+      fireEvent.change(screen.getByLabelText("Admin X-SF-TOKEN"), { target: { value: "synthetic-admin-token" } });
+    }
+    fireEvent.click(screen.getByRole("button", { name: button }));
+    bridge.reject(await bridge.next(action), "Sign-in provider is unavailable.");
+    expect((await screen.findByRole("alert")).textContent).toContain("Sign-in provider is unavailable.");
+    expect(screen.getByRole("button", { name: button }).hasAttribute("disabled")).toBe(false);
+    expect(screen.queryByRole("button", { name: "Reload saved connection" })).toBeNull();
+  });
+
+  it.each(["browser", "IDE"] as const)("recovers an uncertain Cloud mutation without resubmitting (%s)", async (host) => {
+    let current = connectedStatus(true, "us1");
+    let mutations = 0;
+    const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path === "/api/splunk/export/enabled" && init?.method === "POST") {
+        mutations += 1;
+        throw new TypeError("The connection closed before confirmation.");
+      }
+      if (path === "/api/splunk/export/refresh") { current = connectedStatus(false, "us1"); return jsonResponse(current); }
+      return jsonResponse(current);
+    });
+    vi.stubGlobal("fetch", fetch);
+    const bridge = host === "IDE" ? installBridge({ httpStatus: current }) : undefined;
+    const user = userEvent.setup();
+    render(<CloudTab />);
+    if (bridge) bridge.respond(await bridge.next("initialize"), { status: current });
+    const toggle = await screen.findByRole("switch", { name: "Remote telemetry export is on" });
+    await user.click(toggle);
+    if (bridge) bridge.reject(await bridge.next("set-enabled"), "The connection outcome is unknown.", { code: "outcome_unknown", retrySafe: false });
+    const reload = await screen.findByRole("button", { name: "Reload saved connection" });
+    await waitFor(() => expect(toggle.hasAttribute("disabled")).toBe(true));
+    expect(reload.hasAttribute("disabled")).toBe(false);
+    await user.click(toggle);
+    expect(mutations).toBe(host === "IDE" ? 0 : 1);
+    expect(bridge?.requests().filter(({ action }) => action === "set-enabled") ?? []).toHaveLength(0);
+    reload.focus();
+    await user.keyboard("{Enter}");
+    if (bridge) bridge.respond(await bridge.next("refresh"), { status: connectedStatus(false, "us1") });
+    await waitFor(() => expect(screen.getByRole("switch", { name: "Remote telemetry export is off" }).hasAttribute("disabled")).toBe(false));
+  });
+
+  it("moves an uncertain Disconnect out of its dialog to saved-state recovery", async () => {
+    const bridge = installBridge({ httpStatus: connectedStatus(true, "us1") });
+    const user = userEvent.setup();
+    render(<CloudTab />);
+    bridge.respond(await bridge.next("initialize"), { status: connectedStatus(true, "us1") });
+    await user.click(await screen.findByRole("button", { name: "Disconnect Observability Cloud" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Disconnect Observability Cloud" }));
+    bridge.reject(await bridge.next("forget"), "Disconnect outcome is unknown.", { code: "outcome_unknown", retrySafe: false });
+    const reload = await screen.findByRole("button", { name: "Reload saved connection" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(reload));
+    expect(reload.hasAttribute("disabled")).toBe(false);
+    await user.keyboard("{Enter}");
+    bridge.respond(await bridge.next("refresh"), { status: disconnectedStatus() });
+    await waitFor(() => expect(screen.getByLabelText("Realm or Observability Cloud URL").hasAttribute("disabled")).toBe(false));
+  });
+
+  it("keeps the reload action mounted and restores keyboard focus after refresh fails", async () => {
+    let failRefresh!: (response: Response) => void;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path === "/api/splunk/export/enabled") return jsonResponse({ error: "Settings changed" }, 409);
+      if (path === "/api/splunk/export/refresh") return new Promise<Response>((resolve) => { failRefresh = resolve; });
+      if (path === "/api/splunk/export") return jsonResponse(connectedStatus(true, "us1"));
+      throw new Error(`unexpected request: ${path}`);
+    }));
+    const user = userEvent.setup();
+    render(<CloudTab />);
+    await user.click(await screen.findByRole("switch", { name: "Remote telemetry export is on" }));
+    const reload = await screen.findByRole("button", { name: "Reload saved connection" });
+    reload.focus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("button", { name: "Reload saved connection" })).toBe(reload);
+    expect(reload.hasAttribute("disabled")).toBe(true);
+    await act(async () => failRefresh(jsonResponse({ error: "Storage unavailable" }, 500)));
+    await waitFor(() => expect(document.activeElement).toBe(reload));
+    expect(reload.hasAttribute("disabled")).toBe(false);
+    expect(screen.getByRole("alert").textContent).toContain("Storage unavailable");
+  });
+
+  it.each(["browser", "IDE"] as const)("reloads a first connection saved by another collector after a disconnected conflict (%s)", async (host) => {
+    let status = disconnectedStatus();
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path === "/api/splunk/export" && init?.method === "POST") return jsonResponse({ error: "Settings changed in another session" }, 409);
+      if (path === "/api/splunk/export/refresh") { status = connectedStatus(true, "eu0"); return jsonResponse(status); }
+      if (path === "/api/splunk/export") return jsonResponse(status);
+      throw new Error(`unexpected request: ${path}`);
+    }));
+    const bridge = host === "IDE" ? installBridge() : undefined;
+    const user = userEvent.setup();
+    render(<CloudTab />);
+    if (bridge) bridge.respond(await bridge.next("initialize"), { status });
+    await screen.findByRole("button", { name: "Connect" });
+    fireEvent.change(screen.getByLabelText("Realm or Observability Cloud URL"), { target: { value: "us1" } });
+    fireEvent.change(screen.getByLabelText("Access token"), { target: { value: "browser_token_123456789" } });
+    await user.click(screen.getByRole("button", { name: "Connect" }));
+    if (bridge) bridge.reject(await bridge.next("connect"), "Settings changed in another session", { code: "settings_changed" });
+    const reload = await screen.findByRole("button", { name: "Reload saved connection" });
+    reload.focus();
+    await user.keyboard("{Enter}");
+    if (bridge) bridge.respond(await bridge.next("refresh"), { status: connectedStatus(true, "eu0") });
+    expect(await screen.findByRole("switch", { name: "Remote telemetry export is on" })).toBeTruthy();
+    expect(screen.queryByRole("form", { name: "Cloud connection" })).toBeNull();
+  });
+
+  it.each(["browser", "IDE"] as const)("keeps the Cloud draft version until an explicit reload (%s)", async (host) => {
+    vi.useFakeTimers();
+    const originalVersion = "K".repeat(43);
+    const updatedVersion = "N".repeat(43);
+    let server = { ...connectedStatus(true, "us1"), cloudVersion: originalVersion };
+    const options = { httpStatus: server };
+    const bridge = host === "IDE" ? installBridge(options) : null;
+    const posts: Record<string, unknown>[] = [];
+    if (!bridge) vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/splunk/export" && init?.method === "POST") {
+        const body = JSON.parse(String(init.body));
+        posts.push(body);
+        if (body.expectedVersion !== server.cloudVersion) return jsonResponse({ error: "Cloud configuration changed in another session. Reload before saving." }, 409);
+      }
+      return jsonResponse(server);
+    }));
+    await act(async () => { render(<CloudTab />); });
+    if (bridge) bridge.respond(bridge.requests().find((request) => request.action === "initialize")!, { status: server });
+    await act(async () => {});
+    fireEvent.click(screen.getByRole("button", { name: "Edit token for Observability Cloud" }));
+    fireEvent.change(screen.getByLabelText("Access token"), { target: { value: "draft-token" } });
+    server = { ...server, version: updatedVersion, cloudVersion: updatedVersion };
+    options.httpStatus = server;
+    await act(async () => { vi.advanceTimersByTime(5000); });
+    fireEvent.submit(screen.getByRole("form", { name: "Cloud connection" }));
+    await act(async () => {});
+    if (bridge) {
+      const request = bridge.requests().filter((request) => request.action === "connect").at(-1)!;
+      expect(request.payload).toMatchObject({ expectedVersion: originalVersion, accessToken: "draft-token" });
+      bridge.reject(request, "Cloud configuration changed in another session. Reload before saving.", { code: "settings_changed" });
+    } else expect(posts.at(-1)).toMatchObject({ expectedVersion: originalVersion, accessToken: "draft-token" });
+    await act(async () => {});
+    const reload = screen.getByRole("button", { name: "Reload saved connection" });
+    fireEvent.click(reload);
+    await act(async () => {});
+    if (bridge) bridge.respond(bridge.requests().filter((request) => request.action === "refresh").at(-1)!, { status: server });
+    await act(async () => {});
+    expect((screen.getByLabelText("Access token") as HTMLInputElement).value).toBe("draft-token");
+    fireEvent.submit(screen.getByRole("form", { name: "Cloud connection" }));
+    await act(async () => {});
+    if (bridge) {
+      const request = bridge.requests().filter((request) => request.action === "connect").at(-1)!;
+      expect(request.payload).toMatchObject({ expectedVersion: updatedVersion, accessToken: "draft-token" });
+      bridge.respond(request, { status: server });
+    } else expect(posts.at(-1)).toMatchObject({ expectedVersion: updatedVersion, accessToken: "draft-token" });
+    await act(async () => {});
+    expect(screen.queryByRole("form", { name: "Cloud connection" })).toBeNull();
+  });
+
+  it("reloads a saved connection after credential storage is unlocked", async () => {
+    const paused = disconnectedStatus();
+    paused.metrics.configured = paused.traces.configured = true;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/splunk/export/refresh") return jsonResponse(connectedStatus(true, "us1"));
+      if (String(input) === "/api/splunk/export") return jsonResponse(paused);
+      throw new Error(`unexpected request: ${String(input)}`);
+    }));
+    render(<CloudTab />);
+    await userEvent.setup().click(await screen.findByRole("button", { name: "Reload saved connection" }));
+    expect((await screen.findByRole("switch", { name: "Remote telemetry export is on" })).getAttribute("aria-checked")).toBe("true");
+  });
+
+  it.each(["NONE", "CIMD", "O11Y_OAUTH"] as const)("keeps credential cleanup visible and restores focus in %s", async (protocol) => {
+    vi.useFakeTimers();
+    let status = {...connectedStatus(false, "us1"), registrationAndAuthProtocol: protocol};
+    let statusReads = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path === "/api/splunk/export/forget") {
+        status = { ...disconnectedStatus(), registrationAndAuthProtocol: protocol, cleanupPending: true };
+        return jsonResponse({ error: "credential cleanup is pending" }, 500);
+      }
+      if (path === "/api/splunk/export/refresh") {
+        status = { ...status, cleanupPending: false };
+        return jsonResponse(status);
+      }
+      if (path === "/api/splunk/export") { statusReads += 1; return jsonResponse(status); }
+      throw new Error(`unexpected request: ${path}`);
+    }));
+    await act(async () => { render(<CloudTab />); });
+    fireEvent.click(screen.getByRole("button", { name: "Disconnect Observability Cloud" }));
+    await act(async () => { fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Disconnect Observability Cloud" })); });
+    const retry = screen.getByRole("button", { name: "Retry credential cleanup" });
+    expect(screen.getByText("Credential cleanup is pending. Unlock secure storage, then retry.")).toBeTruthy();
+    const readsBeforePoll = statusReads;
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+    expect(statusReads).toBe(readsBeforePoll + 1);
+    expect(screen.getByRole("button", { name: "Retry credential cleanup" })).toBe(retry);
+    vi.useRealTimers();
+    retry.focus();
+    await userEvent.setup().keyboard("{Enter}");
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Retry credential cleanup" })).toBeNull());
+    const target = protocol === "CIMD" ? screen.getByRole("button", {name: "Register OAuth client with CIMD"})
+      : screen.getByRole("textbox", {name: protocol === "O11Y_OAUTH" ? "Realm" : "Realm or Observability Cloud URL"});
+    await waitFor(() => expect(document.activeElement).toBe(target));
+  });
+
+  it("retries pending credential cleanup through the IDE capability", async () => {
+    const bridge = installBridge();
+    render(<CloudTab />);
+    bridge.respond(await bridge.next("initialize"), { status: { ...disconnectedStatus(), cleanupPending: true } });
+    fireEvent.click(await screen.findByRole("button", { name: "Retry credential cleanup" }));
+    bridge.respond(await bridge.next("refresh"), { status: { ...disconnectedStatus(), cleanupPending: false } });
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Retry credential cleanup" })).toBeNull());
+  });
+
+  it("reloads a connected destination after a shared-settings conflict", async () => {
+    let status = connectedStatus(true, "us1");
+    const fetch = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/splunk/export/enabled") return jsonResponse({error: "Connection settings changed in another session. Refresh or restart Studio, then retry."}, 409);
+      if (String(input) === "/api/splunk/export/refresh") {
+        status = connectedStatus(false, "eu0");
+        return jsonResponse(status);
+      }
+      if (String(input) === "/api/splunk/export") return jsonResponse(status);
+      throw new Error(`unexpected request: ${String(input)}`);
+    });
+    vi.stubGlobal("fetch", fetch);
+    const user = userEvent.setup();
+    render(<CloudTab />);
+    await user.click(await screen.findByRole("switch", {name: "Remote telemetry export is on"}));
+    await user.click(await screen.findByRole("button", {name: "Reload saved connection"}));
+    expect(await screen.findByText("realm eu0")).toBeTruthy();
+    expect(screen.getByRole("switch", {name: "Remote telemetry export is off"}).getAttribute("aria-checked")).toBe("false");
+  });
+
+
+  it("validates the Cloud configuration version when supplied", () => {
+    expect(isSplunkExportStatus(disconnectedStatus())).toBe(true);
+    expect(isSplunkExportStatus({ ...disconnectedStatus(), cloudVersion: "K".repeat(43) })).toBe(true);
+    for (const cloudVersion of [null, 17, "invalid"]) {
+      expect(isSplunkExportStatus({ ...disconnectedStatus(), cloudVersion })).toBe(false);
+    }
+  });
+
+  it.each(["browser", "IDE"] as const)("opens metrics and traces for the connected realm (%s)", async (host) => {
+    const status = connectedStatus(false, "eu0");
+    const bridge = host === "IDE" ? installBridge() : null;
+    if (!bridge) vi.stubGlobal("fetch", statusFetch(status));
+    const user = userEvent.setup();
+    render(<CloudTab />);
+    if (bridge) bridge.respond(await bridge.next("initialize"), { status });
+    await screen.findByText("1 of 2 connected");
+    for (const [label, action, route] of [
+      ["View metrics", "open-observability-metrics", "metric-explorer"],
+      ["View traces", "open-observability-traces", "apm/traces"],
+    ] as const) {
+      const link = screen.getByRole("link", { name: label });
+      expect(link.getAttribute("href")).toBe(bridge ? "#" : `https://app.eu0.observability.splunkcloud.com/#/${route}`);
+      if (bridge) {
+        link.focus();
+        await user.keyboard("{Enter}");
+        const request = await bridge.next(action);
+        expect(request.payload).toBeUndefined();
+        bridge.respond(request, {});
+      } else {
+        expect(link.getAttribute("target")).toBe("_blank");
+        expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+      }
+    }
+    expect(screen.getByRole("link", { name: "Open Observability Cloud" })).toBeTruthy();
+  });
+
+  it("keeps the trace link usable when the IDE cannot open metrics", async () => {
+    const bridge = installBridge();
+    const user = userEvent.setup();
+    render(<CloudTab />);
+    bridge.respond(await bridge.next("initialize"), { status: connectedStatus(true, "us1") });
+    await user.click(await screen.findByRole("link", { name: "View metrics" }));
+    bridge.reject(await bridge.next("open-observability-metrics"), "The IDE could not open metrics.");
+    expect((await screen.findByRole("alert")).textContent).toBe("The IDE could not open metrics.");
+    await user.click(screen.getByRole("link", { name: "View traces" }));
+    bridge.respond(await bridge.next("open-observability-traces"), {});
+    expect(screen.getByRole("switch", { name: "Remote telemetry export is on" }).hasAttribute("disabled")).toBe(false);
+  });
+
+  it.each(["browser", "IDE"] as const)("includes logs form validation in the destination summary (%s)", async (host) => {
+    vi.mocked(fetchSplunkLogsStatus).mockResolvedValue({ version: "logs-empty", configured: false, connected: false, enabled: false, endpoint: "https://logs.example/services/collector", index: "studio", source: "otel", sourcetype: "otel:logs", insecureSkipVerify: false, tokenConfigured: false, exportedRecords: 0, failedBatches: 0 });
+    const bridge = host === "IDE" ? installBridge() : null;
+    if (!bridge) vi.stubGlobal("fetch", statusFetch(disconnectedStatus()));
+    const user = userEvent.setup();
+    render(<CloudTab />);
+    if (bridge) bridge.respond(await bridge.next("initialize"), { status: disconnectedStatus() });
+    await screen.findByText("Neither is connected yet.");
+    const cloudForm = screen.getByRole("form", { name: "Cloud connection" });
+    const logsForm = screen.getByRole("form", { name: "Logs connection" });
+    await waitFor(() => expect(within(cloudForm).getByRole("button", { name: "Connect" }).hasAttribute("disabled")).toBe(false));
+    fireEvent.submit(cloudForm);
+    expect(screen.getByText("The Observability Cloud connection needs attention.")).toBeTruthy();
+    await user.type(within(logsForm).getByLabelText("HEC endpoint"), "https://logs.example/services/collector");
+    await user.type(within(logsForm).getByLabelText("Logs index"), "studio");
+    fireEvent.submit(logsForm);
+    expect(screen.getByText("Paste the complete HEC token for this endpoint.")).toBeTruthy();
+    expect(screen.getByText("Both destinations need attention.")).toBeTruthy();
+    expect(screen.getByText("0 of 2 connected")).toBeTruthy();
+    await user.type(screen.getByLabelText("HEC token"), "replacement-token");
+    expect(screen.getByText("The Observability Cloud connection needs attention.")).toBeTruthy();
+  });
+
+  it.each(["browser", "IDE"] as const)("keeps a saved logs connection healthy during invalid edits (%s)", async (host) => {
+    vi.mocked(fetchSplunkLogsStatus).mockResolvedValue({ version: "logs-connected", configured: true, connected: true, enabled: true, endpoint: "https://logs.example/services/collector", index: "studio", source: "otel", sourcetype: "otel:logs", insecureSkipVerify: false, tokenConfigured: true, exportedRecords: 1, failedBatches: 0 });
+    const bridge = host === "IDE" ? installBridge() : null;
+    if (!bridge) vi.stubGlobal("fetch", statusFetch(disconnectedStatus()));
+    const user = userEvent.setup();
+    render(<CloudTab />);
+    if (bridge) bridge.respond(await bridge.next("initialize"), { status: disconnectedStatus() });
+    await screen.findByText("1 of 2 connected");
+    const cloudForm = screen.getByRole("form", { name: "Cloud connection" });
+    await waitFor(() => expect(within(cloudForm).getByRole("button", { name: "Connect" }).hasAttribute("disabled")).toBe(false));
+    fireEvent.submit(cloudForm);
+    await user.click(screen.getByRole("button", { name: "Edit token for Splunk Platform" }));
+    await user.clear(screen.getByLabelText("Logs index"));
+    fireEvent.submit(screen.getByRole("form", { name: "Logs connection" }));
+    expect(screen.getByText("Enter the destination index.")).toBeTruthy();
+    expect(screen.getByText("Observability Cloud needs attention — logs are unaffected.")).toBeTruthy();
+    expect(screen.getByText("1 of 2 connected")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("switch", { name: "Logs export is on" })).toBeTruthy();
+  });
+
+  it.each(["browser", "IDE"] as const)("includes disconnected Cloud validation errors in the destination summary (%s)", async (host) => {
+    vi.mocked(fetchSplunkLogsStatus).mockResolvedValue({ version: "logs-failed", configured: true, connected: false, enabled: false, endpoint: "https://logs.example/services/collector", index: "studio", source: "otel", sourcetype: "otel:logs", insecureSkipVerify: false, tokenConfigured: true, exportedRecords: 0, failedBatches: 1, lastExportError: "HEC refused token", lastHTTPStatus: 403, lastHECCode: 4 });
+    const bridge = host === "IDE" ? installBridge() : null;
+    if (!bridge) vi.stubGlobal("fetch", statusFetch(disconnectedStatus()));
+    const user = userEvent.setup();
+    render(<CloudTab />);
+    if (bridge) bridge.respond(await bridge.next("initialize"), { status: disconnectedStatus() });
+    await screen.findByText("The logs connection needs attention.");
+    const connect = within(screen.getByRole("form", { name: "Cloud connection" })).getByRole("button", { name: "Connect" });
+    await waitFor(() => expect(connect.hasAttribute("disabled")).toBe(false));
+
+    await user.click(connect);
+    expect(await screen.findByText("Both destinations need attention.")).toBeTruthy();
+    expect(screen.getByText("0 of 2 connected")).toBeTruthy();
+    const realm = screen.getByLabelText("Realm or Observability Cloud URL");
+    expect(realm.getAttribute("aria-invalid")).toBe("true");
+    expect(document.activeElement).toBe(realm);
+
+    await user.type(realm, "us1");
+    expect(await screen.findByText("The logs connection needs attention.")).toBeTruthy();
+    await user.click(connect);
+    expect(await screen.findByText("Both destinations need attention.")).toBeTruthy();
+    const token = screen.getByLabelText("Access token");
+    expect(token.getAttribute("aria-invalid")).toBe("true");
+    expect(document.activeElement).toBe(token);
+    await user.type(token, "valid-token");
+    expect(await screen.findByText("The logs connection needs attention.")).toBeTruthy();
+  });
+
+  it.each(["browser", "IDE"] as const)("keeps the saved Cloud connection healthy in the destination summary during invalid edits (%s)", async (host) => {
+    vi.mocked(fetchSplunkLogsStatus).mockResolvedValue({ version: "logs-failed", configured: true, connected: false, enabled: false, endpoint: "https://logs.example/services/collector", index: "studio", source: "otel", sourcetype: "otel:logs", insecureSkipVerify: false, tokenConfigured: true, exportedRecords: 0, failedBatches: 1, lastExportError: "HEC refused token", lastHTTPStatus: 403, lastHECCode: 4 });
+    const status = connectedStatus(true, "us1");
+    const bridge = host === "IDE" ? installBridge() : null;
+    if (!bridge) vi.stubGlobal("fetch", statusFetch(status));
+    const user = userEvent.setup();
+    render(<CloudTab />);
+    if (bridge) bridge.respond(await bridge.next("initialize"), { status });
+    await screen.findByText("1 of 2 connected");
+    await user.click(await screen.findByRole("button", { name: "Edit token for Observability Cloud" }));
+    const realm = screen.getByLabelText("Realm or Observability Cloud URL");
+    await user.clear(realm);
+    await user.click(screen.getByRole("button", { name: "Save Observability Cloud changes" }));
+    expect(realm.getAttribute("aria-invalid")).toBe("true");
+    expect(screen.getByText("1 of 2 connected")).toBeTruthy();
+    expect(screen.getByText(/metrics and traces are unaffected/)).toBeTruthy();
+    expect(screen.queryByText("Both destinations need attention.")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("switch", { name: "Remote telemetry export is on" })).toBeTruthy();
+  });
+  it("requires a token without claiming one is reusable for a partial connection", async () => {
+    const partial = { ...disconnectedStatus(), realm: "us0", metrics: signalStatus(false, true) };
+    vi.stubGlobal("fetch", statusFetch(partial));
+    const user = userEvent.setup();
+    render(<CloudTab />);
+    await user.click(await screen.findByRole("button", { name: "Edit token for Observability Cloud" }));
+    expect(screen.queryByText("Saved")).toBeNull();
+    expect(screen.queryByText("Leave blank to keep the saved token.")).toBeNull();
+    expect(screen.getByLabelText("Access token").getAttribute("placeholder")).toBe("Paste token");
+    expect(screen.getByText("Needs ingest and API scope with the power role.")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Save Observability Cloud changes" }));
+    expect(await screen.findByText("Paste the access token secret.")).toBeTruthy();
+  });
+
+  it("preserves warning styling for recovered signals with failed batches", async () => {
+    const status = connectedStatus(true);
+    status.metrics = { ...status.metrics, failedBatches: 2, lastExport: { success: true, time: new Date().toISOString() } };
+    vi.stubGlobal("fetch", statusFetch(status));
+    render(<CloudTab />);
+    const activity = await screen.findByRole("list", { name: "Telemetry export activity" });
+    expect(within(activity).getAllByRole("listitem")[0].classList.contains("cloud-signal-row--warning")).toBe(true);
+  });
+
+  it.each([true, false])("clears a failed edit when disconnecting (cancel first: %s)", async (cancelFirst) => {
+    const bridge = installBridge({ httpStatus: connectedStatus(true) });
+    const user = userEvent.setup();
+    render(<CloudTab />);
+    bridge.respond(await bridge.next("initialize"), { status: connectedStatus(true) });
+    await user.click(await screen.findByRole("button", { name: "Edit token for Observability Cloud" }));
+    await user.type(screen.getByLabelText("Access token"), "rejected-token");
+    await user.click(screen.getByRole("button", { name: "Save Observability Cloud changes" }));
+    bridge.reject(await bridge.next("connect"), "Access token was rejected.");
+    await screen.findByText("Access token was rejected.");
+    if (cancelFirst) await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await user.click(screen.getByRole("button", { name: "Disconnect Observability Cloud" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Disconnect Observability Cloud" }));
+    bridge.respond(await bridge.next("forget"), { status: disconnectedStatus() });
+    await screen.findByRole("form", { name: "Cloud connection" });
+    expect(screen.queryByText("Connection failed")).toBeNull();
+    expect(screen.getByText("Neither is connected yet.")).toBeTruthy();
+    expect(screen.queryByText("The Observability Cloud connection needs attention.")).toBeNull();
+  });
+
+  it("labels both disconnected connection actions Connect", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(disconnectedStatus())));
+    render(<CloudTab />);
+    const cloud = await screen.findByRole("form", { name: "Cloud connection" });
+    const logs = await screen.findByRole("form", { name: "Logs connection" });
+    const cloudButton = within(cloud).getByRole("button", { name: "Connect" });
+    const logsButton = within(logs).getByRole("button", { name: "Connect Splunk Platform" });
+    expect(cloudButton.textContent).toBe("Connect");
+    expect(logsButton.textContent).toBe("Connect");
+    expect(logsButton.className).toBe(cloudButton.className);
+    expect(logsButton.parentElement?.className).toBe(cloudButton.parentElement?.className);
+  });
+  it("keeps both forms hidden until their own connection is disconnected", async () => {
+    const logs = { version: "logs-v1", connected: true, configured: true, enabled: false, endpoint: "https://logs.example/services/collector", index: "studio", source: "otel", sourcetype: "otel:logs", insecureSkipVerify: false, tokenConfigured: true, exportedRecords: 1, failedBatches: 0 };
+    vi.mocked(fetchSplunkLogsStatus).mockResolvedValue(logs);
+    const bridge = installBridge();
+    const user = userEvent.setup();
+    render(<CloudTab />);
+    bridge.respond(await bridge.next("initialize"), { status: connectedStatus(false) });
+    await screen.findByRole("button", { name: "Disconnect Observability Cloud" });
+    await screen.findByRole("button", { name: "Disconnect Splunk Platform" });
+    expect(screen.queryByRole("form", { name: "Cloud connection" })).toBeNull();
+    expect(screen.queryByRole("form", { name: "Logs connection" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Disconnect Observability Cloud" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Disconnect Observability Cloud" }));
+    bridge.respond(await bridge.next("forget"), { status: disconnectedStatus() });
+    await screen.findByRole("form", { name: "Cloud connection" });
+    expect(screen.queryByRole("form", { name: "Logs connection" })).toBeNull();
+    expect(screen.getByRole("switch", { name: "Logs export is off" })).toBeTruthy();
+    const disconnectedLogs = { ...logs, version: "logs-v2", connected: false };
+    vi.mocked(disconnectSplunkLogs).mockResolvedValueOnce(disconnectedLogs);
+    vi.mocked(fetchSplunkLogsStatus).mockResolvedValue(disconnectedLogs);
+    await user.click(screen.getByRole("button", { name: "Disconnect Splunk Platform" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Disconnect Splunk Platform?" })).getByRole("button", { name: "Disconnect Splunk Platform" }));
+    await screen.findByRole("form", { name: "Logs connection" });
+    expect(screen.getByRole("form", { name: "Cloud connection" })).toBeTruthy();
+    expect(vi.mocked(disconnectSplunkLogs)).toHaveBeenCalledWith("logs-v1");
+    expect(screen.queryByRole("switch")).toBeNull();
+  });
+  it("reports the logs connection independently when metrics and traces are disconnected", async () => {
+    vi.mocked(fetchSplunkLogsStatus).mockResolvedValue({version:"logs-v1",configured:true,connected:true,enabled:true,endpoint:"https://logs.example/services/collector",index:"studio",source:"otel",sourcetype:"otel:logs",insecureSkipVerify:false,tokenConfigured:true,exportedRecords:1,failedBatches:0});
+    vi.stubGlobal("fetch",vi.fn(async()=>jsonResponse(disconnectedStatus())));
+    const onConnectionChange=vi.fn();render(<CloudTab onConnectionChange={onConnectionChange}/>);
+    await waitFor(()=>expect(onConnectionChange).toHaveBeenLastCalledWith("logs-connected"));
+    await waitFor(()=>expect(fetchSplunkLogsStatus).toHaveBeenCalledTimes(2));
+    expect(onConnectionChange).toHaveBeenLastCalledWith("logs-connected");
+    expect(screen.getByRole("button",{name:"Connect"})).toBeTruthy();
+  });
   it("loads standalone status directly without creating a browser session", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const path = String(input);
@@ -33,8 +581,8 @@ describe("CloudTab", () => {
 
     render(<CloudTab />);
 
-    expect(await screen.findByText("us1 · Access token configured")).toBeTruthy();
-    expect((screen.getByRole("button", { name: "Remove connection" }) as HTMLButtonElement).disabled)
+    expect(await screen.findByText("realm us1")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Disconnect Observability Cloud" }) as HTMLButtonElement).disabled)
       .toBe(false);
   });
 
@@ -131,8 +679,8 @@ describe("CloudTab", () => {
 
     expect(statusCalls).toBe(2);
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.getByText("us1 · Access token configured")).toBeTruthy();
-    expect((screen.getByRole("button", { name: "Remove connection" }) as HTMLButtonElement).disabled)
+    expect(screen.getByText("realm us1")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Disconnect Observability Cloud" }) as HTMLButtonElement).disabled)
       .toBe(false);
   });
 
@@ -173,8 +721,8 @@ describe("CloudTab", () => {
 
     expect(statusCalls).toBe(2);
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.getByText("eu1 · Access token configured")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Remove connection" }));
+    expect(screen.getByText("realm eu1")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Disconnect Observability Cloud" }));
     expect(screen.getByRole("dialog")).toBeTruthy();
 
     observerStatus = disconnectedStatus();
@@ -186,6 +734,56 @@ describe("CloudTab", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     expect((screen.getByLabelText("Realm or Observability Cloud URL") as HTMLInputElement).value).toBe("invalid");
     expect((screen.getByLabelText("Access token") as HTMLInputElement).value).toBe("local_secret");
+  });
+
+  it.each([
+    ["browser", false], ["browser", true], ["IDE", false], ["IDE", true],
+  ] as const)("preserves Cloud feedback while another session changes logs (%s, connected=%s)", async (host, connected) => {
+    let observerStatus: SplunkExportStatus = {
+      ...(connected ? connectedStatus(true, "us1") : disconnectedStatus()),
+      cloudVersion: "K".repeat(43),
+    };
+    const options = { httpStatus: observerStatus };
+    const bridge = host === "IDE" ? installBridge(options) : null;
+    if (!bridge) vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(observerStatus)));
+    vi.useFakeTimers();
+    render(<CloudTab />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    if (bridge) {
+      const initialize = bridge.requests().shift();
+      expect(initialize?.action).toBe("initialize");
+      bridge.respond(initialize!, { status: observerStatus });
+    }
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+
+    if (connected) {
+      fireEvent.click(screen.getByRole("button", { name: "Disconnect Observability Cloud" }));
+    } else {
+      fireEvent.change(screen.getByLabelText("Realm or Observability Cloud URL"), { target: { value: "invalid" } });
+      fireEvent.click(within(screen.getByRole("region", { name: "Splunk Observability Cloud" })).getByRole("button", { name: "Connect" }));
+    }
+    const feedback = connected ? screen.getByRole("dialog") : screen.getByRole("alert");
+    const focused = document.activeElement;
+    observerStatus = {
+      ...observerStatus,
+      version: "L".repeat(43),
+      enabled: !observerStatus.enabled,
+      logs: signalStatus(!observerStatus.enabled, true),
+    };
+    options.httpStatus = observerStatus;
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+    expect(connected ? screen.getByRole("dialog") : screen.getByRole("alert")).toBe(feedback);
+    expect(document.activeElement).toBe(focused);
+
+    observerStatus = {
+      ...(connected ? disconnectedStatus() : connectedStatus(true, "eu1")),
+      cloudVersion: "N".repeat(43),
+    };
+    options.httpStatus = observerStatus;
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    if (!connected) expect(screen.getByText("realm eu1")).toBeTruthy();
   });
 
   it("refreshes standalone state after a concurrent Connect loses to another surface", async () => {
@@ -203,6 +801,7 @@ describe("CloudTab", () => {
         expect(headers.get("Authorization")).toBeNull();
         expect(JSON.parse(String(init?.body))).toEqual({
           accessToken: "losing_token",
+          enabled: true,
           expectedVersion: disconnectedVersion,
           realm: "us1",
         });
@@ -219,7 +818,7 @@ describe("CloudTab", () => {
     fireEvent.change(screen.getByLabelText("Access token"), { target: { value: "losing_token" } });
     fireEvent.click(connectButton);
 
-    expect(await screen.findByText("eu1 · Access token configured")).toBeTruthy();
+    expect(await screen.findByText("realm eu1")).toBeTruthy();
     expect(screen.getByText("Cloud state refreshed from Splunk Observability Studio.")).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
     expect(statusCalls).toBe(2);
@@ -240,12 +839,13 @@ describe("CloudTab", () => {
     const connect = await bridge.next("connect");
     expect(connect.payload).toEqual({
       accessToken: "losing_token",
+      enabled: true,
       expectedVersion: disconnectedVersion,
       realm: "us1",
     });
     bridge.reject(connect, "A cloud configuration change is already in progress.");
 
-    expect(await screen.findByText("eu1 · Access token configured")).toBeTruthy();
+    expect(await screen.findByText("realm eu1")).toBeTruthy();
     expect(screen.getByText("Cloud state refreshed from Splunk Observability Studio.")).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
     expect(bridge.httpRequests().filter((request) => request.path === "/api/splunk/export"))
@@ -346,14 +946,14 @@ describe("CloudTab", () => {
 
     const initialize = await bridge.next("initialize");
     bridge.respond(initialize, { status: connectedStatus(false, "us1") });
-    fireEvent.click(await screen.findByRole("button", { name: "Remove connection" }));
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Remove connection" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Disconnect Observability Cloud" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Disconnect Observability Cloud" }));
 
     const forget = await bridge.next("forget");
     expect(forget.payload).toEqual({ expectedVersion: connectedVersion });
     bridge.reject(forget, "A cloud configuration change is already in progress.");
 
-    expect(await screen.findByText("Connect to export metrics and traces and publish detectors and dashboards.")).toBeTruthy();
+    expect(await screen.findByText("Neither is connected yet.")).toBeTruthy();
     expect(screen.getByText("Cloud state refreshed from Splunk Observability Studio.")).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
     const regionInput = screen.getByLabelText("Realm or Observability Cloud URL");
@@ -431,11 +1031,9 @@ describe("CloudTab", () => {
     expect((regionInput as HTMLInputElement).disabled).toBe(false);
     expect((tokenInput as HTMLInputElement).disabled).toBe(false);
     expect((regionInput as HTMLInputElement).value).toBe("");
-    expect((regionInput as HTMLInputElement).placeholder).toBe("e.g. us1");
-    // Labels are rendered before any value is entered, not only once a field is filled.
-    expect(document.querySelector('label[for="cloud-region"]')?.textContent)
-      .toBe("Realm or Observability Cloud URL");
-    expect(document.querySelector('label[for="cloud-access-token"]')?.textContent).toBe("Access token");
+    expect((regionInput as HTMLInputElement).placeholder).toBe("us1 — or paste the full URL");
+    expect(regionInput.closest(".destination-field")?.querySelector("label")?.textContent).toBe("Realm or Observability Cloud URL");
+    expect(tokenInput.closest(".destination-field")?.querySelector("label")?.textContent).toBe("Access token");
     await waitFor(() => {
       expect((screen.getByRole("button", { name: "Connect" }) as HTMLButtonElement).disabled).toBe(false);
     });
@@ -446,21 +1044,23 @@ describe("CloudTab", () => {
 
     expect((regionInput as HTMLInputElement).value).toBe("eu1");
     expect((tokenInput as HTMLInputElement).value).toBe("token_without_bridge_123456789");
-    expect(screen.getByPlaceholderText("Ingest and API token with power role")).toBeTruthy();
+    expect((tokenInput as HTMLInputElement).placeholder).toBe("Paste token");
     expect(document.querySelector('label[for="cloud-region"]')?.textContent)
       .toBe("Realm or Observability Cloud URL");
     expect(document.querySelector('label[for="cloud-access-token"]')?.textContent).toBe("Access token");
+    expect((regionInput as HTMLInputElement).value).toBe("eu1");
+    expect((tokenInput as HTMLInputElement).value).toBe("token_without_bridge_123456789");
     expect(screen.queryByText(/get token/i)).toBeNull();
 
-    const regionField = screen.getByLabelText("Realm or Observability Cloud URL").closest(".cloud-field");
-    const tokenField = screen.getByLabelText("Access token").closest(".cloud-field");
+    const regionField = screen.getByLabelText("Realm or Observability Cloud URL").closest(".destination-field");
+    const tokenField = screen.getByLabelText("Access token").closest(".destination-field");
     if (!regionField || !tokenField) throw new Error("Cloud connection fields are missing");
     expect(screen.getByRole("form", { name: "Cloud connection" })
-      .closest(".cloud-panel")?.classList.contains("cloud-panel--setup")).toBe(true);
+      .closest(".cloud-panel")?.classList.contains("cloud-destination--o11y")).toBe(true);
     expect(screen.queryByRole("heading", { name: "Get started with Observability Cloud Free Edition" })).toBeNull();
     expect(screen.queryByText(/Find this code in your Splunk Observability Cloud URL/i)).toBeNull();
-    expect(regionField.classList.contains("cloud-field--region")).toBe(true);
-    expect(tokenField.classList.contains("cloud-field--token")).toBe(true);
+    expect(regionField.querySelector("label")?.textContent).toBe("Realm or Observability Cloud URL");
+    expect(tokenField.querySelector("label")?.textContent).toBe("Access token");
     expect(regionField.compareDocumentPosition(tokenField) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
     expect(screen.queryByRole("form", { name: "Free Edition account" })).toBeNull();
@@ -470,32 +1070,17 @@ describe("CloudTab", () => {
     expect(screen.queryByRole("link", { name: "Start Free Edition" })).toBeNull();
     const help = document.getElementById("cloud-token-help");
     if (!help) throw new Error("Cloud connection help is missing");
-    expect(help.textContent).toBe("More on realm and access tokens");
-    expect(within(help).getAllByRole("link").map((link) => link.textContent))
-      .toEqual(["realm", "access tokens"]);
-    const realmHelpLink = within(help).getByRole("link", { name: "realm" });
+    expect(help.textContent).toBe("Needs ingest and API scope with the power role.");
+    const realmHelpLink = screen.getByRole("link", { name: "Find your realm" });
     expect(realmHelpLink.getAttribute("href"))
       .toBe("https://help.splunk.com/en/splunk-observability-cloud/administer/org-reference-info/view-your-realm-api-endpoints-and-organization");
     expect(realmHelpLink.getAttribute("target")).toBe("_blank");
     expect(realmHelpLink.getAttribute("rel")).toBe("noopener noreferrer");
-    const tokenHelpLink = within(help).getByRole("link", { name: "access tokens" });
+    const tokenHelpLink = screen.getByRole("link", { name: "Create a token" });
     expect(tokenHelpLink.getAttribute("href"))
       .toBe("https://help.splunk.com/en/splunk-observability-cloud/administer/authentication-and-security/authentication-tokens/org-access-tokens");
     expect(tokenHelpLink.getAttribute("target")).toBe("_blank");
     expect(tokenHelpLink.getAttribute("rel")).toBe("noopener noreferrer");
-  });
-
-  it("shows field labels above the inputs at all times and uses the app's button and panel styling", () => {
-    const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
-
-    expect(css).toMatch(/\.cloud-field__label\s*\{[^}]*display:\s*block;/s);
-    expect(css).not.toMatch(/\.cloud-field__label\s*\{[^}]*(opacity:\s*0|position:\s*absolute)/s);
-    expect(css).not.toMatch(/cloud-field__floating-label|cloud-field__control--filled/);
-    expect(css).not.toMatch(/#ce0070/);
-    expect(css).not.toMatch(/\.cloud-[a-z_-]+[^{]*\{[^}]*border-radius:\s*24px;/s);
-    expect(css).toMatch(/\.cloud-connect-form\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);[^}]*gap:\s*16px;/s);
-    expect(css).toMatch(/\.cloud-field input,\s*\.cloud-field select\s*\{[^}]*height:\s*36px;[^}]*border:\s*1px solid #969daa;[^}]*border-radius:\s*6px;/s);
-    expect(css).toMatch(/\.cloud-connect-form__action \.cloud-button,\s*\.cloud-free-account__action \.cloud-button\s*\{[^}]*width:\s*100%;/s);
   });
 
   it("keeps standalone controls available without a browser credential", async () => {
@@ -529,13 +1114,31 @@ describe("CloudTab", () => {
 
     render(<CloudTab />);
 
-    expect(await screen.findByText("us1 · Access token configured")).toBeTruthy();
+    expect(await screen.findByText("realm us1")).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByText("Splunk Observability Studio state is read-only in this browser session.")).toBeNull();
     expect((screen.getByRole("switch", { name: "Remote telemetry export is on" }) as HTMLButtonElement).disabled)
       .toBe(false);
-    expect((screen.getByRole("button", { name: "Remove connection" }) as HTMLButtonElement).disabled)
+    expect((screen.getByRole("button", { name: "Disconnect Observability Cloud" }) as HTMLButtonElement).disabled)
       .toBe(false);
+  });
+
+  it("reloads an uncertain startup migration before accepting another connection", async () => {
+    const bridge = installBridge();
+    const user = userEvent.setup();
+    render(<CloudTab />);
+    bridge.respond(await bridge.next("initialize"), {
+      status: disconnectedStatus(),
+      warning: "Migration outcome is unknown. Reload saved connection.",
+      warningCode: "outcome_unknown",
+    });
+    const reload = await screen.findByRole("button", { name: "Reload saved connection" });
+    expect(screen.getByRole("button", { name: "Connect" }).hasAttribute("disabled")).toBe(true);
+    reload.focus();
+    await user.keyboard("{Enter}");
+    bridge.respond(await bridge.next("refresh"), { status: disconnectedStatus() });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Connect" }).hasAttribute("disabled")).toBe(false));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Realm or Observability Cloud URL")));
   });
 
   it("keeps Connect available when IDE initialization returns a status warning", async () => {
@@ -546,14 +1149,14 @@ describe("CloudTab", () => {
     vi.useFakeTimers();
     bridge.respond(initialize, {
       status: disconnectedStatus(),
-      warning: "Could not parse the configured env file.",
+      warning: "Could not refresh the saved connection.",
     });
     await act(async () => {
       await Promise.resolve();
     });
 
     expect(screen.getByRole("alert").textContent)
-      .toContain("Could not parse the configured env file.");
+      .toContain("Could not refresh the saved connection.");
     expect((screen.getByLabelText("Realm or Observability Cloud URL") as HTMLInputElement).disabled).toBe(false);
     expect((screen.getByLabelText("Access token") as HTMLInputElement).disabled).toBe(false);
     expect((screen.getByRole("button", { name: "Connect" }) as HTMLButtonElement).disabled)
@@ -563,7 +1166,7 @@ describe("CloudTab", () => {
       await vi.advanceTimersByTimeAsync(5000);
     });
     expect(screen.getByRole("alert").textContent)
-      .toContain("Could not parse the configured env file.");
+      .toContain("Could not refresh the saved connection.");
   });
 
   it("supports human-like standalone editing, paste, Enter, enable, disable, and forget", async () => {
@@ -583,6 +1186,7 @@ describe("CloudTab", () => {
       if (path === "/api/splunk/export") {
         expect(JSON.parse(String(init?.body))).toEqual({
           accessToken: "browser_token_123456789",
+          enabled: true,
           expectedVersion: disconnectedVersion,
           realm: "us1",
         });
@@ -618,7 +1222,7 @@ describe("CloudTab", () => {
     expect((tokenInput as HTMLInputElement).value).toBe("browser_token_123456789");
     await user.keyboard("{Enter}");
 
-    expect(await screen.findByText("us1 · Access token configured")).toBeTruthy();
+    expect(await screen.findByText("realm us1")).toBeTruthy();
     let exportSwitch = screen.getByRole("switch", { name: "Remote telemetry export is off" });
     expect((exportSwitch as HTMLButtonElement).disabled).toBe(false);
     await user.click(exportSwitch);
@@ -627,15 +1231,15 @@ describe("CloudTab", () => {
     await user.click(exportSwitch);
     expect(await screen.findByText("Off")).toBeTruthy();
 
-    const forgetButton = screen.getByRole("button", { name: "Remove connection" });
+    const forgetButton = screen.getByRole("button", { name: "Disconnect Observability Cloud" });
     expect((forgetButton as HTMLButtonElement).disabled).toBe(false);
     await user.click(forgetButton);
-    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Remove connection" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Disconnect Observability Cloud" }));
 
-    expect(await screen.findByText("Connect to export metrics and traces and publish detectors and dashboards.")).toBeTruthy();
+    expect(await screen.findByText("Neither is connected yet.")).toBeTruthy();
     expect((screen.getByLabelText("Realm or Observability Cloud URL") as HTMLInputElement).value).toBe("");
     expect((screen.getByLabelText("Realm or Observability Cloud URL") as HTMLInputElement).placeholder)
-      .toBe("e.g. us1");
+      .toBe("us1 — or paste the full URL");
     expect(mutationPaths).toEqual([
       "/api/splunk/export",
       "/api/splunk/export/enabled",
@@ -667,6 +1271,7 @@ describe("CloudTab", () => {
       if (path === "/api/splunk/export") {
         expect(JSON.parse(String(init?.body))).toEqual({
           accessToken: "standalone_url_token",
+          enabled: true,
           expectedVersion: disconnectedVersion,
           realm: "eu0",
         });
@@ -685,7 +1290,7 @@ describe("CloudTab", () => {
     });
     fireEvent.click(connectButton);
 
-    expect(await screen.findByText("eu0 · Access token configured")).toBeTruthy();
+    expect(await screen.findByText("realm eu0")).toBeTruthy();
     expect(mutationPaths).toEqual([
       "/api/splunk/export/realm",
       "/api/splunk/export",
@@ -725,12 +1330,13 @@ describe("CloudTab", () => {
     expect(regionInput.disabled).toBe(false);
     expect(tokenInput.disabled).toBe(false);
     expect(tokenInput.value).toBe("rejected_token");
+    expect(screen.queryByRole("button", { name: "Reload saved connection" })).toBeNull();
 
     await user.clear(tokenInput);
     await user.type(tokenInput, "corrected_token");
     await user.keyboard("{Enter}");
 
-    expect(await screen.findByText("us1 · Access token configured")).toBeTruthy();
+    expect(await screen.findByText("realm us1")).toBeTruthy();
     expect(connectCalls).toBe(2);
   });
 
@@ -745,7 +1351,7 @@ describe("CloudTab", () => {
     });
     const regionInput = await screen.findByLabelText("Realm or Observability Cloud URL") as HTMLInputElement;
     expect(regionInput.value).toBe("");
-    expect(regionInput.placeholder).toBe("e.g. us1");
+    expect(regionInput.placeholder).toBe("us1 — or paste the full URL");
 
     const connectButton = screen.getByRole("button", { name: "Connect" }) as HTMLButtonElement;
     expect(connectButton.disabled).toBe(false);
@@ -836,12 +1442,13 @@ describe("CloudTab", () => {
     const connect = await bridge.next("connect");
     expect(connect.payload).toEqual({
       accessToken: "token_1234567890123456",
+      enabled: true,
       expectedVersion: disconnectedVersion,
       realm: "us1",
     });
     bridge.respond(connect, { status: connectedStatus(false, "us1") });
 
-    expect(await screen.findByText("us1 · Access token configured")).toBeTruthy();
+    expect(await screen.findByText("realm us1")).toBeTruthy();
     expect(screen.queryByDisplayValue("token_1234567890123456")).toBeNull();
     expect(screen.queryByRole("form", { name: "Free Edition account" })).toBeNull();
     expect(screen.getByRole("switch", { name: "Remote telemetry export is off" }).getAttribute("aria-checked")).toBe("false");
@@ -869,13 +1476,14 @@ describe("CloudTab", () => {
     const connect = await bridge.next("connect");
     expect(connect.payload).toEqual({
       accessToken: "customer_url_token",
+      enabled: true,
       expectedVersion: disconnectedVersion,
       realm: "eu0",
     });
     expect(regionInput.value).toBe(destination);
     bridge.respond(connect, { status: connectedStatus(false, "eu0") });
 
-    expect(await screen.findByText("eu0 · Access token configured")).toBeTruthy();
+    expect(await screen.findByText("realm eu0")).toBeTruthy();
   });
 
   it("keeps the pasted URL after a resolved IDE connection fails", async () => {
@@ -896,6 +1504,7 @@ describe("CloudTab", () => {
     const connect = await bridge.next("connect");
     expect(connect.payload).toEqual({
       accessToken: "preserved_customer_url_token",
+      enabled: true,
       expectedVersion: disconnectedVersion,
       realm: "us1",
     });
@@ -942,8 +1551,8 @@ describe("CloudTab", () => {
     const initialize = await bridge.next("initialize");
     bridge.respond(initialize, { status });
 
-    expect(await screen.findByText("configured destination · Access token configured")).toBeTruthy();
-    expect(screen.getByText("Send metrics and traces to configured destination.")).toBeTruthy();
+    expect(await screen.findByText("Connection details incomplete")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Open Observability Cloud" })).toBeNull();
   });
 
   it("keeps connected controls available when bridge initialization fails", async () => {
@@ -953,10 +1562,10 @@ describe("CloudTab", () => {
     const initialize = await bridge.next("initialize");
     bridge.reject(initialize, "Splunk Observability Studio was still starting");
 
-    expect(await screen.findByText("us1 · Access token configured")).toBeTruthy();
+    expect(await screen.findByText("realm us1")).toBeTruthy();
     expect(screen.getByRole("alert").textContent).toContain("Splunk Observability Studio was still starting");
     expect(screen.queryByText("Splunk Observability Studio state is read-only in this browser session.")).toBeNull();
-    expect((screen.getByRole("button", { name: "Remove connection" }) as HTMLButtonElement).disabled)
+    expect((screen.getByRole("button", { name: "Disconnect Observability Cloud" }) as HTMLButtonElement).disabled)
       .toBe(false);
   });
 
@@ -1003,10 +1612,11 @@ describe("CloudTab", () => {
     const connect = await bridge.next("connect");
     expect(connect.payload).toEqual({
       accessToken: "human_like_token",
+      enabled: true,
       realm: "us1",
     });
     bridge.respond(connect, { status: connectedStatus(false, "us1") });
-    expect(await screen.findByText("us1 · Access token configured")).toBeTruthy();
+    expect(await screen.findByText("realm us1")).toBeTruthy();
   });
 
   it("falls back to Splunk Observability Studio status when the IDE initialize response omits status", async () => {
@@ -1021,7 +1631,7 @@ describe("CloudTab", () => {
       expect(bridge.httpRequests().some((request) => request.path === "/api/splunk/export")).toBe(true);
     });
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.getByText("Connect to export metrics and traces and publish detectors and dashboards.")).toBeTruthy();
+    expect(screen.getByText("Neither is connected yet.")).toBeTruthy();
   });
 
   it("does not detect a signup region when initialization finds a connected organization", async () => {
@@ -1031,7 +1641,7 @@ describe("CloudTab", () => {
     const initialize = await bridge.next("initialize");
     bridge.respond(initialize, { status: connectedStatus(false, "us1") });
 
-    expect(await screen.findByText("us1 · Access token configured")).toBeTruthy();
+    expect(await screen.findByText("realm us1")).toBeTruthy();
     await act(async () => Promise.resolve());
     expect(bridge.requests().some((request) => request.action === "detect-free-account-region")).toBe(false);
     expect(screen.queryByRole("form", { name: "Free Edition account" })).toBeNull();
@@ -1127,7 +1737,7 @@ describe("CloudTab", () => {
     bridge.respond(terms, {});
     expect((termsCheckbox as HTMLInputElement).checked).toBe(false);
 
-    const realmHelpLink = screen.getByRole("link", { name: "realm" });
+    const realmHelpLink = screen.getByRole("link", { name: "Find your realm" });
     expect(realmHelpLink.getAttribute("href")).toBe("#");
     expect(realmHelpLink.getAttribute("target")).toBeNull();
     expect(fireEvent.click(realmHelpLink)).toBe(false);
@@ -1137,7 +1747,7 @@ describe("CloudTab", () => {
     bridge.respond(realmHelp, {});
     expect(window.location.hash).toBe("");
 
-    const tokenHelpLink = screen.getByRole("link", { name: "access tokens" });
+    const tokenHelpLink = screen.getByRole("link", { name: "Create a token" });
     expect(tokenHelpLink.getAttribute("href")).toBe("#");
     expect(tokenHelpLink.getAttribute("target")).toBeNull();
     expect(fireEvent.click(tokenHelpLink)).toBe(false);
@@ -1158,11 +1768,10 @@ describe("CloudTab", () => {
     expect(startButton.getAttribute("aria-controls")).toBe("cloud-free-account-details");
     expect(startButton.getAttribute("aria-expanded")).toBe("false");
     const details = document.getElementById("cloud-free-account-details") as HTMLDivElement;
-    expect(details).toBeTruthy();
-    expect(details.hidden).toBe(true);
+    expect(details).toBeNull();
     expect(screen.queryByRole("form", { name: "Free Edition account" })).toBeNull();
     expect(screen.queryByLabelText("First name")).toBeNull();
-    expect(screen.getByText("Sign up to get an access token.")).toBeTruthy();
+    expect(screen.getByText(/No org yet/)).toBeTruthy();
     expect(bridge.requests().some((request) => request.action === "detect-free-account-region")).toBe(false);
 
     bridge.respond(initialize, { status: disconnectedStatus() });
@@ -1171,15 +1780,13 @@ describe("CloudTab", () => {
 
     fireEvent.click(startButton);
     const form = await screen.findByRole("form", { name: "Free Edition account" });
-    expect(details.hidden).toBe(false);
+    expect(document.getElementById("cloud-free-account-details")?.hidden).toBe(false);
     expect(form.id).toBe("cloud-free-account-form");
     const connectionPanel = screen.getByRole("form", { name: "Cloud connection" }).closest(".cloud-panel");
     const signupPanel = form.closest(".cloud-panel");
     expect(connectionPanel).toBeTruthy();
     expect(signupPanel).toBeTruthy();
-    expect(signupPanel).not.toBe(connectionPanel);
-    expect(connectionPanel?.parentElement).toBe(signupPanel?.parentElement);
-    expect(signupPanel?.parentElement?.classList.contains("cloud-setup-stack")).toBe(true);
+    expect(connectionPanel?.contains(signupPanel)).toBe(true);
     expect(screen.queryByRole("button", { name: "Get started with Observability Cloud Free Edition" })).toBeNull();
     expect(within(form).getByRole("button", { name: "Start Free Edition" }).hasAttribute("disabled"))
       .toBe(true);
@@ -1195,30 +1802,6 @@ describe("CloudTab", () => {
     fireEvent.submit(form);
     expect((await screen.findByRole("alert")).textContent).toContain("Enter your last name.");
     expect(screen.getByRole("form", { name: "Free Edition account" })).toBeTruthy();
-  });
-
-  it("separates signup into its own compact panel and stacks every field responsively", () => {
-    const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
-
-    expect(css).toMatch(/\.cloud-panel--setup\s*\{[^}]*max-width:\s*432px;/s);
-    expect(css).toMatch(/\.cloud-setup-stack\s*\{[^}]*display:\s*grid;[^}]*gap:\s*20px;[^}]*max-width:\s*432px;[^}]*margin:\s*0 auto;/s);
-    expect(css).toMatch(/\.cloud-setup-stack > \.cloud-panel\s*\{[^}]*max-width:\s*none;[^}]*margin:\s*0;/s);
-    expect(css).toMatch(/\.cloud-button--primary\s*\{[^}]*border-color:\s*rgba\(57,\s*147,\s*255,\s*0\.72\);[^}]*background:\s*rgba\(57,\s*147,\s*255,\s*0\.16\);[^}]*color:\s*#dcecff;/s);
-    expect(css).toMatch(/\.cloud-free-account\s*\{[^}]*border-top:\s*1px solid var\(--border\);/s);
-    expect(css).toMatch(/\.cloud-free-account__prompt\s*\{[^}]*flex-direction:\s*column;[^}]*gap:\s*14px;[^}]*padding:\s*18px 20px;/s);
-    expect(css).toMatch(/\.cloud-free-account__start\s*\{[^}]*width:\s*100%;/s);
-    expect(css).toMatch(/\.cloud-free-account__header\s*\{[^}]*padding:\s*18px 20px 16px;[^}]*text-align:\s*center;/s);
-    expect(css).toMatch(/\.cloud-free-account__form\s*\{[^}]*display:\s*flex;[^}]*flex-direction:\s*column;[^}]*gap:\s*16px;[^}]*padding:\s*0 20px 20px;/s);
-    expect(css).toMatch(/\.cloud-free-account__fields\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/s);
-    expect(css).toMatch(/\.cloud-free-account__terms input\s*\{[^}]*width:\s*24px;[^}]*height:\s*24px;/s);
-    expect(css).toMatch(/\.cloud-field__control\s*\{[^}]*position:\s*relative;/s);
-    expect(css).toMatch(/\.cloud-free-account__action\s*\{[^}]*flex-direction:\s*column;[^}]*gap:\s*10px;/s);
-    expect(css).toMatch(/\.cloud-free-account__submission-error\s*\{[^}]*min-height:\s*0;/s);
-    expect(css).toMatch(/\.cloud-free-account__action \.cloud-button\s*\{[^}]*width:\s*100%;/s);
-    expect(css).toMatch(/\.cloud-free-account__resources\s*\{[^}]*display:\s*grid;[^}]*gap:\s*14px;/s);
-    expect(css).toMatch(/\.cloud-free-account__outcome-actions\s*\{[^}]*display:\s*flex;[^}]*flex-wrap:\s*wrap;/s);
-    expect(css).toMatch(/@media \(max-width:\s*680px\)[^{]*\{[\s\S]*?\.cloud-free-account__form\s*\{[^}]*padding:\s*0 18px 18px;/);
-    expect(css).toMatch(/@media \(max-width:\s*680px\)[^{]*\{[\s\S]*?\.cloud-free-account__action,[\s\S]*?\.cloud-free-account__action \.cloud-button\s*\{[^}]*width:\s*100%;/);
   });
 
   it("blocks repeat submission only in flight, then lets the user submit the same email again", async () => {
@@ -1457,15 +2040,15 @@ describe("CloudTab", () => {
     fireEvent.click(screen.getByRole("button", { name: "Connect" }));
     const connect = await bridge.next("connect");
     bridge.respond(connect, { status: connectedStatus(false, "us1") });
-    await screen.findByText("us1 · Access token configured");
+    await screen.findByText("realm us1");
 
-    fireEvent.click(screen.getByRole("button", { name: "Remove connection" }));
+    fireEvent.click(screen.getByRole("button", { name: "Disconnect Observability Cloud" }));
     const removeDialog = screen.getByRole("dialog");
-    expect(within(removeDialog).getByRole("heading", { name: "Remove connection?" })).toBeTruthy();
+    expect(within(removeDialog).getByRole("heading", { name: "Disconnect Observability Cloud?" })).toBeTruthy();
     expect(within(removeDialog).getByText(
-      "This removes the saved region and access token and turns off remote export.",
+      "This removes the saved region and access token and turns off metrics and traces export.",
     )).toBeTruthy();
-    fireEvent.click(within(removeDialog).getByRole("button", { name: "Remove connection" }));
+    fireEvent.click(within(removeDialog).getByRole("button", { name: "Disconnect Observability Cloud" }));
     const forget = await bridge.next("forget");
     bridge.respond(forget, { status: disconnectedStatus() });
 
@@ -1887,6 +2470,7 @@ describe("CloudTab", () => {
     const connect = await bridge.next("connect");
     expect(connect.payload).toEqual({
       accessToken: "human_like_token",
+      enabled: true,
       expectedVersion: disconnectedVersion,
       realm: "eu1",
     });
@@ -1896,7 +2480,7 @@ describe("CloudTab", () => {
       .toBe(true);
 
     bridge.respond(connect, { status: connectedStatus(false, "eu1") });
-    expect(await screen.findByText("eu1 · Access token configured")).toBeTruthy();
+    expect(await screen.findByText("realm eu1")).toBeTruthy();
   });
 
   it("submits when an IDE host delivers Enter without the browser default form action", async () => {
@@ -1917,11 +2501,12 @@ describe("CloudTab", () => {
     const connect = await bridge.next("connect");
     expect(connect.payload).toEqual({
       accessToken: "kiro_pasted_token",
+      enabled: true,
       expectedVersion: disconnectedVersion,
       realm: "ap0",
     });
     bridge.respond(connect, { status: connectedStatus(false, "ap0") });
-    expect(await screen.findByText("ap0 · Access token configured")).toBeTruthy();
+    expect(await screen.findByText("realm ap0")).toBeTruthy();
   });
 
   it("leaves modified Enter events to the IDE host", async () => {
@@ -1966,7 +2551,7 @@ describe("CloudTab", () => {
     await act(async () => {
       await Promise.resolve();
     });
-    expect(screen.getByText("us1 · Access token configured")).toBeTruthy();
+    expect(screen.getByText("realm us1")).toBeTruthy();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5000);
@@ -2039,6 +2624,7 @@ describe("CloudTab", () => {
     const connect = await bridge.next("connect");
     expect(connect.payload).toEqual({
       accessToken: "short",
+      enabled: true,
       expectedVersion: disconnectedVersion,
       realm: "us1",
     });
@@ -2073,7 +2659,7 @@ describe("CloudTab", () => {
     expect(screen.queryByText("Cloud destination connected.")).toBeNull();
   });
 
-  it("allows an explicit retry if the IDE does not confirm completion of Connect", async () => {
+  it("requires saved-state recovery when the IDE cannot confirm Connect", async () => {
     const bridge = installBridge();
     render(<CloudTab />);
 
@@ -2090,16 +2676,18 @@ describe("CloudTab", () => {
     });
     expect(bridge.requests().some((request) => request.action === "connect")).toBe(true);
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(60_000);
+      await vi.advanceTimersByTimeAsync(cloudHostRequestTimeoutMs);
       await Promise.resolve();
     });
 
     expect(screen.getByRole("alert").textContent)
-      .toContain("Reload the window to reconcile its final state");
+      .toContain("Reload saved connection before trying again.");
     expect((screen.getByLabelText("Realm or Observability Cloud URL") as HTMLInputElement).disabled).toBe(false);
     expect(tokenInput.disabled).toBe(false);
     expect((screen.getByRole("button", { name: "Connect" }) as HTMLButtonElement).disabled)
-      .toBe(false);
+      .toBe(true);
+    expect(screen.getByRole("button", { name: "Reload saved connection" }).hasAttribute("disabled")).toBe(false);
+    expect(tokenInput.value).toBe("opaque_token");
   });
 
   it("does not report success unless Splunk Observability Studio confirms the connection", async () => {
@@ -2214,6 +2802,7 @@ describe("CloudTab", () => {
     const connect = await bridge.next("connect");
     expect(connect.payload).toEqual({
       accessToken: "token_context_menu_123456789",
+      enabled: true,
       expectedVersion: disconnectedVersion,
       realm: "in0",
     });
@@ -2283,6 +2872,7 @@ describe("CloudTab", () => {
     const connect = await bridge.next("connect");
     expect(connect.payload).toEqual({
       accessToken: "token_context_menu_123456789",
+      enabled: true,
       expectedVersion: disconnectedVersion,
       realm: "us0",
     });
@@ -2310,6 +2900,52 @@ describe("CloudTab", () => {
     expect(bridge.requests().some((request) => request.action === "connect")).toBe(false);
   });
 
+  it("keeps logs-only connection controls and activity inside the logs panel", async () => {
+    const logs = { version: "logs-v1", configured: true, connected: true, enabled: false, endpoint: "https://logs.example/services/collector", index: "studio", source: "otel", sourcetype: "otel:logs", insecureSkipVerify: false, tokenConfigured: true, exportedRecords: 7, exportedBatches: 2, failedBatches: 0, lastExportSuccess: "2026-10-26T16:00:00Z" };
+    vi.mocked(fetchSplunkLogsStatus).mockResolvedValue(logs);
+    vi.mocked(setSplunkLogsEnabled).mockResolvedValueOnce({ ...logs, enabled: true, version: "logs-v2" }).mockResolvedValueOnce({ ...logs, version: "logs-v3" });
+    const bridge = installBridge();
+    render(<CloudTab />);
+    const initialize = await bridge.next("initialize");
+    bridge.respond(initialize, { status: disconnectedStatus() });
+    const panel = await screen.findByRole("region", { name: "Splunk Platform" });
+    const off = await within(panel).findByRole("switch", { name: "Logs export is off" });
+    expect(screen.queryByRole("switch", { name: /Remote telemetry/ })).toBeNull();
+    expect(within(panel).getByRole("list", { name: "Logs export activity" }).textContent).toContain("7 logs exported · 2 batches");
+    expect(within(panel).queryByText("Metrics")).toBeNull();
+    fireEvent.click(off);
+    await within(panel).findByRole("switch", { name: "Logs export is on" });
+    expect(setSplunkLogsEnabled).toHaveBeenLastCalledWith(true, "logs-v1");
+    fireEvent.click(within(panel).getByRole("switch", { name: "Logs export is on" }));
+    await within(panel).findByRole("switch", { name: "Logs export is off" });
+    expect(setSplunkLogsEnabled).toHaveBeenLastCalledWith(false, "logs-v2");
+    expect(bridge.requests().some((request) => request.action === "set-enabled")).toBe(false);
+    expect(within(screen.getByRole("region", { name: "Splunk Observability Cloud" })).getByRole("button", { name: "Connect" })).toBeTruthy();
+  });
+
+  it("pauses Observability Cloud while the separate logs control stays off", async () => {
+    const logs = { version: "logs-v1", configured: true, connected: true, enabled: false, endpoint: "https://logs.example/services/collector", index: "studio", source: "otel", sourcetype: "otel:logs", insecureSkipVerify: false, tokenConfigured: true, exportedRecords: 7, failedBatches: 0, lastExportSuccess: "2026-10-26T16:00:00Z" };
+    vi.mocked(fetchSplunkLogsStatus).mockResolvedValue(logs);
+    const bridge = installBridge();
+    render(<CloudTab />);
+    const initialize = await bridge.next("initialize");
+    bridge.respond(initialize, { status: { ...connectedStatus(true), cloudVersion: "K".repeat(43), logs: { ...signalStatus(false, true), exportedItems: 7 } } });
+    const cloudPanel = await screen.findByRole("region", { name: "Splunk Observability Cloud" });
+    const toggle = await within(cloudPanel).findByRole("switch", { name: "Remote telemetry export is on" });
+    const activity = within(cloudPanel).getByRole("list", { name: "Telemetry export activity" });
+    expect(within(activity).getByText("Metrics")).toBeTruthy();
+    expect(within(activity).getByText("Traces")).toBeTruthy();
+    expect(within(activity).queryByText("Logs")).toBeNull();
+    fireEvent.click(toggle);
+    const disable = await bridge.next("set-enabled");
+    expect(disable.payload).toMatchObject({ enabled: false, expectedVersion: "K".repeat(43) });
+    bridge.respond(disable, { status: connectedStatus(false) });
+    await within(cloudPanel).findByRole("switch", { name: "Remote telemetry export is off" });
+    expect(await screen.findByRole("switch", { name: "Logs export is off" })).toBeTruthy();
+    expect(setSplunkLogsEnabled).not.toHaveBeenCalled();
+    expect(bridge.httpRequests().some((request) => request.path === "/api/splunk/logs/enabled")).toBe(false);
+  });
+
   it("toggles remote export and forgets the securely stored key", async () => {
     const bridge = installBridge();
     render(<CloudTab />);
@@ -2328,20 +2964,20 @@ describe("CloudTab", () => {
     bridge.respond(enable, { status: connectedStatus(true) });
 
     expect(await screen.findByRole("list", { name: "Telemetry export activity" })).toBeTruthy();
-    expect(screen.getByText("12 points · 2 batches")).toBeTruthy();
-    expect(screen.getByText("3 spans · 1 batch")).toBeTruthy();
+    expect(screen.getByText("12 points exported · 2 batches")).toBeTruthy();
+    expect(screen.getByText("3 spans exported · 1 batch")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Remove connection" }));
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Remove connection" }));
+    fireEvent.click(screen.getByRole("button", { name: "Disconnect Observability Cloud" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Disconnect Observability Cloud" }));
     const forget = await bridge.next("forget");
     expect(forget.payload).toEqual({ expectedVersion: enabledVersion });
     bridge.respond(forget, { status: disconnectedStatus() });
 
-    expect(await screen.findByText("Connection removed.")).toBeTruthy();
-    expect(await screen.findByText("Connect to export metrics and traces and publish detectors and dashboards.")).toBeTruthy();
+    expect(await screen.findByText("Observability Cloud disconnected.")).toBeTruthy();
+    expect(await screen.findByText("Neither is connected yet.")).toBeTruthy();
     const regionInput = screen.getByLabelText("Realm or Observability Cloud URL") as HTMLInputElement;
     expect(regionInput.value).toBe("");
-    expect(regionInput.placeholder).toBe("e.g. us1");
+    expect(regionInput.placeholder).toBe("us1 — or paste the full URL");
     expect(screen.getByLabelText("Access token")).toBeTruthy();
   });
 
@@ -2357,7 +2993,7 @@ describe("CloudTab", () => {
     await act(async () => {
       await Promise.resolve();
     });
-    expect(screen.getByText("12 points · 2 batches")).toBeTruthy();
+    expect(screen.getByText("12 points exported · 2 batches")).toBeTruthy();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5000);
@@ -2365,7 +3001,7 @@ describe("CloudTab", () => {
 
     expect(bridge.httpRequests().filter((request) => request.path === "/api/splunk/export"))
       .toHaveLength(1);
-    expect(screen.getByText("18 points · 2 batches")).toBeTruthy();
+    expect(screen.getByText("18 points exported · 2 batches")).toBeTruthy();
   });
 
   it("refreshes disconnected setup from Splunk Observability Studio when another session connects", async () => {
@@ -2378,7 +3014,7 @@ describe("CloudTab", () => {
     await act(async () => {
       await Promise.resolve();
     });
-    expect(screen.getByText("Connect to export metrics and traces and publish detectors and dashboards.")).toBeTruthy();
+    expect(screen.getByText("Neither is connected yet.")).toBeTruthy();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5000);
@@ -2386,7 +3022,7 @@ describe("CloudTab", () => {
 
     expect(bridge.httpRequests().filter((request) => request.path === "/api/splunk/export"))
       .toHaveLength(1);
-    expect(screen.getByText("eu1 · Access token configured")).toBeTruthy();
+    expect(screen.getByText("realm eu1")).toBeTruthy();
   });
 
   it("refreshes export-off state from Splunk Observability Studio when another session forgets it", async () => {
@@ -2399,7 +3035,7 @@ describe("CloudTab", () => {
     await act(async () => {
       await Promise.resolve();
     });
-    expect(screen.getByText("us0 · Access token configured")).toBeTruthy();
+    expect(screen.getByText("realm us0")).toBeTruthy();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5000);
@@ -2407,7 +3043,7 @@ describe("CloudTab", () => {
 
     expect(bridge.httpRequests().filter((request) => request.path === "/api/splunk/export"))
       .toHaveLength(1);
-    expect(screen.getByText("Connect to export metrics and traces and publish detectors and dashboards.")).toBeTruthy();
+    expect(screen.getByText("Neither is connected yet.")).toBeTruthy();
   });
 
   it("restores focus when another session forgets the key while the dialog is open", async () => {
@@ -2421,7 +3057,7 @@ describe("CloudTab", () => {
       await Promise.resolve();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Remove connection" }));
+    fireEvent.click(screen.getByRole("button", { name: "Disconnect Observability Cloud" }));
     expect(screen.getByRole("dialog")).toBeTruthy();
 
     await act(async () => {
@@ -2446,7 +3082,7 @@ describe("CloudTab", () => {
     expect(exportSwitch.textContent).toContain("Partial");
     expect(exportSwitch.getAttribute("aria-checked")).toBe("false");
     expect(screen.getByRole("list", { name: "Telemetry export activity" })).toBeTruthy();
-    expect(screen.getByText("Remote export off")).toBeTruthy();
+    expect(screen.getByText("Paused — export is off. Telemetry stays local.")).toBeTruthy();
 
     fireEvent.click(exportSwitch);
     const enable = await bridge.next("set-enabled");
@@ -2459,7 +3095,7 @@ describe("CloudTab", () => {
     expect(await screen.findByText("On")).toBeTruthy();
   });
 
-  it("shows and polls partial signal activity even when aggregate connection is incomplete", async () => {
+  it("keeps export controls hidden until the Observability Cloud connection succeeds", async () => {
     const partial = disconnectedStatus();
     partial.realm = "us0";
     partial.metrics = {
@@ -2485,9 +3121,9 @@ describe("CloudTab", () => {
       await Promise.resolve();
     });
 
-    expect(screen.getByText("us0 · Connection details incomplete")).toBeTruthy();
-    expect(screen.getByRole("list", { name: "Telemetry export activity" })).toBeTruthy();
-    expect(screen.getByText("7 points · 1 batch")).toBeTruthy();
+    expect(screen.getByText("realm us0")).toBeTruthy();
+    expect(screen.queryByRole("list", { name: "Telemetry export activity" })).toBeNull();
+    expect(screen.queryByRole("switch")).toBeNull();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5000);
@@ -2495,7 +3131,7 @@ describe("CloudTab", () => {
 
     expect(bridge.httpRequests().filter((request) => request.path === "/api/splunk/export"))
       .toHaveLength(1);
-    expect(screen.getByText("9 points · 2 batches")).toBeTruthy();
+    expect(screen.queryByRole("switch")).toBeNull();
   });
 
   it("shows the CIMD setup control from Splunk Observability Studio's own status when there is no IDE bridge", async () => {
@@ -2507,6 +3143,23 @@ describe("CloudTab", () => {
     render(<CloudTab />);
 
     expect(await screen.findByText("Unified sign-in")).toBeTruthy();
+  });
+
+  it.each(["NONE", "CIMD", "O11Y_OAUTH"] as const)("keeps Free Edition signup reachable with %s authentication", async (protocol) => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({
+      ...disconnectedStatus(), registrationAndAuthProtocol: protocol,
+    })));
+    const user = userEvent.setup();
+    render(<CloudTab />);
+    if (protocol === "CIMD") await screen.findByText("Unified sign-in");
+    if (protocol === "O11Y_OAUTH") await screen.findByText("MCP client registration");
+    const start = await screen.findByRole("button", { name: "Get started with Observability Cloud Free Edition" });
+    await user.click(start);
+    const form = await screen.findByRole("form", { name: "Free Edition account" });
+    expect(within(form).getByRole("button", { name: "Start Free Edition" })).toBeTruthy();
+    await user.click(within(form).getByLabelText("First name"));
+    await user.keyboard("Test");
+    expect((within(form).getByLabelText("First name") as HTMLInputElement).value).toBe("Test");
   });
 
   it("shows the MCP client registration control from Splunk Observability Studio's own status when there is no IDE bridge", async () => {
@@ -2626,12 +3279,315 @@ describe("CloudTab", () => {
     fireEvent.click(screen.getByRole("button", { name: "Register MCP client" }));
 
     const register = await bridge.next("register-o11y-oauth");
+    expect((screen.getByRole("button", { name: "Registering..." }) as HTMLButtonElement).disabled).toBe(true);
     expect(register.payload).toMatchObject({ adminToken: "admin-token", realm: "us0" });
     bridge.respond(register, { o11yOAuthClientCreated: false, o11yOAuthClientId: "existing-client-id" });
 
     const clientIdField = await screen.findByLabelText("Client ID") as HTMLInputElement;
     expect(clientIdField.value).toBe("*".repeat("existing-client-id".length));
     expect(screen.queryByLabelText("Client secret")).toBeNull();
+  });
+
+  it("keeps the Authenticate button disabled until realm, org ID, client ID, and client secret are all filled", async () => {
+    const bridge = installBridge();
+    render(<CloudTab />);
+
+    const initialize = await bridge.next("initialize");
+    bridge.respond(initialize, { registrationAndAuthProtocol: "O11Y_OAUTH", status: disconnectedStatus() });
+
+    const authenticateButton = await screen.findByRole("button", { name: "Authenticate" }) as HTMLButtonElement;
+    expect(authenticateButton.disabled).toBe(true);
+
+    fireEvent.change(screen.getByLabelText("Realm"), { target: { value: "us0" } });
+    expect(authenticateButton.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Org ID"), { target: { value: "org-123" } });
+    expect(authenticateButton.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Sign-in client ID"), { target: { value: "the-client-id" } });
+    expect(authenticateButton.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Sign-in client secret"), { target: { value: "the-client-secret" } });
+    expect(authenticateButton.disabled).toBe(false);
+  });
+
+  it("authenticates and disconnects O11y OAuth through the IDE bridge, without opening a browser tab itself", async () => {
+    const bridge = installBridge();
+    render(<CloudTab />);
+
+    const initialize = await bridge.next("initialize");
+    bridge.respond(initialize, { registrationAndAuthProtocol: "O11Y_OAUTH", status: disconnectedStatus() });
+
+    fireEvent.change(await screen.findByLabelText("Realm"), { target: { value: "us0" } });
+    fireEvent.change(screen.getByLabelText("Org ID"), { target: { value: "org-123" } });
+    fireEvent.change(screen.getByLabelText("Sign-in client ID"), { target: { value: "the-client-id" } });
+    fireEvent.change(screen.getByLabelText("Sign-in client secret"), { target: { value: "the-client-secret" } });
+
+    const openSpy = vi.spyOn(window, "open");
+    fireEvent.click(screen.getByRole("button", { name: "Authenticate" }));
+
+    const login = await bridge.next("login-o11y-oauth");
+    expect(login.payload).toMatchObject({
+      clientId: "the-client-id",
+      clientSecret: "the-client-secret",
+      orgId: "org-123",
+      realm: "us0",
+    });
+    bridge.respond(login, {
+      o11yOAuthSession: {
+        connectedAt: "2026-10-12T00:00:00Z",
+        expiresAt: "2026-10-12T01:00:00Z",
+        issuer: "https://api.us0.signalfx.com/us0/sis/v1/rg/org-123",
+        orgId: "org-123",
+        phase: "connected",
+        realm: "us0",
+      },
+    });
+
+    expect(await screen.findByText("Signed in with O11y OAuth. Cloud export is still disconnected.")).toBeTruthy();
+    expect(screen.getByText("User successfully logged in")).toBeTruthy();
+    expect(openSpy).not.toHaveBeenCalled();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Disconnect" }));
+    const disconnect = await bridge.next("disconnect-o11y-oauth");
+    bridge.respond(disconnect, { o11yOAuthSession: { phase: "disconnected" } });
+
+    expect(await screen.findByText("O11y OAuth sign-in disconnected.")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Authenticate" })).toBeTruthy();
+  });
+
+  it("authenticates through Splunk Observability Studio's own backend and polls until connected, with no IDE bridge", async () => {
+    const sessionPhases: Array<{ issuer?: string; orgId?: string; phase: string; realm?: string }> = [
+      { phase: "pending" },
+      {
+        issuer: "https://api.us0.signalfx.com/us0/sis/v1/rg/org-123",
+        orgId: "org-123",
+        phase: "connected",
+        realm: "us0",
+      },
+    ];
+    const popup = fakePopup();
+    const openMock = vi.fn(() => popup);
+    vi.stubGlobal("open", openMock);
+    let loginBody: unknown;
+    // Mirrors the real backend: GET /session reports "disconnected" until /login has
+    // actually been called -- the pre-click automatic poll must see that, not "pending",
+    // or it would (correctly, per the fix for a reload mid-sign-in) start polling for a
+    // login that was never started.
+    let loginStarted = false;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/splunk/o11y-oauth/login") && init?.method === "POST") {
+        loginStarted = true;
+        loginBody = JSON.parse(String(init.body));
+        const headers = new Headers(init.headers);
+        expect(headers.get("X-Obstudio-Browser-Request")).toBe("1");
+        expect(headers.get("Authorization")).toBeNull();
+        return jsonResponse({
+          authorizationUrl: "https://api.us0.signalfx.com/us0/sis/v1/rg/org-123/oauth2/authorize?state=abc",
+        });
+      }
+      if (url.includes("/api/splunk/o11y-oauth/session")) {
+        if (!loginStarted) return jsonResponse({ phase: "disconnected" });
+        const nextPhase = sessionPhases.length > 1 ? sessionPhases.shift() : sessionPhases[0];
+        return jsonResponse(nextPhase);
+      }
+      return jsonResponse({ ...disconnectedStatus(), registrationAndAuthProtocol: "O11Y_OAUTH" });
+    }));
+
+    render(<CloudTab />);
+    fireEvent.change(await screen.findByLabelText("Realm"), { target: { value: "us0" } });
+    fireEvent.change(screen.getByLabelText("Org ID"), { target: { value: "org-123" } });
+    fireEvent.change(screen.getByLabelText("Sign-in client ID"), { target: { value: "the-client-id" } });
+    fireEvent.change(screen.getByLabelText("Sign-in client secret"), { target: { value: "the-client-secret" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Authenticate" }));
+
+    expect(await screen.findByText("Complete sign-in in the new tab, then return here.")).toBeTruthy();
+    expect(openMock).toHaveBeenCalledWith("", "_blank");
+    expect(popup.location.href).toBe("https://api.us0.signalfx.com/us0/sis/v1/rg/org-123/oauth2/authorize?state=abc");
+
+    expect(await screen.findByText(
+      "Signed in with O11y OAuth. Cloud export is still disconnected.",
+      {},
+      { timeout: 5_000 },
+    )).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Authenticate" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Disconnect" })).toBeTruthy();
+    expect(loginBody).toEqual({
+      clientId: "the-client-id",
+      clientSecret: "the-client-secret",
+      orgId: "org-123",
+      realm: "us0",
+    });
+  });
+
+  it("resumes polling after a reload finds an O11y OAuth sign-in already pending, with no IDE bridge", async () => {
+    // Simulates reloading the standalone page while a sign-in started in another tab is
+    // still in flight: the component mounts straight into "pending" with no Authenticate
+    // click of its own. The one-shot "not busy" poll must notice "pending" and start the
+    // recurring interval, or this would get stuck on "Waiting for sign-in" forever.
+    const sessionPhases: Array<{ issuer?: string; orgId?: string; phase: string; realm?: string }> = [
+      { phase: "pending" },
+      { phase: "pending" },
+      {
+        issuer: "https://api.us0.signalfx.com/us0/sis/v1/rg/org-123",
+        orgId: "org-123",
+        phase: "connected",
+        realm: "us0",
+      },
+    ];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/splunk/o11y-oauth/session")) {
+        const nextPhase = sessionPhases.length > 1 ? sessionPhases.shift() : sessionPhases[0];
+        return jsonResponse(nextPhase);
+      }
+      return jsonResponse({ ...disconnectedStatus(), registrationAndAuthProtocol: "O11Y_OAUTH" });
+    }));
+
+    render(<CloudTab />);
+
+    expect(await screen.findByText("Waiting for sign-in to complete in the other tab...")).toBeTruthy();
+    expect(await screen.findByText(
+      "Signed in with O11y OAuth. Cloud export is still disconnected.",
+      {},
+      { timeout: 5_000 },
+    )).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Disconnect" })).toBeTruthy();
+  });
+
+  function fillO11yOAuthFields() {
+    fireEvent.change(screen.getByLabelText("Realm"), { target: { value: "us0" } });
+    fireEvent.change(screen.getByLabelText("Org ID"), { target: { value: "org-123" } });
+    fireEvent.change(screen.getByLabelText("Sign-in client ID"), { target: { value: "the-client-id" } });
+    fireEvent.change(screen.getByLabelText("Sign-in client secret"), { target: { value: "the-client-secret" } });
+  }
+
+  it("ignores a previous attempt's stale error while a standalone retry is still in discovery", async () => {
+    vi.stubGlobal("open", vi.fn(() => fakePopup()));
+    let resolveLogin: (() => void) | undefined;
+    let loginStarted = false;
+    let sessionReadsDuringStart = 0;
+    let sessionPhase: Record<string, unknown> = { error: "previous failure", phase: "error" };
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/splunk/o11y-oauth/login") && init?.method === "POST") {
+        loginStarted = true;
+        await new Promise<void>((resolve) => { resolveLogin = resolve; });
+        sessionPhase = { phase: "pending" };
+        return jsonResponse({ authorizationUrl: "https://api.us0.signalfx.com/authorize?state=abc" });
+      }
+      if (url.includes("/api/splunk/o11y-oauth/session")) {
+        if (loginStarted && !resolveLoginResolved()) sessionReadsDuringStart += 1;
+        return jsonResponse(sessionPhase);
+      }
+      return jsonResponse({ ...disconnectedStatus(), registrationAndAuthProtocol: "O11Y_OAUTH" });
+    }));
+    let loginResolved = false;
+    const resolveLoginResolved = () => loginResolved;
+
+    render(<CloudTab />);
+    await screen.findByLabelText("Realm");
+    fillO11yOAuthFields();
+    expect(await screen.findByText("Sign-in failed: previous failure")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Authenticate" }));
+    // Longer than the poll interval: a stale poll would have cleared the busy state.
+    await new Promise((resolve) => setTimeout(resolve, 1_800));
+    expect(sessionReadsDuringStart).toBe(0);
+    expect((screen.getByRole("button", { name: "Authenticating..." }) as HTMLButtonElement).disabled).toBe(true);
+
+    loginResolved = true;
+    sessionPhase = { phase: "pending" };
+    resolveLogin?.();
+    expect(await screen.findByText("Complete sign-in in the new tab, then return here.")).toBeTruthy();
+
+    sessionPhase = { orgId: "org-123", phase: "connected", realm: "us0" };
+    expect(await screen.findByText(
+      "Signed in with O11y OAuth. Cloud export is still disconnected.",
+      {},
+      { timeout: 5_000 },
+    )).toBeTruthy();
+  });
+
+  it("stops waiting when a pending standalone sign-in is disconnected elsewhere", async () => {
+    vi.stubGlobal("open", vi.fn(() => fakePopup()));
+    let sessionPhase: Record<string, unknown> = { phase: "disconnected" };
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/splunk/o11y-oauth/login") && init?.method === "POST") {
+        sessionPhase = { phase: "pending" };
+        return jsonResponse({ authorizationUrl: "https://api.us0.signalfx.com/authorize?state=abc" });
+      }
+      if (url.includes("/api/splunk/o11y-oauth/session")) return jsonResponse(sessionPhase);
+      return jsonResponse({ ...disconnectedStatus(), registrationAndAuthProtocol: "O11Y_OAUTH" });
+    }));
+
+    render(<CloudTab />);
+    await screen.findByLabelText("Realm");
+    fillO11yOAuthFields();
+    fireEvent.click(screen.getByRole("button", { name: "Authenticate" }));
+    expect(await screen.findByText("Complete sign-in in the new tab, then return here.")).toBeTruthy();
+
+    // e.g. the IDE cancels the shared backend attempt.
+    sessionPhase = { phase: "disconnected" };
+    await waitFor(() => {
+      const button = screen.getByRole("button", { name: "Authenticate" }) as HTMLButtonElement;
+      expect(button.disabled).toBe(false);
+    }, { timeout: 5_000 });
+  });
+
+  it("clears the client secret from the form once the sign-in connects", async () => {
+    vi.stubGlobal("open", vi.fn(() => fakePopup()));
+    let sessionPhase: Record<string, unknown> = { phase: "disconnected" };
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/splunk/o11y-oauth/login") && init?.method === "POST") {
+        sessionPhase = { orgId: "org-123", phase: "connected", realm: "us0" };
+        return jsonResponse({ authorizationUrl: "https://api.us0.signalfx.com/authorize?state=abc" });
+      }
+      if (url.includes("/api/splunk/o11y-oauth/session/disconnect")) {
+        sessionPhase = { phase: "disconnected" };
+        return jsonResponse(sessionPhase);
+      }
+      if (url.includes("/api/splunk/o11y-oauth/session")) return jsonResponse(sessionPhase);
+      return jsonResponse({ ...disconnectedStatus(), registrationAndAuthProtocol: "O11Y_OAUTH" });
+    }));
+
+    render(<CloudTab />);
+    await screen.findByLabelText("Realm");
+    fillO11yOAuthFields();
+    fireEvent.click(screen.getByRole("button", { name: "Authenticate" }));
+    await screen.findByRole("button", { name: "Disconnect" }, { timeout: 5_000 });
+
+    fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
+    const secret = await screen.findByLabelText("Sign-in client secret") as HTMLInputElement;
+    expect(secret.value).toBe("");
+  });
+
+  it("resumes tracking a pending O11y OAuth session restored by the IDE bridge until it connects", async () => {
+    const bridge = installBridge();
+    render(<CloudTab />);
+
+    const initialize = await bridge.next("initialize");
+    bridge.respond(initialize, {
+      o11yOAuthSession: { phase: "pending" },
+      registrationAndAuthProtocol: "O11Y_OAUTH",
+      status: disconnectedStatus(),
+    });
+    expect(await screen.findByText("Waiting for sign-in to complete in your browser...")).toBeTruthy();
+
+    // The first status read happens one poll interval (1.5s) after pending is observed.
+    await new Promise((resolve) => setTimeout(resolve, 1_700));
+    const poll = await bridge.next("get-o11y-oauth-session");
+    bridge.respond(poll, {
+      o11yOAuthSession: {
+        issuer: "https://api.us0.signalfx.com/us0/sis/v1/rg/org-123",
+        orgId: "org-123",
+        phase: "connected",
+        realm: "us0",
+      },
+    });
+    expect(await screen.findByText("Signed in with O11y OAuth. Cloud export is still disconnected.")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Disconnect" })).toBeTruthy();
   });
 
   it("keeps cloud controls available on a fresh install with current Splunk Observability Studio status", async () => {
@@ -2676,6 +3632,7 @@ describe("CloudTab", () => {
 
     fireEvent.click(setupButton);
     const setupCIMD = await bridge.next("setup-cimd");
+    expect((screen.getByRole("button", { name: "Registering..." }) as HTMLButtonElement).disabled).toBe(true);
     bridge.respond(setupCIMD, {
       registrationAndAuthProtocol: "CIMD",
       cimdRegistrationVerified: true,
@@ -2742,6 +3699,27 @@ describe("CloudTab", () => {
     expect(await screen.findByText("Signed in to SIS. Cloud export is still disconnected.")).toBeTruthy();
     expect(await screen.findByRole("button", { name: "Disconnect" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Register OAuth client with CIMD" })).toBeNull();
+  });
+
+  it("restores a connected O11y OAuth session from the IDE bridge on initialize", async () => {
+    const bridge = installBridge();
+    render(<CloudTab />);
+
+    const initialize = await bridge.next("initialize");
+    bridge.respond(initialize, {
+      registrationAndAuthProtocol: "O11Y_OAUTH",
+      o11yOAuthSession: {
+        issuer: "https://api.us0.signalfx.com/us0/sis/v1/rg/org-123",
+        orgId: "org-123",
+        phase: "connected",
+        realm: "us0",
+      },
+      status: disconnectedStatus(),
+    });
+
+    expect(await screen.findByText("Signed in with O11y OAuth. Cloud export is still disconnected.")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Disconnect" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Authenticate" })).toBeNull();
   });
 
   it("registers through Splunk Observability Studio's own backend when there is no IDE bridge", async () => {
@@ -2963,24 +3941,39 @@ describe("CloudTab", () => {
     expect(await screen.findByText("Complete sign-in in the new tab, then return here.")).toBeTruthy();
   });
 
-  it("traps dialog focus and restores it when cancellation closes the dialog", async () => {
-    const bridge = installBridge();
+  it.each([
+    ["browser", "connected", "Cancel"],
+    ["browser", "connected", "Escape"],
+    ["browser", "editing", "Cancel"],
+    ["browser", "editing", "Escape"],
+    ["IDE bridge", "connected", "Cancel"],
+    ["IDE bridge", "connected", "Escape"],
+    ["IDE bridge", "editing", "Cancel"],
+    ["IDE bridge", "editing", "Escape"],
+  ])("traps dialog focus and restores it in %s from the %s view after %s", async (host, view, dismissal) => {
+    const user = userEvent.setup();
+    const bridge = host === "IDE bridge" ? installBridge() : undefined;
+    if (!bridge) vi.stubGlobal("fetch", statusFetch(connectedStatus(false)));
     render(<CloudTab />);
-
-    const initialize = await bridge.next("initialize");
-    bridge.respond(initialize, { status: connectedStatus(false) });
-    const trigger = await screen.findByRole("button", { name: "Remove connection" });
-    fireEvent.click(trigger);
+    if (bridge) bridge.respond(await bridge.next("initialize"), { status: connectedStatus(false) });
+    if (view === "editing") {
+      await user.click(await screen.findByRole("button", { name: "Edit token for Observability Cloud" }));
+    }
+    const trigger = await screen.findByRole("button", { name: "Disconnect Observability Cloud" });
+    await user.click(trigger);
 
     const dialog = screen.getByRole("dialog");
     const cancel = within(dialog).getByRole("button", { name: "Cancel" });
-    const confirm = within(dialog).getByRole("button", { name: "Remove connection" });
+    const confirm = within(dialog).getByRole("button", { name: "Disconnect Observability Cloud" });
     expect(document.activeElement).toBe(cancel);
-    confirm.focus();
-    fireEvent.keyDown(dialog, { key: "Tab" });
+    await user.tab({ shift: true });
+    expect(document.activeElement).toBe(confirm);
+    await user.tab();
     expect(document.activeElement).toBe(cancel);
-    fireEvent.click(cancel);
+    if (dismissal === "Escape") await user.keyboard("{Escape}");
+    else await user.click(cancel);
     await waitFor(() => expect(document.activeElement).toBe(trigger));
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });
 
@@ -3092,7 +4085,7 @@ function installBridge(options: {
     ok: boolean,
     result?: unknown,
     error?: string,
-    metadata: { code?: string; retrySafe?: boolean } = {},
+    metadata: { code?: string; retrySafe?: boolean; platform?: string } = {},
   ) => {
     act(() => {
       window.dispatchEvent(new MessageEvent("message", {
@@ -3130,14 +4123,16 @@ function installBridge(options: {
       message?: string;
       o11yOAuthClientCreated?: boolean;
       o11yOAuthClientId?: string;
+      o11yOAuthSession?: O11yOAuthSessionStatus;
       realm?: string;
       region?: string;
       status?: SplunkExportStatus;
       warning?: string;
+    warningCode?: string;
     }) {
       dispatchResponse(request.requestId, true, result);
     },
-    reject(request: BridgeRequest, message: string, metadata: { code?: string; retrySafe?: boolean } = {}) {
+    reject(request: BridgeRequest, message: string, metadata: { code?: string; retrySafe?: boolean; platform?: string } = {}) {
       dispatchResponse(request.requestId, false, undefined, message, metadata);
     },
     respondHTTP(request: HostHTTPRequest, body: unknown, status = 200) {
@@ -3227,3 +4222,284 @@ function freeAccountResult(region = "us", realm = "us1"): Record<string, unknown
     region,
   };
 }
+
+it("groups both unconnected destination forms in one card with matching Connect controls", async () => {
+  vi.stubGlobal("fetch", statusFetch(disconnectedStatus()));
+  render(<CloudTab />);
+  await screen.findByText("0 of 2 connected");
+  const title = screen.getByRole("heading", { level: 1, name: "Splunk connection" });
+  expect(title.parentElement?.textContent).toBe("Splunk connection");
+  const cloud = screen.getByRole("form", { name: "Cloud connection" });
+  const logs = await screen.findByRole("form", { name: "Logs connection" });
+  expect(within(cloud).getByText(CLOUD_CONNECT_DESCRIPTION)).toBeTruthy();
+  expect(cloud.closest(".cloud-destinations")).toBe(logs.closest(".cloud-destinations"));
+  expect((within(logs).getByLabelText("HEC endpoint") as HTMLInputElement).value).toBe("");
+  expect((within(logs).getByLabelText("HEC token") as HTMLInputElement).value).toBe("");
+  const logsIndex = within(logs).getByLabelText("Logs index") as HTMLInputElement;
+  expect(logsIndex.value).toBe("");
+  expect(logsIndex.placeholder).toBe("Index");
+  expect(screen.queryByRole("switch")).toBeNull();
+  expect(within(cloud).getByRole("button", { name: "Connect" }).className).toBe(within(logs).getByRole("button", { name: "Connect Splunk Platform" }).className);
+});
+
+it("offers a Platform trial beside the connected O11y destination", async () => {
+  vi.mocked(fetchSplunkLogsStatus).mockResolvedValue({ version: "logs-buffer", configured: false, connected: false, enabled: false, endpoint: "", index: "", source: "otel", sourcetype: "otel:logs", insecureSkipVerify: false, tokenConfigured: false, exportedRecords: 0, failedBatches: 0 });
+  const cloud = connectedStatus(true, "us1");
+  cloud.metrics.lastExport = cloud.traces.lastExport = { success: true, time: new Date().toISOString() };
+  vi.stubGlobal("fetch", statusFetch(cloud));
+  render(<CloudTab />);
+  await screen.findByText("1 of 2 connected");
+  expect((await screen.findByRole("link", { name: "Start a free trial" })).getAttribute("href")).toBe("https://www.splunk.com/en_us/download/splunk-cloud.html");
+  expect(screen.queryByRole("list", { name: "Logs export activity" })).toBeNull();
+  expect(screen.queryByRole("form", { name: "Cloud connection" })).toBeNull();
+  expect(screen.getByRole("form", { name: "Logs connection" })).toBeTruthy();
+  expect(screen.getByRole("switch", { name: "Remote telemetry export is on" })).toBeTruthy();
+});
+
+it("shows both destinations exporting and pauses O11y independently of logs", async () => {
+  const now = new Date().toISOString();
+  vi.mocked(fetchSplunkLogsStatus).mockResolvedValue({ version: "logs-both", searchURL: "https://stack.splunkcloud.com/en-US/app/search/search?q=search+index%3D%22studio%22", configured: true, connected: true, enabled: true, endpoint: "https://logs.example/services/collector", index: "studio", source: "otel", sourcetype: "otel:logs", insecureSkipVerify: false, tokenConfigured: true, exportedRecords: 42, exportedBatches: 7, failedBatches: 0, lastExportSuccess: now });
+  const bridge = installBridge(); const user = userEvent.setup();
+  const cloud = connectedStatus(true, "us1");
+  cloud.metrics.lastExport = { success: true, time: now };
+  cloud.traces.lastExport = { success: true, time: now };
+  render(<CloudTab />);
+  bridge.respond(await bridge.next("initialize"), { status: cloud });
+  await screen.findByText("2 of 2 connected");
+  expect(screen.getByText("All signals are reaching Splunk.")).toBeTruthy();
+  const editCloudToken = screen.getByRole("button", { name: "Edit token for Observability Cloud" });
+  expect(editCloudToken.textContent).toBe("Edit token");
+  const editLogs = screen.getByRole("button", { name: "Edit token for Splunk Platform" });
+  expect(editLogs.textContent).toBe("Edit token");
+  expect(editLogs.className).toBe("cloud-button");
+  expect(editCloudToken.className).toBe(editLogs.className);
+  expect(screen.queryByRole("form", { name: "Cloud connection" })).toBeNull();
+  expect(screen.queryByRole("form", { name: "Logs connection" })).toBeNull();
+  expect(screen.getByText("12 points exported · 2 batches")).toBeTruthy();
+  expect(screen.getByText("3 spans exported · 1 batch")).toBeTruthy();
+  expect(screen.getByText("42 logs exported · 7 batches")).toBeTruthy();
+  expect(screen.getByRole("link", { name: "Open Observability Cloud" }).getAttribute("href")).toBe("#");
+  expect(screen.getByRole("link", { name: "Search index studio" }).getAttribute("href")).toBe("#");
+  await user.click(screen.getByRole("switch", { name: "Remote telemetry export is on" }));
+  const request = await bridge.next("set-enabled");
+  expect(request.payload).toMatchObject({ enabled: false });
+  bridge.respond(request, { status: connectedStatus(false, "us1") });
+  await screen.findByRole("switch", { name: "Remote telemetry export is off" });
+  expect(screen.getByRole("switch", { name: "Logs export is on" })).toBeTruthy();
+  expect(screen.getByText("42 logs exported · 7 batches")).toBeTruthy();
+});
+
+it("keeps O11y controls available while HEC rejects new logs", async () => {
+  const logs = { version: "logs-error", configured: true, connected: true, enabled: true, endpoint: "https://prd-p-test.splunkcloud.com:8088/services/collector", index: "studio", source: "otel", sourcetype: "otel:logs", insecureSkipVerify: false, tokenConfigured: true, exportedRecords: 5430, exportedBatches: 14, failedBatches: 1, lastExportError: "HEC returned 401", lastHTTPStatus: 401 };
+  vi.mocked(fetchSplunkLogsStatus).mockResolvedValue(logs);
+  const bridge = installBridge(); const user = userEvent.setup();
+  render(<CloudTab />);
+  bridge.respond(await bridge.next("initialize"), { status: connectedStatus(true, "us1") });
+  await screen.findByText("Rejected");
+  expect(screen.getByText("1 of 2 connected")).toBeTruthy();
+  expect(screen.getByRole("list", { name: "Logs export activity" }).textContent).toContain("5,430 logs exported · 14 batches");
+  expect(screen.queryByRole("link", { name: "Search index studio" })).toBeNull();
+  const editToken = screen.getByRole("button", { name: "Edit token for Splunk Platform" });
+  expect(editToken.textContent).toBe("Edit token");
+  expect(editToken.className).toBe("cloud-button");
+  expect(screen.getByText("Update the token to resume exporting new logs.").parentElement).toBe(editToken.parentElement);
+  expect(screen.getByText(/Logs are being refused/)).toBeTruthy();
+  const o11y = screen.getByRole("region", { name: "Splunk Observability Cloud" });
+  expect(within(o11y).getByRole("switch", { name: "Remote telemetry export is on" }).hasAttribute("disabled")).toBe(false);
+  await user.click(editToken);
+  expect(document.activeElement).toBe(screen.getByLabelText("HEC token"));
+  expect((screen.getByLabelText("HEC token") as HTMLInputElement).value).toBe("");
+  expect(screen.getByText("Saved settings stay in use until you save.")).toBeTruthy();
+  expect(within(o11y).queryByRole("form")).toBeNull();
+  await user.type(screen.getByLabelText("HEC token"), "replacement");
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(document.activeElement).toBe(screen.getByRole("button", { name: "Edit token for Splunk Platform" }));
+  expect(screen.queryByLabelText("HEC token")).toBeNull();
+});
+
+it("cancels inline O11y drafts and saves with the server-held token while logs remain usable", async () => {
+  vi.mocked(fetchSplunkLogsStatus).mockResolvedValue({ version: "logs-on", configured: true, connected: true, enabled: true, endpoint: "https://logs.example/services/collector", index: "studio", source: "otel", sourcetype: "otel:logs", insecureSkipVerify: false, tokenConfigured: true, exportedRecords: 42, failedBatches: 0, lastExportSuccess: new Date().toISOString() });
+  const bridge = installBridge(); const user = userEvent.setup();
+  render(<CloudTab />);
+  bridge.respond(await bridge.next("initialize"), { status: connectedStatus(true, "us1") });
+  await screen.findByText("2 of 2 connected");
+  await user.click(screen.getByRole("button", { name: "Edit token for Observability Cloud" }));
+  expect(document.activeElement).toBe(screen.getByLabelText("Realm or Observability Cloud URL"));
+  expect(screen.getByText("Editing Observability Cloud.")).toBeTruthy();
+  expect(screen.getByText("Saved").querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
+  const realm = screen.getByLabelText("Realm or Observability Cloud URL");
+  await user.clear(realm); await user.type(realm, "eu0");
+  await user.click(screen.getByRole("button", { name: "Save Observability Cloud changes" }));
+  expect((await screen.findByRole("alert")).textContent).toContain("A new realm needs a token issued for it.");
+  expect(document.activeElement).toBe(screen.getByLabelText("Access token"));
+  expect(bridge.requests().some(({ action }) => action === "connect")).toBe(false);
+  expect(screen.getByRole("switch", { name: "Logs export is on" }).hasAttribute("disabled")).toBe(false);
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(document.activeElement).toBe(screen.getByRole("button", { name: "Edit token for Observability Cloud" }));
+  await user.click(screen.getByRole("button", { name: "Edit token for Observability Cloud" }));
+  expect((screen.getByLabelText("Realm or Observability Cloud URL") as HTMLInputElement).value).toBe("us1");
+  expect((screen.getByLabelText("Access token") as HTMLInputElement).value).toBe("");
+  await user.click(screen.getByRole("button", { name: "Save Observability Cloud changes" }));
+  const request = await bridge.next("connect");
+  expect(request.payload).toMatchObject({ realm: "us1", accessToken: "", reuseSavedToken: true, preserveEnabled: true, expectedVersion: enabledVersion });
+  bridge.respond(request, { status: connectedStatus(true, "us1") });
+  await screen.findByRole("button", { name: "Edit token for Observability Cloud" });
+  expect(screen.queryByLabelText("Access token")).toBeNull();
+  expect(screen.getByRole("switch", { name: "Remote telemetry export is on" })).toBeTruthy();
+  expect(screen.getByText("42 logs exported · 0 batches")).toBeTruthy();
+});
+
+it.each(["delivery", "cleanup"] as const)("reports both destinations that need attention (%s)", async (failure) => {
+  const pending = failure === "cleanup";
+  vi.mocked(fetchSplunkLogsStatus).mockResolvedValue({ version: "logs-failed", configured: !pending, connected: !pending, enabled: !pending, endpoint: "https://logs.example/services/collector", index: "studio", source: "otel", sourcetype: "otel:logs", insecureSkipVerify: false, tokenConfigured: !pending, canDisconnect: true, exportedRecords: pending ? 0 : 2, failedBatches: pending ? 0 : 1,
+    ...(pending ? { cleanupPending: true } : { lastExportError: "HEC refused token", lastHTTPStatus: 401 }),
+  });
+  const cloud = pending ? { ...disconnectedStatus(), cleanupPending: true } : connectedStatus(true, "us1");
+  if (!pending) cloud.metrics.lastExport = { success: false, time: new Date().toISOString(), error: "Cloud ingest unavailable" };
+  vi.stubGlobal("fetch", statusFetch(cloud));
+  render(<CloudTab />);
+  await screen.findByText("Both destinations need attention.");
+  expect(screen.getByText("0 of 2 connected")).toBeTruthy();
+  expect(screen.queryByText(/unaffected/)).toBeNull();
+  if (pending) {
+    expect(screen.getAllByRole("button", { name: "Retry credential cleanup" })).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "Disconnect Splunk Platform" }).hasAttribute("disabled")).toBe(false);
+  } else {
+    expect(screen.getByRole("button", { name: "Edit token for Observability Cloud" }).hasAttribute("disabled")).toBe(false);
+    expect(screen.getByRole("button", { name: "Edit token for Splunk Platform" }).hasAttribute("disabled")).toBe(false);
+  }
+});
+
+const storageHelpCases = [
+  { platform: "darwin", os: "macOS", url: "https://support.apple.com/guide/keychain-access/welcome/mac" },
+  { platform: "windows", os: "Windows", url: "https://support.microsoft.com/en-us/windows/security/credential-manager-in-windows" },
+  { platform: "linux", os: "Linux", url: "https://github.com/signalfx/obstudio/blob/main/docs/USER.md#secure-token-storage" },
+].flatMap(help => (["browser", "IDE"] as const).map(host => ({ ...help, host })));
+
+it.each(storageHelpCases)("offers an explicit session connection after a definite storage refusal ($host, $platform)", async ({ host, platform, os, url }) => {
+ const bridge=host==="IDE"?installBridge():null;
+ const disconnected=disconnectedStatus();
+ const session={...connectedStatus(true,"us1"),sessionOnly:true,cleanupPending:true};
+ let current=disconnected;
+ const fetch=vi.fn(async (_url:unknown,init?:RequestInit)=>{
+  if(init?.method==="POST"){
+   const body=JSON.parse(String(init.body));
+   if(!body.sessionOnly)return jsonResponse({error:"Secure storage is unavailable",code:"credential_storage_unavailable",retrySafe:true,platform},503);
+   current=session;
+  }
+  return jsonResponse(current);
+ });
+ if(!bridge)vi.stubGlobal("fetch",fetch);
+ const user=userEvent.setup();render(<CloudTab/>);
+ if(bridge)bridge.respond(await bridge.next("initialize"),{status:disconnected});
+ await user.type(await screen.findByLabelText("Realm or Observability Cloud URL"),"us1");
+ await user.type(screen.getByLabelText("Access token"),"session-token");
+ const originalSubmit=screen.getByRole("button",{name:"Connect"});
+ await user.click(originalSubmit);
+ if(bridge)bridge.reject(await bridge.next("connect"),"Secure storage is unavailable",{code:"credential_storage_unavailable",retrySafe:true,platform});
+ let use=await screen.findByRole("button",{name:"Connect for this session"});
+ expect(use).toBe(originalSubmit);
+ expect(screen.getByText("Secure storage unavailable")).toBeTruthy();
+ expect(screen.getByLabelText("Access token").getAttribute("aria-describedby")).toContain("cloud-storage-help");
+ expect(screen.getByRole("link",{name:`Set up secure storage on ${os}`}).getAttribute("href")).toBe(url);
+ expect(screen.queryByRole("button",{name:"Reload saved connection"})).toBeNull();
+ if (bridge) {
+  await user.click(screen.getByRole("link",{name:"Create a token"}));
+  bridge.reject(await bridge.next("open-ingest-token-help"),"Token help could not be opened");
+  expect((await screen.findByRole("alert")).textContent).toContain("Token help could not be opened");
+  use=screen.getByRole("button",{name:"Connect for this session"});
+ }
+ expect((screen.getByLabelText("Access token") as HTMLInputElement).value).toBe("session-token");
+ use.focus();await user.keyboard("{Enter}");
+ if(bridge){const request=await bridge.next("connect");expect(request.payload).toMatchObject({sessionOnly:true,accessToken:"session-token",realm:"us1"});bridge.respond(request,{status:session});}
+ else expect(fetch.mock.calls.some(([,init])=>init?.body&&JSON.parse(String(init.body)).sessionOnly===true)).toBe(true);
+ const exportSwitch=await screen.findByRole("switch",{name:"Remote telemetry export is on"});
+ expect(screen.queryByRole("button",{name:"Retry credential cleanup"})).toBeNull();
+ expect(screen.queryByRole("button",{name:"Connect for this session"})).toBeNull();
+ await waitFor(()=>expect(document.activeElement).toBe(exportSwitch));
+ await user.click(screen.getByRole("button",{name:"Disconnect Observability Cloud"}));
+ expect(screen.getByRole("dialog").textContent).toContain("This clears the token from this session");
+ await user.click(within(screen.getByRole("dialog")).getByRole("button",{name:"Cancel"}));
+ if (bridge) {
+  await user.click(screen.getByRole("button",{name:"Disconnect Observability Cloud"}));
+  await user.click(within(screen.getByRole("dialog")).getByRole("button",{name:"Disconnect Observability Cloud"}));
+  const forget=await bridge.next("forget");expect(forget.payload).toMatchObject({sessionOnly:true});
+  bridge.respond(forget,{status:{...disconnectedStatus(),sessionOnly:true}});
+  await screen.findByLabelText("Access token");
+ }
+});
+
+it("Cancel dismisses the Cloud session choice and preserves the saved export state",async()=>{
+ const bridge=installBridge({httpStatus:connectedStatus(false,"us1")});const user=userEvent.setup();render(<CloudTab/>);
+ bridge.respond(await bridge.next("initialize"),{status:connectedStatus(false,"us1")});
+ await user.click(await screen.findByRole("button",{name:"Edit token for Observability Cloud"}));
+ await user.type(screen.getByLabelText("Access token"),"replacement-token");
+ await user.click(screen.getByRole("button",{name:"Save Observability Cloud changes"}));
+ bridge.reject(await bridge.next("connect"),"Secure storage is unavailable",{code:"credential_storage_unavailable",retrySafe:true,platform:"darwin"});
+ await screen.findByRole("button",{name:"Save Observability Cloud for this session"});
+ await user.click(screen.getByRole("button",{name:"Cancel"}));
+ expect(screen.queryByRole("button",{name:"Save Observability Cloud for this session"})).toBeNull();
+ expect(screen.getByRole("switch",{name:"Remote telemetry export is off"})).toBeTruthy();
+});
+
+
+it.each([["browser", "draft"], ["IDE", "draft"], ["browser", "help"], ["IDE", "help"]] as const)("retries a saved Cloud connection after %s/%s recovery", async (host, recovery) => {
+  const bridge = host === "IDE" ? installBridge() : null;
+  const fetch = vi.fn(async (_url: unknown, init?: RequestInit) => init?.method === "POST"
+    ? jsonResponse({error:"Storage unavailable",code:"credential_storage_unavailable",retrySafe:true,platform:"linux"},503)
+    : jsonResponse(disconnectedStatus()));
+  if (!bridge) vi.stubGlobal("fetch", fetch);
+  const user=userEvent.setup(); render(<CloudTab/>);
+  if (bridge) bridge.respond(await bridge.next("initialize"),{status:disconnectedStatus()});
+  await user.type(await screen.findByLabelText("Realm or Observability Cloud URL"),"us1");
+  await user.type(screen.getByLabelText("Access token"),"first-token");
+  await user.click(screen.getByRole("button",{name:"Connect"}));
+  if (bridge) bridge.reject(await bridge.next("connect"),"Storage unavailable",{code:"credential_storage_unavailable",retrySafe:true,platform:"linux"});
+  await screen.findByRole("button",{name:"Connect for this session"});
+  if (recovery === "draft") await user.type(screen.getByLabelText("Access token"),"-changed");
+  else {
+    await user.click(screen.getByRole("link",{name:"Set up secure storage on Linux"}));
+    if (bridge) {
+      const help=await bridge.next("open-credential-storage-help");
+      expect(help.payload).toMatchObject({platform:"linux"});
+      bridge.respond(help,{});
+    }
+  }
+  expect(screen.queryByText("Secure storage unavailable")).toBeNull();
+  await user.click(screen.getByRole("button",{name:"Connect"}));
+  const request=bridge ? await bridge.next("connect") : null;
+  const payload=request ? request.payload : JSON.parse(String(fetch.mock.calls.filter(([,init])=>init?.method==="POST").at(-1)?.[1]?.body));
+  expect(payload).toMatchObject({accessToken:recovery === "draft" ? "first-token-changed" : "first-token"});
+  expect(payload?.sessionOnly).toBeUndefined();
+  if (bridge && request) bridge.reject(request,"Storage unavailable",{code:"credential_storage_unavailable",retrySafe:true});
+  await screen.findByRole("button",{name:"Connect for this session"});
+});
+
+
+it.each(["browser", "IDE"] as const)("keeps focus on a usable control after a failed session Cloud submit (%s)",async(host)=>{
+ const pending={...disconnectedStatus(),cleanupPending:true};
+ const bridge=host==="IDE"?installBridge({httpStatus:pending}):null;
+ let failSession: ((response:Response)=>void)|undefined;
+ if(!bridge)vi.stubGlobal("fetch",vi.fn(async(_url:unknown,init?:RequestInit)=>{
+  if(init?.method!=="POST")return jsonResponse(pending);
+  if(JSON.parse(String(init.body)).sessionOnly)return new Promise<Response>(resolve=>{failSession=resolve;});
+  return jsonResponse({error:"Storage unavailable",code:"credential_storage_unavailable",retrySafe:true},503);
+ }));
+ const user=userEvent.setup();render(<CloudTab/>);
+ if(bridge)bridge.respond(await bridge.next("initialize"),{status:pending});
+ await user.type(await screen.findByLabelText("Realm or Observability Cloud URL"),"us1");
+ await user.type(screen.getByLabelText("Access token"),"session-token");
+ await user.click(screen.getByRole("button",{name:"Connect"}));
+ if(bridge)bridge.reject(await bridge.next("connect"),"Storage unavailable",{code:"credential_storage_unavailable",retrySafe:true});
+ const submit=await screen.findByRole("button",{name:"Connect for this session"});
+ await waitFor(()=>expect(document.activeElement).toBe(submit));
+ await user.click(submit);submit.blur();
+ if(bridge)bridge.reject(await bridge.next("connect"),"Token refused");
+ else failSession!(jsonResponse({error:"Token refused"},401));
+ await screen.findByText("Token refused");
+ expect(screen.getByText("Connection failed")).toBeTruthy();
+ await waitFor(()=>{
+  expect(document.activeElement).toBe(screen.getByRole("button",{name:"Connect"}));
+  expect((document.activeElement as HTMLButtonElement).disabled).toBe(false);
+ });
+});

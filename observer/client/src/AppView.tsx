@@ -1,5 +1,8 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { CloudTab, type CloudConnectionState } from "./cloud/CloudTab";
+import { ConfigTab } from "./config";
+import { useConfigManagerCapability } from "./config/configManagerCapability";
+import { CONFIG_PROBLEM_PILL_TEXT, useConfigStatus } from "./config/configStatus";
 import { DashboardsTab } from "./dashboards";
 import { LogsTab } from "./logs";
 import { MetricsTab } from "./metrics";
@@ -16,7 +19,9 @@ interface AppViewProps {
   telemetry: TelemetryHandle;
 }
 
-type AppTab = "overview" | "services" | "metrics" | "traces" | "logs" | "validation" | "dashboards" | "cloud";
+type AppTab = "overview" | "services" | "metrics" | "traces" | "logs" | "validation" | "dashboards" | "cloud" | "config";
+
+const TAB_ORDER: readonly AppTab[] = ["overview", "metrics", "traces", "logs", "services", "validation", "dashboards", "cloud", "config"];
 
 /** Main application view with tab navigation, summary cards, and live/paused toggle. */
 export function AppView({ telemetry }: AppViewProps): React.ReactElement {
@@ -25,11 +30,27 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
   const [tabOverflow, setTabOverflow] = useState({ left: false, right: false });
   const [showHelp, setShowHelp] = useState(false);
   const [cloudConnectionState, setCloudConnectionState] = useState<CloudConnectionState | null>(null);
+  const capability = useConfigManagerCapability();
+  const configManager = capability === "on";
+  const configStatus = useConfigStatus(configManager);
+
+  // The Config tab exists only while the observer says the Config Manager is
+  // on. On an applied "off" the tab falls back to the default; while the
+  // capability is pending the active tab is left alone.
+  useEffect(() => {
+    if (capability === "off" && activeTab === "config") setActiveTab("overview");
+  }, [capability, activeTab]);
 
   const { state, paused, hasNewUpdates, resume, toggle } = telemetry;
   const validationSummary = state.validation?.summary ?? null;
   const validationFindings = state.validation?.findings ?? [];
   const backendValidationIssues = state.validation?.issues ?? [];
+  // Rows in the Metrics table, or the stats count until the metric list has loaded.
+  const metricCount = state.metrics?.length || state.stats?.metricNameCount;
+  // Undefined until stats load, so Overview doesn't flash its "no telemetry" card.
+  const hasTelemetry = state.stats
+    ? state.stats.spanCount + state.stats.dataPointCount + state.stats.logCount > 0
+    : undefined;
   const validationIndex = useMemo(() => buildValidationIndex(validationFindings), [validationFindings]);
   const validationIssues = useMemo(
     () => (backendValidationIssues.length > 0 || validationFindings.length === 0
@@ -53,7 +74,10 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
     "6": () => switchTab("validation"),
     "7": () => switchTab("dashboards"),
     "8": () => switchTab("cloud"),
-  }), [toggle, switchTab]);
+    "9": () => {
+      if (configManager) switchTab("config");
+    },
+  }), [toggle, switchTab, configManager]);
 
   useKeyboardShortcuts(shortcuts);
 
@@ -129,7 +153,7 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
             aria-label="Splunk Observability Studio sections"
             onScroll={updateTabOverflow}
             onKeyDown={(e) => {
-              const order: AppTab[] = ["overview", "metrics", "traces", "logs", "services", "validation", "dashboards", "cloud"];
+              const order = configManager ? TAB_ORDER : TAB_ORDER.filter((tab) => tab !== "config");
               const idx = order.indexOf(activeTab);
               let next = idx;
               if (e.key === "ArrowRight") next = (idx + 1) % order.length;
@@ -161,13 +185,13 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
             role="tab"
             aria-selected={activeTab === "metrics"}
             aria-controls={activeTab === "metrics" ? "panel-metrics" : undefined}
-            aria-label={formatTabAriaLabel("Metrics", state.stats?.metricNameCount, "metric name", "metric names")}
+            aria-label={formatTabAriaLabel("Metrics", metricCount, "metric", "metrics")}
             className={activeTab === "metrics" ? "tab-button is-active" : "tab-button"}
             tabIndex={activeTab === "metrics" ? 0 : -1}
             onClick={() => switchTab("metrics")}
           >
             Metrics
-            {state.stats?.metricNameCount ? <span className="tab-button__count" aria-hidden="true">{state.stats.metricNameCount}</span> : null}
+            {metricCount ? <span className="tab-button__count" aria-hidden="true">{metricCount}</span> : null}
           </button>
           <button
             id="tab-traces"
@@ -251,6 +275,21 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
           >
             Cloud
           </button>
+          {configManager ? (
+          <button
+            id="tab-config"
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "config"}
+            aria-controls={activeTab === "config" ? "panel-config" : undefined}
+            aria-label="Config"
+            className={activeTab === "config" ? "tab-button is-active" : "tab-button"}
+            tabIndex={activeTab === "config" ? 0 : -1}
+            onClick={() => switchTab("config")}
+          >
+            Config
+          </button>
+          ) : null}
           </div>
           {tabOverflow.right ? (
             <button
@@ -267,7 +306,7 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
           ) : null}
 
           <div className="tab-bar__actions">
-            {activeTab !== "cloud" ? (
+            {activeTab !== "cloud" && activeTab !== "config" ? (
               <>
                 <span
                   role="status"
@@ -295,24 +334,26 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
                   )}
                 </button>
               </>
-            ) : (
+            ) : activeTab === "cloud" ? (
               <span
                 role="status"
                 aria-live="polite"
                 className={`stream-toggle stream-toggle--status ${
-                  cloudConnectionState === "connected" ? "stream-toggle--live"
-                  : cloudConnectionState === "configured" ? "stream-toggle--paused"
+                  cloudConnectionState === "connected" || cloudConnectionState === "logs-connected" ? "stream-toggle--live"
+                  : cloudConnectionState === "configured" || cloudConnectionState === "logs-configured" ? "stream-toggle--paused"
                   : "stream-toggle--muted"
                 }`}
               >
                 {cloudConnectionState !== null ? <span className="stream-toggle__dot" aria-hidden="true" /> : null}
                 {cloudConnectionState === "connected" ? "Connected"
+                  : cloudConnectionState === "logs-connected" ? "Logs forwarding on"
+                  : cloudConnectionState === "logs-configured" ? "Logs configured"
                   : cloudConnectionState === "configured" ? "Configured, not connected"
                   : cloudConnectionState === "disconnected" ? "Not connected"
                   : "Checking connection…"}
               </span>
-            )}
-            {activeTab !== "cloud" && paused && hasNewUpdates ? (
+            ) : null}
+            {activeTab !== "cloud" && activeTab !== "config" && paused && hasNewUpdates ? (
               <button
                 className="pending-badge"
                 onClick={resume}
@@ -321,8 +362,13 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
                 updates available — resume
               </button>
             ) : null}
-            {activeTab !== "cloud" && state.error !== null ? (
+            {activeTab !== "cloud" && activeTab !== "config" && state.error !== null ? (
               <span className="pill pill--error">{state.error}</span>
+            ) : null}
+            {configManager && activeTab !== "config" && configStatus?.problem === true ? (
+              <button className="pill pill--error" onClick={() => switchTab("config")} type="button">
+                {CONFIG_PROBLEM_PILL_TEXT}
+              </button>
             ) : null}
             <button
               className="tab-bar__help"
@@ -337,7 +383,7 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
         </div>
 
         {activeTab === "overview" ? (
-          <OverviewTab onOpenCloud={() => switchTab("cloud")} />
+          <OverviewTab onOpenCloud={() => switchTab("cloud")} hasTelemetry={hasTelemetry} />
         ) : null}
         {activeTab === "services" ? (
           <ServicesTab
@@ -373,9 +419,10 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
           <DashboardsTab telemetryError={state.error} paused={paused} />
         ) : null}
         {activeTab === "cloud" ? <CloudTab onConnectionChange={setCloudConnectionState} /> : null}
+        {configManager && activeTab === "config" ? <ConfigTab status={configStatus} /> : null}
       </section>
 
-      {showHelp ? <KeyboardHelp onClose={() => setShowHelp(false)} /> : null}
+      {showHelp ? <KeyboardHelp onClose={() => setShowHelp(false)} configManager={configManager} /> : null}
     </main>
   );
 }
@@ -393,6 +440,7 @@ function initialTabFromLocation(): AppTab {
     case "validation":
     case "dashboards":
     case "cloud":
+    case "config":
       return tab;
     default:
       return "overview";

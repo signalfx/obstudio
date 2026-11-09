@@ -14,7 +14,33 @@ Before any application-code, dependency, runtime-config, or test edit:
    python3 "<directory-containing-loaded-SKILL.md>/scripts/observe_report.py" validate .observe/otel-audit.json
    ```
 
-2. Accept finding IDs from one of these sources, in order:
+2. Always drop stale artifacts from active use before accepting saved scope.
+   This is automatic recovery, not an approval question. Compare against the
+   validated current audit and its normalized digest, not timestamps or raw-file hashes:
+
+   - A saved selection with a different `audit_id` or `audit_sha256` is stale.
+     Move it and its downstream instrumentation/verification JSON and generated
+     result Markdown/HTML to a unique `.observe/history/<run>/` folder.
+   - With a valid current selection, instrumentation bound to another audit or
+     `selection_sha256` is stale; move it and its downstream results, retaining
+     the current selection. With valid current instrumentation, verification
+     bound to another audit or `instrumentation_sha256` is stale; move that
+     verification and any result view carrying it, retaining valid upstream state.
+   - Preserve archived bytes exactly. Keep the current canonical audit and
+     audit HTML active. Do not relabel old IDs/digests, transplant old targets,
+     answers or approvals, or credit archived proof for the new contract. The
+     same numeric finding IDs can describe different work after a new audit.
+     Archive only the active project's artifacts; ignore unrelated Downloads
+     candidates. A stale embedded `review_selection` supplies no current scope;
+     do not replace the canonical audit with its older selected-audit copy.
+   - Continue with current scope immediately. Never ask whether to keep the
+     stale selection versus all current findings. Only actual unresolved current
+     decisions, required inputs or invalid current state can block edits.
+     Malformed JSON or invalid current schemas are not mere stale bindings;
+     report that actual problem. Valid bound failed verification remains repair
+     evidence and must not be discarded as stale just because it failed.
+
+   Accept finding IDs from one of these sources, in order:
    the user's current `$otel-instrument --ids OTEL-001,OTEL-002` request;
    otherwise a trusted repository state from an existing
    `.observe/otel-selection.json` or selected audit saved inside `.observe/`;
@@ -25,8 +51,10 @@ Before any application-code, dependency, runtime-config, or test edit:
    Accept manual answers only from that bound handoff's `decision_answers` or
    the user's current repeatable `--decision OTEL-###=option-id` arguments; do
    not infer an answer from prose or from an executable ID. Do not infer
-   selected scope from priority, severity, or an earlier request after a saved
-   selection exists.
+   selected scope from priority, severity, or an earlier request after a valid
+   current selection exists. Stale packets contribute no active scope. Current
+   explicit IDs or a valid current selection win; otherwise a bare/broad request
+   uses Step 4a against the current audit.
 3. Unless Step 4 writes a fresh selection from current `--ids`, run
    `adopt-selection` before reporting a missing selection. Step 4a writes a
    fresh selection from `--all` only after adoption finds no saved scope for a
@@ -62,8 +90,13 @@ Before any application-code, dependency, runtime-config, or test edit:
    after a successful adoption. If it reports that the audit is invalid, the
    blocker is the canonical audit, not missing selection; rerun or repair
    `$otel-audit` instead of bypassing the JSON gate. If it reports no matching
-   saved audit state or selection, continue to Step 4a only when the current
-   request is bare or broad instrumentation. Otherwise stop before edits, point
+   saved audit state or selection, continue to Step 4a when the current request
+   is bare or broad instrumentation. This includes a no-match error caused by
+   the stale binding removed in Step 2. The helper's `--all-if-empty` flag does
+   not recover this error itself: run the separate `select --all` command and
+   continue the same run. Current explicit IDs instead use Step 4; never fall
+   back to all when those IDs are invalid or the user supplied a current scope
+   restriction. Otherwise stop before edits, point
    the user to `.observe/otel.html`, summarize the selectable findings, and ask
    which IDs to include.
 4. For user-provided IDs, create the selection and scoped input:
@@ -85,9 +118,9 @@ Before any application-code, dependency, runtime-config, or test edit:
    `selection_sha256`; they do not add AO work outside the selected IDs. Use
    the saved target unchanged during adoption unless the current user request
    explicitly replaces it. Older schema-v1/v2 selections remain valid. If
-   selected provisioning needs the audit's proposed target because no input
-   or application binding exists, materialize those disclosed names through
-   `select` with the same requested IDs and decision answers before editing.
+   any required input is missing, ask for it rather than adopting a proposed
+   target automatically. A partial current-request target must prompt for its
+   missing peer before passing a complete target to `select`.
 4a. For a bare or broad instrumentation request with no saved scope, create the
     selection from every currently eligible executable finding:
 
@@ -106,6 +139,10 @@ Before any application-code, dependency, runtime-config, or test edit:
    between mutually exclusive telemetry owners, providers, propagation paths,
    or signal shapes. A `select --all` result with empty executable IDs does not
    authorize code or configuration edits.
+   After stale-state recovery, continue immediately to Step 5 and Step 5a.
+   Explain briefly that the current audit was loaded and stale artifacts were
+   dropped from active use; ask only for actual unresolved decisions or required
+   inputs. Do not ask the user to authorize the same broad scope again.
 5. Validate the bound selection:
 
    ```bash
@@ -114,13 +151,65 @@ Before any application-code, dependency, runtime-config, or test edit:
      --selection-json .observe/otel-selection.json
    ```
 
-   A missing, stale, unknown, or dependency-incomplete selection is a hard
-   stop. A handoff with an authored answer whose option unlocks no work may
+   A selection still missing, stale, unknown, or dependency-incomplete after
+   the applicable Step 2/3/4/4a recovery is a hard stop before implementation.
+   This does not block authorized selection creation. Validate only the current
+   audit and current selection at this gate; archived instrumentation or
+   verification bindings cannot block a new valid run. Newly produced results
+   must bind to the new selection; historical proof stays historical.
+   A handoff with an authored answer whose option unlocks no work may
    validly have empty executable ID lists. Repair invalid state through the
    planning flow; never bypass the validator.
    Instrumentation must later copy the validator-computed digest of this exact
    normalized selection into `selection_sha256`. Do not hash a hand-authored or
    partially normalized object.
+5a. Resolve required inputs before any application, dependency, configuration,
+    provisioning, or test edit:
+
+   ```bash
+   python3 "<directory-containing-loaded-SKILL.md>/scripts/observe_report.py" required-inputs \
+     .observe/otel-audit.json \
+     --selection-json .observe/otel-selection.json
+   ```
+
+   This read-only preflight is generic: inspect `required_inputs`, `missing_inputs`
+   and `ready`, and reconcile any other required parameters declared by the
+   selected findings or their supported configuration contract. Values already
+   supplied in the request or validated selection need no repeated question.
+   Collect only unresolved values, then prompt once using their labels and wait
+   for the reply. Do not substitute defaults, guesses, or environment fallback
+   for missing user selections. For AO the prompt is:
+
+   ```text
+   Provide values for these required fields:
+   Project:
+   Agent Stream:
+   ```
+
+   Omit a line when that value is already supplied. Any selected AO finding,
+   including callback/content work and dependencies, requires the complete
+   Project/Agent Stream name-or-ID pair. Reuse-only with blank values is not
+   ready. Legacy targetless packets still validate and keep their digests, but
+   new work waits for these inputs. After the answer, re-run `select` with the
+   same requested IDs, decision answers, approval metadata, and accepted inputs;
+   re-run `validate-flow` and `required-inputs`, then complete Step 5b before edits.
+   Ask for credentials through an appropriate secure channel; do not put secrets
+   in report fields. Inputs do not select findings or authorize additional work.
+5b. After any selection creation, adoption or update, repeat Step 2's downstream
+    binding checks against the resulting normalized selection before application,
+    dependency, configuration, provisioning or test edits. Adding a required AO
+    target can change `selection_sha256` even when the selected finding IDs stay
+    the same. Results that matched before Step 4/4a/5a may now be stale.
+
+    Validate surviving result files with `validate-flow` using their
+    `--instrumentation-json` and, when present, `--verify-json` paths; an
+    audit/selection-only pass does not check their bindings. Archive newly stale
+    results and their dependent proof views using Step 2, preserving original
+    bytes. Keep the current audit, new selection and still-matching upstream
+    results active. If no results survive, validate just audit/selection. If the
+    normalized selection digest is unchanged, keep matching result files and
+    views byte-for-byte unchanged. Never restamp old proof to make it match;
+    malformed current data remains a validation error, not a stale-binding bypass.
 6. Use only the scoped executable findings, dependencies, and referenced
    verification scenarios. `manual decision` and `external follow-up` findings
    cannot appear in either selection ID list. `decision_answers` is separate
