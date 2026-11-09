@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-instrument",
-    "run_id": "20261109T171002799009Z",
+    "run_id": "20261109T173523482641Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-6-luna",
     "judge_model": "",
@@ -986,7 +986,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "6b910573f791f46dbc28c1b316330f087dd15a7377163eb80e6936bc5bbcec64",
+    "digest": "d50d0117630a49b19b172c1f4c0097991b068fd77f4ba2b1614c5e88314f6e85",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -1210,7 +1210,7 @@
       "observer/internal/api/splunk_export.go": "f3c9f16b9ac74aa7f25a5921a63add8d6343446e86128617eafc57b5f0ae0709",
       "observer/internal/api/splunk_export_test.go": "30f98a3b24447a319f9c06a13f946e73b947dd9ea2a597dbdd9e36edefae60c6",
       "observer/internal/api/splunk_logs.go": "966c909f3cd2f09211bc5304a132fcbd892e4e299b54c376211ab47a0b87e430",
-      "observer/internal/api/splunk_logs_test.go": "039ceab91b20228d0310a703d1a999e85eb4a0d71c8cd735271a3bc615c93176",
+      "observer/internal/api/splunk_logs_test.go": "f9100b039b9578e01f9e511e97be1dabbd73b64685e615235be127a58628ba12",
       "observer/internal/api/user_config.go": "6f9f3c174105b382ed2baa20b1c275f38a238be70ee60676f27188c5b30b8e0e",
       "observer/internal/api/user_config_test.go": "2fe306c01b14710df8c8e4dbfce539deea480210587f6e690523e53ad5bc3eae",
       "observer/internal/audit/audit.go": "174a579c8c0a8957989adf9d36692cd731bd7cc154020892526b0dfe1e6e2b20",
