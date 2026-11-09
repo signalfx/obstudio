@@ -31,7 +31,7 @@
           "scenario": "cancel"
         }
       ],
-      "duration_ms": 198,
+      "duration_ms": 216,
       "exit_ok": true,
       "failures": [],
       "model_requests": [
@@ -121,7 +121,7 @@
         }
       ],
       "model_response_ids": {
-        "turn-1": "fixture-response-ff073ddf-2742-48ff-8c63-582ac0918d40"
+        "turn-1": "fixture-response-628add90-3c1d-457f-9fa1-37c4dec7631d"
       },
       "native_requests": [],
       "passed": true,

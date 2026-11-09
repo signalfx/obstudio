@@ -93,7 +93,7 @@
     }
   ],
   "selected_version": "v1.46.0",
-  "selection_reason": "Newest examined common SDK/API/OTLPHTTP exporter release compatible with cached Go1.25.1. Newest overall1.47.0 requires Go1.26.",
+  "selection_reason": "Historical initial selection on 2026-10-15: Newest examined common SDK/API/OTLPHTTP exporter release compatible with cached Go1.25.1. Newest overall1.47.0 requires Go1.26.",
   "test_jsonschema_metadata": {
     "metadata_url": "https://proxy.golang.org/github.com/santhosh-tekuri/jsonschema/v6/@latest",
     "metadata": {
@@ -186,12 +186,14 @@
     }
   ],
   "security_dependency_update": {
-    "checked_at_utc": "2026-11-09T16:57:41.247042+00:00",
+    "checked_at_utc": "2026-11-09T17:14:01.031260+00:00",
     "module": "golang.org/x/net",
     "version": "v0.62.0",
     "go_mod_url": "https://proxy.golang.org/golang.org/x/net/@v/v0.62.0.mod",
     "go_directive": "go 1.26.0",
     "cve": "CVE-2026-78661",
     "decision": "Require Go 1.26 for the patched network dependency; retain the selected OTel 1.46.0 API/SDK/exporters to limit this security fix."
-  }
+  },
+  "toolchain_context": "Historical metadata collection toolchain on checked_at_utc; current security build toolchain and minimum are recorded in security_dependency_update and candidate-provenance.json.",
+  "current_selection_reason": "Retain the selected v1.46.0 SDK/API/exporters to keep the network security fix focused. The patched x/net v0.62.0 now requires Go 1.26; the older Go 1.25 compatibility decision no longer limits the current toolchain."
 }
