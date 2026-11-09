@@ -12,7 +12,9 @@ inventory and subsequent source corrections, including the version-neutral
 Java guidance. Real bare-skill development workflows then exposed a selected
 Java framework-log privacy failure and incomplete Node delivery accounting.
 Their source-backed clarifications and a Java native regression are applied;
-Claude is checking the exact changed clauses. All 88 native cases and 203
+Claude verified those exact clauses with zero required corrections. A later
+Node audit exposed a SERVER-only correlation expectation; the active-span
+clarification is applied and awaits its exact Desktop source check. All 88 native cases and 214
 focused checks pass. The strict complete three-run gate has **0/3** clean passes.
 Prior clean runs and partial development workflows are historical; the final
 whole-PR combined review follows three complete unchanged-source clean passes.
@@ -258,9 +260,11 @@ its partial evidence is retained. No timeout or interrupted run is reported as c
 ## Current validation and three-run gate
 
 The current 13-file instruction snapshot is
-`07a6809ad77e9d1d7243e11ec6f47be5593134775c75e802dfb6734e574ac1f3`.
-Claude verified B1/B2/B3 at `b117b995`; four subsequent changed files are pending
-its exact-source check. The previous full-workflow development attempt executed
+`60bb2505414661eebf5a45fc8846fe94a73229972b8c70ec72d9bb01d59c1565`.
+Claude verified B1/B2/B3 at `b117b995` and the next four changed files at
+`07a6809a`; all C1-C4 qualifiers are closed. An initial status-vocabulary suggestion
+was independently checked and withdrawn: ordinary coverage prose does not invent
+a row status, and a failed executed probe must not be blanket-labeled Blocked. The previous full-workflow development attempt executed
 10 of 12 stages: all four audits passed 14/14, Python and Go passed their full
 42/42 criteria, Java instrumentation passed 12/14 and Node 13/14. That is
 137/140 executed criteria, with two verify stages not run; it is not a complete
@@ -289,9 +293,45 @@ role/language rubrics semantically check both corrections. Claude's pre-adoption
 review supplied four boundary/capability qualifiers, all incorporated. These
 clarifications preserve conditional privacy policy and SDK ownership.
 
+The subsequent `75ffc705` development attempt found a Node audit expectation
+that required every log SpanId to equal the SERVER span while preserving Express
+INTERNAL handler spans. The resolved bridge captures its selected context, and
+the retained actual receipts show all four sync/async logs joined their own
+INTERNAL handler spans with IDs distinct from their SERVER ancestors. The
+common and Node guides now derive the expected association from the real
+bridge/API context, including explicit caller-side capture, and verify request
+ancestry separately. The twelve rubrics reject unsupported SERVER-only targets.
+The existing checker already accepts legitimate INTERNAL children and rejects
+cross-request swaps; its assertions remain unchanged. That attempted run earns
+no clean credit, regardless of its remaining language outcomes. Exact changed-
+clause verification was submitted to Claude Desktop after the manual unlock.
+
+The completed `75ffc705` attempt has 109/112 executed criteria over eight of
+twelve required stages: Java42/42, Python27/28, Go27/28 and Node13/14. Java's
+selected privacy repair and both independent app checks passed. Python exposed
+a real launcher identity defect: a Make fallback replaced `service.name`
+provided solely through resource attributes. The Python guide's old CLI also
+replaced other operator resource fields; paired real SDK/CLI controls reproduce
+both failures and prove the repaired recipes preserve name and version. Six
+maintained cases cover resource-only, explicit override and absent identity.
+The host checker now resolves its expected name through the SDK detector rather
+than requiring the single environment variable; five controls cover precedence,
+decoding and missing identity. The tested Node SDK already preserved the operator
+name, so its code recipe was retained. Java's image recipe no longer bakes a
+higher-priority fallback name. All four variable tables and twelve rubrics
+recognize valid resource-only identity.
+
+Go's grader rejected completed-response accounting. Its unknown accepted counts
+are not inherently wrong; the report did mention HTTP400/no retry. The added
+clarification assesses known response and terminal retry evidence separately,
+permits unresolved acceptance, and prohibits invented zero/rejected counts.
+The old failed grade remains recorded. None of these development outcomes is
+converted into a clean pass. The current five-file clause delta is under actual
+Claude Desktop verification.
+
 Each complete pass requires all four languages and all three skills:
 **12 bare-skill stages / 168 individual criteria, eight independent real-app
-startup checks, 88 native cases, 55 runner/receiver/workflow checks and plugin
+startup checks, 88 native cases, 214 focused guidance/runner/receiver/workflow checks and plugin
 parity**. Pass 2 starts only after pass 1 is clean; pass 3
 starts only after pass 2 is clean. Any source fix, failed obligation or stale
 receipt resets the streak. Expected faults in deliberately bad fixtures must
@@ -313,10 +353,10 @@ client enqueue/flush is never used as receiver acceptance.
 
 | Deterministic command | Current result |
 |---|---|
-| From `evals/`: `UV_NO_CONFIG=1 uv run pytest -q test_default_local_log_export_guidance.py test_incident_readiness_skill_guidance.py test_logging_contract_runner.py test_logging_receiver.py test_logging_workflow_check.py` | 203 passed |
-| `UV_NO_CONFIG=1 make eval-validation SKILL=skills/otel-audit` | 743 passed, 5 scoped skips |
-| `UV_NO_CONFIG=1 make eval-validation SKILL=skills/otel-instrument` | 774 passed, 5 scoped skips |
-| `UV_NO_CONFIG=1 make eval-validation SKILL=skills/otel-verify` | 709 passed, 5 scoped skips |
+| From `evals/`: `UV_NO_CONFIG=1 uv run pytest -q test_default_local_log_export_guidance.py test_incident_readiness_skill_guidance.py test_logging_contract_runner.py test_logging_receiver.py test_logging_workflow_check.py` | 214 passed |
+| `UV_NO_CONFIG=1 make eval-validation SKILL=skills/otel-audit` | 754 passed, 5 scoped skips |
+| `UV_NO_CONFIG=1 make eval-validation SKILL=skills/otel-instrument` | 785 passed, 5 scoped skips |
+| `UV_NO_CONFIG=1 make eval-validation SKILL=skills/otel-verify` | 720 passed, 5 scoped skips |
 | `PATH="$PWD/evals/.venv/bin:$PATH" make agent-policy-check` | 49 unit + 8 contract checks passed; policy passed |
 | `PATH="$PWD/evals/.venv/bin:$PATH" make test-interactive-otel-scripts` | 188 passed |
 | `make check-obstudio-plugin-skills` | Passed |
@@ -345,12 +385,16 @@ or a plan with “Not run” cannot establish positive runtime coverage.
 The repository also requires representative local per-skill commands:
 
 ```sh
-UV_NO_CONFIG=1 make eval-rubric SKILL=skills/otel-audit CASE=go/chi-basic EVAL_PATTERN=go/chi-basic/eval/qual/logging-audit-contract.json PROMPT=logging-trial-1 MODEL=gpt-6.1-sol
-UV_NO_CONFIG=1 make eval-rubric SKILL=skills/otel-instrument CASE=go/chi-basic EVAL_PATTERN=go/chi-basic/eval/qual/logging-instrument-contract.json PROMPT=logging-trial-1 MODEL=gpt-6.1-sol
-UV_NO_CONFIG=1 make eval-rubric SKILL=skills/otel-verify CASE=go/chi-basic EVAL_PATTERN=go/chi-basic/eval/qual/logging-verify-contract.json PROMPT=logging-trial-1 MODEL=gpt-6.1-sol
+PYTEST_ADDOPTS=--agent-timeout=3600 UV_NO_CONFIG=1 make eval-rubric SKILL=skills/otel-audit CASE=go/chi-basic EVAL_PATTERN=go/chi-basic/eval/qual/logging-audit-contract.json PROMPT=logging-trial-1 MODEL=gpt-6.1-sol
+PYTEST_ADDOPTS=--agent-timeout=3600 UV_NO_CONFIG=1 make eval-rubric SKILL=skills/otel-instrument CASE=go/chi-basic EVAL_PATTERN=go/chi-basic/eval/qual/logging-instrument-contract.json PROMPT=logging-trial-1 MODEL=gpt-6.1-sol
+PYTEST_ADDOPTS=--agent-timeout=3600 UV_NO_CONFIG=1 make eval-rubric SKILL=skills/otel-verify CASE=go/chi-basic EVAL_PATTERN=go/chi-basic/eval/qual/logging-verify-contract.json PROMPT=logging-trial-1 MODEL=gpt-6.1-sol
 ```
 
-Fresh commands are running for the final task definitions and post-upstream fixture.
+Fresh commands are running for the active-span task definitions and post-upstream fixture.
+The preceding standalone instrumentation command hit its default 1200-second
+outer model timeout and is retained as a failure. The supported 3600-second
+override changes that model budget, not application/probe deadlines or required
+semantic decisions.
 Their actual rubric decisions, not pytest exit status alone, determine semantic
 success. A preceding standalone instrumentation run passed 13/14; the missing
 requirement-strength/maturity classification is now explicit at finalization. A standalone verify

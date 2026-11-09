@@ -68,6 +68,16 @@ User-provided resources take precedence over `OTEL_RESOURCE_ATTRIBUTES` in the
 standard SDK merge; preserve operator identity when adding defaults by avoiding
 conflicting code values, not by assuming the environment wins. Check decoding
 errors and actual merge order rather than replacing the existing provider.
+An existing `service.name` in the effective resource configuration is valid
+operator identity even when `OTEL_SERVICE_NAME` is absent. Do not add a higher-
+precedence Make, shell, CLI, image or JVM fallback that replaces it. Resolve
+resource values with the installed SDK's supported detector/merge, apply new
+application defaults underneath supplied values, and inspect the actual merge
+order. Verify the normal launcher as well as the helper with resource-only
+identity, explicit service-name override and absent-identity controls. These
+preservation checks are local workflow; SDK configuration defines each setting's
+precedence, and an active file loader retains its own contract.
+
 Let the installed exporter parse OTLP header environment values using its
 supported `key=value,key2=value2` encoding. W3C Baggage-style semicolon metadata
 is not supported here. Do not introduce a custom parser, print header values
@@ -219,6 +229,13 @@ do not assume a sampled SDK context has only a single flag bit. Injected
 non-recording contexts remain useful unit controls, but cannot prove tracer
 startup, span export or an end-to-end join. Do not manufacture IDs, add a second
 provider or invent spans for unowned operations merely to satisfy a test.
+
+For each call, derive the expected SpanId from the bridge/API's selected context,
+including explicit caller-side capture when used. That span may be an INTERNAL
+framework/handler child. Verify its ancestry to the correct request separately;
+do not require the log to use a SERVER ancestor's SpanId or replace valid context
+merely to satisfy a test. A SERVER-only target needs evidence that this is the
+associated span on that path.
 
 Where the application owns an async boundary, require at least one combined
 scenario: capture a real SDK parent/child context, traverse that boundary,
@@ -417,7 +434,13 @@ count N and rejected count R (0 <= R <= N), report acknowledged accepted N-R and
 rejected R separately from SDK emissions, attempts and received copies. Controlled
 receiver rejection policy or observed late acceptance can resolve more counts;
 neither a client failure result nor received bytes alone proves persisted loss
-or success.
+or success. Unknown accepted counts can be valid after a completed negative
+response: the protocol does not always return per-record counts. They do not
+make a known failure response pending. Record the observed response and terminal
+retry decision separately, such as non-retryable HTTP 400 or a completed HTTP 503
+whose server wait cannot fit the remaining export budget. Assess that evidence
+across the report and raw observations; do not invent zero acceptance or rejection
+counts merely to fill a field.
 
 The standard OTLP exporter timeout covers a whole batch export, including all
 attempts and retry waits; it must not restart for each attempt, and an earlier
@@ -531,7 +554,7 @@ across the applicable rules.
 | LOG-ASYNC-HANDOFF | Caller capture before scheduling; exact request pairing, permitted MDC handling where applicable, worker cleanup and bridge placement relative to queues. Link the joint real-span async scenario, supported propagation and expected-loss controls. |
 | LOG-EXCEPTION | Allowed exception fields and excluded sensitive fields, with bridge/event convention applicability and optional-field decisions. |
 | LOG-LIMITS | Name the effective/proposed log attribute count/value settings or public API fields, separately from Body policy. Specify below/at/above-limit inputs, units, expected outcomes and supported drop accounting; generic limits plus numbers are insufficient. For an expensive construction path, name the supported native/direct-OTel enablement query, check current policy inside the owned worker, and prove construction/output counts across disabled/enabled/disabled states. Preserve cheap direct emits and original sinks when the OTel path is disabled. |
-| LOG-DELIVERY | Record observed attempt/retry/caller deadlines and missing bounds with units/source separately from proposed queue/batch/schedule/export/shutdown settings and the composed budget. Assert batch <= queue on a batch path; a selected simple processor needs synchronous-cost evidence instead. Include a stalled receiver/caller deadline and a final log immediately before shutdown, with healthy receipt and bounded fault behavior checked independently. Record attempted/accepted/rejected/dropped separately, retaining unknown acceptance after a client timeout until a receipt resolves it. |
+| LOG-DELIVERY | Record observed attempt/retry/caller deadlines and missing bounds with units/source separately from proposed queue/batch/schedule/export/shutdown settings and the composed budget. Assert batch <= queue on a batch path; a selected simple processor needs synchronous-cost evidence instead. Include a stalled receiver/caller deadline and a final log immediately before shutdown, with healthy receipt and bounded fault behavior checked independently. Record attempted/accepted/rejected/dropped separately, retaining unknown acceptance after a client timeout until a receipt resolves it. Name observed completed failure responses and terminal retry decisions separately from unresolved acceptance/persistence counts; a null count alone is not a failed response-classification check. |
 | LOG-DIAGNOSTICS | Name the supported separate routing or suppression mechanism. One exporter-fault scenario asserts bounded diagnostic volume and export attempts, application progress, original sink output, and continued operation of each other configured signal. Explicitly mark absent signals not configured; preserving configuration alone is not operation proof. |
 | LOG-VERIFY-FRESH | Unique report storage for each trial; planned manifest/lockfile dependency preparation; binding to source, command and dependency versions; actual success/failure/error/skip counts; preserved timeout console output, failed timeout verdict, owned-process cleanup and incremental structured partial results; explicit evidence scope. |
 

@@ -230,10 +230,8 @@ fi
 
 exec opentelemetry-instrument \
   --logs_exporter "$effective_logs_exporter" \
-  --service_name "${OTEL_SERVICE_NAME:-my-service}" \
   --exporter_otlp_endpoint "${OTEL_EXPORTER_OTLP_ENDPOINT:-http://127.0.0.1:4318}" \
   --exporter_otlp_protocol "${OTEL_EXPORTER_OTLP_PROTOCOL:-http/protobuf}" \
-  --resource_attributes deployment.environment.name=production \
   "$@"
 ```
 
@@ -242,6 +240,14 @@ pass the same command the project already uses, for example
 `./otel-entrypoint.sh python app.py`, `uv run`, `poetry run`, `gunicorn`, or
 `uvicorn`. Do not inline only the final `opentelemetry-instrument` command and
 drop the policy checks.
+
+The wrapper leaves service and resource selection to the existing SDK/configuration
+owner. Do not add CLI `--service_name` or `--resource_attributes` defaults over
+operator values. Supply deployment identity through the existing configuration,
+for example `OTEL_RESOURCE_ATTRIBUTES=deployment.environment.name=production`
+when that is the actual environment. An absent identity retains the SDK fallback
+and needs a source-backed service-name decision; it is not evidence that an
+arbitrary application default was configured.
 
 If the project already runs in Docker:
 ```dockerfile
@@ -347,7 +353,7 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
-from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.resources import OTELResourceDetector, Resource
 
 
 FALLBACK_LOCAL_OTLP_LOGS_ENDPOINT = "http://127.0.0.1:4318/v1/logs"
@@ -427,6 +433,13 @@ def _local_log_exporter():
     return OTLPLogExporter(endpoint=endpoint)
 
 
+def _application_resource():
+    return Resource.create({
+        "service.name": "my-service",
+        **OTELResourceDetector().detect().attributes,
+    })
+
+
 def configure_opentelemetry():
     # Resolve log policy before registering globals. A conflicting log route
     # disables only this local log branch; traces, metrics, and the application
@@ -434,9 +447,7 @@ def configure_opentelemetry():
     use_local_log_export = _use_default_local_log_export()
     log_exporter = _local_log_exporter() if use_local_log_export else None
 
-    resource = Resource.create({
-        "service.name": os.environ.get("OTEL_SERVICE_NAME", "my-service"),
-    })
+    resource = _application_resource()
 
     tracer_provider = TracerProvider(resource=resource)
     tracer_provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
@@ -780,7 +791,7 @@ not fixed-port equality checks.
 | `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | resolved local receiver; fallback `http://127.0.0.1:4318/v1/logs` | Signal-specific local application-log destination |
 | `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` | `http/protobuf` for the shown local baseline | Select a matching official exporter for another explicit protocol |
 | `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset | Signal-specific operator log headers; generic cloud headers are rejected from the log path |
-| `OTEL_SERVICE_NAME` | (must be set) | Service identity in telemetry |
+| `OTEL_SERVICE_NAME` | unset | Optional service-name override; preserve identity supplied through resource attributes or the active resource configuration |
 | `OTEL_METRIC_EXPORT_INTERVAL` | `60000` | Metric export interval (ms) |
 | `OTEL_METRIC_EXPORT_TIMEOUT` | `30000` | Metric export timeout (ms) |
 | `OTEL_BSP_SCHEDULE_DELAY` | `5000` | Span batch export delay (ms) |

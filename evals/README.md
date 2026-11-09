@@ -89,6 +89,9 @@ It independently starts the generated service after instrumentation and
 verification and proves concurrent sync/async logs against real SDK span
 ancestry and the original sink. Runtime failure, incomplete rubric evidence,
 or a task/grader model other than the configured Sol high fails the workflow.
+The checker resolves expected service identity with the SDK environment detector:
+resource-only `service.name` is supported, an explicit `OTEL_SERVICE_NAME` takes
+its normal precedence, and missing expected identity fails clearly before launch.
 This host runtime proof supplements the regular per-skill rubric commands;
 a standalone verify task on an uninstrumented fixture is only a precondition
 check. It is not positive runtime verification.

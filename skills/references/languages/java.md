@@ -424,6 +424,12 @@ preserves each value's boundary.
 
 ### If the Project Already Runs in Docker
 
+Supply service identity through the deployment's existing resource configuration.
+Do not bake a fallback `OTEL_SERVICE_NAME` into a new image: it would override a
+runtime `service.name` supplied only in `OTEL_RESOURCE_ATTRIBUTES`. An explicitly
+selected service-name override remains valid. The host/JVM examples above show
+explicit values, not defaults to add over an operator's resource identity.
+
 ```dockerfile
 FROM eclipse-temurin:21-jre
 
@@ -432,7 +438,6 @@ COPY otel-entrypoint.sh /usr/local/bin/otel-entrypoint
 COPY my-app.jar /opt/app.jar
 RUN chmod 0755 /usr/local/bin/otel-entrypoint
 
-ENV OTEL_SERVICE_NAME=my-service
 ENV OTEL_EXPORTER_OTLP_ENDPOINT=http://observer:4318
 ENV OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
 ENV OTEL_LOGS_EXPORTER=otlp
@@ -662,7 +667,7 @@ The literal ports below are conventional fallbacks, not equality gates.
 | `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset | Only signal-specific operator-owned log headers; never inherit a generic cloud credential |
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` / `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` | unset | Use these instead of a generic endpoint for direct-cloud trace/metric export |
 | `OTEL_EXPORTER_OTLP_TRACES_HEADERS` / `OTEL_EXPORTER_OTLP_METRICS_HEADERS` | unset | Keep cloud credentials signal-specific; never copy them to logs |
-| `OTEL_SERVICE_NAME` | (must be set) | Service identity in telemetry |
+| `OTEL_SERVICE_NAME` | unset | Optional service-name override; preserve identity supplied through resource attributes or the active resource configuration |
 | `OTEL_METRIC_EXPORT_INTERVAL` | `60000` | Metric export interval (ms) |
 | `OTEL_METRIC_EXPORT_TIMEOUT` | `30000` | Metric export timeout (ms) |
 | `OTEL_BSP_SCHEDULE_DELAY` | `5000` | Span batch export delay (ms) |

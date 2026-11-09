@@ -17,7 +17,7 @@ detected in the codebase. Only install what the project actually uses.
 
 | Dependency in package.json | Auto-instrumentation Package | What It Covers |
 |----------------------------|------------------------------|----------------|
-| `express` | `@opentelemetry/instrumentation-express` | HTTP server spans with route, method, status code |
+| `express` | `@opentelemetry/instrumentation-express` | Express middleware/router/handler spans and route enrichment; HTTP instrumentation owns SERVER spans |
 | `fastify` | `@opentelemetry/instrumentation-fastify` | HTTP server spans with route, method, status code |
 | `koa` | `@opentelemetry/instrumentation-koa` | HTTP server spans with route, method, status code |
 | `@nestjs/core` | `@opentelemetry/instrumentation-nestjs-core` | NestJS handler and interceptor spans |
@@ -599,7 +599,7 @@ not fixed-port equality checks.
 | `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | resolved local receiver; fallback `http://127.0.0.1:4318/v1/logs` | Signal-specific local application-log destination |
 | `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` | `http/protobuf` for the shown local baseline | Select a matching official exporter for another explicit protocol |
 | `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset or empty | Non-empty log headers disable this added local log pipeline so the exporter cannot inherit credentials |
-| `OTEL_SERVICE_NAME` | (must be set) | Service identity in telemetry |
+| `OTEL_SERVICE_NAME` | unset | Optional service-name override; preserve identity supplied through resource attributes or the active resource configuration |
 | `OTEL_METRIC_EXPORT_INTERVAL` | `60000` | Metric export interval (ms) |
 | `OTEL_METRIC_EXPORT_TIMEOUT` | `30000` | Metric export timeout (ms) |
 | `OTEL_BSP_SCHEDULE_DELAY` | `5000` | Span batch export delay (ms) |
@@ -665,6 +665,12 @@ Auto-instrumented: `pg`, `mysql2`, `mongodb`, `redis`, `ioredis` -- all included
 ---
 
 ## Logging Readiness Checks
+
+Inspect actual HTTP/Express topology: a supported framework layer may activate
+an INTERNAL handler span at the logging call. Match the bridge's selected
+context to that exact received span and check its ancestry to the correct
+request; the SERVER span may be an ancestor. Preserve verified propagation and
+permitted layer spans instead of forcing a SERVER-only log association.
 
 Apply the [common logging rules](../logging-readiness.md), this guide's SDK
 loading order/detected bridge ownership and local application-log boundary.

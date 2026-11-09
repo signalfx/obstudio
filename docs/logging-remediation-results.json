@@ -1,7 +1,7 @@
 {
   "scope": "Maintained native SDK/bridge fixtures; real local OTLP/HTTP exporter/receiver boundary checks replay bridge-produced SDK records. No full application, Java-agent, distributed queue or cloud proof.",
   "starting_head": "8600493b75dc1b3eebf16ac493806cb1e865f2b4",
-  "source_state": "FinalD1instruction snapshotd9ae5700 verified by actualClaudeDesktop with no remaining source/convention mismatch in inspected scope. Execution freeze120fe256 three-pass gate running;finalcombinedPRreview pendingstreak3.",
+  "source_state": "Current13file instruction identity60bb2505; exactsourceverificationcomplete through07a6809a,new5filedeltaunderactualClaudeDesktopreview. Prior75ffc strictattemptsuperseded,109/112executedcriteria over8/12stages,0/3clean. Fresh214regressiongate pending.",
   "native_summary": {
     "commands": 12,
     "trials_per_language": 3,
@@ -1127,7 +1127,7 @@
     "source_snapshot": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/deadline-skip-stale-source-jgeq_k7x",
     "output": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/deadline-skip-stale-output-sjaod2y2"
   },
-  "current_source_note": "fd180modelattempt interrupted for verifiedD1 correction with no clean credit. Current120fe target3x(168semantic+87native+37regression/parity),sol/high task andjudge. All olderdatasets historical.",
+  "current_source_note": "Current target3x(168semantic+88native+214focusedregressions/parity+8independentrealappchecks),sol/high actorandjudge. Historical/partial/developmentdatasetsdonotcount.",
   "semantic_cancelled_rounds": [
     {
       "round": 3,
@@ -1342,9 +1342,9 @@
     }
   ],
   "three_consecutive_clean_passes": {
-    "status": "Current pipeline retained as development evidence; native provenance/cleanup fixes and user-requested version-neutral Java change supersede source freeze, so fresh strict gate required.",
+    "status": "0/3; previous75ffc attemptfullyfinishedandsuperseded;newcurrent-sourcegatepending",
     "clean_streak": 0,
-    "source_identity": "e3d88ddc9cb9f9e5a3a0da11d1ccf8054f59a6dceffbb40cbfa1e7e838a5056f",
+    "source_identity": "75ffc70560b6a387a838c8d628e9b865a21bd596b79dd8b8bbd489216a8432bc",
     "scope": {
       "languages": [
         "java",
@@ -1360,14 +1360,14 @@
       "semantic_cases": 12,
       "criteria_per_case": 14,
       "total_criteria": 168,
-      "native_test_cases": 87,
-      "runner_receiver_workflow_regressions": 54,
+      "native_test_cases": 88,
+      "runner_receiver_workflow_regressions": 55,
       "positive_runtime": "Independent unchanged host checker on actual generated service after instrument and verify",
       "model": "gpt-6.1-sol",
       "reasoning_effort": "high"
     },
-    "source_inputs": 684,
-    "prior_attempts": "Preserved without clean credit; includes setup failures and54/56developmentauditcriteria.",
+    "source_inputs": 680,
+    "prior_attempts": "Preserved without clean credit, including137/140criteria over10/12stages and all4coreappchecks in supersededdevelopmentattempt.",
     "combined_review": "Not started; requires current complete clean streak3"
   },
   "java_flush_evidence": {
@@ -1882,7 +1882,7 @@
     ]
   },
   "current_followup": {
-    "status": "Exact final clauses submitted to Claude; current source three-pass gate 0/3; real development failures retained",
+    "status": "Current60bb2505 source submittedtoClaudeDesktop;214focusedchecksandall3validationspass; prior75ffc wholeworkflow attempt superseded0/3; freshstrictgate pending",
     "native_focused": {
       "counts": {
         "java": 25,
@@ -1897,31 +1897,31 @@
       "scope": "Actual native SDK/bridge and owned HTTP receiver; Java zero/false/emptystring through selected bridge plus emptyarray through typed SDK only; no claim that pinned Java bridge preserves emptycollections.",
       "results": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/native-final-privacy-check/results.json"
     },
-    "focused_guidance_runner_receiver": 203,
+    "focused_guidance_runner_receiver": 214,
     "deterministic_validation": {
       "otel-audit": {
         "command": "PATH=\"$PWD/evals/.venv/bin:$PATH\" UV_NO_CONFIG=1 make eval-validation SKILL=skills/otel-audit",
-        "passed": 743,
+        "passed": 754,
         "skipped": 5,
         "exit_code": 0,
-        "run_id": "20261109T195217053687Z",
-        "log": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/final-audit-validation.log"
+        "run_id": "20261109T204825989125Z",
+        "log": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/resource-audit-validation.log"
       },
       "otel-instrument": {
         "command": "PATH=\"$PWD/evals/.venv/bin:$PATH\" UV_NO_CONFIG=1 make eval-validation SKILL=skills/otel-instrument",
-        "passed": 774,
+        "passed": 785,
         "skipped": 5,
         "exit_code": 0,
-        "run_id": "20261109T195217058380Z",
-        "log": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/final-instrument-validation.log"
+        "run_id": "20261109T204825989132Z",
+        "log": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/resource-instrument-validation.log"
       },
       "otel-verify": {
         "command": "PATH=\"$PWD/evals/.venv/bin:$PATH\" UV_NO_CONFIG=1 make eval-validation SKILL=skills/otel-verify",
-        "passed": 709,
+        "passed": 720,
         "skipped": 5,
         "exit_code": 0,
-        "run_id": "20261109T195217053682Z",
-        "log": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/final-verify-validation.log"
+        "run_id": "20261109T204825989121Z",
+        "log": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/resource-verify-validation.log"
       }
     },
     "policy": "49unit+8contract passed",
@@ -2232,10 +2232,10 @@
       "completed_snapshot": "c89c166bdf8ad7e170b4b4864e2d90db87a24f394bc54085dcc45948ddc0b8fc",
       "directly_corroborated_rows": 183,
       "paraphrase_only_rows": 0,
-      "new_snapshot": "d9ae570062149fe9aa3831fb027c5b901e6af3395ee2dde6c7d2909da40bad60",
-      "delta_status": "complete;F1-F5andD1resolved,all13finalfiles byte-bound and unchangedclauses reused byhash from183rowprimaryledger",
+      "new_snapshot": "60bb2505414661eebf5a45fc8846fe94a73229972b8c70ec72d9bb01d59c1565",
+      "delta_status": "Verifiedthrough07a6809a;60bb5filedelta submittedactualClaudeDesktop,awaitingresult",
       "source_review_is_runtime_proof": false,
-      "final_claude_report_sha256": "e8fad6e75ba2a501200aa9fb19f65f7858670a10bf11c7b3c33c54e1a7f3f4bb",
+      "final_claude_report_sha256": "1f590cb004419a6ec3247a6a734e83ca8136a3fe31c6522a727ec153ee4491e7",
       "runtime_compliance_inferred": false
     },
     "meaningful_value_proof": {
@@ -2421,7 +2421,7 @@
           }
         }
       },
-      "current_instruction_identity": "07a6809ad77e9d1d7243e11ec6f47be5593134775c75e802dfb6734e574ac1f3"
+      "current_instruction_identity": "60bb2505414661eebf5a45fc8846fe94a73229972b8c70ec72d9bb01d59c1565"
     },
     "privacy_delivery_corrections": {
       "claude_proposal": {
@@ -2442,6 +2442,169 @@
       },
       "native_regression": "LoggingContractTest.redactsFrameworkArgumentsBeforeBothSinksWithoutEmittingOnEnablement",
       "scope": "Prototype uses owned transparentloopbackrelay intoStudio,notdirectproducertransportproof;nativeappenderregressionisnotSpringruntimeproof;allfailedattemptsretained"
+    },
+    "active_span_topology_correction": {
+      "evidence": {
+        "scope": "Previously executed real Node development app; not runtime proof for the later failed audit or a clean final gate. Shows why a blanket SERVER SpanId requirement rejects legitimate active-handler correlation.",
+        "source_proof": "/var/folders/1s/d9rtsptx15q306s_q_x43z4w0000gn/T/logging-workflow-node-trial-1-8g0a1eey/service/.observe/logging-workflow-proof/run-fxswbluw",
+        "source_hashes": {
+          "result.json": "c1588111dc309692f9cba322021f4b7e680469fd8ced466020fcdfa25b879d16",
+          "receiver-traces.json": "91d464d9c839048981120755e5e01a0d9c3abd513666754769bb120787be3d07",
+          "receiver-logs.json": "550737dd16c6bd088ea65d6ae28128e4daea3a56b89f1fda02fc0fddeeb9b95e"
+        },
+        "joins": [
+          {
+            "body": "workflow sync completed left",
+            "log_span_id": "214dfecc15f84566",
+            "log_span_kind": "INTERNAL",
+            "log_span_name": "request handler - /logging-workflow/:slot",
+            "server_span_id": "b62031e22fe2382d",
+            "distinct": true,
+            "native_records": 1,
+            "received_records": 1
+          },
+          {
+            "body": "workflow async completed left",
+            "log_span_id": "214dfecc15f84566",
+            "log_span_kind": "INTERNAL",
+            "log_span_name": "request handler - /logging-workflow/:slot",
+            "server_span_id": "b62031e22fe2382d",
+            "distinct": true,
+            "native_records": 1,
+            "received_records": 1
+          },
+          {
+            "body": "workflow sync completed right",
+            "log_span_id": "d3edddc8d4e84d41",
+            "log_span_kind": "INTERNAL",
+            "log_span_name": "request handler - /logging-workflow/:slot",
+            "server_span_id": "be6e3b1541a4a3d4",
+            "distinct": true,
+            "native_records": 1,
+            "received_records": 1
+          },
+          {
+            "body": "workflow async completed right",
+            "log_span_id": "d3edddc8d4e84d41",
+            "log_span_kind": "INTERNAL",
+            "log_span_name": "request handler - /logging-workflow/:slot",
+            "server_span_id": "be6e3b1541a4a3d4",
+            "distinct": true,
+            "native_records": 1,
+            "received_records": 1
+          }
+        ],
+        "failed_audit": "real-workflow-pass-1-8grixsvl/node/audit/rubric_grade.json criterion5; audit requires SERVERSpanId while retainingExpresslayers"
+      },
+      "new_clause": "ExpectedSpanId comesfromactual bridge/API selectedcontext, including explicit callercapture; INTERNALchildvalidwithcorrectrequestancestry;SERVERonlyrequiresactualsource/configevidence",
+      "scope": "Existinghostchecker alreadyprovesINTERNALhandlerandnegativecrossrequestcase;unchangedchecksnotweakened",
+      "semantic_coverage": "All12consumer/languagerubric5 updatedwithpositiveINTERNALchildandunsupportedSERVER-onlycontrol",
+      "claude_status": "Pending:actualDesktopUIreportsMaclocked, manualunlockrequested; noCLIsubstitute",
+      "native_cases": 88,
+      "focused_checks": 203
+    },
+    "standalone_representative_timeout": {
+      "run_start": "20261109T195216",
+      "instrument": "Failed atdefault1200seconds; audit14/14andverifyprerequisite-negative14/14completed; noinstrumentqualityresult",
+      "next_command_override": "PYTEST_ADDOPTS=--agent-timeout=3600",
+      "app_deadlines_changed": false,
+      "semantics_weakened": false
+    },
+    "resource_identity_correction": {
+      "paired_proof": {
+        "scope": "Actual installed SDK resource resolution and real opentelemetry-instrument CLI, not application startup/log receipt/Claude execution",
+        "baseline_commit": "eb6bd7684339e9c7c806618100f9b5f0b7ef8d14",
+        "python": "/Users/tithumma/code/splunk/obstudio-logging-analysis/evals/.venv/bin/python",
+        "source_hashes": {
+          "baseline_python_guide": "c0b77e16348d4fe3e6dc9ea7c5ed79f40efe0f866178f257f5b65a4eff78e342",
+          "repaired_python_guide": "429e6fe2788f063ea764f8088b573f216b6c9c03e6f82a8efbb1ccdd30f1c624"
+        },
+        "configuration": {
+          "OTEL_SERVICE_NAME": "absent",
+          "OTEL_RESOURCE_ATTRIBUTES": "service.name=resource%20operator,service.version=operator-version",
+          "OTEL_SDK_DISABLED": "true"
+        },
+        "rows": [
+          {
+            "case": "baseline-actual-cli",
+            "exit_code": 0,
+            "identity": {
+              "service.name": "my-service",
+              "service.version": null
+            },
+            "wrapper_sha256": "83fc1c739722ca6292e8d0a9803afc52d8f9d81156bb043dff34485938896477"
+          },
+          {
+            "case": "baseline-programmatic-recipe",
+            "exit_code": 0,
+            "identity": {
+              "service.name": "my-service",
+              "service.version": "operator-version"
+            },
+            "script_sha256": "a0b3be897a3ab57b570a74ba86ed0356de0d286bbbe53361de528e91866daec9"
+          },
+          {
+            "case": "repaired-actual-cli",
+            "exit_code": 0,
+            "identity": {
+              "service.name": "resource operator",
+              "service.version": "operator-version"
+            },
+            "wrapper_sha256": "939ee12e22d6e4d790a87ace03e92ee546bb458e3f026b53f59a413dd751ef7e"
+          },
+          {
+            "case": "repaired-programmatic-recipe",
+            "exit_code": 0,
+            "identity": {
+              "service.name": "resource operator",
+              "service.version": "operator-version"
+            },
+            "script_sha256": "ba136368c1d978abbdb3d241f062f91c013c7074afdfc142e941441b7d24ac66"
+          }
+        ],
+        "all_expected_outcomes_proven": true,
+        "output": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/resource-identity-proof-fn97rpvr"
+      },
+      "new_maintained_cases": 6,
+      "host_checker_cases": 5,
+      "root_cause": "Higherprioritylauncher/CLI/applicationfallbacks overwrote valid resource-only operator identity; PythonCLIalso replacedallotheroperatorresourceattrs. Common preservation wordingwasnotexplicitaboutnormalMake/CLI/imageentrypoints.",
+      "fix": "PythonprogrammaticdefaultunderSDKdetectedvalues;CLIleavesresourceandserviceowneruntouched; JavaimagenoautomaticSERVICE_NAMEdefault; all4envtablesallowresourceidentitywithoutvariable;common+rubic13requireentrypointcontrols.",
+      "node_scope": "ActualresolvedNodeSDKprobe retained resource-onlyname despitecodefallback,soNodecoderecipewasnotchanged;actualmergebehaviornotoverriddenwithuniversalenv/codeassumption.",
+      "test_scope": "SDKresource/realCLI pairedproofandnewmaintainedcontrols;notDockerexecutionorfullapplicationreceiptproof.",
+      "intermediate_failure": "FirstSDKhelperinCLIintroducedSDKdependencyonskipbranchesandfailed38guardtests; thatapproachremoved,214focusedcasesnowpass."
+    },
+    "development_75ffc_outcomes": {
+      "status": "Superseded;no cleancredit",
+      "output": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/real-workflow-pass-1-8grixsvl",
+      "stages_executed": 8,
+      "stages_required": 12,
+      "criteria_met": 109,
+      "criteria_executed": 112,
+      "criteria_required": 168,
+      "per_language": {
+        "java": [
+          14,
+          14,
+          14
+        ],
+        "python": [
+          14,
+          13,
+          null
+        ],
+        "go": [
+          14,
+          13,
+          null
+        ],
+        "node": [
+          13,
+          null,
+          null
+        ]
+      },
+      "independent_actual_app_checks_passed": 4,
+      "notes": "Javaactualselectedframeworkprivacyrepairand2independentappchecks passed; Pythonresource-onlylauncherprobe failed; NodeunsupportedSERVER-onlytargetfailed. Gogriter10rejectedcompletedfailureaccounting;unknowncountsnotautomaticallywrong,candidatekeptfailedandnewclarification/rubricpositivecontrolkeepslegitimateunknownsseparatefromknownresponse/retryoutcomes."
     }
   }
 }

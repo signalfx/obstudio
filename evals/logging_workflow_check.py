@@ -25,6 +25,15 @@ SKIP_DIRS = {".git", ".observe", ".venv", "node_modules", "target", "__pycache__
 SOURCE_SUFFIXES = {".py", ".go", ".js", ".mjs", ".cjs", ".java", ".json", ".toml", ".xml", ".sh", ".env", ".lock", ".mod", ".sum", ".properties", ".yaml", ".yml"}
 
 
+def configured_service_name() -> str:
+    from opentelemetry.sdk.resources import OTELResourceDetector
+
+    name = OTELResourceDetector().detect().attributes.get("service.name")
+    if not isinstance(name, str) or not name:
+        raise ValueError("Configure expected service identity through OTEL_SERVICE_NAME or OTEL_RESOURCE_ATTRIBUTES")
+    return name
+
+
 def source_hashes(root: Path) -> dict[str, str]:
     result = {}
     for directory, children, files in os.walk(root):
@@ -208,6 +217,8 @@ def main() -> int:
     drained = threading.Event()
     pump = None
     try:
+        expected_service_name = configured_service_name()
+        result["expected_service_name"] = expected_service_name
         with socket.socket() as probe:
             if probe.connect_ex(("127.0.0.1", port)) == 0:
                 raise RuntimeError("Application port already occupied; no existing process was stopped")
@@ -248,7 +259,7 @@ def main() -> int:
             logs = get_json(studio + "/api/query/logs?limit=10000")
             selected = []
             for record in logs:
-                if record.get("resource", {}).get("serviceName") != os.environ["OTEL_SERVICE_NAME"]:
+                if record.get("resource", {}).get("serviceName") != expected_service_name:
                     continue
                 timestamp = dt.datetime.fromisoformat(record["timeUnixNano"].replace("Z", "+00:00"))
                 if timestamp >= started:
@@ -257,7 +268,7 @@ def main() -> int:
             (output / "receiver-logs.json").write_text(json.dumps(selected, indent=2) + "\n")
             (output / "receiver-traces.json").write_text(json.dumps(details, indent=2) + "\n")
             try:
-                result["joins"] = validate_receipts(requests, selected, details, os.environ["OTEL_SERVICE_NAME"],
+                result["joins"] = validate_receipts(requests, selected, details, expected_service_name,
                                                      (output / "native-output.log").read_text())
                 break
             except (AssertionError, KeyError):

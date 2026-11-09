@@ -11,8 +11,28 @@ import time
 
 import pytest
 
-from logging_workflow_check import drain_output, local_url, source_hashes, stop_owned, validate_receipts
+from logging_workflow_check import configured_service_name, drain_output, local_url, source_hashes, stop_owned, validate_receipts
 from run_logging_workflow import bind_model_metadata
+
+
+@pytest.mark.parametrize("configuration,expected", [
+    ({"OTEL_SERVICE_NAME": "explicit-operator"}, "explicit-operator"),
+    ({"OTEL_RESOURCE_ATTRIBUTES": "service.name=resource%20operator"}, "resource operator"),
+    ({"OTEL_SERVICE_NAME": "explicit-operator", "OTEL_RESOURCE_ATTRIBUTES": "service.name=resource-operator"},
+     "explicit-operator"),
+    ({"OTEL_SERVICE_NAME": "", "OTEL_RESOURCE_ATTRIBUTES": "service.name=resource-operator"}, "resource-operator"),
+    ({}, None),
+])
+def test_configured_identity_uses_sdk_decoding_and_precedence(monkeypatch, configuration, expected):
+    for name in ("OTEL_SERVICE_NAME", "OTEL_RESOURCE_ATTRIBUTES"):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in configuration.items():
+        monkeypatch.setenv(name, value)
+    if expected is None:
+        with pytest.raises(ValueError, match="Configure expected service identity"):
+            configured_service_name()
+    else:
+        assert configured_service_name() == expected
 
 
 def receipts():

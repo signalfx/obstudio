@@ -551,6 +551,63 @@ sys.exit(int(os.environ.get("TEST_APP_EXIT", "0")))
     return launcher, app, {"PATH": str(fake_bin)}
 
 
+_RESOURCE_IDENTITY_CASES = [
+    ({"OTEL_RESOURCE_ATTRIBUTES": "service.name=resource%20operator,service.version=operator-version"},
+     "resource operator", "operator-version"),
+    ({"OTEL_RESOURCE_ATTRIBUTES": "service.name=resource-operator,service.version=operator-version",
+      "OTEL_SERVICE_NAME": "explicit-operator"}, "explicit-operator", "operator-version"),
+    ({}, "my-service", None),
+]
+
+
+@pytest.mark.parametrize("configuration,expected_name,expected_version", _RESOURCE_IDENTITY_CASES)
+def test_python_programmatic_resource_defaults_preserve_sdk_operator_values(
+    monkeypatch, configuration, expected_name, expected_version,
+) -> None:
+    from opentelemetry.sdk.resources import OTELResourceDetector, Resource
+
+    for key in ("OTEL_SERVICE_NAME", "OTEL_RESOURCE_ATTRIBUTES"):
+        monkeypatch.delenv(key, raising=False)
+    for key, value in configuration.items():
+        monkeypatch.setenv(key, value)
+    setup = _fenced_code_after(LANGUAGES / "python.md", "**File**: `otel_setup.py`", "python")
+    helper = next(node for node in ast.parse(setup).body
+                  if isinstance(node, ast.FunctionDef) and node.name == "_application_resource")
+    namespace = {"Resource": Resource, "OTELResourceDetector": OTELResourceDetector}
+    exec(compile(ast.Module(body=[helper], type_ignores=[]), "guide-resource", "exec"), namespace)
+    attributes = namespace["_application_resource"]().attributes
+    assert attributes["service.name"] == expected_name
+    assert attributes.get("service.version") == expected_version
+
+
+@pytest.mark.parametrize("configuration,expected_name,expected_version", _RESOURCE_IDENTITY_CASES)
+def test_python_real_cli_wrapper_preserves_operator_resource_identity(
+    tmp_path, configuration, expected_name, expected_version,
+) -> None:
+    launcher = tmp_path / "otel-entrypoint.sh"
+    _write_executable(launcher, _fenced_code_after(
+        LANGUAGES / "python.md", "## Auto-Instrumentation (CLI Wrapper)", "bash"
+    ))
+    app = tmp_path / "resource_app.py"
+    app.write_text(
+        "import json\nfrom opentelemetry.sdk.resources import Resource\n"
+        "print(json.dumps(dict(Resource.create().attributes)))\n", encoding="utf-8",
+    )
+    environment = {key: value for key, value in os.environ.items() if not key.startswith("OTEL_")}
+    environment.update(configuration, OTEL_SDK_DISABLED="true", OTEL_LOGS_EXPORTER="none",
+                       OTEL_TRACES_EXPORTER="none", OTEL_METRICS_EXPORTER="none",
+                       PATH=str(Path(sys.executable).parent) + os.pathsep + environment.get("PATH", os.defpath))
+    result = subprocess.run([str(launcher), sys.executable, str(app)], env=environment,
+                            text=True, capture_output=True, timeout=15)
+    assert result.returncode == 0, result.stderr
+    attributes = json.loads(result.stdout)
+    if configuration:
+        assert attributes["service.name"] == expected_name
+    else:
+        assert attributes["service.name"].startswith("unknown_service")
+    assert attributes.get("service.version") == expected_version
+
+
 _PYTHON_CLI_TRACE_METRIC_SETTINGS = {
     "OTEL_SERVICE_NAME": "python-cli-test",
     "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:55318/collector/v1/traces",
@@ -613,7 +670,8 @@ def test_python_cli_log_conflicts_preserve_app_trace_metric_and_profile(
     assert instrument["options"]["--logs_exporter"] == "none"
     assert instrument["options"]["--exporter_otlp_endpoint"] == config["OTEL_EXPORTER_OTLP_ENDPOINT"]
     assert instrument["options"]["--exporter_otlp_protocol"] == config["OTEL_EXPORTER_OTLP_PROTOCOL"]
-    assert instrument["options"]["--service_name"] == "python-cli-test"
+    assert "--service_name" not in instrument["options"]
+    assert "--resource_attributes" not in instrument["options"]
     assert instrument["env"] == {**config, "OTEL_PYTHON_LOG_AUTO_INSTRUMENTATION": "false"}
     assert result.stderr == "local OTLP log export skipped; check receiver, protocol and header configuration\n"
     assert "secret" not in result.stderr and "http" not in result.stderr
