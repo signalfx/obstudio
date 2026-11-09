@@ -20,6 +20,7 @@ interface TestContext {
 
 type ExtensionPackage = {
 	contributes?: {
+		chatSkills?: Array<{ path: string }>;
 		commands?: Array<{
 			category?: string;
 			command: string;
@@ -410,6 +411,41 @@ it('integration: VSIX contains extension host and top-level webview assets', { t
 				`VSIX should contain extension/dist/webview/${asset}`,
 			);
 		}
+		const manifest = JSON.parse(execFileSync('unzip', ['-p', vsixFile, 'extension/package.json'], {
+			encoding: 'utf8',
+		})) as ExtensionPackage;
+		assert.ok(manifest.contributes?.chatSkills?.length);
+		for (const skill of manifest.contributes.chatSkills) {
+			const archivePath = `extension/${skill.path.replace(/^\.\//, '')}`;
+			const skillName = path.basename(path.dirname(skill.path));
+			const canonicalPath = path.join(repoRoot, 'skills', skillName, 'SKILL.md');
+			const entrypoint = execFileSync('unzip', ['-p', vsixFile, archivePath], { encoding: 'utf8' });
+			assert.ok(entrypoint.includes(`./bundle/${skillName}/SKILL.md`));
+			assert.equal(
+				execFileSync('unzip', ['-p', vsixFile, `${path.posix.dirname(archivePath)}/bundle/${skillName}/SKILL.md`], { encoding: 'utf8' }),
+				fs.readFileSync(canonicalPath, 'utf8'),
+				`${archivePath} must match its canonical skill`,
+			);
+			for (const script of ['observe_report.py', 'observe_report_core.py', 'observe_report_html.py']) {
+				assert.equal(
+					execFileSync('unzip', ['-p', vsixFile, `${path.posix.dirname(archivePath)}/bundle/references/scripts/${script}`], { encoding: 'utf8' }),
+					fs.readFileSync(path.join(repoRoot, 'skills/references/scripts', script), 'utf8'),
+				);
+			}
+		}
+		for (const resource of [
+			'references/report-flow-contract.md',
+			'otel-instrument/references/languages/go.md',
+			'otel-audit/scripts/scan_python_otel_topology.py',
+			'splunk-dashboard/references/dashboard-templates.md',
+		]) {
+			assert.equal(
+				execFileSync('unzip', ['-p', vsixFile, `extension/dist/skills/${resource}`], { encoding: 'utf8' }),
+				fs.readFileSync(path.join(repoRoot, 'skills', resource), 'utf8'),
+			);
+		}
+		assert.ok(!unzipOutput.includes('/__pycache__/'));
+		assert.ok(!unzipOutput.includes('extension/dist/skills/otel-audit/tests/'));
 	} finally {
 		cleanup(context);
 	}
@@ -609,7 +645,8 @@ it('integration: binary serves client UI assets', { timeout: 180_000 }, async (t
 		const cssStatus = await new Promise<number>((resolve, reject) => {
 			http.get(`http://127.0.0.1:${port}/assets/main.css`, (res) => {
 				res.resume();
-				resolve(res.statusCode ?? 0);
+				res.on('end', () => resolve(res.statusCode ?? 0));
+				res.on('error', reject);
 			}).on('error', reject);
 		});
 		assert.equal(cssStatus, 200, '/assets/main.css should return 200 — client assets not embedded in binary');

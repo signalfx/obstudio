@@ -21,7 +21,7 @@
         <java.version>21</java.version>
         <jackson-bom.version>2.21.7</jackson-bom.version>
         <spring-kafka.version>3.3.16</spring-kafka.version>
-        <lz4.version>1.11.1</lz4.version>
+        <lz4.version>1.11.2</lz4.version>
     </properties>
 
     <dependencyManagement>

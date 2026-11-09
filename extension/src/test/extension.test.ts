@@ -1,4 +1,5 @@
 import * as assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as net from 'node:net';
 import * as os from 'node:os';
@@ -33,9 +34,8 @@ import {
 	auditReportPath,
 	auditReportUrl,
 	cloudBridgeActionRequiresLifecycleSerialization,
-	connectSplunkCloudWithStorage,
+	splunkSearchURLFromStatus,
 	freeAccountSubmissionFailureIsOutcomeUnknown,
-	forgetSplunkCloudWithStorage,
 	initializeCloudBridgeState,
 	initializeSplunkCloudStatus,
 	isSkillDocsId,
@@ -47,15 +47,7 @@ import {
 	skillDocsIds,
 	skillDocsUrl,
 	parseStoredSplunkCloudConnection,
-	restoreSplunkCloudConnectionFromStorage,
-	setSplunkCloudExportEnabledWithStorage,
-	SplunkCloudConnectionStore,
-	SplunkCloudExportPreferenceStore,
-	StoredSplunkCloudConnectionRejectedError,
-	StoredSplunkCloudConnectionVerificationUnavailableError,
-	shouldRestoreObserverAfterCloudMutationFailure,
-	verifyStoredSplunkCloudConnection,
-	writeSplunkCloudStatePair,
+	waitForO11yOAuthLoginOutcome,
 } from '../cloud-bridge';
 import {
 	collectObserverHostHTTPResponse,
@@ -74,13 +66,24 @@ import {
 } from '../observer-port-handoff';
 
 const extensionRoot = path.resolve(__dirname, '..', '..');
+
+test('Splunk Search consumes the backend Web URL and does not guess from HEC', () => {
+	const searchURL = 'https://stack.splunkcloud.com/en-US/app/search/search?q=search+index%3D%22studio%22';
+	assert.equal(splunkSearchURLFromStatus({ endpoint: 'https://http-inputs-stack.splunkcloud.com/services/collector', index: 'studio', searchURL }), searchURL);
+	for (const value of [undefined, {}, { endpoint: 'https://enterprise.example:8088/services/collector', index: 'studio' }, { searchURL: 'javascript:alert(1)' }, { searchURL: 'https://user:secret@example.com/' }, { searchURL: 'bad URL' }]) {
+		assert.equal(splunkSearchURLFromStatus(value), undefined);
+	}
+});
 const {
 	buildClientAssets,
+	bundleCopilotSkills,
 	getBuildPaths,
 	observerBuildArgs,
 	observerBuildVersion,
 	resetObserverOutputDirs,
+	stageSkills,
 } = require('../../build-observer.js') as {
+	bundleCopilotSkills: (paths: ReturnType<typeof getBuildPaths>) => void;
 	buildClientAssets: (
 		paths: ReturnType<typeof getBuildPaths>,
 		run?: (file: string, args: string[], options: { cwd: string; stdio: string }) => unknown,
@@ -97,6 +100,7 @@ const {
 			goos: string;
 		};
 		webviewOutDir: string;
+		skillsOutDir: string;
 	};
 	observerBuildArgs: (
 		paths: ReturnType<typeof getBuildPaths>,
@@ -104,6 +108,10 @@ const {
 	) => string[];
 	observerBuildVersion: (env?: NodeJS.ProcessEnv) => string;
 	resetObserverOutputDirs: (paths: ReturnType<typeof getBuildPaths>) => void;
+	stageSkills: (
+		paths: ReturnType<typeof getBuildPaths>,
+		run?: (file: string, args: string[], options: { cwd: string; stdio: string }) => unknown,
+	) => void;
 };
 function hostWeaverBinaryName(): string {
 	return process.platform === 'win32' ? 'weaver.exe' : 'weaver';
@@ -133,9 +141,16 @@ test('IDE host transport accepts only bounded known cloud requests', () => {
 	});
 	assert.equal(isObserverHostRequestEnvelope(cloudRequest('connect', {
 		accessToken: 'token_1234567890123456',
+		enabled: true,
 		expectedVersion,
 		realm: 'us0',
 	})), true);
+	assert.equal(isObserverHostRequestEnvelope(cloudRequest('connect', {
+		accessToken: '', enabled: true, expectedVersion, realm: 'us0', reuseSavedToken: true, preserveEnabled: true,
+	})), true);
+	assert.equal(isObserverHostRequestEnvelope(cloudRequest('connect', {
+		accessToken: 'token_1234567890123456', enabled: 'true', expectedVersion, realm: 'us0',
+	})), false);
 	assert.equal(isObserverHostRequestEnvelope(cloudRequest('connect', {
 		accessToken: 'é'.repeat(2048),
 		expectedVersion,
@@ -183,6 +198,10 @@ test('IDE host transport accepts only bounded known cloud requests', () => {
 	assert.equal(isObserverHostRequestEnvelope(cloudRequest('open-free-edition')), true);
 	assert.equal(isObserverHostRequestEnvelope(cloudRequest('open-free-edition-terms')), true);
 	assert.equal(isObserverHostRequestEnvelope(cloudRequest('open-ingest-token-help')), true);
+	for (const platform of ['darwin', 'windows', 'linux']) {
+		assert.equal(isObserverHostRequestEnvelope(cloudRequest('open-credential-storage-help', { platform })), true, platform);
+	}
+	assert.equal(isObserverHostRequestEnvelope(cloudRequest('open-credential-storage-help', {platform:'invalid'})), false);
 	assert.equal(isObserverHostRequestEnvelope(cloudRequest('open-realm-help')), true);
 	assert.equal(isObserverHostRequestEnvelope(cloudRequest('open-realm-help', {
 		destination: 'https://example.test',
@@ -601,55 +620,6 @@ test('observer cloud response parsing preserves non-JSON route errors for compat
 	);
 });
 
-test('Splunk Observability Studio rollback is skipped after authoritative cloud mutation rejections', () => {
-	for (const statusCode of [400, 401, 404, 409]) {
-		assert.equal(
-			shouldRestoreObserverAfterCloudMutationFailure(
-				new ObserverCloudResponseError(statusCode, 'request rejected'),
-			),
-			false,
-		);
-	}
-	assert.equal(
-		shouldRestoreObserverAfterCloudMutationFailure(
-			new ObserverCloudResponseError(500, 'uncertain server failure'),
-		),
-		true,
-	);
-	assert.equal(shouldRestoreObserverAfterCloudMutationFailure(new Error('connection reset')), true);
-});
-
-test('stored cloud restore never applies credentials after transient verification failures', async () => {
-	for (const statusCode of [502, 504]) {
-		const calls: string[] = [];
-		await assert.rejects(
-			() => verifyStoredSplunkCloudConnection(async () => {
-				calls.push('verify');
-				throw new ObserverCloudResponseError(statusCode, 'Splunk temporarily unavailable');
-			}),
-			(error: unknown) => error instanceof StoredSplunkCloudConnectionVerificationUnavailableError,
-		);
-		assert.deepEqual(calls, ['verify']);
-	}
-
-	for (const error of [
-		new ObserverCloudResponseError(400, 'invalid stored connection'),
-		new ObserverCloudResponseError(500, 'Splunk Observability Studio apply failed'),
-		new Error('Splunk Observability Studio transport failed'),
-	]) {
-		await assert.rejects(
-			() => verifyStoredSplunkCloudConnection(async () => { throw error; }),
-		);
-	}
-
-	await assert.rejects(
-		() => verifyStoredSplunkCloudConnection(
-			async () => { throw new ObserverCloudResponseError(401, 'Splunk token rejected'); },
-		),
-		(error: unknown) => error instanceof StoredSplunkCloudConnectionRejectedError,
-	);
-});
-
 test('IDE host transport restricts HTTP paths, cancellation, and telemetry commands', () => {
 	assert.equal(maxLocalObserverHostResponseBytes, 64 * 1024 * 1024);
 	assert.equal(maxRemoteObserverHostResponseBytes, 16 * 1024 * 1024);
@@ -670,10 +640,28 @@ test('IDE host transport restricts HTTP paths, cancellation, and telemetry comma
 		'/api/query/traces?service=checkout',
 		'/api/query/traces/0123456789abcdef0123456789abcdef',
 		'/api/splunk/export',
+		'/api/splunk/logs',
 	]) {
 		assert.equal(isAllowedObserverHostHTTPPath('GET', path), true, path);
 	}
 	assert.equal(isAllowedObserverHostHTTPPath('POST', '/api/validation/run'), true);
+	assert.equal(isAllowedObserverHostHTTPPath('GET', '/api/config'), true);
+	assert.equal(isAllowedObserverHostHTTPPath('POST', '/api/config'), true);
+	assert.equal(isAllowedObserverHostHTTPPath('GET', '/api/config/definitions'), true);
+	assert.equal(isAllowedObserverHostHTTPPath('GET', '/api/config/status'), true);
+	for (const [method, path] of [
+		['POST', '/api/config/definitions'],
+		['GET', '/api/config/telemetry'],
+		['POST', '/api/config/telemetry'],
+		['POST', '/api/config/status'],
+	] as const) {
+		assert.equal(isAllowedObserverHostHTTPPath(method, path), false, `${method} ${path}`);
+	}
+	assert.equal(isAllowedObserverHostHTTPPath('POST', '/api/splunk/logs'), true);
+	assert.equal(isAllowedObserverHostHTTPPath('POST', '/api/splunk/logs/enabled'), true);
+	assert.equal(isAllowedObserverHostHTTPPath('POST', '/api/splunk/logs/disconnect'), true);
+	assert.equal(isAllowedObserverHostHTTPPath('GET', '/api/splunk/logs/disconnect'), false);
+	assert.equal(isAllowedObserverHostHTTPPath('POST', '/api/splunk/logs/unknown'), false);
 	for (const path of [
 		'https://evil.example/api/health',
 		'//evil.example/api/health',
@@ -718,6 +706,82 @@ test('IDE host transport restricts HTTP paths, cancellation, and telemetry comma
 			requestId: 'request-123',
 			type: 'obstudio.host.request',
 		}), false, `${cimdAction} must not accept a realm payload`);
+	}
+	for (const method of ['PUT', 'PATCH']) {
+		assert.equal(isObserverHostRequestEnvelope({
+			request: { body: '{}', kind: 'http', method, path: '/api/config' },
+			requestId: 'request-123',
+			type: 'obstudio.host.request',
+		}), false, method);
+	}
+	assert.equal(isObserverHostRequestEnvelope({
+		request: { body: '{"telemetry":{"enabled":false}}', kind: 'http', method: 'POST', path: '/api/config' },
+		requestId: 'request-123',
+		type: 'obstudio.host.request',
+	}), true);
+	assert.equal(isObserverHostRequestEnvelope({
+		request: {
+			action: 'register-o11y-oauth',
+			kind: 'cloud',
+			payload: { adminToken: 'admin-token', expectedVersion: 'V'.repeat(43), realm: 'us0' },
+		},
+		requestId: 'request-123',
+		type: 'obstudio.host.request',
+	}), true);
+	assert.equal(isObserverHostRequestEnvelope({
+		request: { action: 'register-o11y-oauth', kind: 'cloud', payload: { adminToken: '', realm: 'us0' } },
+		requestId: 'request-123',
+		type: 'obstudio.host.request',
+	}), false, 'register-o11y-oauth must reject a blank admin token');
+	assert.equal(isObserverHostRequestEnvelope({
+		request: {
+			action: 'login-o11y-oauth',
+			kind: 'cloud',
+			payload: {
+				clientId: 'the-client-id',
+				clientSecret: 'the-client-secret',
+				expectedVersion: 'V'.repeat(43),
+				orgId: 'org-123',
+				realm: 'us0',
+			},
+		},
+		requestId: 'request-123',
+		type: 'obstudio.host.request',
+	}), true);
+	for (const missingField of ['clientId', 'clientSecret', 'orgId', 'realm']) {
+		const payload: Record<string, string> = {
+			clientId: 'the-client-id',
+			clientSecret: 'the-client-secret',
+			orgId: 'org-123',
+			realm: 'us0',
+		};
+		payload[missingField] = '';
+		assert.equal(isObserverHostRequestEnvelope({
+			request: { action: 'login-o11y-oauth', kind: 'cloud', payload },
+			requestId: 'request-123',
+			type: 'obstudio.host.request',
+		}), false, `login-o11y-oauth must reject a blank ${missingField}`);
+	}
+	for (const o11yOAuthAction of ['disconnect-o11y-oauth', 'get-o11y-oauth-session'] as const) {
+		assert.equal(isObserverHostRequestEnvelope({
+			request: { action: o11yOAuthAction, kind: 'cloud', payload: { expectedVersion: 'V'.repeat(43) } },
+			requestId: 'request-123',
+			type: 'obstudio.host.request',
+		}), true, o11yOAuthAction);
+		assert.equal(isObserverHostRequestEnvelope({
+			request: { action: o11yOAuthAction, kind: 'cloud' },
+			requestId: 'request-123',
+			type: 'obstudio.host.request',
+		}), true, `${o11yOAuthAction} must allow retry without an available state version`);
+		assert.equal(isObserverHostRequestEnvelope({
+			request: {
+				action: o11yOAuthAction,
+				kind: 'cloud',
+				payload: { expectedVersion: 'V'.repeat(43), realm: 'us0' },
+			},
+			requestId: 'request-123',
+			type: 'obstudio.host.request',
+		}), false, `${o11yOAuthAction} must not accept a realm payload`);
 	}
 });
 
@@ -821,6 +885,33 @@ test('IDE telemetry opens its WebSocket immediately and forwards live updates', 
 	]);
 	telemetry.dispose();
 	assert.equal(socket.closed, true);
+});
+
+test('IDE telemetry relays the config-changed notice and still drops unknown types', () => {
+	const posted: unknown[] = [];
+	const socket = new FakeObserverWebSocket();
+	const telemetry = new ObserverWebviewTelemetry(
+		'http://127.0.0.1:3000',
+		async (message) => {
+			posted.push(message);
+			return true;
+		},
+		() => undefined,
+		() => socket as unknown as WebSocket,
+	);
+	telemetry.handle('subscribe');
+	socket.readyState = WebSocket.OPEN;
+	socket.emit('open');
+	posted.length = 0;
+
+	socket.emit('message', Buffer.from('{"type":"config-changed"}'), false);
+	socket.emit('message', Buffer.from('{"type":"bogus"}'), false);
+	assert.deepEqual(posted, [
+		{ message: { type: 'config-changed' }, type: 'obstudio.host.telemetry-message' },
+	]);
+	const forwarded = (posted[0] as { message: Record<string, unknown> }).message;
+	assert.deepEqual(Object.keys(forwarded), ['type']);
+	telemetry.dispose();
 });
 
 test('IDE telemetry uses the same local and remote payload limits as HTTP snapshots', () => {
@@ -1178,6 +1269,10 @@ test('disabled CIMD initialization never reads optional session configuration', 
 			calls.push('cimd');
 			throw new Error('newly contributed setting is not registered yet');
 		},
+		readO11yOAuthSession: async () => {
+			calls.push('o11y-oauth');
+			throw new Error('must not be read');
+		},
 		readStatus: async () => {
 			calls.push('read');
 			return status;
@@ -1201,6 +1296,10 @@ test('disabled CIMD initialization falls back to stored status without reading a
 			calls.push('cimd');
 			throw new Error('must not be read');
 		},
+		readO11yOAuthSession: async () => {
+			calls.push('o11y-oauth');
+			throw new Error('must not be read');
+		},
 		readStatus: async () => {
 			calls.push('read');
 			return status;
@@ -1219,6 +1318,24 @@ test('disabled CIMD initialization falls back to stored status without reading a
 	});
 });
 
+test('initialization preserves uncertain migration recovery across authentication modes', async () => {
+	for (const registrationAndAuthProtocol of ['NONE', 'CIMD', 'O11Y_OAUTH'] as const) {
+		const status = { connected: false };
+		const result = await initializeCloudBridgeState({
+			registrationAndAuthProtocol,
+			readCimdSession: async () => ({ phase: 'disconnected' }),
+			readO11yOAuthSession: async () => ({ phase: 'disconnected' }),
+			readStatus: async () => status,
+			refreshStatus: async () => {
+				throw Object.assign(new Error('Migration outcome is unknown.'), { code: 'outcome_unknown', retrySafe: false });
+			},
+		});
+		assert.equal(result.status, status);
+		assert.equal(result.warningCode, 'outcome_unknown');
+		assert.equal(result.warning, 'Migration outcome is unknown.');
+	}
+});
+
 test('disabled CIMD initialization propagates fallback status errors', async () => {
 	const fallbackError = new Error('stored status failed');
 	let cimdReads = 0;
@@ -1229,6 +1346,7 @@ test('disabled CIMD initialization propagates fallback status errors', async () 
 				cimdReads += 1;
 				throw new Error('must not be read');
 			},
+			readO11yOAuthSession: async () => { throw new Error('must not be read'); },
 			readStatus: async () => { throw fallbackError; },
 			refreshStatus: async () => { throw new Error('refresh failed'); },
 		}),
@@ -1249,6 +1367,7 @@ test('enabled CIMD initialization reads Cloud and session state concurrently', a
 			calls.push('cimd');
 			return session;
 		},
+		readO11yOAuthSession: async () => { throw new Error('must not be read'); },
 		readStatus: async () => {
 			calls.push('read');
 			return { connected: false };
@@ -1282,6 +1401,7 @@ test('enabled CIMD initialization retries only a failed session load', async () 
 			}
 			return { subject: 'user-123' };
 		},
+		readO11yOAuthSession: async () => { throw new Error('must not be read'); },
 		readStatus: async () => {
 			fallbackReads += 1;
 			return status;
@@ -1307,6 +1427,7 @@ test('enabled CIMD initialization preserves a session when Cloud refresh falls b
 			sessionReads += 1;
 			return { subject: 'user-123' };
 		},
+		readO11yOAuthSession: async () => { throw new Error('must not be read'); },
 		readStatus: async () => ({ connected: false }),
 		refreshStatus: async () => { throw new Error('refresh failed'); },
 	});
@@ -1335,6 +1456,7 @@ test('enabled CIMD initialization waits for the original refresh before retrying
 			}
 			return { subject: 'user-123' };
 		},
+		readO11yOAuthSession: async () => { throw new Error('must not be read'); },
 		readStatus: async () => {
 			fallbackStatusReads += 1;
 			return { connected: false };
@@ -1370,6 +1492,7 @@ test('enabled CIMD initialization still rejects when fallback session loading fa
 				sessionReads += 1;
 				throw new Error('CIMD failed');
 			},
+			readO11yOAuthSession: async () => { throw new Error('must not be read'); },
 			readStatus: async () => ({ connected: false }),
 			refreshStatus: async () => ({ connected: true }),
 		}),
@@ -1378,12 +1501,72 @@ test('enabled CIMD initialization still rejects when fallback session loading fa
 	assert.equal(sessionReads, 2);
 });
 
+test('enabled O11Y_OAUTH initialization reads Cloud and session state concurrently', async () => {
+	const calls: string[] = [];
+	let resolveRefresh!: (value: unknown) => void;
+	let resolveSession!: (value: { phase: string }) => void;
+	const refresh = new Promise<unknown>((resolve) => { resolveRefresh = resolve; });
+	const session = new Promise<{ phase: string }>((resolve) => { resolveSession = resolve; });
+	const initialization = initializeCloudBridgeState({
+		registrationAndAuthProtocol: 'O11Y_OAUTH',
+		readCimdSession: async () => { throw new Error('must not be read'); },
+		readO11yOAuthSession: () => {
+			calls.push('o11y-oauth');
+			return session;
+		},
+		readStatus: async () => {
+			calls.push('read');
+			return { connected: false };
+		},
+		refreshStatus: () => {
+			calls.push('refresh');
+			return refresh;
+		},
+	});
+
+	assert.deepEqual(calls, ['refresh', 'o11y-oauth']);
+	resolveSession({ phase: 'connected' });
+	resolveRefresh({ connected: true });
+	assert.deepEqual(await initialization, {
+		registrationAndAuthProtocol: 'O11Y_OAUTH',
+		o11yOAuthSession: { phase: 'connected' },
+		status: { connected: true },
+	});
+});
+
+test('O11Y_OAUTH initialization falls back to stored status when the session read fails', async () => {
+	const status = { connected: false };
+	let sessionReads = 0;
+	const result = await initializeCloudBridgeState({
+		registrationAndAuthProtocol: 'O11Y_OAUTH',
+		readCimdSession: async () => { throw new Error('must not be read'); },
+		readO11yOAuthSession: async () => {
+			sessionReads += 1;
+			if (sessionReads === 1) {
+				throw new Error('transient O11Y_OAUTH read failure');
+			}
+			return { phase: 'disconnected' };
+		},
+		readStatus: async () => status,
+		refreshStatus: async () => status,
+	});
+
+	assert.equal(sessionReads, 2);
+	assert.deepEqual(result, {
+		registrationAndAuthProtocol: 'O11Y_OAUTH',
+		o11yOAuthSession: { phase: 'disconnected' },
+		status,
+		warning: 'transient O11Y_OAUTH read failure',
+	});
+});
+
 test('enabled CIMD initialization lets fallback status errors win over session warnings', async () => {
 	const fallbackError = new Error('stored status failed');
 	await assert.rejects(
 		initializeCloudBridgeState({
 			registrationAndAuthProtocol: 'CIMD',
 			readCimdSession: async () => { throw new Error('CIMD failed'); },
+			readO11yOAuthSession: async () => { throw new Error('must not be read'); },
 			readStatus: async () => { throw fallbackError; },
 			refreshStatus: async () => { throw new Error('refresh failed'); },
 		}),
@@ -1391,136 +1574,76 @@ test('enabled CIMD initialization lets fallback status errors win over session w
 	);
 });
 
-test('extension treats shared Splunk Observability Studio cloud initialization as read-only', () => {
-	const extensionSourcePath = path.join(extensionRoot, 'src', 'extension.ts');
-	const source = fs.readFileSync(extensionSourcePath, 'utf-8');
-
-	assert.match(
-		source,
-		/const\s+usesSharedObserver\s*=\s*observerUsesSharedServer;[\s\S]*?refresh:\s*\(\)\s*=>\s*initializeSplunkCloudStatus\(\{[\s\S]*?isManagedObserver:\s*!usesSharedObserver,[\s\S]*?readStatus:\s*\(\)\s*=>\s*getObserverCloudJSON\('\/api\/splunk\/export'\),[\s\S]*?refreshManagedStatus:\s*\(\)\s*=>\s*refreshObserverCloudStatus\(\)/,
-	);
+test('O11y OAuth login polling resolves immediately on a connected session', async () => {
+	const delays: number[] = [];
+	const result = await waitForO11yOAuthLoginOutcome({
+		delay: async (ms) => { delays.push(ms); },
+		intervalMs: 1_500,
+		isCancelled: () => false,
+		readSession: async () => ({ phase: 'connected' }),
+	});
+	assert.deepEqual(result, { phase: 'connected' });
+	assert.deepEqual(delays, []);
 });
 
-test('cloud export preference survives managed observer restarts', async () => {
-	const stored = {
-		accessToken: 'token_1234567890123456',
-		realm: 'us0',
-	};
-	const refreshed = cloudStatus(false, false, false, 'R'.repeat(43));
-	const configured = cloudStatus(true, false, true, 'C'.repeat(43));
-	const enabled = cloudStatus(true, true, true, 'E'.repeat(43));
-	const calls: Array<[string, unknown?]> = [];
+test('O11y OAuth login polling resolves immediately on an error session', async () => {
+	const result = await waitForO11yOAuthLoginOutcome({
+		delay: async () => { throw new Error('must not delay'); },
+		intervalMs: 1_500,
+		isCancelled: () => false,
+		readSession: async () => ({ error: 'access_denied', phase: 'error' }),
+	});
+	assert.deepEqual(result, { error: 'access_denied', phase: 'error' });
+});
 
-	const result = await restoreSplunkCloudConnectionFromStorage({
-		configure: async (connection, expectedVersion) => {
-			calls.push(['configure', { connection, expectedVersion }]);
-			return configured;
-		},
-		readConnection: async () => {
-			calls.push(['readConnection']);
-			return stored;
-		},
-		readExportEnabled: () => {
-			calls.push(['readExportEnabled']);
-			return true;
-		},
-		refresh: async () => {
-			calls.push(['refresh']);
-			return refreshed;
-		},
-		restoreStoredConnection: true,
-		setEnabled: async (value, expectedVersion) => {
-			calls.push(['setEnabled', { expectedVersion, value }]);
-			return enabled;
+test('O11y OAuth login polling treats a disconnected session as terminal', async () => {
+	// Cancelling a sign-in posts a disconnect request that flips the backend to
+	// 'disconnected' -- the loop must notice that on its own, not only via isCancelled(),
+	// so a disconnect that lands before the extension's own cancellation flag is read
+	// still ends the wait rather than looping on a phase it will never treat as pending.
+	const result = await waitForO11yOAuthLoginOutcome({
+		delay: async () => { throw new Error('must not delay'); },
+		intervalMs: 1_500,
+		isCancelled: () => false,
+		readSession: async () => ({ phase: 'disconnected' }),
+	});
+	assert.deepEqual(result, { phase: 'disconnected' });
+});
+
+test('O11y OAuth login polling stops as soon as isCancelled becomes true, even mid-pending', async () => {
+	let cancelled = false;
+	let reads = 0;
+	const result = await waitForO11yOAuthLoginOutcome({
+		delay: async () => { cancelled = true; },
+		intervalMs: 1_500,
+		isCancelled: () => cancelled,
+		readSession: async () => {
+			reads += 1;
+			return { phase: 'pending' };
 		},
 	});
-
-	assert.equal(result, enabled);
-	assert.deepEqual(calls, [
-		['refresh'],
-		['readConnection'],
-		['configure', { connection: stored, expectedVersion: 'R'.repeat(43) }],
-		['readExportEnabled'],
-		['setEnabled', { expectedVersion: 'C'.repeat(43), value: true }],
-	]);
+	assert.deepEqual(result, { phase: 'pending' });
+	// One read observes 'pending' and delays (flipping `cancelled`); the next read's
+	// result is still 'pending', but isCancelled() now short-circuits the loop before a
+	// third read or delay happens.
+	assert.equal(reads, 2);
 });
 
-test('transient stored verification failure leaves the managed Splunk Observability Studio disconnected', async () => {
-	const disconnected = cloudStatus(false, false, false);
-	let setEnabledCalled = false;
-
-	await assert.rejects(
-		() => restoreSplunkCloudConnectionFromStorage({
-			configure: () => verifyStoredSplunkCloudConnection(async () => {
-				throw new ObserverCloudResponseError(502, 'Splunk temporarily unavailable');
-			}),
-			readConnection: async () => ({
-				accessToken: 'stored_token_123456789',
-				realm: 'us1',
-			}),
-			readExportEnabled: () => true,
-			refresh: async () => disconnected,
-			restoreStoredConnection: true,
-			setEnabled: async () => {
-				setEnabledCalled = true;
-				return cloudStatus(true, true, true);
-			},
-		}),
-		(error: unknown) => error instanceof StoredSplunkCloudConnectionVerificationUnavailableError,
-	);
-	assert.equal(setEnabledCalled, false);
-});
-
-test('cloud export restore skips local storage when observer is already configured', async () => {
-	const refreshed = cloudStatus(true, false, true);
-	let readConnection = false;
-
-	const result = await restoreSplunkCloudConnectionFromStorage({
-		configure: async () => {
-			throw new Error('configure should not be called');
-		},
-		readConnection: async () => {
-			readConnection = true;
-			return undefined;
-		},
-		readExportEnabled: () => {
-			throw new Error('readExportEnabled should not be called');
-		},
-		refresh: async () => refreshed,
-		restoreStoredConnection: true,
-		setEnabled: async () => {
-			throw new Error('setEnabled should not be called');
+test('O11y OAuth login polling keeps polling on an interval while pending', async () => {
+	const delays: number[] = [];
+	let reads = 0;
+	const result = await waitForO11yOAuthLoginOutcome({
+		delay: async (ms) => { delays.push(ms); },
+		intervalMs: 1_500,
+		isCancelled: () => false,
+		readSession: async () => {
+			reads += 1;
+			return reads < 3 ? { phase: 'pending' } : { phase: 'connected' };
 		},
 	});
-
-	assert.equal(result, refreshed);
-	assert.equal(readConnection, false);
-});
-
-test('shared Splunk Observability Studio initialization never restores this profile\'s stored cloud connection', async () => {
-	const refreshed = cloudStatus(false, false, false);
-	let readConnection = false;
-
-	const result = await restoreSplunkCloudConnectionFromStorage({
-		configure: async () => {
-			throw new Error('shared Splunk Observability Studio should not be configured automatically');
-		},
-		readConnection: async () => {
-			readConnection = true;
-			return { accessToken: 'private_profile_token', realm: 'us1' };
-		},
-		readExportEnabled: () => {
-			throw new Error('shared Splunk Observability Studio preference should not be read');
-		},
-		refresh: async () => refreshed,
-		restoreStoredConnection: false,
-		setEnabled: async () => {
-			throw new Error('shared Splunk Observability Studio preference should not be applied');
-		},
-	});
-
-	assert.equal(result, refreshed);
-	assert.equal(readConnection, false);
+	assert.deepEqual(result, { phase: 'connected' });
+	assert.equal(reads, 3);
+	assert.deepEqual(delays, [1_500, 1_500]);
 });
 
 test('shared Splunk Observability Studio initialization reads cloud status without mutating its configuration', async () => {
@@ -1563,421 +1686,6 @@ test('managed Splunk Observability Studio initialization refreshes its owned clo
 	assert.deepEqual(calls, ['refresh']);
 });
 
-test('late cloud preference writes repair the newest value before settling', async () => {
-	const store = new SplunkCloudExportPreferenceStore();
-	let persisted: boolean | undefined;
-	let releaseFirst: (() => void) | undefined;
-	let markFirstStarted: (() => void) | undefined;
-	const firstStarted = new Promise<void>((resolve) => {
-		markFirstStarted = resolve;
-	});
-	const writes: Array<boolean | undefined> = [];
-	const first = store.write(true, async (value) => {
-		writes.push(value);
-		if (writes.length === 1) {
-			markFirstStarted?.();
-			await new Promise<void>((resolve) => {
-				releaseFirst = resolve;
-			});
-		}
-		persisted = value;
-	});
-
-	await firstStarted;
-	assert.equal(store.read(() => false), true);
-	await store.write(false, async (value) => {
-		writes.push(value);
-		persisted = value;
-	});
-	assert.equal(persisted, false);
-
-	releaseFirst?.();
-	await first;
-	assert.equal(persisted, false);
-	assert.deepEqual(writes, [true, false, false]);
-
-	await store.write(undefined, async (value) => {
-		persisted = value;
-	});
-	assert.equal(store.read(() => true), undefined);
-	assert.equal(persisted, undefined);
-});
-
-test('late cloud keychain writes repair the newest credential before settling', async () => {
-	const store = new SplunkCloudConnectionStore();
-	let persisted: string | undefined;
-	let releaseFirst: (() => void) | undefined;
-	let markFirstStarted: (() => void) | undefined;
-	const firstStarted = new Promise<void>((resolve) => {
-		markFirstStarted = resolve;
-	});
-	const writes: Array<string | undefined> = [];
-	const first = store.write('older', async (value) => {
-		writes.push(value);
-		if (writes.length === 1) {
-			markFirstStarted?.();
-			await new Promise<void>((resolve) => {
-				releaseFirst = resolve;
-			});
-		}
-		persisted = value;
-	});
-
-	await firstStarted;
-	assert.equal(await store.read(async () => 'durable'), 'older');
-	await store.write('newer', async (value) => {
-		writes.push(value);
-		persisted = value;
-	});
-	releaseFirst?.();
-	await first;
-	assert.equal(persisted, 'newer');
-	assert.deepEqual(writes, ['older', 'newer', 'newer']);
-});
-
-test('rejected cloud preference writes fall back to durable state', async () => {
-	const store = new SplunkCloudExportPreferenceStore();
-	const failure = new Error('state write failed');
-	await assert.rejects(
-		store.write(true, async () => {
-			throw failure;
-		}),
-		(error: unknown) => error === failure,
-	);
-	assert.equal(store.read(() => false), false);
-
-	await store.write(true, async () => undefined);
-	assert.equal(store.read(() => false), true);
-});
-
-test('a late writer does not retry a newer rejected preference', async () => {
-	const store = new SplunkCloudExportPreferenceStore();
-	let persisted: boolean | undefined;
-	let releaseFirst: (() => void) | undefined;
-	let markFirstStarted: (() => void) | undefined;
-	const firstStarted = new Promise<void>((resolve) => {
-		markFirstStarted = resolve;
-	});
-	const writes: Array<boolean | undefined> = [];
-	const first = store.write(true, async (value) => {
-		writes.push(value);
-		markFirstStarted?.();
-		await new Promise<void>((resolve) => {
-			releaseFirst = resolve;
-		});
-		persisted = value;
-	});
-
-	await firstStarted;
-	await assert.rejects(
-		store.write(false, async (value) => {
-			writes.push(value);
-			throw new Error('newer write failed');
-		}),
-		/newer write failed/,
-	);
-	releaseFirst?.();
-	await first;
-
-	assert.deepEqual(writes, [true, false]);
-	assert.equal(persisted, true);
-	assert.equal(store.read(() => persisted), true);
-});
-
-test('cloud connect stores credentials before mutating Splunk Observability Studio', async () => {
-	const previous = { connectionValue: 'previous', exportEnabled: true };
-	const status = cloudStatus(true, false, true);
-	const rollbackToken = 'R'.repeat(43);
-	const calls: string[] = [];
-	const result = await connectSplunkCloudWithStorage({
-		configureObserver: async () => {
-			calls.push('configureObserver');
-			return { ...status, rollbackToken };
-		},
-		readStoredState: async () => {
-			calls.push('readStoredState');
-			return previous;
-		},
-		rollbackObserver: async () => {
-			throw new Error('rollbackObserver should not be called');
-		},
-		rollbackToken,
-		restoreStoredState: async () => {
-			throw new Error('restoreStoredState should not be called');
-		},
-		storeConnectedState: async () => {
-			calls.push('storeConnectedState');
-		},
-	});
-	assert.deepEqual(result, status);
-	assert.equal(Object.prototype.hasOwnProperty.call(result, 'rollbackToken'), false);
-	assert.deepEqual(calls, ['readStoredState', 'storeConnectedState', 'configureObserver']);
-});
-
-test('cloud connect restores storage without touching Splunk Observability Studio when secure storage fails', async () => {
-	const previous = { connectionValue: 'previous', exportEnabled: true };
-	const calls: string[] = [];
-	await assert.rejects(
-		() => connectSplunkCloudWithStorage({
-			configureObserver: async () => {
-				calls.push('configureObserver');
-				return cloudStatus(true, false, true);
-			},
-			readStoredState: async () => {
-				calls.push('readStoredState');
-				return previous;
-			},
-			rollbackObserver: async () => {
-				calls.push('rollbackObserver');
-			},
-			rollbackToken: 'R'.repeat(43),
-			restoreStoredState: async (state) => {
-				assert.deepEqual(state, previous);
-				calls.push('restoreStoredState');
-			},
-			storeConnectedState: async () => {
-				calls.push('storeConnectedState');
-				throw new Error('keychain unavailable');
-			},
-		}),
-		/Could not store the cloud key securely: keychain unavailable/,
-	);
-	assert.deepEqual(calls, ['readStoredState', 'storeConnectedState', 'restoreStoredState']);
-});
-
-test('cloud connect restores both durable and Splunk Observability Studio state after an uncertain mutation', async () => {
-	const configureFailure = new Error('connection reset after request upload');
-	const rollbackToken = 'R'.repeat(43);
-	const previous = { connectionValue: 'previous', exportEnabled: true };
-	const calls: string[] = [];
-
-	await assert.rejects(
-		() => connectSplunkCloudWithStorage({
-			configureObserver: async () => {
-				calls.push('configureObserver');
-				throw configureFailure;
-			},
-			readStoredState: async () => {
-				calls.push('readStoredState');
-				return previous;
-			},
-			rollbackObserver: async (token) => {
-				assert.equal(token, rollbackToken);
-				calls.push('rollbackObserver');
-			},
-			rollbackToken,
-			restoreStoredState: async (state) => {
-				assert.deepEqual(state, previous);
-				calls.push('restoreStoredState');
-			},
-			storeConnectedState: async () => {
-				calls.push('storeConnectedState');
-			},
-		}),
-		(error: unknown) => error === configureFailure,
-	);
-	assert.deepEqual(calls, [
-		'readStoredState',
-		'storeConnectedState',
-		'configureObserver',
-		'restoreStoredState',
-		'rollbackObserver',
-	]);
-});
-
-test('cloud connect does not roll back an authoritative configure rejection', async () => {
-	const rejection = new ObserverCloudResponseError(401, 'access token rejected');
-	let rollbackCalled = false;
-
-	await assert.rejects(
-		() => connectSplunkCloudWithStorage({
-			configureObserver: async () => {
-				throw rejection;
-			},
-			readStoredState: async () => ({ connectionValue: 'previous', exportEnabled: true }),
-			rollbackObserver: async () => {
-				rollbackCalled = true;
-			},
-			rollbackToken: 'R'.repeat(43),
-			restoreStoredState: async () => undefined,
-			storeConnectedState: async () => undefined,
-		}),
-		(error: unknown) => error === rejection,
-	);
-	assert.equal(rollbackCalled, false);
-});
-
-test('cloud connect leaves newer Splunk Observability Studio state intact when uncertain rollback conflicts', async () => {
-	const configureFailure = new Error('request timed out after upload');
-
-	await assert.rejects(
-		() => connectSplunkCloudWithStorage({
-			configureObserver: async () => {
-				throw configureFailure;
-			},
-			readStoredState: async () => ({ connectionValue: 'previous', exportEnabled: true }),
-			rollbackObserver: async () => {
-				throw new ObserverCloudResponseError(409, 'rollback capability is no longer valid');
-			},
-			rollbackToken: 'R'.repeat(43),
-			restoreStoredState: async () => undefined,
-			storeConnectedState: async () => undefined,
-		}),
-		(error: unknown) => error === configureFailure,
-	);
-});
-
-test('cloud export enable rolls local state back without rewriting Splunk Observability Studio after a 4xx rejection', async () => {
-	const previous = { connectionValue: 'stored', exportEnabled: false };
-	const rejection = new ObserverCloudResponseError(409, 'request rejected');
-	const calls: string[] = [];
-	await assert.rejects(
-		() => setSplunkCloudExportEnabledWithStorage({
-			enabled: true,
-			readStoredState: async () => {
-				calls.push('readStoredState');
-				return previous;
-			},
-			rollbackObserver: async () => {
-				throw new Error('authoritative rejection must not roll back Splunk Observability Studio state');
-			},
-			rollbackToken: 'R'.repeat(43),
-			restoreStoredExportEnabled: async (enabled) => {
-				assert.equal(enabled, false);
-				calls.push('restoreStoredExportEnabled');
-			},
-			setObserverEnabled: async () => {
-				calls.push('setObserverEnabled');
-				throw rejection;
-			},
-			storeExportEnabled: async (enabled) => {
-				assert.equal(enabled, true);
-				calls.push('storeExportEnabled');
-			},
-		}),
-		(error: unknown) => error === rejection,
-	);
-	assert.deepEqual(calls, [
-		'readStoredState',
-		'storeExportEnabled',
-		'setObserverEnabled',
-		'restoreStoredExportEnabled',
-	]);
-});
-
-test('cloud export enable uses its scoped Splunk Observability Studio rollback after an uncertain server failure', async () => {
-	const previous = { connectionValue: 'stored', exportEnabled: false };
-	const failure = new ObserverCloudResponseError(500, 'server failed');
-	const calls: string[] = [];
-	await assert.rejects(
-		() => setSplunkCloudExportEnabledWithStorage({
-			enabled: true,
-			readStoredState: async () => previous,
-			rollbackObserver: async (token) => {
-				assert.equal(token, 'R'.repeat(43));
-				calls.push('rollbackObserver');
-			},
-			rollbackToken: 'R'.repeat(43),
-			restoreStoredExportEnabled: async () => {
-				calls.push('restoreStoredExportEnabled');
-			},
-			setObserverEnabled: async () => {
-				throw failure;
-			},
-			storeExportEnabled: async () => {
-				calls.push('storeExportEnabled');
-			},
-		}),
-		(error: unknown) => error === failure,
-	);
-	assert.deepEqual(calls, [
-		'storeExportEnabled',
-		'restoreStoredExportEnabled',
-		'rollbackObserver',
-	]);
-});
-
-test('cloud forget uses its scoped Splunk Observability Studio rollback after an uncertain failure', async () => {
-	const previous = { connectionValue: 'stored', exportEnabled: true };
-	const failure = new ObserverCloudResponseError(500, 'server failed');
-	const calls: string[] = [];
-	await assert.rejects(
-		() => forgetSplunkCloudWithStorage({
-			clearStoredState: async () => {
-				calls.push('clearStoredState');
-			},
-			forgetObserver: async () => {
-				calls.push('forgetObserver');
-				throw failure;
-			},
-			readStoredState: async () => {
-				calls.push('readStoredState');
-				return previous;
-			},
-			rollbackObserver: async (token) => {
-				assert.equal(token, 'R'.repeat(43));
-				calls.push('rollbackObserver');
-			},
-			rollbackToken: 'R'.repeat(43),
-			restoreStoredState: async (state) => {
-				assert.deepEqual(state, previous);
-				calls.push('restoreStoredState');
-			},
-		}),
-		(error: unknown) => error === failure,
-	);
-	assert.deepEqual(calls, [
-		'readStoredState',
-		'clearStoredState',
-		'forgetObserver',
-		'restoreStoredState',
-		'rollbackObserver',
-	]);
-});
-
-test('cloud export recovery does not overwrite a newer Splunk Observability Studio winner', async () => {
-	const failure = new Error('connection reset');
-	await assert.rejects(
-		() => setSplunkCloudExportEnabledWithStorage({
-			enabled: true,
-			readStoredState: async () => ({ connectionValue: 'stored', exportEnabled: false }),
-			rollbackObserver: async () => {
-				throw new ObserverCloudResponseError(409, 'rollback capability is no longer valid');
-			},
-			rollbackToken: 'R'.repeat(43),
-			restoreStoredExportEnabled: async () => undefined,
-			setObserverEnabled: async () => {
-				throw failure;
-			},
-			storeExportEnabled: async () => undefined,
-		}),
-		(error: unknown) => error === failure,
-	);
-});
-
-test('cloud mutation helpers keep rollback capabilities inside the extension host', async () => {
-	const status = cloudStatus(true, true, true);
-	const enabled = await setSplunkCloudExportEnabledWithStorage({
-		enabled: true,
-		readStoredState: async () => ({ connectionValue: 'stored', exportEnabled: false }),
-		rollbackObserver: async () => undefined,
-		rollbackToken: 'R'.repeat(43),
-		restoreStoredExportEnabled: async () => undefined,
-		setObserverEnabled: async () => ({ ...status, rollbackToken: 'R'.repeat(43) }),
-		storeExportEnabled: async () => undefined,
-	});
-	const forgotten = await forgetSplunkCloudWithStorage({
-		clearStoredState: async () => undefined,
-		forgetObserver: async () => ({ ...status, rollbackToken: 'R'.repeat(43) }),
-		readStoredState: async () => ({ connectionValue: 'stored', exportEnabled: true }),
-		rollbackObserver: async () => undefined,
-		rollbackToken: 'R'.repeat(43),
-		restoreStoredState: async () => undefined,
-	});
-	assert.equal(Object.prototype.hasOwnProperty.call(enabled, 'rollbackToken'), false);
-	assert.equal(Object.prototype.hasOwnProperty.call(forgotten, 'rollbackToken'), false);
-});
-
 function cloudStatus(
 	connected: boolean,
 	enabled: boolean,
@@ -1993,21 +1701,6 @@ function cloudStatus(
 	};
 }
 
-function cloudConfiguration(
-	connected: boolean,
-	enabled: boolean,
-	accessToken?: string,
-	realm?: string,
-	changed = true,
-) {
-	return {
-		...(connected ? { accessToken, realm } : {}),
-		changed,
-		connected,
-		enabled,
-		version: 'V'.repeat(43),
-	};
-}
 
 test('extension unload paths stop only the extension-owned Splunk Observability Studio process', () => {
 	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf-8');
@@ -2743,6 +2436,135 @@ test('resetObserverOutputDirs recreates observer and webview output directories'
 	});
 });
 
+test('stageSkills bundles the embedded runtime tree with sibling resources and removes stale skills', () => {
+	const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-build-skills-'));
+	try {
+		const paths = getBuildPaths(path.join(repoRoot, 'extension'));
+		const stagedRoot = path.join(paths.observerRoot, 'cmd', 'obstudio', '_skills');
+		const resources = [
+			'otel-audit/SKILL.md',
+			'otel-audit/scripts/scan.py',
+			'otel-instrument/references/languages/go.md',
+			'references/report-flow-contract.md',
+		];
+		const calls: string[][] = [];
+		fs.mkdirSync(paths.skillsOutDir, { recursive: true });
+		fs.writeFileSync(path.join(paths.skillsOutDir, 'retired.md'), 'stale');
+		stageSkills(paths, (file, args, options) => {
+			calls.push([file, ...args]);
+			assert.equal(options.cwd, paths.observerRoot);
+			for (const resource of resources) {
+				const target = path.join(stagedRoot, resource);
+				fs.mkdirSync(path.dirname(target), { recursive: true });
+				fs.writeFileSync(target, resource);
+			}
+		});
+		assert.deepEqual(calls, [['go', 'run', './cmd/stage-skills']]);
+		for (const resource of resources) {
+			assert.equal(fs.readFileSync(path.join(paths.skillsOutDir, resource), 'utf8'), resource);
+		}
+		assert.equal(fs.existsSync(path.join(paths.skillsOutDir, 'retired.md')), false);
+		assert.throws(() => stageSkills(paths, () => {
+			throw new Error('skill staging failed');
+		}), /skill staging failed/);
+	} finally {
+		fs.rmSync(repoRoot, { recursive: true, force: true });
+	}
+});
+
+test('each synchronized Copilot skill retains executable report helpers without sibling directories', async () => {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-synced-skills-'));
+	try {
+		const paths = getBuildPaths(path.join(root, 'extension'));
+		fs.cpSync(path.resolve(extensionRoot, '..', 'skills'), paths.skillsOutDir, {
+			recursive: true,
+			filter: (source) => !['tests', 'evals', '__pycache__'].includes(path.basename(source)),
+		});
+		bundleCopilotSkills(paths);
+		const python = process.env.OBSTUDIO_TEST_PYTHON || 'python3';
+		const reportRoot = path.join(root, '.observe');
+		fs.mkdirSync(reportRoot);
+		const audit = path.join(reportRoot, 'otel-audit.json');
+		execFileSync(python, ['-I', '-c', [
+			'import json, runpy, sys',
+			'from pathlib import Path',
+			'fixtures = runpy.run_path(sys.argv[1])',
+			'Path(sys.argv[2]).write_text(json.dumps(fixtures["sample_report"]()))',
+		].join('\n'), path.resolve(extensionRoot, '..', 'skills/references/tests/observe_report_fixtures.py'), audit]);
+		for (const name of ['otel-audit', 'otel-instrument', 'otel-verify']) {
+			const isolated = path.join(root, 'synced', name);
+			fs.cpSync(path.join(root, 'extension', 'dist', 'copilot-skills', name), isolated, { recursive: true });
+			const canonical = path.join(isolated, 'bundle', name);
+			assert.equal(
+				fs.readFileSync(path.join(canonical, 'SKILL.md'), 'utf8'),
+				fs.readFileSync(path.resolve(extensionRoot, '..', 'skills', name, 'SKILL.md'), 'utf8'),
+			);
+			for (const command of ['select', 'validate-flow', 'render-instrumentation-html']) {
+				const output = execFileSync(python, [
+					'-I', path.join(canonical, 'scripts', 'observe_report.py'), command, '--help',
+				], { cwd: root, encoding: 'utf8' });
+				const plainOutput = output.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '');
+				assert.match(plainOutput, /usage: observe_report\.py/);
+			}
+			const launcher = path.join(canonical, 'scripts', 'observe_report.py');
+			const selection = path.join(isolated, 'otel-selection.json');
+			execFileSync(python, ['-I', launcher, 'select', audit, '--ids', 'OTEL-001', '-o', selection], {
+				cwd: root, encoding: 'utf8',
+			});
+			const flow = execFileSync(python, [
+				'-I', launcher, 'validate-flow', audit, '--selection-json', selection,
+			], { cwd: root, encoding: 'utf8' });
+			assert.match(flow, /PASS: audit -> selection/);
+			assert.deepEqual(JSON.parse(fs.readFileSync(selection, 'utf8')).approved_ids, ['OTEL-001']);
+			if (name === 'otel-instrument') {
+				const instrumentation = path.join(reportRoot, 'otel-instrumentation.json');
+				const verification = path.join(reportRoot, 'otel-verify.json');
+				execFileSync(python, ['-I', '-c', [
+					'import json, runpy, sys',
+					'from pathlib import Path',
+					'f = runpy.run_path(sys.argv[1])',
+					'm = f["MODULE"]',
+					'audit = m.normalize_audit_report(json.loads(Path(sys.argv[2]).read_text()))',
+					'selection = json.loads(Path(sys.argv[3]).read_text())',
+					'digest = m.audit_digest(audit)',
+					'instrument = m.normalize_instrumentation(f["sample_instrumentation"](audit, digest, selection), audit, selection)',
+					'Path(sys.argv[4]).write_text(json.dumps(instrument))',
+					'Path(sys.argv[5]).write_text(json.dumps(f["sample_verify"](audit, digest, m.instrumentation_digest(instrument))))',
+				].join('\n'), path.resolve(extensionRoot, '..', 'skills/references/tests/observe_report_fixtures.py'),
+				audit, selection, instrumentation, verification]);
+				const flags = ['--selection-json', selection, '--instrumentation-json', instrumentation, '--verify-json', verification];
+				assert.match(execFileSync(python, ['-I', launcher, 'validate-flow', audit, ...flags], {
+					cwd: root, encoding: 'utf8',
+				}), /PASS: audit -> selection -> instrumentation -> verify/);
+				const html = path.join(reportRoot, 'otel-instrumentation.html');
+				const rendered = JSON.parse(execFileSync(python, [
+					'-I', launcher, 'render-instrumentation-html', audit, '-o', html, ...flags,
+				], { cwd: root, encoding: 'utf8' })) as {
+					result: string;
+					server: { pid: number; url: string };
+				};
+				try {
+					assert.equal(rendered.result, 'PASS');
+					const response = await fetch(rendered.server.url);
+					assert.equal(response.status, 200);
+					assert.equal(await response.text(), fs.readFileSync(html, 'utf8'));
+				} finally {
+					process.kill(rendered.server.pid, 'SIGTERM');
+				}
+			}
+			assert.ok(fs.existsSync(path.join(isolated, 'bundle', 'otel-verify', 'scripts', 'validate_reader_report.py')));
+		}
+		assert.equal(fs.existsSync(path.join(root, 'synced', 'references')), false);
+		fs.writeFileSync(path.join(root, 'extension', 'dist', 'copilot-skills', 'stale.txt'), 'stale');
+		bundleCopilotSkills(paths);
+		assert.equal(fs.existsSync(path.join(root, 'extension', 'dist', 'copilot-skills', 'stale.txt')), false);
+		fs.writeFileSync(path.join(paths.skillsOutDir, 'otel-audit', 'SKILL.md'), 'missing frontmatter');
+		assert.throws(() => bundleCopilotSkills(paths), /Missing skill frontmatter/);
+	} finally {
+		fs.rmSync(root, { recursive: true, force: true });
+	}
+});
+
 test('buildClientAssets rebuilds and stages the same client assets for the top-level webview', () => {
 	const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'obstudio-build-client-'));
 	try {
@@ -2901,3 +2723,17 @@ class FakeObserverWebSocket {
 		this.close();
 	}
 }
+
+test('IDE connection edits accept explicit reuse flags without accepting destination URLs from the webview', () => {
+ const request = (action: string, payload?: Record<string, unknown>) => ({ type: 'obstudio.host.request', requestId: 'edit-123', request: { kind: 'cloud', action, payload } });
+ const payload = { realm: 'us1', accessToken: '', expectedVersion: 'V'.repeat(43), reuseSavedToken: true, preserveEnabled: true };
+ assert.equal(isObserverHostRequestEnvelope(request('connect', payload)), true);
+ for (const key of ['reuseSavedToken', 'preserveEnabled']) {
+  assert.equal(isObserverHostRequestEnvelope(request('connect', { ...payload, [key]: 'true' })), false);
+ }
+ for (const action of ['open-hec-token-help', 'open-splunk-platform-trial', 'open-observability-cloud', 'open-observability-metrics', 'open-observability-traces', 'open-splunk-search'] as const) {
+  assert.equal(isObserverHostRequestEnvelope(request(action)), true);
+  assert.equal(isObserverHostRequestEnvelope(request(action, { destination: 'https://example.test' })), false);
+  assert.equal(cloudBridgeActionRequiresLifecycleSerialization(action), false);
+ }
+});

@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "kind": "otel-verify",
+  "audit_id": "python-ai-assistant-stale-recovery-current",
+  "audit_sha256": "sha256:1a4f1718718a45e285dfc901307cd4c6ac4ea76b242f954303db9355bff9743f",
+  "instrumentation_sha256": "sha256:8ae498bfb85b9a24de29a2237450f9a52022fbcfb54567ecec392d9ba9cedd08",
+  "meta": {
+    "service_name": "python-ai-assistant-offline-evaluation",
+    "date": "2026-10-29",
+    "result": "Not run"
+  },
+  "findings": [
+    {
+      "id": "AO-001",
+      "status": "not_proven",
+      "scenarios": [
+        {
+          "id": "ao.offline.resources",
+          "status": "not_proven",
+          "commands": [],
+          "evidence": [],
+          "observed_telemetry": [],
+          "trace_ids": [],
+          "product_validation": [],
+          "proof_mode": "not_run",
+          "visibility": "not_proven"
+        },
+        {
+          "id": "ao.offline.logger_failure",
+          "status": "not_proven",
+          "commands": [],
+          "evidence": [],
+          "observed_telemetry": [],
+          "trace_ids": [],
+          "product_validation": [],
+          "proof_mode": "not_run",
+          "visibility": "not_proven"
+        }
+      ],
+      "item_results": [],
+      "remaining": [
+        "Current synthetic handoff fixture; no execution proof."
+      ]
+    },
+    {
+      "id": "AO-002",
+      "status": "not_proven",
+      "scenarios": [
+        {
+          "id": "ao.offline.resources",
+          "status": "not_proven",
+          "commands": [],
+          "evidence": [],
+          "observed_telemetry": [],
+          "trace_ids": [],
+          "product_validation": [],
+          "proof_mode": "not_run",
+          "visibility": "not_proven"
+        },
+        {
+          "id": "ao.offline.logger_failure",
+          "status": "not_proven",
+          "commands": [],
+          "evidence": [],
+          "observed_telemetry": [],
+          "trace_ids": [],
+          "product_validation": [],
+          "proof_mode": "not_run",
+          "visibility": "not_proven"
+        }
+      ],
+      "item_results": [],
+      "remaining": [
+        "Current synthetic handoff fixture; no execution proof."
+      ]
+    }
+  ],
+  "next_steps": [
+    "Current synthetic handoff fixture; no executed verification is claimed."
+  ]
+}

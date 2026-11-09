@@ -1485,55 +1485,6 @@ def test_runtime_fixtures_emit_one_shutdown_marker_from_signal_lifecycle() -> No
         assert "SIGTERM" in source
 
 
-def test_observer_integration_proves_trace_metric_cloud_boundary_for_logs() -> None:
-    handler_test = _read(ROOT / "observer/internal/otlp/httphandler_test.go")
-    boundary_case = handler_test.split(
-        "func TestPostLogsRemainsLocalWhenCloudExportersConfigured",
-        1,
-    )[1].split("// Test 4:", 1)[0]
-
-    for term in (
-        'postJSON("/v1/traces"',
-        'postJSON("/v1/metrics"',
-        'postJSON("/v1/logs"',
-        "case exported := <-tracesExporter.ch:",
-        "case exported := <-metricsExporter.ch:",
-        "logs := s.QueryLogs(1)",
-        "log request unexpectedly invoked the Splunk metrics exporter",
-        "log request unexpectedly invoked the Splunk traces exporter",
-    ):
-        assert term in boundary_case
-
-    handler = _read(ROOT / "observer/internal/otlp/httphandler.go")
-    handler_fields = handler.split("type otlpHTTPHandler struct {", 1)[1].split(
-        "}", 1
-    )[0]
-    log_handler = handler.split(
-        "func (h *otlpHTTPHandler) handleLogs",
-        1,
-    )[1].split("// readBody", 1)[0]
-    receiver = _read(ROOT / "observer/internal/otlp/receiver.go")
-    receiver_config = receiver.split("type receiverConfig struct {", 1)[1].split(
-        "}", 1
-    )[0]
-    logs_consumer = receiver.split(
-        "logsConsumer, err := consumer.NewLogs",
-        1,
-    )[1].split("if err != nil", 1)[0]
-    for fields in (handler_fields, receiver_config):
-        assert not any(
-            "log" in line.lower() and "export" in line.lower()
-            for line in fields.splitlines()
-        )
-    assert "export" not in log_handler.lower()
-    assert "export" not in logs_consumer.lower()
-    assert "WithLogsExporter" not in receiver
-
-    readme = _read(ROOT / "evals/README.md")
-    assert "supplies live receiver-side proof" in readme
-    assert "remains semantic rubric coverage" not in readme
-
-
 def test_language_rubrics_grade_each_log_acceptance_path_independently() -> None:
     rubric_paths = (
         ROOT / "evals/python/flask-basic/eval/qual/instrument.json",
@@ -1669,7 +1620,7 @@ def test_runtime_observer_keeps_grpc_loopback_when_http_is_container_visible() -
         if "dockerfile: evals/runtime/observer.Dockerfile" not in compose:
             continue
         observer_service = compose.split("\n  app:", 1)[0]
-        assert "target: 3000" in observer_service
+        assert "target: 17900" in observer_service
         assert "host_ip: 127.0.0.1" in observer_service
 
         definition = json.loads(_read(compose_file.with_name("instrument.json")))

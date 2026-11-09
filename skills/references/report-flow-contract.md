@@ -34,24 +34,31 @@ Apply these precedence and identity rules throughout the chain:
   targetless selection shapes and digests: an absent `ao_target` stays absent;
   do not insert resource defaults or policy fields into those packets.
   When present, `ao_target` carries exactly one Project name or ID and exactly
-  one Agent Stream name or ID as a complete selector pair, or the policy-only
-  form `{create_if_missing: false}` with no selectors. Reject partial selector
-  pairs. Optional resource inputs and policy never change `requested_ids` or
-  dependency-closed `approved_ids`, add findings, or establish cloud identity.
-  AO targets require at least one dependency-closed selected AO resource or
-  runtime-routing configuration finding. Mark such findings with the optional
-  `ao_target_scope: resource-routing`; this marker is valid only for
-  `finding_group: splunk-agent-observability` with configuration telemetry.
-  Preserve unmarked legacy findings named `agent-observability.project`,
-  `agent-observability.agent-stream`, `agent-observability.project-resource`,
-  `agent-observability.agent-stream-resource`, `agent-observability.runtime-routing`,
-  or `agent-observability.splunk-ao-routing`. Do not infer target eligibility
-  from the AO group or configuration type alone: callback content capture,
-  dataset, prompt, or other unrelated configuration does not authorize resource
-  selectors or policy-only targets. An absent `ao_target_scope` stays absent
-  in normalized findings and audit digests. The report engine owns this
-  classification and supplies the eligible finding IDs to the HTML controls;
-  controls and command arguments apply only to the selected eligible scope.
+  one Agent Stream name or ID as a complete selector pair. Reject partial selector
+  pairs. Legacy policy-only `{create_if_missing: false}` packets remain readable,
+  but do not satisfy required inputs for a new instrumentation run. Resource
+  inputs and policy never change `requested_ids` or dependency-closed
+  `approved_ids`, add findings, or establish cloud identity.
+  Any selected `finding_group: splunk-agent-observability` work requires both
+  Project and Agent Stream, including callback/content work and dependencies;
+  an ID prefix or ordinary GenAI subject matter does not activate this requirement.
+  Render the required destination controls first inside the AO subsection,
+  before its finding cards. Mark each field required while AO work is selected,
+  reject blanks (including both blank), and preserve values across selection and
+  disclosure updates. Reuse-only never bypasses required inputs.
+  Required values describe the selected destination; they do not authorize
+  unselected provisioning or routing edits. Keep `ao_target_scope: resource-routing`
+  only on AO configuration findings that actually resolve or route resources.
+  Preserve unmarked legacy resource/routing names and leave absent markers absent.
+  Before new instrumentation edits, run the shared `required-inputs` preflight on
+  the validated selection. It returns a generic `required_inputs`, `missing_inputs`,
+  `ready`, and `prompt` contract from declarative requirement groups. When not
+  ready, ask for only the missing values in one focused prompt and wait for an
+  answer; do not invent service-derived defaults, treat blanks as configuration
+  fallback, or count a missing input as approval. Rebind supplied values with
+  `select`, preserving requested IDs, decision answers and approval metadata,
+  validate the flow again, and recheck requirements before editing. Existing
+  legacy proof is not retroactively rewritten by this execution gate.
   Verification remains transitively bound to that exact selection because its
   `instrumentation_sha256` covers the complete normalized instrumentation
   overlay, including `selection_sha256`.
@@ -164,9 +171,14 @@ Keep detailed tables, source paths, command logs, and raw evidence after the
 summary so readers can follow the flow without hunting through long matrices.
 
 For an audit, the HTML first screen is a decision view. Show one concise
-current-baseline sentence, then exactly one findings list ordered by
-machine-readable priority: `required`, `recommended`, and `deferred`, preserving
-canonical order within a priority. Priority defines ordering only. Render
+current-baseline sentence, then exactly one Findings section with all ordinary
+OpenTelemetry cards first and one nested `Splunk Agent Observability findings`
+subsection afterward. Group by the explicit `finding_group`, preserving stable
+IDs; an ID prefix or GenAI subject does not assign a group. Within each group,
+order by machine-readable priority: `required`, `recommended`, and `deferred`,
+preserving canonical order within a priority. Keep the canonical findings array,
+audit digest, and selection/dependency order unchanged by this display projection.
+Priority defines ordering only. Render
 manual decisions and external requirements only inside the relevant finding.
 Keep quick-win, effort, severity, priority, and execution-state information
 machine-readable in canonical JSON. Do
@@ -462,7 +474,7 @@ handoff.
 
 Keep current instrumentation and readiness ledgers in canonical JSON so
 downstream tools can reason from the source baseline. In human HTML, put the
-priority-ordered findings before technical context, and do not render readiness
+grouped, priority-ordered findings before technical context, and do not render readiness
 ledgers as separate visible sections. The executive summary and finding cards
 remain responsible for keeping the most important gaps visible on the first
 screen.
@@ -564,7 +576,7 @@ Instrumentation is a goal workflow, not just a code edit:
    invoke or apply `$splunk-configure`.
 
 The audit HTML may offer every executable `default` and `fix all` finding; its
-machine-readable priority controls display order, not eligibility. Explicit
+machine-readable priority controls order within each display group, not eligibility. Explicit
 reviewer selection is the instrumentation scope. On a bare or broad
 instrumentation request with no saved selection, deterministically select all
 eligible executable findings. Never select or silently implement `manual

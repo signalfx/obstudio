@@ -92,7 +92,7 @@
           ],
           "properties": {
             "service_name": { "type": "string", "default": "observer" },
-            "service_port": { "type": "integer", "default": 3000 },
+            "service_port": { "type": "integer", "default": 17900 },
             "health_path": { "type": "string", "default": "/api/health" },
             "clear_path": { "type": ["string", "null"], "default": "/api/data" },
             "clear_method": { "type": "string", "default": "DELETE" },
