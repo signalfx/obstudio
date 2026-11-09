@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-verify",
-    "run_id": "20261109T172115891972Z",
+    "run_id": "20261109T175044397431Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-6-luna",
     "judge_model": "",
@@ -336,7 +336,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "604c385ca54f547d21b1755045b155737db934f214c87fc54b1686f5eabfe9d1",
+    "digest": "98dc0fc6161155d33ded423aa13d3712587c65d1d306582d58e75479dee74393",
     "eval_kinds": [
       "rubric"
     ],
@@ -344,12 +344,12 @@
     "files": {
       "evals/codex-evals.validation.toml": "503794fa37e80a742e98969f1d4bbdd17d1f9cfe7d6607c4012498c43905b53e",
       "evals/go/chi-basic/eval/inputs/canonical-verify-evidence.txt": "b49c3c3b48f8cc4e834c5ce7646dea40e70271eab8904c7946d1145501321734",
-      "evals/go/chi-basic/eval/inputs/otel-audit.json": "b2cec5a1635fc3ba29e70f66d0f328942c17c2f5b0697b37092f35a0f72e5aab",
-      "evals/go/chi-basic/eval/inputs/otel-instrumentation.json": "7aec4eb58a52c3edaf5f61d0f745f65cd3b9cdc68a297ab7eaa0d7be287caf7a",
-      "evals/go/chi-basic/eval/inputs/otel-selection.json": "b93dbb07927456dcc3aa44ba1cf8a80f85c4e254cfdfc2fa961a2aeb1ff9bbca",
-      "evals/go/chi-basic/eval/inputs/otel-verify.json": "1673743bb357567b284e73afff9705970772b5fb3052cce8ceb16c14fa6db021",
+      "evals/go/chi-basic/eval/inputs/otel-audit.json": "983cff8a66b0933677d770a0ad4a21b5c28a9065c225d01a6f7d3b0eab6c548c",
+      "evals/go/chi-basic/eval/inputs/otel-instrumentation.json": "65f4d8106106c08f9e4702a12b9bb8d8068ab80746352b34278a4e948393e8d6",
+      "evals/go/chi-basic/eval/inputs/otel-selection.json": "57337390811c6e4d39ee4f6babd02712f1bb08dcfb04aa4e62b4eb77823f5155",
+      "evals/go/chi-basic/eval/inputs/otel-verify.json": "cbb0d5b28f5ec59e1195c619888ab759d9909e5d640f13ba1f8eb48e3392e1bb",
       "evals/go/chi-basic/eval/qual/verify.json": "60698b3937fe05ecba48292cfcabf482fc7e2f6a5adf69b467bd76313008e96b",
-      "evals/go/chi-basic/go.mod": "3180c726d9dfb307fcbebbd0f02e93dc833a8df2f36cbef9101d681e5048ba00",
+      "evals/go/chi-basic/go.mod": "585e9c5a128baf66cc508e074aa3e019875979a6fad497fa892aa967c20ba62c",
       "evals/go/chi-basic/main.go": "98fc93b9ffcd0a996424992672480e110976bbe4d721a8e3a5fefe96fb57512d",
       "skills/otel-verify/SKILL.md": "118d399def93429d47d58a55028150ef0ab129f8db1509187e2bf8adc3a0ac35",
       "skills/otel-verify/references/app-code-test-authoring.md": "d535a0acb3d123ee01eb5b39c3247378b4900f4977672021022dd0fe3885f91f",
