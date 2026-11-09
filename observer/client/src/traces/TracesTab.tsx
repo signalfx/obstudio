@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { EmptyState } from "../components/EmptyState";
+import { TelemetryEmptyState, type EmptyStateSkeleton } from "../components/EmptyState";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { TraceSummary, TraceDetail, ValidationFinding } from "../api/types";
 import { fetchTraceDetail, fetchTraceFilterValues, fetchTraces, type TracesQuery } from "../api/client";
@@ -42,6 +42,20 @@ const TRACE_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: "maxSpanCount", label: "Max Span Count", kind: "number", placeholder: "10", chipLabel: "Max Span Count", operatorLabels: { eq: "<=", neq: ">" }, step: 1 },
 ];
 const TRACE_SUGGESTIBLE_FIELDS = new Set(["rootSpanName", "serviceName"]);
+// Matches the table head below.
+const TRACES_SKELETON: EmptyStateSkeleton = {
+  headClassName: "data-table__head data-table__head--traces",
+  rowClassName: "data-table__row data-table__row--traces",
+  columns: [
+    { label: "Operation", className: "data-table__th--operation" },
+    { label: "Start", className: "data-table__th--start" },
+    { label: "Trace ID", className: "data-table__th--trace-id" },
+    { label: "Service", className: "data-table__th--service" },
+    { label: "Status", className: "data-table__th--status" },
+    { label: "Duration", className: "data-table__th--duration data-table__th--numeric" },
+    { label: "Spans", className: "data-table__th--spans data-table__th--numeric" },
+  ],
+};
 const TRACE_DETAIL_PANEL_DEFAULT_WIDTH = "min(1600px, calc(100vw - 320px))";
 const TRACE_DETAIL_PANEL_MIN_WIDTH = 560;
 const TRACE_DETAIL_PANEL_MAX_WIDTH = 1600;
@@ -373,10 +387,7 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
           ) : null}
 
           {liveTraces.length === 0 && !hasActiveFilter ? (
-            <EmptyState
-              title="No traces received yet."
-              hint="Send OTLP telemetry to port 4318 to begin exploring."
-            />
+            <TelemetryEmptyState title="No traces received yet." skeleton={TRACES_SKELETON} />
           ) : isFiltering && hasActiveFilter && visibleTraces.length === 0 ? (
             <p className="explorer__status" role="status">Updating filtered traces...</p>
           ) : visibleTraces.length === 0 ? (

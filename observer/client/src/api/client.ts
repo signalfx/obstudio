@@ -1,11 +1,14 @@
 import type {
   LogRecord,
   MetricGroup,
+  O11yOAuthLoginStartResult,
   O11yOAuthRegistrationResult,
+  O11yOAuthSessionStatus,
   SISCIMDLoginStartResult,
   SISCIMDRegistrationResult,
   SISCIMDSessionStatus,
   SplunkExportStatus,
+  SplunkLogsStatus,
   TraceDetail,
   TraceSummary,
 } from "./types";
@@ -177,7 +180,51 @@ export async function fetchSplunkExportStatus(signal?: AbortSignal): Promise<Spl
   return fetchJSON<SplunkExportStatus>("/api/splunk/export", { signal });
 }
 
-export type SplunkExportBrowserAction = "connect" | "forget" | "set-enabled";
+export async function fetchSplunkLogsStatus(signal?: AbortSignal): Promise<SplunkLogsStatus> {
+  return requireSplunkLogsStatus(await fetchJSON<unknown>("/api/splunk/logs", { signal, cache: "no-store" }));
+}
+
+export async function configureSplunkLogs(settings: {
+  endpoint: string; token: string; index: string; source: string;
+  enabled?: boolean; insecureSkipVerify: boolean; expectedVersion: string;
+  sessionOnly?: boolean;
+  verifyConnection?: boolean;
+  preserveEnabled?: boolean;
+}): Promise<SplunkLogsStatus> {
+  return requireSplunkLogsStatus(await postSplunkBrowserJSON("/api/splunk/logs", settings));
+}
+
+export async function setSplunkLogsEnabled(enabled: boolean, expectedVersion: string): Promise<SplunkLogsStatus> {
+  return requireSplunkLogsStatus(await postSplunkBrowserJSON("/api/splunk/logs/enabled", { enabled, expectedVersion }));
+}
+
+export async function refreshSplunkLogs(): Promise<SplunkLogsStatus> {
+  return requireSplunkLogsStatus(await postSplunkBrowserJSON("/api/splunk/logs/refresh", {}));
+}
+
+export async function disconnectSplunkLogs(expectedVersion: string): Promise<SplunkLogsStatus> {
+  return requireSplunkLogsStatus(await postSplunkBrowserJSON("/api/splunk/logs/disconnect", { expectedVersion }));
+}
+
+function requireSplunkLogsStatus(value: unknown): SplunkLogsStatus {
+  const status = value as Partial<SplunkLogsStatus> | null;
+  if (!status || typeof status.version !== "string" || typeof status.enabled !== "boolean"
+    || (status.sessionOnly !== undefined && typeof status.sessionOnly !== "boolean")
+    || (status.connected !== undefined && typeof status.connected !== "boolean")
+    || (status.cleanupPending !== undefined && typeof status.cleanupPending !== "boolean")
+    || (status.canDisconnect !== undefined && typeof status.canDisconnect !== "boolean")
+    || typeof status.configured !== "boolean" || typeof status.tokenConfigured !== "boolean"
+    || typeof status.endpoint !== "string" || typeof status.index !== "string"
+    || typeof status.source !== "string" || typeof status.insecureSkipVerify !== "boolean"
+    || !Number.isFinite(status.exportedRecords) || (status.exportedRecords ?? -1) < 0
+    || !Number.isFinite(status.failedBatches) || (status.failedBatches ?? -1) < 0
+    || [status.exportedBatches, status.lastHTTPStatus, status.lastHECCode].some((count) => count !== undefined && (!Number.isSafeInteger(count) || count < 0))) {
+    throw new Error("Logs status is unavailable from this collector. Refresh after updating Splunk Observability Studio.");
+  }
+  return status as SplunkLogsStatus;
+}
+
+export type SplunkExportBrowserAction = "connect" | "forget" | "set-enabled" | "refresh";
 
 export class SplunkExportBrowserActionError extends Error {
   constructor(
@@ -185,6 +232,7 @@ export class SplunkExportBrowserActionError extends Error {
     readonly statusCode: number,
     readonly code?: string,
     readonly retrySafe?: boolean,
+    readonly platform?: string,
   ) {
     super(message);
     this.name = "SplunkExportBrowserActionError";
@@ -197,7 +245,10 @@ const splunkBrowserRequestHeader = "X-Obstudio-Browser-Request";
 export async function runSplunkExportBrowserAction(
   action: SplunkExportBrowserAction,
   payload: {
+    sessionOnly?: boolean;
     accessToken?: string;
+    reuseSavedToken?: boolean;
+    preserveEnabled?: boolean;
     enabled?: boolean;
     expectedVersion?: string;
     realm?: string;
@@ -207,7 +258,9 @@ export async function runSplunkExportBrowserAction(
     ? "/api/splunk/export"
     : action === "forget"
       ? "/api/splunk/export/forget"
-      : "/api/splunk/export/enabled";
+      : action === "refresh"
+        ? "/api/splunk/export/refresh"
+        : "/api/splunk/export/enabled";
   return postSplunkBrowserJSON(path, payload) as Promise<SplunkExportStatus>;
 }
 
@@ -296,7 +349,7 @@ async function fetchSplunkBrowserJSON(
       : `Splunk Observability Studio request failed with HTTP ${response.status}.`;
     const code = typeof errorResponse.code === "string" ? errorResponse.code : undefined;
     const retrySafe = typeof errorResponse.retrySafe === "boolean" ? errorResponse.retrySafe : undefined;
-    throw new SplunkExportBrowserActionError(message, response.status, code, retrySafe);
+    throw new SplunkExportBrowserActionError(message, response.status, code, retrySafe, typeof errorResponse.platform === "string" ? errorResponse.platform : undefined);
   }
   return parsed;
 }
@@ -372,6 +425,38 @@ export async function registerO11yOAuthClient(
     method: "POST",
     signal,
   });
+}
+
+/**
+ * Start O11y OAuth user sign-in (Step 2) directly through Splunk Observability Studio's
+ * own backend, for use when there is no IDE bridge. Returns the authorization URL for the
+ * caller to open (e.g. window.open from the click handler, to avoid popup blockers) --
+ * the actual code exchange, and the second O11y-access-token exchange hop, happen in the
+ * background on Splunk Observability Studio; poll fetchO11yOAuthSession for the result.
+ */
+export async function loginO11yOAuth(
+  realm: string,
+  orgId: string,
+  clientId: string,
+  clientSecret: string,
+  signal?: AbortSignal,
+): Promise<O11yOAuthLoginStartResult> {
+  return fetchSISCIMDLocal<O11yOAuthLoginStartResult>("/api/splunk/o11y-oauth/login", {
+    body: JSON.stringify({ clientId, clientSecret, orgId, realm }),
+    headers: { "Content-Type": "application/json" },
+    method: "POST",
+    signal,
+  });
+}
+
+/** Poll the redacted O11y OAuth session status. Never returns a raw access token. */
+export async function fetchO11yOAuthSession(signal?: AbortSignal): Promise<O11yOAuthSessionStatus> {
+  return fetchSISCIMDLocal<O11yOAuthSessionStatus>("/api/splunk/o11y-oauth/session", { signal });
+}
+
+/** Clear the in-memory O11y OAuth session held by Splunk Observability Studio's own backend. */
+export async function disconnectO11yOAuthSession(): Promise<O11yOAuthSessionStatus> {
+  return fetchSISCIMDLocal<O11yOAuthSessionStatus>("/api/splunk/o11y-oauth/session/disconnect", { method: "POST" });
 }
 
 /** Fetch per-service aggregates computed from the full span store. */

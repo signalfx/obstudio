@@ -180,13 +180,56 @@ jobs:
         with:
           node-version: 22
 
+      - name: Install Linux credential provider
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y dbus-daemon gnome-keyring
+
+      - name: Stage embedded skills for collector tests
+        working-directory: observer
+        run: go run ./cmd/stage-skills
+
+      - name: Verify Linux native credential lifecycle
+        if: runner.os == 'Linux'
+        working-directory: observer
+        env:
+          OBSTUDIO_TEST_SYSTEM_KEYRING: "1"
+          XDG_DATA_HOME: ${{ runner.temp }}/obstudio-native-keyring
+        run: |
+          mkdir -m 700 -p "$XDG_DATA_HOME"
+          dbus-run-session -- bash -euo pipefail <<'NATIVE_TEST'
+            printf '%s' 'obstudio-ci-only' | gnome-keyring-daemon --unlock --components=secrets --daemonize
+            go test ./internal/credentials -run '^(TestSystemCredentialStoreRoundTrip|TestLinux.*)$' -count=1 -timeout=60s -v
+            go test ./cmd/obstudio -run '^TestSystem(Cloud|Logs)ConnectionPersistenceLifecycle$' -count=1 -timeout=60s -v
+          NATIVE_TEST
+
+      - name: Verify Windows native credential lifecycle
+        if: runner.os == 'Windows'
+        working-directory: observer
+        env:
+          OBSTUDIO_TEST_SYSTEM_KEYRING: "1"
+        run: |
+          go test ./internal/credentials -run '^TestSystemCredentialStoreRoundTrip$' -count=1 -timeout=60s -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          go test ./cmd/obstudio -run '^TestSystem(Cloud|Logs)ConnectionPersistenceLifecycle$' -count=1 -timeout=60s -v
+          exit $LASTEXITCODE
+
+      - name: Verify storage refusal and session-only fallback
+        shell: bash
+        working-directory: observer
+        run: |
+          set -euo pipefail
+          go test ./internal/credentials -run '^Test(NativeWriteRefusalDistinguishesUnwrittenAndPartialCredentials|StoreClassifiesOnlyDefiniteProviderRefusal|LateUnsubmittedCredentialWriteDoesNotRequireNativeCleanup)$' -count=1 -timeout=60s -v
+          go test ./cmd/obstudio -run '^Test(CloudRefusalBeforeWriteKeepsSavedStateWithoutPendingCleanup|LogsRefusalBeforeWriteDoesNotCreateAConnectionOrPendingCleanup)$' -count=1 -timeout=60s -v
+          go test ./internal/api -run '^(TestSplunkCloudSessionConnectionLeavesSavedSettingsUntouched|TestCloudSessionRollbackRestoresRuntimeWithoutSaving|TestCloudSaveFailureExplainsStorageAndLaunchOwnership|TestLogsSessionConnectionDoesNotUsePersistence)$' -count=1 -timeout=60s -v
+
       - name: Run Splunk Observability Studio plugin Claude hook shim tests
         run: node --test plugins/obstudio/hooks/tests/test_bootstrap_claude.js
 
       - name: Run install smoke test
         working-directory: observer
         run: |
-          go run ./cmd/stage-skills
           go test ./cmd/obstudio -run 'Test(InstallSmokeInstallsBinaryAndAcceptsOTLP|ManagedLifecycleRealBinary|ManagedUpgradeActivatesOnlyAfterRestart|CopilotTargetUsesVSCodeUserMCPJSON|CopilotMCPConfigPathResolvesPerOS|ConfigureMCPCopilot.*)$' -count=1 -v
 
   extension:

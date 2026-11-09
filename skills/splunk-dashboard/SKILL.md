@@ -8,7 +8,7 @@ description: >-
   preview model for the local Splunk Observability Studio. Use when the user types
   $splunk-dashboard, asks to "generate a dashboard", "build a dashboard from
   the audit", "create charts for my service", or "visualize my metrics".
-allowed-tools: Read, Write, Grep, Glob
+allowed-tools: Read, Edit(**/.observe/**), Grep, Glob
 metadata:
   author: otel-studio
   version: 0.1.0

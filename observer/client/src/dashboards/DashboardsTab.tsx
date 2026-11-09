@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { observerFetch } from "../host/transport";
-import { EmptyState } from "../components/EmptyState";
+import { CommandChip, EmptyState, useOtlpEndpoint } from "../components/EmptyState";
 import { hasHostCommandModifier } from "../hooks/useKeyboardShortcuts";
 import { DashboardGrid } from "./DashboardGrid";
 import { DashboardPanel, OtlpEndpointContext } from "./DashboardPanel";
@@ -29,35 +28,6 @@ const TIME_WINDOWS = [
 ] as const;
 
 const DEFAULT_WINDOW_MS = 60_000;
-
-/** Shape of the fields we read from GET /api/health. */
-interface HealthResponse {
-  endpoints?: { otlpHttp?: string; otlpGrpc?: string; rest?: string; mcp?: string };
-}
-
-/**
- * Fetch the OTLP/HTTP receiver endpoint from /api/health once on mount so the
- * unmatched-panel hint names the actually-configured receiver instead of a
- * hardcoded port (#19). Returns `null` until loaded or on failure; the hint
- * falls back to a port-free message in that case.
- */
-function useOtlpEndpoint(): string | null {
-  const [endpoint, setEndpoint] = useState<string | null>(null);
-  useEffect(() => {
-    const controller = new AbortController();
-    observerFetch("/api/health", { signal: controller.signal })
-      .then((r) => (r.ok ? (r.json() as Promise<HealthResponse>) : null))
-      .then((health) => {
-        const otlpHttp = health?.endpoints?.otlpHttp;
-        if (otlpHttp) setEndpoint(otlpHttp);
-      })
-      .catch(() => {
-        /* leave null → hint uses the port-free fallback */
-      });
-    return () => controller.abort();
-  }, []);
-  return endpoint;
-}
 
 interface DashboardsTabProps {
   telemetryError?: string | null;
@@ -131,7 +101,8 @@ export function DashboardsTab({ telemetryError, paused = false }: DashboardsTabP
     // unmatched-panel hint names the real receiver (#19).
     <OtlpEndpointContext.Provider value={otlpEndpoint}>
     <section id="panel-dashboards" className="dashboards-tab" role="tabpanel" aria-label="Dashboards">
-      <div className="dashboards-tab__bar">
+      {/* Hidden until there is a preview for these controls to describe. */}
+      <div className="dashboards-tab__bar" hidden={!data?.available}>
         <span className="dashboards-tab__badge" title="SignalFlow executes on Splunk's backend; this previews layout and metric targeting using local OTLP data.">
           Approximate · local-data preview
         </span>
@@ -227,6 +198,7 @@ function renderState({
       <EmptyState
         title="No dashboard preview yet."
         hint={data?.message ?? "Run $splunk-dashboard to generate .observe/dashboards.preview.json."}
+        actions={<CommandChip text="$splunk-dashboard" label="$splunk-dashboard command" />}
       />
     );
   }

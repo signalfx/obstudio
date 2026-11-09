@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { FilterBar, type FilterClause, type FilterDefinition } from "../FilterBar";
-import { EmptyState } from "../components/EmptyState";
+import { TelemetryEmptyState, type EmptyStateSkeleton } from "../components/EmptyState";
 import { fetchServiceStats, type ServiceStats } from "../api/client";
 import { formatDurationMs } from "../format";
 
@@ -26,6 +26,23 @@ function formatErrorRate(row: ServiceStats): string {
 function formatAvg(ms: number | null): string {
   return ms !== null ? formatDurationMs(ms) : "—";
 }
+
+// Matches the services table head below.
+const SERVICES_SKELETON: EmptyStateSkeleton = {
+  tableClassName: "services-table",
+  headClassName: "services-table__head",
+  rowClassName: "services-table__row",
+  columns: [
+    { label: "Service" },
+    { label: "Traces", className: "data-table__th--numeric services-table__col--secondary" },
+    { label: "Spans", className: "data-table__th--numeric services-table__col--secondary" },
+    { label: "Errors", className: "data-table__th--numeric" },
+    { label: "Error rate", className: "data-table__th--numeric" },
+    { label: "Avg Duration", className: "data-table__th--numeric" },
+    { label: "Avg Client", className: "data-table__th--numeric services-table__col--secondary" },
+    { label: "Avg Server", className: "data-table__th--numeric services-table__col--secondary" },
+  ],
+};
 
 const SERVICE_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: "serviceName", label: "Service", kind: "text", placeholder: "checkout" },
@@ -98,10 +115,7 @@ export function ServicesTab({ serviceNames }: ServicesTabProps): React.ReactElem
   if (rows.length === 0 && serviceNames.length === 0) {
     return (
       <section id="panel-services" className="tab-panel" role="tabpanel" aria-label="Services">
-        <EmptyState
-          title="No services observed yet."
-          hint="Send OTLP telemetry to port 4318 to begin exploring."
-        />
+        <TelemetryEmptyState title="No services observed yet." skeleton={SERVICES_SKELETON} />
       </section>
     );
   }
