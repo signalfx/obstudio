@@ -383,7 +383,15 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
         </div>
 
         {activeTab === "overview" ? (
-          <OverviewTab onOpenCloud={() => switchTab("cloud")} hasTelemetry={hasTelemetry} />
+          <OverviewTab
+            onOpenCloud={() => switchTab("cloud")}
+            hasTelemetry={hasTelemetry}
+            stats={state.stats}
+            logs={state.logs}
+            traces={state.traces}
+            onOpenServices={() => switchTab("services")}
+            onOpenLogs={() => switchTab("logs")}
+          />
         ) : null}
         {activeTab === "services" ? (
           <ServicesTab
