@@ -426,10 +426,12 @@ it('integration: VSIX contains extension host and top-level webview assets', { t
 				fs.readFileSync(canonicalPath, 'utf8'),
 				`${archivePath} must match its canonical skill`,
 			);
-			assert.equal(
-				execFileSync('unzip', ['-p', vsixFile, `${path.posix.dirname(archivePath)}/bundle/references/scripts/observe_report.py`], { encoding: 'utf8' }),
-				fs.readFileSync(path.join(repoRoot, 'skills/references/scripts/observe_report.py'), 'utf8'),
-			);
+			for (const script of ['observe_report.py', 'observe_report_core.py', 'observe_report_html.py']) {
+				assert.equal(
+					execFileSync('unzip', ['-p', vsixFile, `${path.posix.dirname(archivePath)}/bundle/references/scripts/${script}`], { encoding: 'utf8' }),
+					fs.readFileSync(path.join(repoRoot, 'skills/references/scripts', script), 'utf8'),
+				);
+			}
 		}
 		for (const resource of [
 			'references/report-flow-contract.md',
@@ -643,7 +645,8 @@ it('integration: binary serves client UI assets', { timeout: 180_000 }, async (t
 		const cssStatus = await new Promise<number>((resolve, reject) => {
 			http.get(`http://127.0.0.1:${port}/assets/main.css`, (res) => {
 				res.resume();
-				resolve(res.statusCode ?? 0);
+				res.on('end', () => resolve(res.statusCode ?? 0));
+				res.on('error', reject);
 			}).on('error', reject);
 		});
 		assert.equal(cssStatus, 200, '/assets/main.css should return 200 — client assets not embedded in binary');

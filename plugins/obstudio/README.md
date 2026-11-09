@@ -53,20 +53,22 @@ Splunk publish skills, plus `observer-open`, `observer-status`,
   and [`hooks/claude-hooks.json`](./hooks/claude-hooks.json).
 
 The shared [`hooks/bootstrap_obstudio.py`](./hooks/bootstrap_obstudio.py)
-downloads the release when needed, validates its published checksum, and
-starts or reuses Splunk Observability Studio when the host permits managed startup.
-Claude and Codex prefer the Observer release matching their plugin version. If
-the matching Observer runtime assets return 404, the host falls back to the
-latest Observer with a warning. When a healthy shared Observer is already
-running at another version, the host reports the mismatch and reuses it rather
-than interrupting another host.
+downloads the release when needed, verifies it against the SHA-256 pinned in
+[`hooks/runtime-manifest.json`](./hooks/runtime-manifest.json), and starts or
+reuses Splunk Observability Studio when the host permits managed startup.
+Claude and Codex download only the Observer release matching their plugin
+version. If it is unavailable or does not match the pinned hash, the hook fails
+closed instead of using another version. When a healthy shared Observer is
+already running at another version, the host reports the mismatch and reuses it
+rather than interrupting another host.
 
 ## Security
 
 Nothing is downloaded or started until you review and trust the SessionStart
 hook. If you trust it, the hook downloads a Splunk Observability Studio release
 binary from the `signalfx/obstudio` GitHub releases, verifies it against the
-published `checksums.txt`, and starts a local process bound to loopback
+SHA-256 shipped inside the plugin (`hooks/runtime-manifest.json`), and starts a
+local process bound to loopback
 addresses (`127.0.0.1` ports 17900, 4317, and 4318). Do not trust the hook if
 you do not want managed binary download or local process startup. Skills that
 edit files or run project commands remain subject to your host's approval
