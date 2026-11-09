@@ -19,7 +19,7 @@ import xml.etree.ElementTree as ET
 from logging_receiver import LogsReceiver
 
 
-EXPECTED_TEST_COUNTS = {"python": 21, "go": 18, "node": 18, "java": 22}
+EXPECTED_TEST_COUNTS = {"python": 23, "go": 20, "node": 20, "java": 24}
 NONPASSING_COUNTS = (
     "failed_tests", "error_tests", "skipped_tests", "cancelled_tests", "todo_tests",
 )

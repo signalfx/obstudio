@@ -10,6 +10,8 @@ its bridge/provider ownership references as needed. Those guides own the SDK
 options, numeric conversions, async mechanisms and diagnostic-routing recipes;
 the common rules and acceptance obligations below still apply. A guide's setup
 examples do not authorize application changes in an audit or verification task.
+The logging checks are self-contained for each declared consumer; audit and
+verification do not require a sibling instrumentation skill to be installed.
 
 | Detected stack | Existing language reference |
 |---|---|
@@ -22,13 +24,21 @@ examples do not authorize application changes in an audit or verification task.
 
 Reconcile rules with the installed SDK/bridge's public APIs and current official
 documentation. Record package versions, source URLs/date, applicable stability
-and unsupported features. Specification requirements for SDK authors are not
-automatically missing application code: a supported SDK default can satisfy a
-rule. Do not reimplement SDK behavior merely to make it visible in source.
+of the language's Logs signal and individual features, and unsupported features.
+Development or release-candidate status calls for capability verification, not
+an automatic upgrade or a reason to skip that language. SDK-author,
+instrumentation-library release and semantic-convention-author duties are not
+automatically missing application code. A supported SDK default can satisfy a
+rule. If the repository owns the selected instrumentation library, assess its
+own obligations there; do not reimplement an upstream SDK merely for visibility.
 
 The [log data model](https://opentelemetry.io/docs/specs/otel/logs/data-model/),
+[Logs API](https://opentelemetry.io/docs/specs/otel/logs/api/),
 [Logs SDK](https://opentelemetry.io/docs/specs/otel/logs/sdk/),
 [SDK configuration](https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/),
+[resource merging](https://opentelemetry.io/docs/specs/otel/resource/sdk/),
+[event/attribute naming](https://opentelemetry.io/docs/specs/semconv/general/naming/),
+[log registry](https://opentelemetry.io/docs/specs/semconv/registry/attributes/log/),
 [common attribute limits](https://opentelemetry.io/docs/specs/otel/common/#attribute-limits),
 [exception log conventions](https://opentelemetry.io/docs/specs/semconv/exceptions/exceptions-logs/),
 [trace context in non-OTLP formats](https://opentelemetry.io/docs/specs/otel/compatibility/logging_trace_context/),
@@ -37,15 +47,50 @@ The [log data model](https://opentelemetry.io/docs/specs/otel/logs/data-model/),
 [OTLP exporter retries](https://opentelemetry.io/docs/specs/otel/protocol/exporter/#retry),
 [error handling](https://opentelemetry.io/docs/specs/otel/error-handling/), and
 [sensitive-data guidance](https://opentelemetry.io/docs/security/handling-sensitive-data/)
-are the primary sources. Check individual development features rather than
+are primary sources; the security page is non-normative guidance. Check
+individual development features rather than
 describing an entire language or exception convention as stable.
+
+Resolve the effective configuration owner before applying environment-based
+recipes. A supported, active `OTEL_CONFIG_FILE` loader (or its deprecated
+`OTEL_EXPERIMENTAL_CONFIG_FILE` alias) ignores flat SDK environment settings
+except variables referenced for substitution; inspect application overlays too.
+Do not infer loader support from a variable's presence. Otherwise follow the
+installed distribution's environment, programmatic and agent precedence; empty
+environment values are unset. Check effective `OTEL_SDK_DISABLED`, native/SDK
+filters and resource merge results before diagnosing a missing pipeline.
+For supported environment Boolean settings, only case-insensitive `true` means
+true; `1` and `yes` do not disable the SDK. Other values resolve false, with a
+warning recommended for invalid nonempty values. Let the actual config owner
+parse settings; do not apply flat-environment rules to an active file loader.
+`OTEL_LOG_LEVEL` controls SDK diagnostics, not application log severity.
+User-provided resources take precedence over `OTEL_RESOURCE_ATTRIBUTES` in the
+standard SDK merge; preserve operator identity when adding defaults by avoiding
+conflicting code values, not by assuming the environment wins. Check decoding
+errors and actual merge order rather than replacing the existing provider.
+Let the installed exporter parse OTLP header environment values using its
+supported `key=value,key2=value2` encoding. W3C Baggage-style semicolon metadata
+is not supported here. Do not introduce a custom parser, print header values
+or silently rewrite operator credentials to make a local recipe work.
+
+Follow an existing file/stdout forwarding route through its parser, Collector
+processors and destination before adding an SDK bridge. It can be operator-owned
+coverage; context strings alone cannot prove that route exports canonical OTLP
+records. Preserve one collection owner per record. A Collector redaction/filter/
+transform processor can satisfy an approved downstream processing boundary,
+but cannot close a policy requiring sanitization before SDK or writer capture.
+Name the boundary and prove the values at it; local storage before a later
+redactor still counts as capture.
 
 ## LOG-SPEC-CLOSURE -- Reconcile sources, implementation and proof
 
 Begin with the applicable official source sections, not only this guide's rule
 names or a keyword search. Record source URL, version/date or supplied snapshot,
-requirement level, applicability and owner (SDK, bridge, application, collector
-or operator). Supplementary guidance does not add normative SDK requirements.
+requirement level, applicability and owner (SDK, bridge, instrumentation library,
+semantic-convention author, application, collector or operator). Attribute
+requirement levels bind the instrumentation library; inspect its ownership
+before assigning an application fix. Supplementary guidance adds no normative
+SDK requirements.
 Separate upstream requirements, optional/development capabilities and the
 repository's local destination/privacy policy. If current sources are unavailable,
 name the snapshot and leave unsupported conclusions unverified.
@@ -86,7 +131,10 @@ Check the real bridge's numeric severity mapping, source severity text, body,
 logger/scope and timestamps. Common single-level mappings are DEBUG=5, INFO=9,
 WARN=13 and ERROR=17; finer source levels can use their documented range.
 Never copy a source logger's numeric level directly into SeverityNumber.
-Unknown severity may remain 0/absent; do not invent an ERROR classification.
+Unknown severity in a source with a level concept may remain 0/absent; do not
+invent an ERROR classification. If an event is known erroneous and its source
+has no severity concept, the data model recommends ERROR=17 during mapping.
+Keep that recommendation and its preconditions distinct from a universal MUST.
 
 Preserve the event's occurrence Timestamp when available; ObservedTimestamp
 represents collection time. Do not replace an older event time with export
@@ -96,6 +144,36 @@ absent fields alone are not defects. Preserve
 structured values rather than turning an entire structured record into an
 opaque string. EventName is an event classification when applicable, not a
 mandatory field on ordinary application messages.
+The language's supported empty value (null/None/nil), zero, false, empty strings
+and empty arrays are meaningful AnyValues. Assert presence and type separately
+from truthiness/nonemptiness. Preserve accepted null array entries and their
+positions; an exporter unable to export null may substitute zero, false or an
+empty string. Check that capability before accepting a substitution; dropping
+an entry is different from retaining its position. Check the selected
+bridge's supported conversion before claiming preservation; a direct SDK test
+does not prove the bridge handles every value, or authorize replacing it.
+For selected semantic events, keep EventName free of per-occurrence IDs; put
+permitted varying values in attributes. Reuse applicable semantic attributes;
+new application keys should use a nonconflicting application/company namespace,
+and new `otel.*` keys require specification approval. Where call-site fields are
+selected, check the installed bridge's convention version and current `code.*`
+keys before changing deprecated mappings; do not upgrade or rewrite its SDK.
+Keep scope identity consistent rather than attaching conflicting scope attributes
+to the same Logger identity. Optional development `log.iostream`,
+`log.record.original` and `log.record.uid` are not mandatory on every record.
+If present, bound and sanitize original content before constructing it; two
+distinguishable records must not share a UID. A trace ID is not a per-record UID.
+
+For a newly selected event definition, document when it occurs, its name,
+occurrence timestamp, default severity and permitted attributes, including
+sensitive, expensive or large fields. Reuse relevant attributes without copying
+every span attribute; failure outcomes use applicable `error.type` conventions.
+A named event represents a timestamped occurrence, a span a duration, and span
+attributes properties of the whole operation. Ordinary diagnostic messages
+remain ordinary logs; events can occur outside a trace without inventing a span.
+On a supported new event path, use the canonical EventName field rather than
+the deprecated `event.name` attribute. Resolve existing bridge/version migration
+policy before changing an older mapping; do not upgrade solely for this example.
 
 ## LOG-CONTEXT -- Correlate without inventing or leaking context
 
@@ -111,6 +189,12 @@ filtering, defaulting to false. Preserve an explicitly selected supported
 policy and test its intended drops separately. Do not fabricate or force-sample
 a span to make correlation pass. Test both sampled and unsampled contexts and
 a no-context call, checking exact IDs and flags rather than nonempty strings.
+Where supported, development `LoggerConfig.enabled` should default true and
+`minimum_severity` defaults to 0; severity-0 records bypass that threshold.
+A disabled SDK/logger is a no-op for that path, not proof of a missing bridge
+or permission to suppress other native sinks. Test selected filters separately
+from missing wiring, including severity-0 and no-context bypasses. Configuration
+changes may become visible eventually; do not demand instantaneous SDK updates.
 
 Trace the actual tracer/context manager, provider initialization, log bridge and
 record call site. When tracing is configured, prove correlation with SDK-created
@@ -172,6 +256,9 @@ the supported bridge/SDK exception mapping and `exception.type`,
 an exception object's arbitrary serialization under invented keys. Minimize
 and sanitize message, stack, nested structured values and formatter/MDC fields
 before the exporting processor; truncation alone is not redaction.
+Hashing a small, predictable input does not establish anonymization either.
+Follow the selected privacy policy and capture boundary rather than declaring
+a hashed identifier safe by algorithm name.
 
 The exception-log convention explicitly excludes logging bridges from its
 instrumentation-specific recording guidance. Do not force every bridged error
@@ -181,6 +268,19 @@ selected instrumentation exception events, check the applicable conventions
 and stability, associate the actual operation context, and choose severity
 from impact. No policy permission to collect a message/stack means omit it
 and retain permitted type/category evidence, not enable capture for a test.
+For a selected instrumentation exception event, the convention requires type
+or message when the other is unavailable; if policy permits neither, report the
+semantic limitation without capturing forbidden content. Do not apply this floor
+to ordinary bridged messages. Instrumentation should avoid artificial exceptions
+used only to represent an unsuccessful status; this development recommendation
+does not forbid an application's intentional error log. Where an installed Emit
+API derives exception attributes, explicit user attributes take precedence.
+Prefer a supported exception-instance Emit API for selected instrumentation
+only when policy permits that capture; otherwise retain just permitted fields.
+For a selected exception event, check the versioned recommendation for an
+operation-specific `.exception` name or generic `exception` handler name.
+Check deprecation/version policy for `exception.escaped`; do not migrate span
+exception behavior or delete approved compatibility fields merely by keyword.
 
 Apply a selected exception-field allowlist exactly. Compatibility is not
 permission to retain an excluded alias such as `error.kind` or `error.dump`.
@@ -196,12 +296,28 @@ Inspect effective log attribute count/value limits and existing operator
 values; SDK defaults may already suffice. `OTEL_LOGRECORD_ATTRIBUTE_COUNT_LIMIT`
 and `OTEL_LOGRECORD_ATTRIBUTE_VALUE_LENGTH_LIMIT` are signal-specific settings,
 subject to installed SDK support and generic fallback. Span limits do not
-configure log limits. Attribute length limits do not bound Body, arbitrary
-nested payloads or all exception formatting: use a reviewed application or
-processor policy for these surfaces when required. Avoid arbitrary new limits
-without a source-backed need. Exercise oversized attributes/body, retained
+configure log limits. Attribute length limits do not bound Body, nested
+payloads carried in Body or all exception formatting: use a reviewed application
+or processor policy for these surfaces when required. Avoid arbitrary new limits
+without a source-backed need. When current messages are bounded and no Body
+policy or size problem is established, preserve them and record that a new Body
+cap is not applicable; do not import GenAI capture thresholds into ordinary logs.
+Exercise selected oversized attributes/body, retained
 identity/context, dropped-attribute accounting where supported, and privacy
 after processing. Do not promise lossless export after truncation/drops.
+Resource attributes SHOULD be exempt from common attribute limits; log-record
+limits do not configure Resource limits. Preserve source-backed identity rather
+than applying a record attribute-count budget to its Resource.
+
+When constructing Body or attributes is expensive, use the detected native
+logger's supported enablement query before that work. Check at the actual log
+call, including inside an owned worker/callback, rather than caching a decision
+across configuration changes. The OTel `Logger.Enabled` API is an optional
+optimization for direct OTel emits; a cheap emit does not require a guard.
+An OTel-only disabled result must not suppress an enabled original native sink.
+Keep filtering independent of this optimization: callers may emit directly,
+and processor `OnEmit` must still apply its configured filter. Do not add
+unsupported queries, new filtering policy or a provider to copy an example.
 
 Name the setting or public option that implements the selected count/value
 policy; a promise such as "supported log limits" followed by numbers is not a
@@ -229,10 +345,14 @@ cover byte-array units and recursive array/map value/depth handling where
 implemented; inspect that capability instead of assuming every SDK/version
 enforces the same arbitrary nested payload policy. These limits still do not
 cap Body. Do not reimplement SDK internals to satisfy an unsupported feature.
+If already selected, the development external-content `_ref` convention needs
+a registry-defined base attribute and a string reference (preferably an absolute
+URI); it does not authorize new storage or moving forbidden content elsewhere.
 
 ## LOG-DELIVERY -- Bound buffering and make loss visible
 
-Use the existing provider's batch processor. Check supported log-specific
+Identify the existing processor first. For an OTLP batch path, use the existing
+provider's batch processor and check supported log-specific
 queue, batch, schedule and timeout settings (`OTEL_BLRP_*` where supported);
 `OTEL_BSP_*` configures spans. SDK defaults can be suitable; record the effective
 values, keep batch size within queue size, and use public APIs when a language
@@ -240,6 +360,11 @@ does not consume those environment variables. A bounded queue may drop logs
 when full. Do not promise durable or exactly-once delivery from an in-memory
 batch processor; the one-record acceptance check is a healthy-path duplicate
 check, not an OTLP network delivery guarantee.
+An SDK stdout/console exporter may legitimately use a simple processor; batch
+and queue settings then do not apply. Assess synchronous cost instead, preserve
+the operator-owned branch, and do not confuse that exporter with a native
+console sink. Its [unspecified format](https://opentelemetry.io/docs/specs/otel/logs/sdk_exporters/stdout/)
+is not a production format contract.
 
 Exercise a failing/unavailable receiver, bounded shutdown after final logs,
 and overload when the application has a source-backed overload risk. Confirm
@@ -248,6 +373,15 @@ without secrets, and configured unrelated signals remain usable. An HTTP 200
 with OTLP partial-success rejected records is not full acceptance. Report
 attempted, received, rejected and dropped evidence separately; never infer
 receipt from a successful enqueue or flush call alone.
+Where implemented, [development SDK log metrics](https://opentelemetry.io/docs/specs/semconv/otel/sdk-metrics/) can supply
+creation, queue-pressure, processed and exported counts. Record each instrument's
+stage and retry/rejection semantics; created/processed is not receiver acceptance.
+Do not add duplicate application metrics or assume unavailable instruments exist.
+For a custom asynchronous processor, do not retain and mutate an unsafe shared
+ReadWriteLogRecord after `OnEmit`; use a supported snapshot/clone, keep `OnEmit`
+nonblocking and nonthrowing, and verify concurrent isolation. Built-in SDK
+processors are not a reason to write a replacement. An optional event-to-span
+bridge must still forward the log record when that feature is selected.
 
 Compose the complete export/retry deadline rather than assuming a per-request
 timeout bounds the entire operation. Test a receiver that stalls as well as one
@@ -255,8 +389,11 @@ that fails immediately. Use the existing SDK processor/caller deadline or a
 supported public option to satisfy the selected overall budget; preserve a
 verified adequate default. A client timeout does not prove zero receiver
 acceptance: a receiver can accept after the caller stops waiting. Keep delivery
-unknown until receipt evidence resolves it, and do not retry an entire
-partial-success batch as if all its records were rejected.
+unknown until receipt evidence resolves it. When an OTLP response has populated
+`partial_success`, the client MUST NOT retry that request, including an inferred
+rejected subset; this also covers warning-only responses with zero rejections.
+Keep request-attempt counts, received/accepted/rejected record counts and local
+drops distinct; receiver rejection is not evidence of a local queue drop.
 
 The standard OTLP exporter timeout covers a whole batch export, including all
 attempts and retry waits; it must not restart for each attempt, and an earlier
@@ -265,6 +402,21 @@ from an arbitrary SDK option named timeout. If the installed path only bounds
 one request, report its SDK/capability limitation and verify a supported whole
 deadline through the existing owner rather than claiming the standard contract
 is satisfied or reimplementing the SDK.
+For the selected transport, distinguish server throttling (`Retry-After` or
+gRPC `RetryInfo`) from client backoff, within the same whole-export deadline.
+HTTP `Retry-After` uses integer delay-seconds or an HTTP-date, never a value
+such as `100ms`; gRPC retry durations use their own protocol representation.
+If the server wait exceeds the remaining export/caller budget, end within the
+earlier deadline instead of retrying early or requiring another attempt. For
+example, `Retry-After: 1` requires a one-second wait; it cannot fit after a
+response arriving 100ms into an 800ms export budget. State the valid header,
+measured wait, remaining budget and expected request count in the handoff.
+OTLP/HTTP retries use 429, 502, 503 and 504; other 4xx/5xx must not be retried.
+Check installed exporter behavior with a controlled receiver before claiming
+conformance; do not add an application retry loop around an SDK exporter.
+Record supported request/response byte bounds separately from Body/attribute
+limits. If several destinations are configured, assess each queue/ack/retry
+boundary independently; one destination's success does not prove another's.
 
 A maximum attempt count is a ceiling, not a requirement to reach that many
 attempts during every failure. An earlier deadline can end retries first.
@@ -303,6 +455,9 @@ work under an exporter fault. Existing safe routing is coverage, not a reason
 to add another error handler.
 Name the actual routing/suppression mechanism in the repair and handoff, not
 only a desired zero-recursion outcome.
+When testing SDK attribute-discard diagnostics, count at most one diagnostic
+per discarded-attribute record, not one per dropped attribute; inspect installed
+support without replacing SDK diagnostic internals.
 
 ## LOG-VERIFY-FRESH -- Bind each verdict to its own execution evidence
 
@@ -351,8 +506,8 @@ across the applicable rules.
 | LOG-CONTEXT | Exact sampled/unsampled/outside IDs and SDK flags; real SDK-created sampled parent/child spans joined to their logs at the claimed boundary, with parentage/resource checks. Explicitly name one joint scenario traversing an owned async handoff and joining that worker/callback log to its received real span; separate known-ID async and synchronous join tests are insufficient. Separate unsampled non-export and outside-span controls, canonical OTLP fields from ordinary attributes, and non-OTLP formatter proof where selected. |
 | LOG-ASYNC-HANDOFF | Caller capture before scheduling; exact request pairing, permitted MDC handling where applicable, worker cleanup and bridge placement relative to queues. Link the joint real-span async scenario, supported propagation and expected-loss controls. |
 | LOG-EXCEPTION | Allowed exception fields and excluded sensitive fields, with bridge/event convention applicability and optional-field decisions. |
-| LOG-LIMITS | Name the effective/proposed log attribute count/value settings or public API fields, separately from Body policy. Specify below/at/above-limit inputs, units, expected outcomes and supported drop accounting; generic limits plus numbers are insufficient. |
-| LOG-DELIVERY | Record observed attempt/retry/caller deadlines and missing bounds with units/source separately from proposed queue/batch/schedule/export/shutdown settings and the composed budget. Assert batch <= queue. Include a stalled receiver/caller deadline and a final log immediately before shutdown, with healthy receipt and bounded fault behavior checked independently. Record attempted/accepted/rejected/dropped separately, retaining unknown acceptance after a client timeout until a receipt resolves it. |
+| LOG-LIMITS | Name the effective/proposed log attribute count/value settings or public API fields, separately from Body policy. Specify below/at/above-limit inputs, units, expected outcomes and supported drop accounting; generic limits plus numbers are insufficient. For an expensive construction path, name the supported native/direct-OTel enablement query, check current policy inside the owned worker, and prove construction/output counts across disabled/enabled/disabled states. Preserve cheap direct emits and original sinks when the OTel path is disabled. |
+| LOG-DELIVERY | Record observed attempt/retry/caller deadlines and missing bounds with units/source separately from proposed queue/batch/schedule/export/shutdown settings and the composed budget. Assert batch <= queue on a batch path; a selected simple processor needs synchronous-cost evidence instead. Include a stalled receiver/caller deadline and a final log immediately before shutdown, with healthy receipt and bounded fault behavior checked independently. Record attempted/accepted/rejected/dropped separately, retaining unknown acceptance after a client timeout until a receipt resolves it. |
 | LOG-DIAGNOSTICS | Name the supported separate routing or suppression mechanism. One exporter-fault scenario asserts bounded diagnostic volume and export attempts, application progress, original sink output, and continued operation of each other configured signal. Explicitly mark absent signals not configured; preserving configuration alone is not operation proof. |
 | LOG-VERIFY-FRESH | Unique report storage for each trial; planned manifest/lockfile dependency preparation; binding to source, command and dependency versions; actual success/failure/error/skip counts; preserved timeout console output, failed timeout verdict, owned-process cleanup and incremental structured partial results; explicit evidence scope. |
 

@@ -2,6 +2,12 @@
 
 Language-specific instrumentation guidance for Node.js and TypeScript services.
 
+For a logging path, first resolve the effective configuration and collection
+owner using [the shared logging reference](../logging-readiness.md#source-and-applicability).
+The environment-based setup recipes below apply only after that check; they
+do not supersede an active supported declarative loader, an intentional SDK
+opt-out, or an established operator-owned forwarding route.
+
 ---
 
 ## Auto-Instrumentation Library Map
@@ -516,8 +522,8 @@ async function processOrder(orderId: string): Promise<Order> {
 Before adding a custom counter or histogram for an outcome that happens
 inside a request `@opentelemetry/instrumentation-http` already covers,
 check whether it belongs as an attribute on `http.server.request.duration`
-instead — see `../../otel-instrument/SKILL.md` `#### Implementation Rules` and the
-`Node.js:` entry under `#### Language-Specific Musts`. The instrumentation
+instead. When implementing a change, also follow the loaded instrumentation
+skill's Implementation Rules and Node.js Language-Specific Musts. The instrumentation
 already sets `http.response.status_code` on that metric from the response
 for every request with no extra code, but it does not set `error.type` from
 a failing status: that attribute is reserved there for a lower-level
@@ -637,9 +643,11 @@ forwarding remains traces and metrics only.
 Verify one sanitized record at each required severity both outside and inside
 an active span. Assert body/category, severity, shared `service.name`,
 trace/span IDs when active, presence in the original console/file sink, one
-record in Splunk Observability Studio, and zero OTLP records under `OTEL_LOGS_EXPORTER=none`.
+received record on a healthy path in Splunk Observability Studio, and zero OTLP records under `OTEL_LOGS_EXPORTER=none`.
 That record-count assertion is required for Console, Pino, and Winston because
 their transport/instrumentation combinations can otherwise duplicate logs.
+In fault/retry scenarios distinguish transport copies from SDK emission and
+bridge ownership; an unavailable receiver can receive zero records.
 
 ---
 
@@ -693,6 +701,12 @@ Winston/Pino/Console export path. Prove bounded attempts, observable diagnostics
 application progress and original transport output during an exporter fault.
 
 ### Log limits and export budgets
+
+For expensive construction with Winston, check `logger.isLevelEnabled('info')`
+inside the actual callback before computing the payload. Do not cache the
+answer or gate original transports on OTel-only state. For another detected
+logger, verify its supported native query; Console has no equivalent method.
+Preserve cheap direct calls and existing application policy.
 
 Verify the existing `LoggerProvider` option
 `logRecordLimits: {attributeCountLimit: count, attributeValueLengthLimit: length}`

@@ -61,8 +61,12 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
     assert set(targets) == expected
     for target in targets:
         canonical = SKILLS / "references" / target
-        assert (staged / target).read_bytes() == canonical.read_bytes()
-        assert "## Logging Readiness Checks" in _read(staged / target)
+        guide = staged / target
+        assert guide.read_bytes() == canonical.read_bytes()
+        text = _read(guide)
+        assert "## Logging Readiness Checks" in text
+        for relative in re.findall(r"`((?:\.\.?/)[^`\s]+\.md)`", text):
+            assert (guide.parent / relative).is_file(), (skill, target, relative)
         assert skill in consumers[target]
     assert "read only the detected stack's" in common
 
@@ -785,6 +789,8 @@ def _fixed_library_release_lines(source: str) -> list[tuple[int, str]]:
             "service.version=<app>",
             candidate,
         )
+        if not dependency_recipe.search(line):
+            candidate = re.sub(r"https?://[^\s)]+", "<source-url>", candidate)
         candidate = re.sub(
             r"\b(?:gpt|qwen|llama|claude|gemini)[\w:.+-]*|"
             r"\baws-sdk-go-v\d+\b|"
@@ -831,6 +837,7 @@ def _fixed_library_release_lines(source: str) -> list[tuple[int, str]]:
         "Python >=3.11 is required by this package",
         "---\nversion: 0.1.2\n---\nSDK\nversion: 1.40",
         "Unowned hardcoded SDK example:\n1.40.0",
+        "pip install https://example.invalid/library-1.40.0",
     ],
 )
 def test_fixed_library_release_detector_rejects_short_and_prerelease_recipes(
@@ -862,6 +869,7 @@ def test_fixed_library_release_detector_rejects_short_and_prerelease_recipes(
         "Use 1000 ms export interval and 500 ms timeout",
         "HTTP 5xx and OTEL-001 finding IDs",
         'version = "~> 9.0" in a separate Terraform provider template',
+        "OpenTelemetry [mapper](https://github.com/open-telemetry/opentelemetry-java-instrumentation/blob/main/instrumentation/logback/logback-appender-1.0/library/src/main/java/LoggingEventMapper.java)",
     ],
 )
 def test_fixed_library_release_detector_preserves_non_library_numbers(

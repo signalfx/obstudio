@@ -69,6 +69,32 @@ returns quickly.
 Rubric evals may set `judge_inputs` or `judge_prompt` when the judge should
 inspect artifacts other than a service directory.
 
+The logging contract evals use bare `$otel-audit ./service`,
+`$otel-instrument ./service`, and `$otel-verify ./service` tasks. To exercise
+their normal handoff on the same service, run the host workflow runner with
+the eval environment active:
+
+```sh
+uv run python run_logging_workflow.py --language python --trial 1 \
+  --studio-binary /path/to/obstudio \
+  --codex-home ../.workspace/codex-evals/codex-home \
+  --output ../.workspace/logging-workflow/python-trial-1
+```
+
+Repeat for `java`, `go`, and `node` and trials 1 through 3. The runner requires
+the normal language toolchains on `PATH` (Java 21 for Spring Boot), creates a
+separate local receiver with no cloud credentials, and retains the generated
+service workspace plus per-stage source, report, task and rubric evidence.
+It independently starts the generated service after instrumentation and
+verification and proves concurrent sync/async logs against real SDK span
+ancestry and the original sink. Runtime failure, incomplete rubric evidence,
+or a task/grader model other than the configured Sol high fails the workflow.
+This host runtime proof supplements the regular per-skill rubric commands;
+a standalone verify task on an uninstrumented fixture is only a precondition
+check. It is not positive runtime verification.
+Regular per-skill rubric runs also send these tasks unchanged; the loading
+guard binds Codex's native full-skill input rather than adding a loading prompt.
+
 ## A/B Sides
 
 | Side | Skill visibility |

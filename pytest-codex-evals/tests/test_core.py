@@ -151,6 +151,13 @@ def test_side_prompt_generates_loaded_and_not_loaded_variants():
     assert side_prompt(case, "baseline") == "Scan the service."
 
 
+@pytest.mark.parametrize("task", ["$sample-skill", "$sample-skill ./service"])
+def test_direct_skill_task_is_not_wrapped_with_an_extra_actor_prompt(task):
+    case = sanity_case(task=task)
+    assert side_prompt(case, "with_skill") == task
+    assert side_prompt(case, "baseline") == task
+
+
 def test_prompt_eval_inputs_require_safe_fixture_relative_paths():
     prompt = PromptVariant(
         id="direct",
@@ -376,6 +383,33 @@ def test_source_manifest_rejects_symlinked_eval_config(tmp_path: Path):
             skill_dir,
             linked,
         )
+
+
+@pytest.mark.parametrize("selected", [False, True])
+@pytest.mark.parametrize("direct", [False, True])
+def test_native_loading_source_change_invalidates_only_direct_task_reports(tmp_path, monkeypatch, selected, direct):
+    import pytest_codex_evals.report as report_module
+
+    skill = tmp_path / "skills/sample-skill"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text("name: sample-skill\n")
+    fixture = tmp_path / "evals/python/example"
+    definitions = fixture / "eval/qual"
+    definitions.mkdir(parents=True)
+    definition = definitions / "native.json"
+    definition.write_text(json.dumps({"skill": "sample-skill", "prompts": [{"id": "direct", "eval_inputs": [],
+        "task": "$sample-skill ./service" if direct else "Scan the service."}], "rubric": ["Accurate"]}))
+    package = tmp_path / "editable-harness"
+    (package / "graders").mkdir(parents=True)
+    for relative in ("ab.py", "report.py", "graders/shared.py"):
+        (package / relative).write_text("original\n")
+    monkeypatch.setattr(report_module, "__file__", str(package / "report.py"))
+    kwargs = {"definition_path": definition, "fixture_dir": fixture, "prompt_id": "direct", "eval_inputs": []} if selected else {}
+    before = source_input_digests(tmp_path, "sample-skill", "rubric", skill, **kwargs)
+    (package / "graders/shared.py").write_text("changed loading semantics\n")
+    after = source_input_digests(tmp_path, "sample-skill", "rubric", skill, **kwargs)
+    assert (before != after) is direct
+    assert ("editable-harness/graders/shared.py" in before) is direct
 
 
 def test_codex_subprocess_env_uses_sandbox_local_package_caches(
@@ -1284,6 +1318,38 @@ def test_with_skill_guard_fails_when_agent_does_not_read_instructions(tmp_path: 
     )
     assert instruction_check.passed is False
     assert "Did not successfully read all" in instruction_check.evidence
+
+
+@pytest.mark.parametrize("fault", [None, "wrong-body", "wrong-path", "wrong-thread", "wrong-cwd", "late", "wrapped", "malformed"])
+def test_direct_skill_guard_binds_complete_native_input_and_isolates_bad_sessions(tmp_path, monkeypatch, fault):
+    target = write_loaded_skill(tmp_path, "otel-audit").resolve()
+    home = tmp_path / "isolated-home"
+    sessions = home / "sessions"
+    sessions.mkdir(parents=True)
+    monkeypatch.setenv("CODEX_EVAL_HOME", str(home))
+    body = target.read_text() if fault != "wrong-body" else "name: otel-audit\ntruncated\n"
+    path = target if fault != "wrong-path" else tmp_path / "other/SKILL.md"
+    injected = f"<skill>\n<name>otel-audit</name>\n<path>{path}</path>\n{body}\n</skill>"
+    def message(text):
+        return {"type": "response_item", "payload": {"type": "message", "role": "user", "content": [{"type": "input_text", "text": text}]}}
+    events = [{"type": "session_meta", "payload": {"id": "other" if fault == "wrong-thread" else "native-thread",
+               "cwd": str(tmp_path / "other") if fault == "wrong-cwd" else str(tmp_path)}},
+              message("Use $otel-audit after another instruction" if fault == "wrapped" else "$otel-audit ./service")]
+    if fault == "late":
+        events.append({"type": "response_item", "payload": {"type": "message", "role": "assistant", "content": []}})
+    events.append(message(injected))
+    session = sessions / "rollout-native-thread.jsonl"
+    session.write_text("invalid json" if fault == "malformed" else "\n".join(json.dumps(event) for event in events))
+    trace_events = [{"type": "thread.started", "thread_id": "native-thread"},
+                    codex_command_event("pwd", "completed", item_id="discovery", output=str(tmp_path))]
+    check = instruction_guard_check(tmp_path, trace_events)
+    assert check.passed is (fault is None)
+    if fault:
+        # A failed proof does not contaminate or abort a later independent run.
+        events[0]["payload"] = {"id": "native-thread", "cwd": str(tmp_path)}
+        session.write_text("\n".join(json.dumps(event) for event in [events[0], message("$otel-audit ./service"),
+            message(f"<skill>\n<name>otel-audit</name>\n<path>{target}</path>\n{target.read_text()}\n</skill>")]))
+        assert instruction_guard_check(tmp_path, trace_events).passed
 
 
 def test_with_skill_guard_ignores_transport_error_before_skill_read(tmp_path: Path):

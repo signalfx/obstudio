@@ -2,6 +2,12 @@
 
 Language-specific instrumentation guidance for Java services.
 
+For a logging path, first resolve the effective configuration and collection
+owner using [the shared logging reference](../logging-readiness.md#source-and-applicability).
+The environment-based setup recipes below apply only after that check; they
+do not supersede an active supported declarative loader, an intentional SDK
+opt-out, or an established operator-owned forwarding route.
+
 ---
 
 ## Preflight: Trace Wiring Inventory
@@ -588,8 +594,9 @@ public Item getItem(@SpanAttribute("item.id") String id) {
 
 Before adding a custom counter or histogram for an outcome that happens
 inside a request the Java agent already covers, check whether it belongs as
-an attribute on `http.server.request.duration` instead — see `../../otel-instrument/SKILL.md`
-`#### Implementation Rules`. The agent already sets
+an attribute on `http.server.request.duration` instead. When implementing a
+change, also follow the loaded instrumentation skill's Implementation Rules.
+The agent already sets
 `http.response.status_code` on that metric for every request, and
 `error.type` for a 5xx (or otherwise invalid) status, with no extra code --
 a plain 4xx client-error response does not set `error.type` on a server
@@ -722,7 +729,9 @@ diff or trace IDs printed in stdout is not evidence of OTLP log export.
          spanId: .[0].spanId}'
    ```
 
-3. Require exactly one matching OTLP record for one application log call.
+3. On a healthy delivery path, require exactly one matching received OTLP record
+   for one application log call. Fault/retry scenarios account for transport
+   copies separately from SDK emission and bridge ownership.
    Assert the body/category, severity text/number, logger or scope, and the same
    `service.name`, environment, and other approved resource identity used by
    traces and metrics. For the in-span record, assert nonempty trace/span IDs
@@ -774,6 +783,17 @@ fields. Check SDK-created parent/child spans and exact log-to-span joins using
 the common acceptance contract; stdout MDC strings alone do not prove OTLP
 correlation.
 
+Select only approved structured fields with the installed appender's supported
+capture options. Inspect the resolved agent/bridge's public documentation and
+value conversion, then exercise selected values through the actual appender.
+Use source matching that resolved dependency when documentation is insufficient;
+another release or the upstream main branch cannot establish installed behavior.
+If a selected required value, including an empty collection, is omitted, record
+the observed limitation; a direct typed-SDK pass does not close it. Resolve an
+authorized supported mapping or report it unverified/uncovered, preserving the
+sink and provider. Recheck capabilities after a dependency change rather than
+assuming either preservation or omission from a previous release.
+
 Capture the caller's OTel `Context` before submitting executor work and use its
 supported wrapping/scope mechanism unless agent/framework propagation is
 already verified. Context propagation alone does not carry arbitrary MDC.
@@ -797,6 +817,12 @@ bounded attempts, observable diagnostics, original appender output and
 application progress during an exporter fault.
 
 ### Log limits and export budgets
+
+For expensive payload construction, use the detected native logger's query,
+such as Logback `isInfoEnabled()`, at the worker's log call. Do not cache its
+answer or substitute an OTel-only predicate that hides original appenders.
+Cheap calls need no extra guard. Verify the actual Log4j/SLF4J API before
+using a different logger's query.
 
 For an existing application-owned SDK provider, verify
 `SdkLoggerProviderBuilder.setLogLimits` with

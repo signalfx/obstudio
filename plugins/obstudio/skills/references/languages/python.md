@@ -2,6 +2,12 @@
 
 Language-specific instrumentation guidance for Python services.
 
+For a logging path, first resolve the effective configuration and collection
+owner using [the shared logging reference](../logging-readiness.md#source-and-applicability).
+The environment-based setup recipes below apply only after that check; they
+do not supersede an active supported declarative loader, an intentional SDK
+opt-out, or an established operator-owned forwarding route.
+
 ---
 
 ## Auto-Instrumentation Library Map
@@ -689,8 +695,8 @@ async def process_order(order_id: str) -> Order:
 Before adding a custom counter or histogram for an outcome that happens
 inside a request the ASGI/WSGI instrumentation already covers, check
 whether it belongs as an attribute on `http.server.request.duration`
-instead — see `../../otel-instrument/SKILL.md` `#### Implementation Rules` and the
-`Python:` entry under `#### Language-Specific Musts`. The instrumentation
+instead. When implementing a change, also follow the loaded instrumentation
+skill's Implementation Rules and Python Language-Specific Musts. The instrumentation
 already sets `http.response.status_code` on that metric for every request,
 and `error.type` for a 5xx (or otherwise invalid) status, with no extra code
 -- a plain 4xx client-error response does not set `error.type` on a server
@@ -826,8 +832,10 @@ metrics only.
 Verify one sanitized record at each required severity both outside and inside
 an active span. Assert its body/category, severity, shared `service.name`,
 trace/span IDs when a span is active, presence in the original stdout/file
-sink, one record in Splunk Observability Studio, and zero OTLP records with
+sink, one received record on a healthy path in Splunk Observability Studio, and zero OTLP records with
 `OTEL_LOGS_EXPORTER=none`. This runtime check also detects duplicate handlers.
+In fault/retry scenarios distinguish transport copies from SDK emission and
+handler ownership; an unavailable receiver can receive zero records.
 
 ---
 
@@ -883,6 +891,12 @@ through application `logger.error`. Verify bounded attempts, application
 progress and original-handler output under a real exporter fault.
 
 ### Log limits and export budgets
+
+Use `logger.isEnabledFor(logging.INFO)` before an expensive argument-producing
+function when needed, checking inside the actual worker. Lazy `%s` formatting
+does not defer a function already called to produce its argument. Do not cache
+enablement or gate an enabled original handler on OTel-only state; cheap emits
+need no extra check.
 
 Verify the existing provider's public
 `LoggerProvider(log_record_limits=LogRecordLimits(

@@ -79,6 +79,26 @@ func TestSampledUnsampledDetachedContext(t *testing.T) {
 	}
 }
 
+func TestPreservesMeaningfulZeroFalseAndEmptyAttributes(t *testing.T) {
+	e := &exporter{}
+	_, logger := setup(t, e)
+	logger.Info("falsy-values", "zero", int64(0), "disabled", false, "empty", "", "items", []string{})
+	if len(e.records) != 1 {
+		t.Fatalf("wanted one native record, got %d", len(e.records))
+	}
+	attributes := map[string]log.Value{}
+	e.records[0].WalkAttributes(func(kv log.KeyValue) bool {
+		attributes[kv.Key] = kv.Value
+		return true
+	})
+	if len(attributes) != 4 || attributes["zero"].Kind() != log.KindInt64 || attributes["zero"].AsInt64() != 0 ||
+		attributes["disabled"].Kind() != log.KindBool || attributes["disabled"].AsBool() ||
+		attributes["empty"].Kind() != log.KindString || attributes["empty"].AsString() != "" ||
+		attributes["items"].Kind() != log.KindSlice || len(attributes["items"].AsSlice()) != 0 {
+		t.Fatalf("meaningful values lost or coerced: %v", attributes)
+	}
+}
+
 func TestConcurrentContextIsolation(t *testing.T) {
 	e := &exporter{}
 	_, l := setup(t, e)
@@ -164,9 +184,12 @@ func TestFailureBoundedWithOriginalSink(t *testing.T) {
 	}
 }
 
-type countHandler struct{ count int }
+type countHandler struct {
+	count int
+	err   error
+}
 
-func (h *countHandler) Handle(context.Context, slog.Record) error { h.count++; return nil }
+func (h *countHandler) Handle(context.Context, slog.Record) error { h.count++; return h.err }
 func (*countHandler) Enabled(context.Context, slog.Level) bool    { return true }
 func (h *countHandler) WithAttrs([]slog.Attr) slog.Handler        { return h }
 func (h *countHandler) WithGroup(string) slog.Handler             { return h }
@@ -180,8 +203,14 @@ func (h teeHandler) Enabled(ctx context.Context, level slog.Level) bool {
 	return h.bridge.Enabled(ctx, level) || h.sink.Enabled(ctx, level)
 }
 func (h teeHandler) Handle(ctx context.Context, r slog.Record) error {
-	_ = h.sink.Handle(ctx, r.Clone())
-	return h.bridge.Handle(ctx, r)
+	var sinkErr, bridgeErr error
+	if h.sink.Enabled(ctx, r.Level) {
+		sinkErr = h.sink.Handle(ctx, r.Clone())
+	}
+	if h.bridge.Enabled(ctx, r.Level) {
+		bridgeErr = h.bridge.Handle(ctx, r)
+	}
+	return errors.Join(sinkErr, bridgeErr)
 }
 func (h teeHandler) WithAttrs(a []slog.Attr) slog.Handler {
 	return teeHandler{h.bridge.WithAttrs(a), h.sink.WithAttrs(a)}

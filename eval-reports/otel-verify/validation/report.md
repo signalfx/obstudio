@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-verify |
-| Run ID | 20261109T042848592608Z |
+| Run ID | 20261109T184737999886Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -17,11 +17,11 @@ This report validates eval JSON, eval directory availability, and skill source a
 
 | Eval | Service | Prompts | Eval File | Sanity Checks | Rubric Checks | Runtime Checks |
 |---|---|---:|---|---:|---:|---:|
-| go/chi-basic/qual/logging-verify-contract | go/chi-basic | 3 | evals/go/chi-basic/eval/qual/logging-verify-contract.json | 0 | 11 | 0 |
+| go/chi-basic/qual/logging-verify-contract | go/chi-basic | 3 | evals/go/chi-basic/eval/qual/logging-verify-contract.json | 0 | 14 | 0 |
 | go/chi-basic/qual/verify | go/chi-basic | 1 | evals/go/chi-basic/eval/qual/verify.json | 0 | 6 | 0 |
 | go/native-genai-demo/qual/verify | go/native-genai-demo | 1 | evals/go/native-genai-demo/eval/qual/verify.json | 0 | 7 | 0 |
-| java/springboot-basic/qual/logging-verify-contract | java/springboot-basic | 3 | evals/java/springboot-basic/eval/qual/logging-verify-contract.json | 0 | 11 | 0 |
-| node/express-basic/qual/logging-verify-contract | node/express-basic | 3 | evals/node/express-basic/eval/qual/logging-verify-contract.json | 0 | 11 | 0 |
+| java/springboot-basic/qual/logging-verify-contract | java/springboot-basic | 3 | evals/java/springboot-basic/eval/qual/logging-verify-contract.json | 0 | 14 | 0 |
+| node/express-basic/qual/logging-verify-contract | node/express-basic | 3 | evals/node/express-basic/eval/qual/logging-verify-contract.json | 0 | 14 | 0 |
 | python/ai-assistant-demo/qual/ao-name-inputs-verify | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/ao-name-inputs-verify.json | 0 | 6 | 0 |
 | python/ai-assistant-demo/qual/ao-root-compatibility-verify | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/ao-root-compatibility-verify.json | 0 | 8 | 0 |
 | python/ai-assistant-demo/qual/ao-target-handoff-verify | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/ao-target-handoff-verify.json | 0 | 4 | 0 |
@@ -36,7 +36,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | python/ai-assistant-demo/qual/verify | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/verify.json | 0 | 7 | 0 |
 | python/existing-otel-agent-demo/qual/route-recovery-verify | python/existing-otel-agent-demo | 1 | evals/python/existing-otel-agent-demo/eval/qual/route-recovery-verify.json | 0 | 5 | 0 |
 | python/existing-otel-agent-demo/qual/verify | python/existing-otel-agent-demo | 1 | evals/python/existing-otel-agent-demo/eval/qual/verify.json | 0 | 7 | 0 |
-| python/flask-basic/qual/logging-verify-contract | python/flask-basic | 3 | evals/python/flask-basic/eval/qual/logging-verify-contract.json | 0 | 11 | 0 |
+| python/flask-basic/qual/logging-verify-contract | python/flask-basic | 3 | evals/python/flask-basic/eval/qual/logging-verify-contract.json | 0 | 14 | 0 |
 | python/model-directed-agent/qual/connection-modes-verify | python/model-directed-agent | 1 | evals/python/model-directed-agent/eval/qual/connection-modes-verify.json | 0 | 5 | 0 |
 | python/model-directed-agent/qual/resource-table-verify | python/model-directed-agent | 1 | evals/python/model-directed-agent/eval/qual/resource-table-verify.json | 0 | 6 | 0 |
 | python/model-directed-agent/qual/verify | python/model-directed-agent | 1 | evals/python/model-directed-agent/eval/qual/verify.json | 0 | 4 | 0 |

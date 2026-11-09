@@ -2,6 +2,12 @@
 
 Language-specific instrumentation guidance for Go services.
 
+For a logging path, first resolve the effective configuration and collection
+owner using [the shared logging reference](../logging-readiness.md#source-and-applicability).
+The environment-based setup recipes below apply only after that check; they
+do not supersede an active supported declarative loader, an intentional SDK
+opt-out, or an established operator-owned forwarding route.
+
 ---
 
 ## Auto-Instrumentation Library Map
@@ -666,9 +672,10 @@ go func(ctx context.Context) {
 
 Before adding a custom counter or histogram for an outcome that happens
 inside a request `otelhttp.NewHandler` already wraps, check whether it
-belongs as an attribute on `http.server.request.duration` instead — see
-`../../otel-instrument/SKILL.md` `#### Implementation Rules` and the `Go:` entry under
-`#### Language-Specific Musts` for the `otelhttp.LabelerFromContext` pattern.
+belongs as an attribute on `http.server.request.duration` instead, using
+`otelhttp.LabelerFromContext` for permitted request-metric attributes.
+When implementing a change, also follow the loaded instrumentation skill's
+Implementation Rules and Language-Specific Musts.
 Only define a new instrument when the signal does not correlate 1:1 with a
 single request (a queue-depth gauge, a background job outcome).
 
@@ -818,8 +825,10 @@ Add an in-memory SDK log test and a full local Splunk Observability Studio runti
 sanitized application record at each required severity both outside and inside
 an active span, then assert its exact body/category, severity, shared resource
 including `service.name`, and trace/span IDs for the active-span record. Prove
-the original stdout/file sink still receives it, exactly one OTel record exists
-per application log call, `OTEL_LOGS_EXPORTER=none` produces no OTel record
+the original stdout/file sink still receives it, one SDK record is emitted per
+application log call and a healthy receiver gets exactly one copy.
+Fault/retry scenarios count transport copies separately from bridge ownership;
+an unavailable receiver can receive zero records. `OTEL_LOGS_EXPORTER=none` produces no OTel record
 while preserving the original sink, and the record is visible in the Splunk Observability Studio
 Explorer. When trace/metric cloud export is enabled, also prove no cloud log
 endpoint, header, exporter, or forwarding path was configured.
@@ -862,6 +871,12 @@ changes global error handling, isolate its process so it cannot affect later
 cases. Prove bounded attempts, diagnostics, original sink and app progress.
 
 ### Log limits and export budgets
+
+For expensive construction, check `logger.Enabled(ctx, slog.LevelInfo)` at the
+worker call using its actual request context. Do not cache the result. A fanout
+must enable the native call when any destination needs it, then dispatch only
+to individually enabled handlers. OTel-only disabled state must preserve an
+enabled original sink; cheap emits need no additional guard.
 
 Verify `sdklog.WithAttributeCountLimit(count)` and
 `sdklog.WithAttributeValueLengthLimit(length)` on the existing provider's

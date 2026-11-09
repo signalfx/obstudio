@@ -160,6 +160,47 @@ class AsyncLogging(unittest.TestCase):
         self.expect({"bridge-before-queue-sink": (62, 1)})
         self.assertEqual(sink.getvalue().count("bridge-before-queue-sink"), 1)
 
+    def test_worker_checks_current_native_enablement_before_expensive_work(self):
+        sink = io.StringIO()
+        self.logger.addHandler(logging.StreamHandler(sink))
+        constructed = 0
+
+        def payload():
+            nonlocal constructed
+            constructed += 1
+            return f"guard-{constructed}"
+
+        async def run():
+            self.logger.setLevel(logging.ERROR)
+            await asyncio.to_thread(lambda: self.logger.info(payload()))
+            self.assertEqual(constructed, 1)
+            self.assertEqual(sink.getvalue(), "")
+            self.assertEqual(len(self.exporter.get_finished_logs()), 0)
+
+            def guarded():
+                if self.logger.isEnabledFor(logging.INFO):
+                    self.logger.info(payload())
+
+            for level, expected in ((logging.ERROR, 1), (logging.INFO, 2), (logging.ERROR, 2)):
+                self.logger.setLevel(level)
+                await asyncio.wait_for(asyncio.to_thread(guarded), 2)
+                self.assertEqual(constructed, expected)
+            self.expect({"guard-2": (0, 0)})
+            self.assertEqual(sink.getvalue(), "guard-2\n")
+
+            empty = LoggerProvider(shutdown_on_exit=False)
+            try:
+                self.logger.handlers = [LoggingHandler(logger_provider=empty), logging.StreamHandler(sink)]
+                self.logger.setLevel(logging.INFO)
+                await asyncio.wait_for(asyncio.to_thread(guarded), 2)
+                self.assertEqual(constructed, 3)
+                self.assertEqual(sink.getvalue(), "guard-2\nguard-3\n")
+                self.expect({"guard-2": (0, 0)})
+            finally:
+                empty.shutdown()
+
+        asyncio.run(run())
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

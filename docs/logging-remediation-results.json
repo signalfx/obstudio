@@ -1,7 +1,7 @@
 {
   "scope": "Maintained native SDK/bridge fixtures; real local OTLP/HTTP exporter/receiver boundary checks replay bridge-produced SDK records. No full application, Java-agent, distributed queue or cloud proof.",
   "starting_head": "8600493b75dc1b3eebf16ac493806cb1e865f2b4",
-  "source_state": "Source-bound local pre-push validation:3consecutive completecleanpasses on unchanged150-input source. Review/publication/current-headCI tracked separately in PR352.",
+  "source_state": "FinalD1instruction snapshotd9ae5700 verified by actualClaudeDesktop with no remaining source/convention mismatch in inspected scope. Execution freeze120fe256 three-pass gate running;finalcombinedPRreview pendingstreak3.",
   "native_summary": {
     "commands": 12,
     "trials_per_language": 3,
@@ -24,7 +24,8 @@
       "log_limit_environment_precedence": 3
     },
     "raw_output_hash_count": 52,
-    "actual_xml_reconciled": 6
+    "actual_xml_reconciled": 6,
+    "status": "historical complete pre-followup source; see current_followup"
   },
   "native_trials": [
     {
@@ -940,7 +941,8 @@
     "command": "UV_NO_CONFIG=1 make test-pytest-plugin",
     "passed": 214,
     "worker_reproduction": "Actual two-worker report previously recorded1; serial and two-worker regression cases now pass.",
-    "latest_log": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/plugin-rubric-mapping.log"
+    "latest_log": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/source-precision-pytest-plugin.log",
+    "latest_result": "214passed on current source,exit0"
   },
   "validation": {
     "otel-audit": {
@@ -958,7 +960,8 @@
       "skipped": 5,
       "log": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/verify-validation-joint-async.log"
     },
-    "skip_reason": "Four Python wire/correlation cases require the runner-owned receiver and skip in ordinary validation; one unrelated optional LangChain/AO module is unavailable. The formal four-language native matrix has zero skips."
+    "skip_reason": "Four Python wire/correlation cases require the runner-owned receiver and skip in ordinary validation; one unrelated optional LangChain/AO module is unavailable. The formal four-language native matrix has zero skips.",
+    "status": "Historical62e;current full validation recorded in current_followup"
   },
   "semantic_round_1": {
     "workflow_cases_passed": 36,
@@ -1124,7 +1127,7 @@
     "source_snapshot": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/deadline-skip-stale-source-jgeq_k7x",
     "output": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/deadline-skip-stale-output-sjaod2y2"
   },
-  "current_source_note": "Threeconsecutivecurrent150-inputpasses clean. All396declaredcriteria,237nativecases,240realspan/logjoins,6XMLdirs and81snapshotfilechecks independentlyverified;12baseline/150frozenhashes unchanged. Standalone237nativeevidence is separate,not added to gate totals.",
+  "current_source_note": "fd180modelattempt interrupted for verifiedD1 correction with no clean credit. Current120fe target3x(168semantic+87native+37regression/parity),sol/high task andjudge. All olderdatasets historical.",
   "semantic_cancelled_rounds": [
     {
       "round": 3,
@@ -1204,7 +1207,8 @@
     "namespace": "/Users/tithumma/.codex/skills/obstudio",
     "receipt": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/installed-skills-joint-async.json",
     "verified_canonical_files": 70,
-    "preserved_aliases": true
+    "preserved_aliases": true,
+    "status": "Historical62e installation;current validated reinstall pending"
   },
   "correlation_assertions": [
     "Actual SDK-created parent/child spans; native application logger bridges export directly through configured OTLP/HTTP pipelines, not replay or manually assigned correlation IDs.",
@@ -1338,6 +1342,295 @@
     }
   ],
   "three_consecutive_clean_passes": {
+    "status": "Current pipeline retained as development evidence; native provenance/cleanup fixes and user-requested version-neutral Java change supersede source freeze, so fresh strict gate required.",
+    "clean_streak": 0,
+    "source_identity": "e3d88ddc9cb9f9e5a3a0da11d1ccf8054f59a6dceffbb40cbfa1e7e838a5056f",
+    "scope": {
+      "languages": [
+        "java",
+        "python",
+        "go",
+        "node"
+      ],
+      "roles": [
+        "audit",
+        "instrument",
+        "verify"
+      ],
+      "semantic_cases": 12,
+      "criteria_per_case": 14,
+      "total_criteria": 168,
+      "native_test_cases": 87,
+      "runner_receiver_workflow_regressions": 54,
+      "positive_runtime": "Independent unchanged host checker on actual generated service after instrument and verify",
+      "model": "gpt-6.1-sol",
+      "reasoning_effort": "high"
+    },
+    "source_inputs": 684,
+    "prior_attempts": "Preserved without clean credit; includes setup failures and54/56developmentauditcriteria.",
+    "combined_review": "Not started; requires current complete clean streak3"
+  },
+  "java_flush_evidence": {
+    "observed": "Simple live-correlation flush join did not succeed within2s;all22logs/20spans eventually received.",
+    "mechanism": "Installed SimpleLogRecordProcessor passes a live concurrent pending-export set to CompletableResultCode.ofAll; that helper counts size separately from iterator callbacks. A controlled concurrent collection reproduces pending aggregate after individual success. This establishes a matching race mechanism, not a captured exact interleaving of the failed run.",
+    "controlled_reproduction": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/java-live-flush-proof/result.json",
+    "correction": "Use public bounded SDK batch processors with explicit exporter/processor/caller budgets and assert one HTTP batch per signal in allfour correlation cases. No upstream SDK patch is claimed.",
+    "focused_repetitions": {
+      "passed": 10,
+      "per_trial_log_requests": 1,
+      "per_trial_logs": 22,
+      "per_trial_trace_requests": 1,
+      "per_trial_spans": 20,
+      "receipt_pointer": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/java-batch-stress-latest.txt"
+    },
+    "budgets": "Java correlation: whole HTTP call1s,max2attempt ceiling,100msbackoff; SDKprocessor3s,flushjoin4s,JUnit15s. Other languages also use supported bounded batch options. Controlled fixture budgets are not production defaults."
+  },
+  "historical_native_234_before_batch": {
+    "receipt": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/native-correlation-234/results.json",
+    "note": "Passed before sequential pass2 exposed Java Simple processor flush timeout; superseded by fresh bounded-batch234 result."
+  },
+  "language_reference_refactor": {
+    "canonical_guides": [
+      "skills/references/languages/java.md",
+      "skills/references/languages/python.md",
+      "skills/references/languages/go.md",
+      "skills/references/languages/node.md"
+    ],
+    "compatibility_forwarders": [
+      "skills/otel-instrument/references/languages/java.md",
+      "skills/otel-instrument/references/languages/python.md",
+      "skills/otel-instrument/references/languages/go.md",
+      "skills/otel-instrument/references/languages/node.md"
+    ],
+    "shared_consumers": [
+      "otel-audit",
+      "otel-instrument",
+      "otel-verify"
+    ],
+    "existing_guide_content": "All four original bodies preserved, apart from repaired relative skill links; logging sections added.",
+    "common_reference": "Keeps common rules/acceptance; loads detected language only. Audit and verification remain read-only.",
+    "structural_checks": {
+      "command": "UV_NO_CONFIG=1 .venv/bin/python -m pytest test_default_local_log_export_guidance.py -k 'logging_language_references or previous_language_reference' -q",
+      "cwd": "evals",
+      "passed": 7
+    },
+    "focused_regressions": {
+      "command": "UV_NO_CONFIG=1 .venv/bin/python -m pytest test_default_local_log_export_guidance.py test_incident_readiness_skill_guidance.py test_logging_contract_runner.py test_logging_receiver.py -q",
+      "cwd": "evals",
+      "passed": 182
+    },
+    "semantic_addition": "New language-options observation and native-API/provider/resource preservation acceptance for all12 definitions; existing11 criteria and3prompts retained.",
+    "adapted_simplifier": "Applied installed official code-simplifier criteria to the refactor; retained one canonical guide per language and simple forwarding files; clarified test construction without behavior changes.",
+    "refactor_pre_precedence_source_identity": "75fac0d8165ecbf0c718abda99c85a40cfe4b8a72c66187e5dbb3da2b8e8597e",
+    "refactor_pre_precedence_frozen_inputs": 143
+  },
+  "historical_native_234_before_python_precedence": {
+    "receipt": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/native-batch-full-234/results.json",
+    "note": "Passed before Python limit-precedence guide/setup regression; retained with old source identity."
+  },
+  "historical_native_237_auxiliary_probe_invalidation": {
+    "receipt": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/native-237-postrun-probe-invalidation.json",
+    "note": "Full execution passed, but a later diagnostic reused one Java XML path; excluded from final-source evidence. Fresh237 run uses different snapshot/output and raw output hashes."
+  },
+  "python_log_limit_precedence": {
+    "receipt": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/python-limit-precedence-evidence.json",
+    "root_cause": "Example used generic fallback args, which log-specific environment can override. SDK behaves correctly; guidance lacked the explicit effective-precedence scenario.",
+    "correction": "Supported log-specific args, env-present exact8/32/12drop proof and independent128/64 operator-policy preservation.",
+    "focused_regressions": 189,
+    "native_regression_trials": 3,
+    "other_language_targeted_checks": "Existing Go/Node/Java limit APIs each passed one env-present targeted check; no general deployment proof."
+  },
+  "historical_negative_control_before_current_source": {
+    "command_prefix": "MAVEN_ARGS=-DskipTests",
+    "runner_exit_code": 1,
+    "trials": [
+      {
+        "language": "java",
+        "trial": 1,
+        "command": [
+          "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/toolchains/maven/apache-maven-3.9.11/bin/mvn",
+          "-s",
+          "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/public-maven-settings.xml",
+          "test",
+          "-Dlogging.contract.reportsDirectory=/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/java-skip-control-234/java-1-pb1rxj5o"
+        ],
+        "cwd": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/native-correlation-t1bhvh6p/evals/java/logging-contract",
+        "exit_code": 0,
+        "passed_tests": 0,
+        "expected_tests": 22,
+        "status": "fail",
+        "passed": false,
+        "log": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/java-skip-control-234/java-1.log",
+        "report_dir": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/java-skip-control-234/java-1-pb1rxj5o",
+        "receiver_url": "http://127.0.0.1:50928/java-1",
+        "seconds": 0.853,
+        "timed_out": false,
+        "validation_error": "No fresh JUnit/Surefire report; tests may have been skipped"
+      },
+      {
+        "language": "java",
+        "trial": 2,
+        "command": [
+          "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/toolchains/maven/apache-maven-3.9.11/bin/mvn",
+          "-s",
+          "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/public-maven-settings.xml",
+          "test",
+          "-Dlogging.contract.reportsDirectory=/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/java-skip-control-234/java-2-z5fzj1g4"
+        ],
+        "cwd": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/native-correlation-t1bhvh6p/evals/java/logging-contract",
+        "exit_code": 0,
+        "passed_tests": 0,
+        "expected_tests": 22,
+        "status": "fail",
+        "passed": false,
+        "log": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/java-skip-control-234/java-2.log",
+        "report_dir": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/java-skip-control-234/java-2-z5fzj1g4",
+        "receiver_url": "http://127.0.0.1:50928/java-2",
+        "seconds": 0.781,
+        "timed_out": false,
+        "validation_error": "No fresh JUnit/Surefire report; tests may have been skipped"
+      },
+      {
+        "language": "java",
+        "trial": 3,
+        "command": [
+          "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/toolchains/maven/apache-maven-3.9.11/bin/mvn",
+          "-s",
+          "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/public-maven-settings.xml",
+          "test",
+          "-Dlogging.contract.reportsDirectory=/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/java-skip-control-234/java-3-03i2hekr"
+        ],
+        "cwd": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/native-correlation-t1bhvh6p/evals/java/logging-contract",
+        "exit_code": 0,
+        "passed_tests": 0,
+        "expected_tests": 22,
+        "status": "fail",
+        "passed": false,
+        "log": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/java-skip-control-234/java-3.log",
+        "report_dir": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/java-skip-control-234/java-3-03i2hekr",
+        "receiver_url": "http://127.0.0.1:50928/java-3",
+        "seconds": 0.795,
+        "timed_out": false,
+        "validation_error": "No fresh JUnit/Surefire report; tests may have been skipped"
+      }
+    ],
+    "verdict": "All three correctly rejected despite Maven exit0; not counted as logging successes."
+  },
+  "semantic_precedence_first_gate": {
+    "source_identity": "36881e23b7ceb34d507d78f7e486fc8a75e09fe29a26f4c27791fb0b592dc423",
+    "output": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/clean-pass-1-w1zcqqtm",
+    "semantic_cases": 12,
+    "met_criteria": 130,
+    "criteria": 132,
+    "native_passed": 79,
+    "failures": [
+      {
+        "job": "instrument",
+        "path": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/codex-evals/otel-instrument/20261109T012701137368Z/cases/python/flask-basic/logging-trial-1/with_skill/rubric_grade.json",
+        "reason": "Incomplete/failed grade"
+      },
+      {
+        "job": "instrument",
+        "path": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/codex-evals/otel-instrument/20261109T012701137368Z/cases/python/flask-basic/logging-trial-1/with_skill/rubric_grade.json",
+        "criterion": {
+          "id": "rubric-5",
+          "pass": false,
+          "notes": "Nearly complete, but omits the explicitly required positive environment-present test asserting 20 input attributes become 8 retained attributes, 32-character values and 12 drops.",
+          "evidence": "logging-instrument.json:921 describes the negative 20-attribute precedence case. Line 922 asserts effective 8/32 for the positive route; line 923 tests 7/8/9 attributes with one drop. Neither report specifies the required positive 20-to-8 case with 12 drops. Native Python options, provider preservation, independent 128/64 policy and other boundaries are correctly covered."
+        }
+      },
+      {
+        "job": "verify",
+        "path": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/codex-evals/otel-verify/20261109T012701137364Z/cases/python/flask-basic/logging-trial-1/with_skill/rubric_grade.json",
+        "reason": "Incomplete/failed grade"
+      },
+      {
+        "job": "verify",
+        "path": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/codex-evals/otel-verify/20261109T012701137364Z/cases/python/flask-basic/logging-trial-1/with_skill/rubric_grade.json",
+        "criterion": {
+          "id": "rubric-5",
+          "pass": false,
+          "notes": "Otherwise thorough: names Python log-specific APIs, explains environment precedence, rejects foreign options/provider replacement, preserves independent 128/64 controls, and specifies separate Body boundaries. However, the env-present 20-attribute test permits 'at most 8' attributes and makes 12 drops conditional. The requested exact 8 retained attributes, 32-character values and 12 drops should be explicit; the current assertion could accept excessive truncation or dropping.",
+          "evidence": "logging-verify.json: ownership_and_capability.python_limit_decision; scenarios.S-LIMITS.exact_assertions, especially '12 if retains 8' and 'at most8 attrs and at most32 chars'"
+        }
+      },
+      {
+        "reason": "All12 cases and132 individual criteria must pass"
+      }
+    ],
+    "disposition": "Rejected. Corrected Python exact positive replay and clarified controlled SDK-input versus application/bridge accounting. No native fixture or existing substantive expected outcome removed."
+  },
+  "historical_native_237_before_java_deadline": {
+    "receipt": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/report-results-before-java-deadline.json",
+    "note": "Three trials passed before a later sequential pass exposed the wrong200ms Java retry expectation. Superseded by fresh deadline-corrected237 execution."
+  },
+  "correlation_flag_scope": "Maintained native assertions compare each log flag byte to the actual SDK SpanContext. The receipt cross-check joins exact IDs/resources/parentage; it does not claim serialized span flag bytes equal log flags. Python1.45.1 span exporter emits256 while sampled log flags preserve SDK3.",
+  "java_retry_deadline_evidence": {
+    "root_cause": "Fixture treated SDK1.68 OkHttp whole-call timeout as per-attempt and incorrectly guaranteed2received retries within200ms. SDK bounds remaining budget correctly; no SDKbug or patch claimed.",
+    "official_source": "https://opentelemetry.io/docs/specs/otel/protocol/exporter/#retry",
+    "normative_scope": "One OTLP batch deadline includes all request attempts and retry waits; an earlier caller deadline still wins.",
+    "installed_bytecode_provenance": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/java-deadline-scope/provenance.json",
+    "red_three_trials": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/java-deadline-red-native-mgqs3jsq/proof.json",
+    "red_outcome": "Controlled150ms503:old200ms test failed retry assertion3/3 with1received,0accepted;21other Java cases passed each.",
+    "green_stress": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/java-deadline-stress-440/results.json",
+    "green_outcome": "20cold trials22/22 each:440/440, exact2received/0accepted in every controlled retry.",
+    "correction": "800ms whole-call for retry/healthy/partial; retain200ms stalled-case early deadline, max2ceiling,100basebackoff80\u2013120jitter,1000ms measured overall bound. Receiver delayed retry waits outside receipt lock; new concurrent request regression passes.",
+    "rubric_coverage": [
+      "evals/java/springboot-basic/eval/qual/logging-audit-contract.json",
+      "evals/java/springboot-basic/eval/qual/logging-instrument-contract.json",
+      "evals/java/springboot-basic/eval/qual/logging-verify-contract.json"
+    ]
+  },
+  "rubric_mapping_evidence": {
+    "retained_protocol": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/three-clean-before-rubric-mapping.json",
+    "invalid_grade": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/codex-evals/otel-instrument/20261109T032239371225Z/cases/python/flask-basic/logging-trial-1/with_skill/rubric_grade.json",
+    "observed": "Final compound source/correlation criterion split into rubric11and12;all133checks positive but wrong mapping invalidates132-check gate.",
+    "correction": "Defaultprompt labels declared items and requires exactly one joint check per item;customjudge template/schemaunchanged. Privategate additionally rejects missing/duplicate/unexpectedIDs without rewriting grades or removing obligations.",
+    "focused_red": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/rubric-mapping-red.log",
+    "focused_green": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/rubric-mapping-green.log",
+    "plugin_suite": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/plugin-rubric-mapping.log",
+    "private_negative_controls": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/rubric-mapping-gate-controls.json",
+    "simplifier": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/rubric-mapping-simplifier.json"
+  },
+  "joint_async_proof_evidence": {
+    "gap": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/joint-async-proof-gap.json",
+    "retained_protocol": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/three-clean-before-joint-async-proof.json",
+    "native_status": "Existing4native correlation fixtures already combine SDKparent/childspans and ownedasync logger withreceiver joins. No nativecode changed;27source/52rawoutput hashes verified.",
+    "correction": "Same-owned-path evidence composition and explicitly linked joint scenario;4language-specific mechanisms;split-async-join-proof negativecontrol ineachinput/all12rubrics. Missingproof ispartial,notautomaticproductiondefect;existingprovider/span/propagation ownershippreserved.",
+    "simplifier": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/joint-async-simplifier.json",
+    "focused": "146passed",
+    "validation": "721audit/752instrument/687verify,5scopedskipseach;2audit+2instrumentsmoke;49+8policy+owningskillunits+188interactive passed.",
+    "observed_corrected_plan": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/joint-async-first-go-plan-evidence.json"
+  },
+  "evaluation_model": {
+    "agent": "gpt-6.1-sol",
+    "judge": "gpt-6.1-sol",
+    "reasoning_effort": "high",
+    "configuration": "evals/codex-evals.toml",
+    "live_process_proof": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/sol-high-live-eval-proof.json",
+    "execution_scope": "Both task and rubric configured gpt-6.1-sol/high;current driver enforces exact model metadata and frozen high config. Historical62e3pass evidence is separate; current fd180 gate running,not yet complete.",
+    "github_live_evals": "Disabled template .github/workflows/codex-evals.yml.disabled; no live-model GitHubActions run claimed.",
+    "live_process_proof_status": "Old live_process_proof is historical. Current point-in-time sample found no inspectable CLI flags after process rename; do not present it as live flag evidence. Current backend task/grade share explicit extra_args; per-run model metadata must reconcile.",
+    "current_task_runtime_metadata": {
+      "verified_sessions": 12,
+      "model": "gpt-6.1-sol",
+      "effort": "high",
+      "proof": "isolated Codex session turn_context metadata matched to current12taskworkspaces",
+      "receipt": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/current-gate-session-model-contexts.json",
+      "rubric_sessions": "not yet complete;must verify later",
+      "status": "Historical superseded fd180 attempt;new120fe task/rubric session reconciliation pending"
+    }
+  },
+  "final_harness": {
+    "command": "PATH=\"$PWD/evals/.venv/bin:$PATH\" UV_NO_CONFIG=1 make test-eval-harness",
+    "passed": 880,
+    "skipped": 5,
+    "source_manifests_verified": 26,
+    "log": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/final-three-clean-harness.log",
+    "skip_scope": "Oneoptionalmodule plus4Pythonwire/correlationcases require the runner-owned receiver;all formal native trials havezero skips.",
+    "status": "Historical62e;current fullharness pending fresh rubric reports"
+  },
+  "historical_complete_gate_at_62e0391": {
     "required": 3,
     "clean_streak": 3,
     "status": "Complete:3consecutiveunchanged-sourcepasses,12cases/132criteria+79native+37regressions/parity each;396criteria/237native/240realjoins independentlyreconciled.",
@@ -1588,253 +1881,501 @@
       }
     ]
   },
-  "java_flush_evidence": {
-    "observed": "Simple live-correlation flush join did not succeed within2s;all22logs/20spans eventually received.",
-    "mechanism": "Installed SimpleLogRecordProcessor passes a live concurrent pending-export set to CompletableResultCode.ofAll; that helper counts size separately from iterator callbacks. A controlled concurrent collection reproduces pending aggregate after individual success. This establishes a matching race mechanism, not a captured exact interleaving of the failed run.",
-    "controlled_reproduction": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/java-live-flush-proof/result.json",
-    "correction": "Use public bounded SDK batch processors with explicit exporter/processor/caller budgets and assert one HTTP batch per signal in allfour correlation cases. No upstream SDK patch is claimed.",
-    "focused_repetitions": {
-      "passed": 10,
-      "per_trial_log_requests": 1,
-      "per_trial_logs": 22,
-      "per_trial_trace_requests": 1,
-      "per_trial_spans": 20,
-      "receipt_pointer": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/java-batch-stress-latest.txt"
+  "current_followup": {
+    "status": "Source verification complete atd9ae5700;allF1-F5andD1resolved,current three-pass gate running",
+    "native_focused": {
+      "counts": {
+        "java": 24,
+        "python": 23,
+        "go": 20,
+        "node": 20
+      },
+      "passed": 87,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0,
+      "scope": "Actual native SDK/bridge and owned HTTP receiver; Java zero/false/emptystring through selected bridge plus emptyarray through typed SDK only; no claim that pinned Java bridge preserves emptycollections.",
+      "results": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/native-values-focused-a7wcdef0/results.json"
     },
-    "budgets": "Java correlation: whole HTTP call1s,max2attempt ceiling,100msbackoff; SDKprocessor3s,flushjoin4s,JUnit15s. Other languages also use supported bounded batch options. Controlled fixture budgets are not production defaults."
-  },
-  "historical_native_234_before_batch": {
-    "receipt": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/native-correlation-234/results.json",
-    "note": "Passed before sequential pass2 exposed Java Simple processor flush timeout; superseded by fresh bounded-batch234 result."
-  },
-  "language_reference_refactor": {
-    "canonical_guides": [
-      "skills/references/languages/java.md",
-      "skills/references/languages/python.md",
-      "skills/references/languages/go.md",
-      "skills/references/languages/node.md"
-    ],
-    "compatibility_forwarders": [
-      "skills/otel-instrument/references/languages/java.md",
-      "skills/otel-instrument/references/languages/python.md",
-      "skills/otel-instrument/references/languages/go.md",
-      "skills/otel-instrument/references/languages/node.md"
-    ],
-    "shared_consumers": [
-      "otel-audit",
-      "otel-instrument",
-      "otel-verify"
-    ],
-    "existing_guide_content": "All four original bodies preserved, apart from repaired relative skill links; logging sections added.",
-    "common_reference": "Keeps common rules/acceptance; loads detected language only. Audit and verification remain read-only.",
-    "structural_checks": {
-      "command": "UV_NO_CONFIG=1 .venv/bin/python -m pytest test_default_local_log_export_guidance.py -k 'logging_language_references or previous_language_reference' -q",
-      "cwd": "evals",
-      "passed": 7
-    },
-    "focused_regressions": {
-      "command": "UV_NO_CONFIG=1 .venv/bin/python -m pytest test_default_local_log_export_guidance.py test_incident_readiness_skill_guidance.py test_logging_contract_runner.py test_logging_receiver.py -q",
-      "cwd": "evals",
-      "passed": 182
-    },
-    "semantic_addition": "New language-options observation and native-API/provider/resource preservation acceptance for all12 definitions; existing11 criteria and3prompts retained.",
-    "adapted_simplifier": "Applied installed official code-simplifier criteria to the refactor; retained one canonical guide per language and simple forwarding files; clarified test construction without behavior changes.",
-    "refactor_pre_precedence_source_identity": "75fac0d8165ecbf0c718abda99c85a40cfe4b8a72c66187e5dbb3da2b8e8597e",
-    "refactor_pre_precedence_frozen_inputs": 143
-  },
-  "historical_native_234_before_python_precedence": {
-    "receipt": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/native-batch-full-234/results.json",
-    "note": "Passed before Python limit-precedence guide/setup regression; retained with old source identity."
-  },
-  "historical_native_237_auxiliary_probe_invalidation": {
-    "receipt": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/native-237-postrun-probe-invalidation.json",
-    "note": "Full execution passed, but a later diagnostic reused one Java XML path; excluded from final-source evidence. Fresh237 run uses different snapshot/output and raw output hashes."
-  },
-  "python_log_limit_precedence": {
-    "receipt": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/python-limit-precedence-evidence.json",
-    "root_cause": "Example used generic fallback args, which log-specific environment can override. SDK behaves correctly; guidance lacked the explicit effective-precedence scenario.",
-    "correction": "Supported log-specific args, env-present exact8/32/12drop proof and independent128/64 operator-policy preservation.",
-    "focused_regressions": 189,
-    "native_regression_trials": 3,
-    "other_language_targeted_checks": "Existing Go/Node/Java limit APIs each passed one env-present targeted check; no general deployment proof."
-  },
-  "historical_negative_control_before_current_source": {
-    "command_prefix": "MAVEN_ARGS=-DskipTests",
-    "runner_exit_code": 1,
-    "trials": [
-      {
-        "language": "java",
-        "trial": 1,
-        "command": [
-          "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/toolchains/maven/apache-maven-3.9.11/bin/mvn",
-          "-s",
-          "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/public-maven-settings.xml",
-          "test",
-          "-Dlogging.contract.reportsDirectory=/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/java-skip-control-234/java-1-pb1rxj5o"
-        ],
-        "cwd": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/native-correlation-t1bhvh6p/evals/java/logging-contract",
+    "focused_guidance_runner_receiver": 185,
+    "deterministic_validation": {
+      "otel-audit": {
+        "passed": 725,
+        "skipped": 5,
         "exit_code": 0,
-        "passed_tests": 0,
-        "expected_tests": 22,
-        "status": "fail",
-        "passed": false,
-        "log": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/java-skip-control-234/java-1.log",
-        "report_dir": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/java-skip-control-234/java-1-pb1rxj5o",
-        "receiver_url": "http://127.0.0.1:50928/java-1",
-        "seconds": 0.853,
-        "timed_out": false,
-        "validation_error": "No fresh JUnit/Surefire report; tests may have been skipped"
+        "command": "UV_NO_CONFIG=1 make eval-validation SKILL=skills/otel-audit",
+        "run_id": "20261109T170601929230Z",
+        "log": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/null-final-validation-audit.log"
+      },
+      "otel-instrument": {
+        "passed": 756,
+        "skipped": 5,
+        "exit_code": 0,
+        "command": "UV_NO_CONFIG=1 make eval-validation SKILL=skills/otel-instrument",
+        "run_id": "20261109T170601929236Z",
+        "log": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/null-final-validation-instrument.log"
+      },
+      "otel-verify": {
+        "passed": 691,
+        "skipped": 5,
+        "exit_code": 0,
+        "command": "UV_NO_CONFIG=1 make eval-validation SKILL=skills/otel-verify",
+        "run_id": "20261109T170601929242Z",
+        "log": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/null-final-validation-verify.log"
+      }
+    },
+    "policy": "49unit+8contract passed",
+    "interactive": {
+      "command": "UV_NO_CONFIG=1 make test-interactive-otel-scripts PYTHON=\"$PWD/evals/.venv/bin/python\"",
+      "passed": 188,
+      "exit_code": 0,
+      "earlier_failed_invocation": "System Python3.9 rejected zip(strict=True);required local3.12 succeeds."
+    },
+    "simplifier": "Official Toolkit1.0.1 adapted, no further code edits",
+    "inventory_dispositions": [
+      {
+        "id": "GAP-1",
+        "disposition": "clarified",
+        "reason": "Config classification previously used flat exporter/endpoint variables without resolving a supported active declarative loader. Resolve loader, substitutions and overlays first; unknown support stays unverified."
       },
       {
-        "language": "java",
-        "trial": 2,
-        "command": [
-          "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/toolchains/maven/apache-maven-3.9.11/bin/mvn",
-          "-s",
-          "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/public-maven-settings.xml",
-          "test",
-          "-Dlogging.contract.reportsDirectory=/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/java-skip-control-234/java-2-z5fzj1g4"
-        ],
-        "cwd": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/native-correlation-t1bhvh6p/evals/java/logging-contract",
-        "exit_code": 0,
-        "passed_tests": 0,
-        "expected_tests": 22,
-        "status": "fail",
-        "passed": false,
-        "log": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/java-skip-control-234/java-2.log",
-        "report_dir": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/java-skip-control-234/java-2-z5fzj1g4",
-        "receiver_url": "http://127.0.0.1:50928/java-2",
-        "seconds": 0.781,
-        "timed_out": false,
-        "validation_error": "No fresh JUnit/Surefire report; tests may have been skipped"
+        "id": "GAP-2",
+        "disposition": "clarified",
+        "reason": "Inspect effective supported SDK/logger enablement, minimum severity and trace filters. Keep optional native/direct-OTel cost guards separate from pipeline ownership. Default enabled is SHOULD true, not MUST."
       },
       {
-        "language": "java",
-        "trial": 3,
-        "command": [
-          "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/toolchains/maven/apache-maven-3.9.11/bin/mvn",
-          "-s",
-          "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/public-maven-settings.xml",
-          "test",
-          "-Dlogging.contract.reportsDirectory=/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/java-skip-control-234/java-3-03i2hekr"
-        ],
-        "cwd": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/native-correlation-t1bhvh6p/evals/java/logging-contract",
-        "exit_code": 0,
-        "passed_tests": 0,
-        "expected_tests": 22,
-        "status": "fail",
-        "passed": false,
-        "log": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/java-skip-control-234/java-3.log",
-        "report_dir": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/java-skip-control-234/java-3-03i2hekr",
-        "receiver_url": "http://127.0.0.1:50928/java-3",
-        "seconds": 0.795,
-        "timed_out": false,
-        "validation_error": "No fresh JUnit/Surefire report; tests may have been skipped"
+        "id": "GAP-3",
+        "disposition": "conditional clarification",
+        "reason": "Collector processing can satisfy an approved downstream boundary. It cannot close forbidden pre-SDK/pre-writer capture; the existing stricter privacy rule was already present. No weakening of that rule."
+      },
+      {
+        "id": "GAP-4",
+        "disposition": "clarified",
+        "reason": "Selected semantic EventName cannot contain per-occurrence identifiers; only permitted varying data goes in attributes. Ordinary bridged messages need no EventName."
+      },
+      {
+        "id": "GAP-5",
+        "disposition": "clarified",
+        "reason": "Distinguish server throttle instructions from client backoff under one whole deadline; verify supported exporter behavior instead of adding an app retry loop. HTTP400 is non-retryable."
+      },
+      {
+        "id": "GAP-6a",
+        "disposition": "conditional clarification",
+        "reason": "When the selected supported Emit API derives exception fields, user attributes win. Do not add an optional API or raw exception capture solely for this test."
+      },
+      {
+        "id": "GAP-6b",
+        "disposition": "conditional clarification",
+        "reason": "A selected event-to-span processor must continue the record; its absence does not require adding a new processor."
+      },
+      {
+        "id": "GAP-6c",
+        "disposition": "conditional clarification",
+        "reason": "Only an owned custom asynchronous processor needs a verified safe snapshot/clone of mutable records. Built-in processors need no replacement; unknown public support stays unverified."
+      },
+      {
+        "id": "GAP-6d",
+        "disposition": "conditional clarification",
+        "reason": "Development recommendation against instrumentation-generated artificial status exceptions excludes logging bridges and does not ban intentional application error logs."
+      },
+      {
+        "id": "GAP-6e",
+        "disposition": "conditional clarification",
+        "reason": "Inspect SDK discard diagnostics: at most one per record, not one per dropped attribute. Do not replace SDK internals."
+      },
+      {
+        "id": "GAP-6f",
+        "disposition": "clarified",
+        "reason": "Preserve scope identity; conflicting scope attributes on the same logger are not new per-record fields."
+      },
+      {
+        "id": "GAP-6g",
+        "disposition": "not applicable",
+        "reason": "No syslog sink is selected. RFC5424-specific formatting is conditional on that path and does not belong in every language setup."
+      },
+      {
+        "id": "GAP-6h",
+        "disposition": "clarified",
+        "reason": "An effective supported SDK_DISABLED opt-out is distinct from a missing bridge and does not disable an original native sink. A flat setting ignored by a file loader is not effective."
+      },
+      {
+        "id": "GAP-6i",
+        "disposition": "conditional clarification",
+        "reason": "For selected instrumentation exception events, require the permitted identifiable type/message pairing. If policy forbids both, report the semantic limitation without capturing them. Do not impose the floor on ordinary bridge messages."
+      },
+      {
+        "id": "GAP-6j",
+        "disposition": "conditional clarification",
+        "reason": "Check exception.escaped deprecation and actual version/compatibility policy. A deprecated span attribute is not a reason to delete approved fields or migrate ordinary bridges."
+      },
+      {
+        "id": "GAP-7",
+        "disposition": "clarified",
+        "reason": "Record supported transport request/response size limits separately from attributes and Body. No universal new application Body cap or unsupported SDK option."
+      },
+      {
+        "id": "GAP-8",
+        "disposition": "clarified",
+        "reason": "Batch guidance previously unqualified. An operator-owned SDK console exporter can legitimately pair a simple processor; BLRP settings then do not apply and synchronous cost is the relevant check."
+      },
+      {
+        "id": "GAP-9",
+        "disposition": "clarification; original defect claim narrowed",
+        "reason": "The existing instruction expresses preservation policy for newly added defaults; it never promised that env always overrides code. State standard code-over-env resource merge explicitly and avoid conflicting new code keys. Check malformed env and actual effective resource."
+      },
+      {
+        "id": "GAP-10",
+        "disposition": "clarified",
+        "reason": "Reuse existing semconv keys; custom application/company names avoid namespace collisions and new otel.* names need spec approval. A recommendation is not an unconditional new-prefix mandate."
+      },
+      {
+        "id": "GAP-11",
+        "disposition": "optional feature, conditional clarification",
+        "reason": "An existing selected _ref path uses a registry-defined base and string reference, preferably absolute URI. No new storage or permission to capture forbidden content. Absence is not a gap."
+      },
+      {
+        "id": "GAP-12",
+        "disposition": "optional feature, conditional clarification",
+        "reason": "Inspect selected log.iostream/original/uid with Development status. Bound original content before construction; distinguishable records cannot share UID. A trace ID is not a record UID; absent UID is valid."
+      },
+      {
+        "id": "GAP-13",
+        "disposition": "conditional clarification",
+        "reason": "Call-site conventions must match the verified bridge version. Source/SDK migration is not justified merely because a newer registry has dotted keys."
+      },
+      {
+        "id": "GAP-14",
+        "disposition": "optional feature, conditional clarification",
+        "reason": "Use implemented SDK log metrics at their documented stage; processed/created do not prove receiver acceptance. No duplicate app metrics or assumed unsupported instruments."
+      },
+      {
+        "id": "GAP-15",
+        "disposition": "clarified existing applicability discipline",
+        "reason": "Record language Logs signal maturity as well as per-feature stability/version. Development/RC status does not justify skipping a supported stack or upgrading it."
+      },
+      {
+        "id": "GAP-16",
+        "disposition": "not applicable",
+        "reason": "No HEC log sink selected. The appendix is non-normative and cannot create a mandatory application requirement from Splunk branding."
       }
     ],
-    "verdict": "All three correctly rejected despite Maven exit0; not counted as logging successes."
-  },
-  "semantic_precedence_first_gate": {
-    "source_identity": "36881e23b7ceb34d507d78f7e486fc8a75e09fe29a26f4c27791fb0b592dc423",
-    "output": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/clean-pass-1-w1zcqqtm",
-    "semantic_cases": 12,
-    "met_criteria": 130,
-    "criteria": 132,
-    "native_passed": 79,
-    "failures": [
-      {
-        "job": "instrument",
-        "path": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/codex-evals/otel-instrument/20261109T012701137368Z/cases/python/flask-basic/logging-trial-1/with_skill/rubric_grade.json",
-        "reason": "Incomplete/failed grade"
-      },
-      {
-        "job": "instrument",
-        "path": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/codex-evals/otel-instrument/20261109T012701137368Z/cases/python/flask-basic/logging-trial-1/with_skill/rubric_grade.json",
-        "criterion": {
-          "id": "rubric-5",
+    "report_link": "logging-rules-and-remediation-report.md",
+    "inventory_link": "logging-skill-analysis-evidence.json",
+    "harness": "Initial make test-eval-harness stopped at stale older rubric artifacts. Must rerun after current semantic reports; no bypass or passing claim.",
+    "retry_after_plan_gap": {
+      "at": "2026-11-09T09:08:25.774576+00:00",
+      "source_identity": "5a5f6f3580d3c3260a788ce56146f8ddb7d22aa3d2e39c40e152d0331bd30497",
+      "candidate": "Invalid proposed HTTP Retry-After units",
+      "grade": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/codex-evals/otel-audit/20261109T085140351039Z/cases/node/express-basic/logging-trial-1/with_skill/rubric_grade.json",
+      "grade_sha256": "dbfe2889bedfbf7b6bacfa14ed948178b7e931d6816b4f815086fcb8eca4a5b1",
+      "failed_check": [
+        {
+          "id": "rubric-13",
           "pass": false,
-          "notes": "Nearly complete, but omits the explicitly required positive environment-present test asserting 20 input attributes become 8 retained attributes, 32-character values and 12 drops.",
-          "evidence": "logging-instrument.json:921 describes the negative 20-attribute precedence case. Line 922 asserts effective 8/32 for the positive route; line 923 tests 7/8/9 attributes with one drop. Neither report specifies the required positive 20-to-8 case with 12 drops. Native Python options, provider preservation, independent 128/64 policy and other boundaries are correctly covered."
+          "notes": "Semantic and optional-capability decisions are otherwise complete, but the exact HTTP throttling fixture is invalid. Retry-After requires delay-seconds or an HTTP-date; use a valid value and specify its deadline outcome.",
+          "evidence": "service/.observe/logging-audit.json:2477 specifies Retry-After=100ms on429/503. This cannot establish compliant server-directed throttling behavior as written."
         }
+      ],
+      "verified_source": "Actual saved service/.observe/logging-audit.json line2477 proposes Retry-After=100ms on429/503. This is the HTTP header, not an internal backoff duration.",
+      "primary_url": "https://opentelemetry.io/docs/specs/otlp/#otlphttp-throttling",
+      "clause": "OTLP says HTTP-date or a number of seconds. 100ms is invalid. Earlier whole-export/caller deadline still bounds all waits/attempts.",
+      "disposition": "Verified plan-only acceptance gap. No evidence of a Node application defect or installed SDK nonconformance. Add valid representation and no-early-retry control when server delay exceeds remaining budget; reset current streak0.",
+      "completed_attempt": {
+        "semantic_cases": 12,
+        "criteria_met": 155,
+        "criteria_total": 156,
+        "native_passed": 83,
+        "all_child_commands_exit": 0,
+        "strict_gate_status": "needs_triage,clean_streak0",
+        "scope": "All twelve tasks completed; only Nodeaudit rubric13 failed. High aggregate score and Makeexit0 do not satisfy every-criterion requirement."
+      },
+      "before_source": {
+        "path": "retry-after-before-common-guide.md",
+        "sha256": "1e225af554790cddd349773d77e176eaa9e0fc798a02dc1e8831b6244332801a",
+        "matches_frozen_source": true
+      }
+    },
+    "residual_clause_reconciliation": [
+      {
+        "id": "A4",
+        "original_instruction_verdict": "partial",
+        "clause": "New first-party apps: logging library + appender, or Logs API directly",
+        "source": "S5",
+        "disposition": "option, no mandatory change",
+        "current_rule_or_section": "LOG-SPEC-CLOSURE",
+        "reason": "Official alternative styles do not require replacing an established native library/bridge. Direct OTel emit remains an option; no new provider required.",
+        "runtime_status": "Not claimed;conditional installed capabilities remain unverified"
       },
       {
-        "job": "verify",
-        "path": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/codex-evals/otel-verify/20261109T012701137364Z/cases/python/flask-basic/logging-trial-1/with_skill/rubric_grade.json",
-        "reason": "Incomplete/failed grade"
+        "id": "G1",
+        "original_instruction_verdict": "partial",
+        "clause": "When to define events vs spans vs span attributes vs plain log records; events may be emitted inside or outside an active trace context",
+        "source": "S7",
+        "disposition": "clarified for selected events",
+        "current_rule_or_section": "LOG-RECORD",
+        "reason": "Choose duration spans, whole-operation attributes, timestamped named occurrences or ordinary diagnostics according to the actual requirement. Events outside a trace do not require fabricated spans.",
+        "runtime_status": "Not claimed;conditional installed capabilities remain unverified"
       },
       {
-        "job": "verify",
-        "path": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/codex-evals/otel-verify/20261109T012701137364Z/cases/python/flask-basic/logging-trial-1/with_skill/rubric_grade.json",
-        "criterion": {
-          "id": "rubric-5",
-          "pass": false,
-          "notes": "Otherwise thorough: names Python log-specific APIs, explains environment precedence, rejects foreign options/provider replacement, preserves independent 128/64 controls, and specifies separate Body boundaries. However, the env-present 20-attribute test permits 'at most 8' attributes and makes 12 drops conditional. The requested exact 8 retained attributes, 32-character values and 12 drops should be explicit; the current assertion could accept excessive truncation or dropping.",
-          "evidence": "logging-verify.json: ownership_and_capability.python_limit_decision; scenarios.S-LIMITS.exact_assertions, especially '12 if retains 8' and 'at most8 attrs and at most32 chars'"
-        }
+        "id": "G5",
+        "original_instruction_verdict": "partial",
+        "clause": "Event attributes MUST be documented; reuse existing attributes; avoid copying every span attribute; prefer flat attributes; include error.type for failure outcomes; document attributes that may be sensitive, expensive or especially large",
+        "source": "S7",
+        "disposition": "clarified for selected definitions",
+        "current_rule_or_section": "LOG-RECORD",
+        "reason": "Document occurrence/name/time/severity/permitted attributes and their privacy/cost; reuse relevant fields without copying all span attributes, and apply relevant failure error.type conventions.",
+        "runtime_status": "Not claimed;conditional installed capabilities remain unverified"
       },
       {
-        "reason": "All12 cases and132 individual criteria must pass"
+        "id": "H4",
+        "original_instruction_verdict": "partial",
+        "clause": "Where supported, instrumentations SHOULD pass the exception instance to Emit rather than setting individual attributes",
+        "source": "S8",
+        "disposition": "conditional clarification",
+        "current_rule_or_section": "LOG-EXCEPTION",
+        "reason": "Prefer a supported exception-instance Emit API only for selected instrumentation when capture policy permits it. Ordinary bridges and type-only pre-capture policy do not require raw exception capture.",
+        "runtime_status": "Not claimed;conditional installed capabilities remain unverified"
+      },
+      {
+        "id": "H7",
+        "original_instruction_verdict": "partial",
+        "clause": "Event name RECOMMENDED as operation + '.exception'; non-domain-specific handlers SHOULD use 'exception'",
+        "source": "S8",
+        "disposition": "conditional clarification",
+        "current_rule_or_section": "LOG-EXCEPTION",
+        "reason": "Check versioned operation.exception/generic exception recommendation only for a selected instrumentation event, without forcing EventName onto ordinary bridged logs.",
+        "runtime_status": "Not claimed;conditional installed capabilities remain unverified"
+      },
+      {
+        "id": "H10",
+        "original_instruction_verdict": "partial",
+        "clause": "Migration: OTEL_SEMCONV_EXCEPTION_SIGNAL_OPT_IN with values logs and logs/dup SHOULD be introduced; default keeps span events; SHOULD maintain existing major version >= 6 months; MAY drop later; users may still route logs to span events at the SDK layer",
+        "source": "S8",
+        "disposition": "retain operator choice; upstream release scope excluded",
+        "current_rule_or_section": "LOG-EXCEPTION",
+        "reason": "Preserve versioned signal opt-ins and existing behavior. Upstream instrumentation six-month maintenance/release obligations are not a new application logging implementation requirement.",
+        "runtime_status": "Not claimed;conditional installed capabilities remain unverified"
+      },
+      {
+        "id": "I11",
+        "original_instruction_verdict": "partial",
+        "clause": "Multi-destination exporting SHOULD use per-destination queuing, acknowledgement handling and retry over shared immutable data",
+        "source": "S9",
+        "disposition": "already clarified",
+        "current_rule_or_section": "LOG-DELIVERY",
+        "reason": "Assess each configured destination queue/ack/retry boundary and receipts independently. No new multi-destination pipeline is authorized.",
+        "runtime_status": "Not claimed;conditional installed capabilities remain unverified"
+      },
+      {
+        "id": "I13",
+        "original_instruction_verdict": "partial",
+        "clause": "Encoders SHOULD ensure valid UTF-8 and producing invalid UTF-8 is a bug; decoders SHOULD replace invalid sequences with U+FFFD; intermediaries MAY pass through unvalidated",
+        "source": "S9",
+        "disposition": "SDK owner; application UTF-8 boundary retained",
+        "current_rule_or_section": "LOG-LIMITS",
+        "reason": "Existing SDK owns UTF-8 encoding/decoding when no custom codec defect exists; do not reimplement it. Application-selected Body truncation still requires valid UTF-8 and explicit units; runtime codec conformance is not asserted.",
+        "runtime_status": "Not claimed;conditional installed capabilities remain unverified"
+      },
+      {
+        "id": "K2",
+        "original_instruction_verdict": "partial",
+        "clause": "The SDK MUST interpret an empty environment variable value the same way as unset",
+        "source": "S14",
+        "disposition": "already clarified",
+        "current_rule_or_section": "Source and applicability",
+        "reason": "Effective supported environment parsing treats an empty value as unset, after resolving declarative/config overlays.",
+        "runtime_status": "Not claimed;conditional installed capabilities remain unverified"
+      },
+      {
+        "id": "L4",
+        "original_instruction_verdict": "partial",
+        "clause": "Hashing may not provide sufficient anonymization because hashes are reversible when the input space is small and predictable; truncation or prefix grouping offered as alternatives",
+        "source": "S15",
+        "disposition": "clarified privacy limitation",
+        "current_rule_or_section": "LOG-EXCEPTION",
+        "reason": "Hashing a low-entropy input is not anonymity or permission to capture it. Preserve selected policy and pre-SDK/pre-writer boundary.",
+        "runtime_status": "Not claimed;conditional installed capabilities remain unverified"
+      },
+      {
+        "id": "M7",
+        "original_instruction_verdict": "partial",
+        "clause": "OTLP header environment variables use W3C Baggage key1=value1,key2=value2 form; semicolon-delimited metadata is not supported; all attribute values MUST be considered strings",
+        "source": "S16",
+        "disposition": "clarified SDK parser/format ownership",
+        "current_rule_or_section": "Source and applicability",
+        "reason": "OTLP header env values use supported key=value encoding without Baggage semicolon metadata. Do not log or silently rewrite operator credentials or write a custom parser.",
+        "runtime_status": "Not claimed;conditional installed capabilities remain unverified"
+      },
+      {
+        "id": "U1",
+        "original_instruction_verdict": "partial",
+        "clause": "The event.name ATTRIBUTE is Deprecated: its value MUST now be set as the value of the EventName field on the LogRecord to indicate that the record represents an Event",
+        "source": "S22e",
+        "disposition": "conditional clarification",
+        "current_rule_or_section": "LOG-RECORD",
+        "reason": "A supported new semantic-event path uses canonical EventName rather than deprecated event.name; existing bridge/version migration policy remains explicit and no automatic upgrade is mandated.",
+        "runtime_status": "Not claimed;conditional installed capabilities remain unverified"
       }
     ],
-    "disposition": "Rejected. Corrected Python exact positive replay and clarified controlled SDK-input versus application/bridge accounting. No native fixture or existing substantive expected outcome removed."
-  },
-  "historical_native_237_before_java_deadline": {
-    "receipt": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/report-results-before-java-deadline.json",
-    "note": "Three trials passed before a later sequential pass exposed the wrong200ms Java retry expectation. Superseded by fresh deadline-corrected237 execution."
-  },
-  "correlation_flag_scope": "Maintained native assertions compare each log flag byte to the actual SDK SpanContext. The receipt cross-check joins exact IDs/resources/parentage; it does not claim serialized span flag bytes equal log flags. Python1.45.1 span exporter emits256 while sampled log flags preserve SDK3.",
-  "java_retry_deadline_evidence": {
-    "root_cause": "Fixture treated SDK1.68 OkHttp whole-call timeout as per-attempt and incorrectly guaranteed2received retries within200ms. SDK bounds remaining budget correctly; no SDKbug or patch claimed.",
-    "official_source": "https://opentelemetry.io/docs/specs/otel/protocol/exporter/#retry",
-    "normative_scope": "One OTLP batch deadline includes all request attempts and retry waits; an earlier caller deadline still wins.",
-    "installed_bytecode_provenance": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/java-deadline-scope/provenance.json",
-    "red_three_trials": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/java-deadline-red-native-mgqs3jsq/proof.json",
-    "red_outcome": "Controlled150ms503:old200ms test failed retry assertion3/3 with1received,0accepted;21other Java cases passed each.",
-    "green_stress": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/java-deadline-stress-440/results.json",
-    "green_outcome": "20cold trials22/22 each:440/440, exact2received/0accepted in every controlled retry.",
-    "correction": "800ms whole-call for retry/healthy/partial; retain200ms stalled-case early deadline, max2ceiling,100basebackoff80\u2013120jitter,1000ms measured overall bound. Receiver delayed retry waits outside receipt lock; new concurrent request regression passes.",
-    "rubric_coverage": [
-      "evals/java/springboot-basic/eval/qual/logging-audit-contract.json",
-      "evals/java/springboot-basic/eval/qual/logging-instrument-contract.json",
-      "evals/java/springboot-basic/eval/qual/logging-verify-contract.json"
-    ]
-  },
-  "rubric_mapping_evidence": {
-    "retained_protocol": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/three-clean-before-rubric-mapping.json",
-    "invalid_grade": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/codex-evals/otel-instrument/20261109T032239371225Z/cases/python/flask-basic/logging-trial-1/with_skill/rubric_grade.json",
-    "observed": "Final compound source/correlation criterion split into rubric11and12;all133checks positive but wrong mapping invalidates132-check gate.",
-    "correction": "Defaultprompt labels declared items and requires exactly one joint check per item;customjudge template/schemaunchanged. Privategate additionally rejects missing/duplicate/unexpectedIDs without rewriting grades or removing obligations.",
-    "focused_red": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/rubric-mapping-red.log",
-    "focused_green": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/rubric-mapping-green.log",
-    "plugin_suite": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/plugin-rubric-mapping.log",
-    "private_negative_controls": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/rubric-mapping-gate-controls.json",
-    "simplifier": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/rubric-mapping-simplifier.json"
-  },
-  "joint_async_proof_evidence": {
-    "gap": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/joint-async-proof-gap.json",
-    "retained_protocol": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/three-clean-before-joint-async-proof.json",
-    "native_status": "Existing4native correlation fixtures already combine SDKparent/childspans and ownedasync logger withreceiver joins. No nativecode changed;27source/52rawoutput hashes verified.",
-    "correction": "Same-owned-path evidence composition and explicitly linked joint scenario;4language-specific mechanisms;split-async-join-proof negativecontrol ineachinput/all12rubrics. Missingproof ispartial,notautomaticproductiondefect;existingprovider/span/propagation ownershippreserved.",
-    "simplifier": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/joint-async-simplifier.json",
-    "focused": "146passed",
-    "validation": "721audit/752instrument/687verify,5scopedskipseach;2audit+2instrumentsmoke;49+8policy+owningskillunits+188interactive passed.",
-    "observed_corrected_plan": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/joint-async-first-go-plan-evidence.json"
-  },
-  "evaluation_model": {
-    "agent": "gpt-6.1-sol",
-    "judge": "gpt-6.1-sol",
-    "reasoning_effort": "high",
-    "configuration": "evals/codex-evals.toml",
-    "live_process_proof": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/sol-high-live-eval-proof.json",
-    "execution_scope": "All3cleanpasses locally on PR-branch worktree,source-bound by frozenhashes. Both taskandjudgemodel gpt6.1-sol/high. No GitHub live-model execution claimed.",
-    "github_live_evals": "Disabled template .github/workflows/codex-evals.yml.disabled; no live-model GitHubActions run claimed."
-  },
-  "final_harness": {
-    "command": "PATH=\"$PWD/evals/.venv/bin:$PATH\" UV_NO_CONFIG=1 make test-eval-harness",
-    "passed": 880,
-    "skipped": 5,
-    "source_manifests_verified": 26,
-    "log": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/final-three-clean-harness.log",
-    "skip_scope": "Oneoptionalmodule plus4Pythonwire/correlationcases require the runner-owned receiver;all formal native trials havezero skips."
+    "final_clause_verification": {
+      "route": "actual ClaudeDesktop",
+      "session": "app://localhost/cowork/local_e428c157-fd0d-47c7-9164-80533899b19f",
+      "snapshot": "c89c166bdf8ad7e170b4b4864e2d90db87a24f394bc54085dcc45948ddc0b8fc",
+      "status": "Running;no result claimed"
+    },
+    "reusable_pytest_plugin": {
+      "command": "UV_NO_CONFIG=1 make test-pytest-plugin",
+      "passed": 214,
+      "exit_code": 0
+    },
+    "clause_source_verification": {
+      "completed_snapshot": "c89c166bdf8ad7e170b4b4864e2d90db87a24f394bc54085dcc45948ddc0b8fc",
+      "directly_corroborated_rows": 183,
+      "paraphrase_only_rows": 0,
+      "new_snapshot": "d9ae570062149fe9aa3831fb027c5b901e6af3395ee2dde6c7d2909da40bad60",
+      "delta_status": "complete;F1-F5andD1resolved,all13finalfiles byte-bound and unchangedclauses reused byhash from183rowprimaryledger",
+      "source_review_is_runtime_proof": false,
+      "final_claude_report_sha256": "e8fad6e75ba2a501200aa9fb19f65f7858670a10bf11c7b3c33c54e1a7f3f4bb",
+      "runtime_compliance_inferred": false
+    },
+    "meaningful_value_proof": {
+      "scope": "Meaningful false/zero/empty fields through actual native bridge;SDK default capture is not an application defect",
+      "before_source_sha256": "fe7b0a903a917d7dec75c4551f783bd4ba7e7c7fce861c690168aa1f917f6220",
+      "java_initial_result": "1failed:attrs{} because the selected structured fields were not enabled in pinned Logback appender;public installed API inspected with javap confirms explicit included-key selector. Correct test setup to select only four approved keys.",
+      "initial_other_languages": "Python1passed;Node1passed;Go-race1passed",
+      "date": "2026-11-09T16:33:11.833661+00:00",
+      "java_second_result": "1failed: approved scalar fields preserved, items=[] absent. Verified pinned official mapper captureArrayValueAttribute explicitly skips empty lists at lines369-372; this is a bridge capability limitation, not SDK loss.",
+      "official_pinned_source": "https://raw.githubusercontent.com/open-telemetry/opentelemetry-java-instrumentation/v2.33.1/instrumentation/logback/logback-appender-1.0/library/src/main/java/io/opentelemetry/instrumentation/logback/appender/v1_0/internal/LoggingEventMapper.java",
+      "test_correction": "Separate actual bridge scalar preservation from SDK typed empty-array preservation. Do not claim Logback empty-array support or silently replace the bridge.",
+      "java_final_result": "1passed: actual bridge preserves approved zero/false/emptystring; direct SDK typed emptyarray preserved. Emptyarray bridge limitation retained separately, not claimed fixed.",
+      "target_native_counts": {
+        "java": 24,
+        "python": 23,
+        "go": 20,
+        "node": 20
+      },
+      "full_native_result": {
+        "passed": 87,
+        "counts": {
+          "python": 23,
+          "go": 20,
+          "node": 20,
+          "java": 24
+        },
+        "results": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/native-values-focused-a7wcdef0/results.json",
+        "errors": 0,
+        "skips": 0
+      }
+    },
+    "native_java_empty_array_limitation": "Pinned official Logback appender2.33.1-alpha drops emptycollections; failed bridge probe plus tagged source confirm. Typed SDK emptyarray preservation does not close a selected required bridge field. Rule and plan-only controls retain uncovered/unverified status without new provider/bridge or forced upgrade.",
+    "java_empty_bridge_negative_probe": {
+      "status": "expected negative compatibility probe; not a passing clean-gate case or application defect",
+      "command": [
+        "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/toolchains/maven/apache-maven-3.9.11/bin/mvn",
+        "-q",
+        "-s",
+        "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/public-maven-settings.xml",
+        "-Dtest=LoggingContractTest#selectedEmptyArrayMustSurviveTheBridge",
+        "test"
+      ],
+      "cwd": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/java-empty-bridge-proof-a6wrg2an/fixture",
+      "exit_code": 1,
+      "testcase": "selectedEmptyArrayMustSurviveTheBridge",
+      "failure_message": "Bridge lost the selected empty array while typed SDK and approved scalar controls passed: {approved=true} ==> expected: <true> but was: <false>",
+      "pinned_appender": "2.33.1-alpha",
+      "official_source": "https://github.com/open-telemetry/opentelemetry-java-instrumentation/blob/v2.33.1/instrumentation/logback/logback-appender-1.0/library/src/main/java/io/opentelemetry/instrumentation/logback/appender/v1_0/internal/LoggingEventMapper.java",
+      "typed_sdk_control": "passes before bridge assertion",
+      "bridge_approved_scalar_control": "passes before emptyarray assertion",
+      "source_sha256": "cd6764d5476a4ca07983cb472e511d3f355dd906547113811eaba46b04b71202",
+      "xml_sha256": "44ef2f74a768cdaaab985ab999eea9f539a761b03e1dbb2638af61b14f4cf9de",
+      "source": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/java-empty-bridge-proof-a6wrg2an/fixture/src/test/java/LoggingContractTest.java",
+      "xml": "/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/java-empty-bridge-proof-a6wrg2an/fixture/target/surefire-reports/TEST-LoggingContractTest.xml",
+      "date": "2026-11-09T16:56:57.924176+00:00",
+      "repair_status": "Rule/evals classify selected required bridge field uncovered; upstream bridge not modified. Do not claim full meaningful-field bridge support from SDK test."
+    },
+    "null_value_scope": "Plan-only negative/positive decisions across all4languages/3skills;not runtime proof of installed null API/exporter support. No SDK rewrite/newprovider/forcedupgrade.",
+    "minimal_task_workflow": {
+      "status": "running",
+      "definitions": 12,
+      "prompt_variants": 36,
+      "tasks": [
+        "$otel-audit ./service",
+        "$otel-instrument ./service",
+        "$otel-verify ./service"
+      ],
+      "synthetic_overlay_files": "Removed",
+      "focused_checks": {
+        "command": "cd evals && UV_NO_CONFIG=1 uv run pytest -q test_default_local_log_export_guidance.py test_incident_readiness_skill_guidance.py test_logging_contract_runner.py test_logging_receiver.py test_logging_workflow_check.py",
+        "passed": 203
+      },
+      "baseline_negative_control": {
+        "language": "python",
+        "expected_exit": 1,
+        "observed_exit": 1,
+        "failure": "Expected one real application server span per controlled request",
+        "limit": "Expected rejection of working but uninstrumented baseline; not positive implementation proof."
+      },
+      "validation": {
+        "otel-audit": {
+          "command": "PATH=\"$PWD/evals/.venv/bin:$PATH\" UV_NO_CONFIG=1 make eval-validation SKILL=skills/otel-audit",
+          "passed": 742,
+          "skipped": 5,
+          "run_id": "20261109T181920140890Z"
+        },
+        "otel-instrument": {
+          "command": "PATH=\"$PWD/evals/.venv/bin:$PATH\" UV_NO_CONFIG=1 make eval-validation SKILL=skills/otel-instrument",
+          "passed": 773,
+          "skipped": 5,
+          "run_id": "20261109T181920140878Z"
+        },
+        "otel-verify": {
+          "command": "PATH=\"$PWD/evals/.venv/bin:$PATH\" UV_NO_CONFIG=1 make eval-validation SKILL=skills/otel-verify",
+          "passed": 708,
+          "skipped": 5,
+          "run_id": "20261109T181920140888Z"
+        },
+        "policy": "49 unit tests + 8 guideline contracts and policy passed with Python3.12 PATH",
+        "interactive": "188 passed",
+        "cleanup_regression": "Focused suite17passed; owned child-flush control separately passed3consecutive times after race fix."
+      },
+      "native_loading": {
+        "status": "implemented and independently bound on4actual bare audit tasks",
+        "harness_behavior": "Direct $skill or $skill ./service tasks are sent unchanged; old loading wrapper retained for other task wording.",
+        "proof": "Executed thread+workspace+skill path+full injected source before assistant actions",
+        "validation": "27focused new+legacyguards/sourceprovenance checks passed; fullreusableplugin228passed",
+        "previous_false_negatives": "All4developmentaudits had complete native skill input but old filesystem-first guard rejected them. Raw failed grades preserved; no clean credit."
+      },
+      "development_audit": {
+        "criteria_met": 54,
+        "criteria_total": 56,
+        "per_language": {
+          "java": 14,
+          "python": 14,
+          "go": 13,
+          "node": 13
+        },
+        "failures": [
+          "Go missing per-clause requirement-strength/disposition reconciliation",
+          "Node mandatoryarbitrary8192-byte Body cap with no policy"
+        ],
+        "correction": "Audit finalization explicitly checks existing clause matrix; common limits and audit reject arbitrary GenAI-derived Body thresholds.",
+        "instruction_identity": "7a4b6e3fcfa0d6ed9e1c77e7cf7b64572ed852df1ea754738affdb2f2f193b8b",
+        "claude_delta_status": "B1173clause delta submitted in actualDesktop task local_e428c157-fd0d-47c7-9164-80533899b19f;awaiting result"
+      },
+      "version_neutral_java_guidance": {
+        "status": "implemented",
+        "instruction_identity": "b117b9959784994311645676afef4c4161c860203b636d493f89c569d458b652",
+        "behavior": "Resolve installed dependency capability; inspect matchingdocs/source and test actual appender, without main-branch or older-release behavior assumptions. No forcedrelease/providerupgrade.",
+        "semantic_coverage": "All3Java role rubrics now reject directSDK or other-release evidence as proof of bridge preservation.",
+        "native_test_pins": "Kept solely for reproducibility; their scoped observations do not become general version requirements.",
+        "claude_status": "Submitted for primary-source verification"
+      },
+      "development_followup_audit": {
+        "criteria_met": 56,
+        "total": 56,
+        "languages": 4,
+        "status": "All4auditstages passed native loading guards and14rubriccriteria. This developmentattempt is superseded by later source/user changes,not aclean fullworkflow pass."
+      }
+    }
   }
 }

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import os
 import re
 import shlex
 from pathlib import Path
@@ -65,17 +67,62 @@ def check_skill_instructions_read(
 ) -> GradeCheckResult:
     target_path = (run_dir / ".agents" / "skills" / target_skill / "SKILL.md").resolve()
     inspected = reads_complete_skill_before_other_actions(trace.actions, run_dir, target_path)
+    native = native_skill_injected(run_dir, trace, target_skill, target_path)
     return GradeCheckResult(
         id="skill-instructions-read",
         description="Loaded side completely reads the target SKILL.md before any other task action.",
-        passed=inspected,
+        passed=inspected or native,
         evidence=(
-            f"Initial actions completely read {target_skill}/SKILL.md"
+            f"Executed native invocation injected the complete source-bound {target_skill}/SKILL.md before assistant actions"
+            if native else f"Initial actions completely read {target_skill}/SKILL.md"
             if inspected
             else f"Did not successfully read all of {target_skill}/SKILL.md before another action"
         ),
         category="sanity",
     )
+
+
+def native_skill_injected(run_dir: Path, trace: TraceSummary, skill: str, target: Path) -> bool:
+    """Bind a direct Codex skill invocation to its actual full input message."""
+    home = os.environ.get("CODEX_EVAL_HOME", "")
+    threads = [event.get("thread_id") for event in trace.events if event.get("type") == "thread.started"]
+    if not home or len(threads) != 1 or not isinstance(threads[0], str) or not re.fullmatch(r"[A-Za-z0-9_-]+", threads[0]):
+        return False
+    try:
+        sessions = list((Path(home) / "sessions").rglob("*" + threads[0] + ".jsonl"))
+        if len(sessions) != 1:
+            return False
+        source = target.read_text(encoding="utf-8").rstrip("\n")
+        bound, direct = False, False
+        with sessions[0].open(encoding="utf-8") as stream:
+            for line in stream:
+                event = json.loads(line)
+                if not isinstance(event, dict):
+                    return False
+                payload = event.get("payload", {})
+                if not isinstance(payload, dict):
+                    return False
+                if event.get("type") == "session_meta":
+                    bound = payload.get("id") == threads[0] and Path(payload.get("cwd", "")).resolve() == run_dir.resolve()
+                if event.get("type") != "response_item":
+                    continue
+                # Only inspect supplied user input, never assistant reasoning.
+                if payload.get("type") != "message" or payload.get("role") == "assistant":
+                    return False
+                if payload.get("role") != "user":
+                    continue
+                for content in payload.get("content", []):
+                    if not isinstance(content, dict):
+                        return False
+                    text = content.get("text", "")
+                    if text in {f"${skill}", f"${skill} ./service"}:
+                        direct = True
+                    match = re.fullmatch(r"<skill>\n<name>([^<]+)</name>\n<path>([^<]+)</path>\n(.*)\n</skill>", text, re.DOTALL)
+                    if match and bound and direct and match[1] == skill and Path(match[2]).resolve() == target:
+                        return match[3].rstrip("\n") == source
+    except (OSError, ValueError, TypeError):
+        return False
+    return False
 
 
 def reads_complete_skill_before_other_actions(

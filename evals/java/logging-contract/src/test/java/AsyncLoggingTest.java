@@ -3,6 +3,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import ch.qos.logback.classic.AsyncAppender;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;
+import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import io.opentelemetry.api.logs.Severity;
@@ -30,6 +31,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -214,5 +216,35 @@ class AsyncLoggingTest {
       assertEquals("request-71", records.get(1).getAttributes().get(key));
       assertNull(records.get(2).getAttributes().get(key));
     } finally { mdc.clear(); stop(executor); }
+  }
+
+  @Test void workerChecksCurrentNativeEnablementBeforeExpensiveWork() throws Exception {
+    var executor = pool(1); var constructed = new AtomicInteger();
+    Runnable guarded = () -> {
+      if (logger.isInfoEnabled()) { logger.info("guard-" + constructed.incrementAndGet()); }
+    };
+    try {
+      logger.setLevel(Level.ERROR);
+      executor.submit(() -> logger.info("guard-" + constructed.incrementAndGet())).get(2, TimeUnit.SECONDS);
+      assertEquals(1, constructed.get()); assertTrue(sink.list.isEmpty());
+      assertTrue(exporter.getFinishedLogRecordItems().isEmpty());
+      var levels = new Level[] {Level.ERROR, Level.INFO, Level.ERROR};
+      var expected = new int[] {1, 2, 2};
+      for (int i = 0; i < levels.length; i++) {
+        logger.setLevel(levels[i]); executor.submit(guarded).get(2, TimeUnit.SECONDS);
+        assertEquals(expected[i], constructed.get());
+      }
+      expect(Map.of("guard-2", new Wanted(0, 0))); assertEquals(1, sink.list.size());
+      try (var empty = SdkLoggerProvider.builder().build()) {
+        logger.detachAppender(bridge);
+        var emptyBridge = bridge(empty); logger.addAppender(emptyBridge);
+        try {
+          logger.setLevel(Level.INFO); executor.submit(guarded).get(2, TimeUnit.SECONDS);
+          assertEquals(3, constructed.get()); assertEquals(2, sink.list.size());
+          assertEquals("guard-3", sink.list.get(1).getFormattedMessage());
+          expect(Map.of("guard-2", new Wanted(0, 0)));
+        } finally { logger.detachAppender(emptyBridge); emptyBridge.stop(); logger.addAppender(bridge); }
+      }
+    } finally { stop(executor); }
   }
 }

@@ -7,92 +7,92 @@
     "mode": "with_skill",
     "eval_kind": "rubric",
     "skill": "otel-audit",
-    "run_id": "20261109T045620782361Z",
+    "run_id": "20261109T183242167222Z",
     "agent_model": "gpt-6.1-sol",
     "judge_model": "gpt-6.1-sol",
     "rubric_enabled": true,
     "runtime_enabled": false,
-    "workers": "4",
+    "workers": "1",
     "config_path": "evals/codex-evals.toml"
   },
   "summary": {
-    "eval_count": 4,
-    "prompt_count": 4,
+    "eval_count": 1,
+    "prompt_count": 1,
     "failure_count": 0,
     "with_skill": {
-      "prompt_count": 4,
-      "command_count": 119,
-      "duration_seconds": 3073.783,
-      "agent_duration_seconds": 2700.639,
-      "tokens": 10414712,
-      "agent_tokens": 6792705,
+      "prompt_count": 1,
+      "command_count": 26,
+      "duration_seconds": 495.963,
+      "agent_duration_seconds": 376.757,
+      "tokens": 3018410,
+      "agent_tokens": 2135230,
       "error_count": 0,
       "agent_usage": {
         "provider": "codex",
         "source": "cumulative",
         "observed": true,
-        "usage_record_count": 4,
-        "selected_record_count": 4,
-        "input_tokens": 6663449,
-        "cached_input_tokens": 6249088,
+        "usage_record_count": 1,
+        "selected_record_count": 1,
+        "input_tokens": 2119153,
+        "cached_input_tokens": 2014080,
         "cache_creation_input_tokens": 0,
-        "output_tokens": 129256,
-        "reasoning_output_tokens": 25197,
+        "output_tokens": 16077,
+        "reasoning_output_tokens": 1664,
         "provider_total_tokens": null,
-        "derived_total_tokens": 6792705,
-        "effective_total_tokens": 6792705,
+        "derived_total_tokens": 2135230,
+        "effective_total_tokens": 2135230,
         "coverage": {
-          "record_count": 4,
-          "modeled_count": 4,
-          "observed_count": 4,
-          "recognized_count": 4,
-          "preferred_total_count": 4,
+          "record_count": 1,
+          "modeled_count": 1,
+          "observed_count": 1,
+          "recognized_count": 1,
+          "preferred_total_count": 1,
           "field_counts": {
-            "input_tokens": 4,
-            "cached_input_tokens": 4,
-            "cache_creation_input_tokens": 4,
-            "output_tokens": 4,
-            "reasoning_output_tokens": 4,
+            "input_tokens": 1,
+            "cached_input_tokens": 1,
+            "cache_creation_input_tokens": 1,
+            "output_tokens": 1,
+            "reasoning_output_tokens": 1,
             "provider_total_tokens": 0,
-            "derived_total_tokens": 4
+            "derived_total_tokens": 1
           }
         }
       },
       "rubric": {
-        "passed": 44,
-        "total": 44,
+        "passed": 14,
+        "total": 14,
         "average_score": 100.0
       },
-      "rubric_tokens": 3622007,
-      "rubric_duration_seconds": 372.779,
+      "rubric_tokens": 883180,
+      "rubric_duration_seconds": 119.155,
       "rubric_usage": {
         "provider": "codex",
         "source": "cumulative",
         "observed": true,
-        "usage_record_count": 4,
-        "selected_record_count": 4,
-        "input_tokens": 3607508,
-        "cached_input_tokens": 3215616,
+        "usage_record_count": 1,
+        "selected_record_count": 1,
+        "input_tokens": 878497,
+        "cached_input_tokens": 765568,
         "cache_creation_input_tokens": 0,
-        "output_tokens": 14499,
-        "reasoning_output_tokens": 2411,
+        "output_tokens": 4683,
+        "reasoning_output_tokens": 1347,
         "provider_total_tokens": null,
-        "derived_total_tokens": 3622007,
-        "effective_total_tokens": 3622007,
+        "derived_total_tokens": 883180,
+        "effective_total_tokens": 883180,
         "coverage": {
-          "record_count": 4,
-          "modeled_count": 4,
-          "observed_count": 4,
-          "recognized_count": 4,
-          "preferred_total_count": 4,
+          "record_count": 1,
+          "modeled_count": 1,
+          "observed_count": 1,
+          "recognized_count": 1,
+          "preferred_total_count": 1,
           "field_counts": {
-            "input_tokens": 4,
-            "cached_input_tokens": 4,
-            "cache_creation_input_tokens": 4,
-            "output_tokens": 4,
-            "reasoning_output_tokens": 4,
+            "input_tokens": 1,
+            "cached_input_tokens": 1,
+            "cache_creation_input_tokens": 1,
+            "output_tokens": 1,
+            "reasoning_output_tokens": 1,
             "provider_total_tokens": 0,
-            "derived_total_tokens": 4
+            "derived_total_tokens": 1
           }
         }
       }
@@ -107,15 +107,15 @@
       "service": "chi-basic",
       "prompt_count": 1,
       "prompts": [
-        "logging-trial-3"
+        "logging-trial-1"
       ],
       "with_skill": {
         "prompt_count": 1,
-        "command_count": 25,
-        "duration_seconds": 816.423,
-        "agent_duration_seconds": 729.423,
-        "tokens": 2826863,
-        "agent_tokens": 2111991,
+        "command_count": 26,
+        "duration_seconds": 495.963,
+        "agent_duration_seconds": 376.757,
+        "tokens": 3018410,
+        "agent_tokens": 2135230,
         "error_count": 0,
         "agent_usage": {
           "provider": "codex",
@@ -123,14 +123,14 @@
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 2077047,
-          "cached_input_tokens": 1975040,
+          "input_tokens": 2119153,
+          "cached_input_tokens": 2014080,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 34944,
-          "reasoning_output_tokens": 5472,
+          "output_tokens": 16077,
+          "reasoning_output_tokens": 1664,
           "provider_total_tokens": null,
-          "derived_total_tokens": 2111991,
-          "effective_total_tokens": 2111991,
+          "derived_total_tokens": 2135230,
+          "effective_total_tokens": 2135230,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -149,26 +149,26 @@
           }
         },
         "rubric": {
-          "passed": 11,
-          "total": 11,
+          "passed": 14,
+          "total": 14,
           "average_score": 100.0
         },
-        "rubric_tokens": 714872,
-        "rubric_duration_seconds": 86.912,
+        "rubric_tokens": 883180,
+        "rubric_duration_seconds": 119.155,
         "rubric_usage": {
           "provider": "codex",
           "source": "cumulative",
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 711583,
-          "cached_input_tokens": 622080,
+          "input_tokens": 878497,
+          "cached_input_tokens": 765568,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 3289,
-          "reasoning_output_tokens": 453,
+          "output_tokens": 4683,
+          "reasoning_output_tokens": 1347,
           "provider_total_tokens": null,
-          "derived_total_tokens": 714872,
-          "effective_total_tokens": 714872,
+          "derived_total_tokens": 883180,
+          "effective_total_tokens": 883180,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -190,312 +190,29 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/otel-audit/20261109T045620782361Z/results/go/chi-basic/qual-logging-audit-contract/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-audit/20261109T045620782361Z/results/go/chi-basic/qual-logging-audit-contract/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-audit/20261109T045620782361Z/results/go/chi-basic/qual-logging-audit-contract/with_baseline.json"
-      }
-    },
-    {
-      "id": "java/springboot-basic/qual/logging-audit-contract",
-      "case": "java/springboot-basic",
-      "language": "java",
-      "service": "springboot-basic",
-      "prompt_count": 1,
-      "prompts": [
-        "logging-trial-3"
-      ],
-      "with_skill": {
-        "prompt_count": 1,
-        "command_count": 28,
-        "duration_seconds": 611.913,
-        "agent_duration_seconds": 522.866,
-        "tokens": 2228558,
-        "agent_tokens": 1428139,
-        "error_count": 0,
-        "agent_usage": {
-          "provider": "codex",
-          "source": "cumulative",
-          "observed": true,
-          "usage_record_count": 1,
-          "selected_record_count": 1,
-          "input_tokens": 1403404,
-          "cached_input_tokens": 1304320,
-          "cache_creation_input_tokens": 0,
-          "output_tokens": 24735,
-          "reasoning_output_tokens": 4814,
-          "provider_total_tokens": null,
-          "derived_total_tokens": 1428139,
-          "effective_total_tokens": 1428139,
-          "coverage": {
-            "record_count": 1,
-            "modeled_count": 1,
-            "observed_count": 1,
-            "recognized_count": 1,
-            "preferred_total_count": 1,
-            "field_counts": {
-              "input_tokens": 1,
-              "cached_input_tokens": 1,
-              "cache_creation_input_tokens": 1,
-              "output_tokens": 1,
-              "reasoning_output_tokens": 1,
-              "provider_total_tokens": 0,
-              "derived_total_tokens": 1
-            }
-          }
-        },
-        "rubric": {
-          "passed": 11,
-          "total": 11,
-          "average_score": 100.0
-        },
-        "rubric_tokens": 800419,
-        "rubric_duration_seconds": 88.928,
-        "rubric_usage": {
-          "provider": "codex",
-          "source": "cumulative",
-          "observed": true,
-          "usage_record_count": 1,
-          "selected_record_count": 1,
-          "input_tokens": 796874,
-          "cached_input_tokens": 701952,
-          "cache_creation_input_tokens": 0,
-          "output_tokens": 3545,
-          "reasoning_output_tokens": 513,
-          "provider_total_tokens": null,
-          "derived_total_tokens": 800419,
-          "effective_total_tokens": 800419,
-          "coverage": {
-            "record_count": 1,
-            "modeled_count": 1,
-            "observed_count": 1,
-            "recognized_count": 1,
-            "preferred_total_count": 1,
-            "field_counts": {
-              "input_tokens": 1,
-              "cached_input_tokens": 1,
-              "cache_creation_input_tokens": 1,
-              "output_tokens": 1,
-              "reasoning_output_tokens": 1,
-              "provider_total_tokens": 0,
-              "derived_total_tokens": 1
-            }
-          }
-        }
-      },
-      "with_baseline": null,
-      "mode": "with_skill",
-      "result_paths": {
-        "eval": ".workspace/codex-evals/otel-audit/20261109T045620782361Z/results/java/springboot-basic/qual-logging-audit-contract/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-audit/20261109T045620782361Z/results/java/springboot-basic/qual-logging-audit-contract/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-audit/20261109T045620782361Z/results/java/springboot-basic/qual-logging-audit-contract/with_baseline.json"
-      }
-    },
-    {
-      "id": "node/express-basic/qual/logging-audit-contract",
-      "case": "node/express-basic",
-      "language": "node",
-      "service": "express-basic",
-      "prompt_count": 1,
-      "prompts": [
-        "logging-trial-3"
-      ],
-      "with_skill": {
-        "prompt_count": 1,
-        "command_count": 31,
-        "duration_seconds": 856.289,
-        "agent_duration_seconds": 756.555,
-        "tokens": 2582044,
-        "agent_tokens": 1369013,
-        "error_count": 0,
-        "agent_usage": {
-          "provider": "codex",
-          "source": "cumulative",
-          "observed": true,
-          "usage_record_count": 1,
-          "selected_record_count": 1,
-          "input_tokens": 1332414,
-          "cached_input_tokens": 1230592,
-          "cache_creation_input_tokens": 0,
-          "output_tokens": 36599,
-          "reasoning_output_tokens": 8444,
-          "provider_total_tokens": null,
-          "derived_total_tokens": 1369013,
-          "effective_total_tokens": 1369013,
-          "coverage": {
-            "record_count": 1,
-            "modeled_count": 1,
-            "observed_count": 1,
-            "recognized_count": 1,
-            "preferred_total_count": 1,
-            "field_counts": {
-              "input_tokens": 1,
-              "cached_input_tokens": 1,
-              "cache_creation_input_tokens": 1,
-              "output_tokens": 1,
-              "reasoning_output_tokens": 1,
-              "provider_total_tokens": 0,
-              "derived_total_tokens": 1
-            }
-          }
-        },
-        "rubric": {
-          "passed": 11,
-          "total": 11,
-          "average_score": 100.0
-        },
-        "rubric_tokens": 1213031,
-        "rubric_duration_seconds": 99.652,
-        "rubric_usage": {
-          "provider": "codex",
-          "source": "cumulative",
-          "observed": true,
-          "usage_record_count": 1,
-          "selected_record_count": 1,
-          "input_tokens": 1209289,
-          "cached_input_tokens": 1100544,
-          "cache_creation_input_tokens": 0,
-          "output_tokens": 3742,
-          "reasoning_output_tokens": 723,
-          "provider_total_tokens": null,
-          "derived_total_tokens": 1213031,
-          "effective_total_tokens": 1213031,
-          "coverage": {
-            "record_count": 1,
-            "modeled_count": 1,
-            "observed_count": 1,
-            "recognized_count": 1,
-            "preferred_total_count": 1,
-            "field_counts": {
-              "input_tokens": 1,
-              "cached_input_tokens": 1,
-              "cache_creation_input_tokens": 1,
-              "output_tokens": 1,
-              "reasoning_output_tokens": 1,
-              "provider_total_tokens": 0,
-              "derived_total_tokens": 1
-            }
-          }
-        }
-      },
-      "with_baseline": null,
-      "mode": "with_skill",
-      "result_paths": {
-        "eval": ".workspace/codex-evals/otel-audit/20261109T045620782361Z/results/node/express-basic/qual-logging-audit-contract/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-audit/20261109T045620782361Z/results/node/express-basic/qual-logging-audit-contract/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-audit/20261109T045620782361Z/results/node/express-basic/qual-logging-audit-contract/with_baseline.json"
-      }
-    },
-    {
-      "id": "python/flask-basic/qual/logging-audit-contract",
-      "case": "python/flask-basic",
-      "language": "python",
-      "service": "flask-basic",
-      "prompt_count": 1,
-      "prompts": [
-        "logging-trial-3"
-      ],
-      "with_skill": {
-        "prompt_count": 1,
-        "command_count": 35,
-        "duration_seconds": 789.158,
-        "agent_duration_seconds": 691.795,
-        "tokens": 2777247,
-        "agent_tokens": 1883562,
-        "error_count": 0,
-        "agent_usage": {
-          "provider": "codex",
-          "source": "cumulative",
-          "observed": true,
-          "usage_record_count": 1,
-          "selected_record_count": 1,
-          "input_tokens": 1850584,
-          "cached_input_tokens": 1739136,
-          "cache_creation_input_tokens": 0,
-          "output_tokens": 32978,
-          "reasoning_output_tokens": 6467,
-          "provider_total_tokens": null,
-          "derived_total_tokens": 1883562,
-          "effective_total_tokens": 1883562,
-          "coverage": {
-            "record_count": 1,
-            "modeled_count": 1,
-            "observed_count": 1,
-            "recognized_count": 1,
-            "preferred_total_count": 1,
-            "field_counts": {
-              "input_tokens": 1,
-              "cached_input_tokens": 1,
-              "cache_creation_input_tokens": 1,
-              "output_tokens": 1,
-              "reasoning_output_tokens": 1,
-              "provider_total_tokens": 0,
-              "derived_total_tokens": 1
-            }
-          }
-        },
-        "rubric": {
-          "passed": 11,
-          "total": 11,
-          "average_score": 100.0
-        },
-        "rubric_tokens": 893685,
-        "rubric_duration_seconds": 97.287,
-        "rubric_usage": {
-          "provider": "codex",
-          "source": "cumulative",
-          "observed": true,
-          "usage_record_count": 1,
-          "selected_record_count": 1,
-          "input_tokens": 889762,
-          "cached_input_tokens": 791040,
-          "cache_creation_input_tokens": 0,
-          "output_tokens": 3923,
-          "reasoning_output_tokens": 722,
-          "provider_total_tokens": null,
-          "derived_total_tokens": 893685,
-          "effective_total_tokens": 893685,
-          "coverage": {
-            "record_count": 1,
-            "modeled_count": 1,
-            "observed_count": 1,
-            "recognized_count": 1,
-            "preferred_total_count": 1,
-            "field_counts": {
-              "input_tokens": 1,
-              "cached_input_tokens": 1,
-              "cache_creation_input_tokens": 1,
-              "output_tokens": 1,
-              "reasoning_output_tokens": 1,
-              "provider_total_tokens": 0,
-              "derived_total_tokens": 1
-            }
-          }
-        }
-      },
-      "with_baseline": null,
-      "mode": "with_skill",
-      "result_paths": {
-        "eval": ".workspace/codex-evals/otel-audit/20261109T045620782361Z/results/python/flask-basic/qual-logging-audit-contract/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-audit/20261109T045620782361Z/results/python/flask-basic/qual-logging-audit-contract/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-audit/20261109T045620782361Z/results/python/flask-basic/qual-logging-audit-contract/with_baseline.json"
+        "eval": ".workspace/codex-evals/otel-audit/20261109T183242167222Z/results/go/chi-basic/qual-logging-audit-contract/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-audit/20261109T183242167222Z/results/go/chi-basic/qual-logging-audit-contract/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-audit/20261109T183242167222Z/results/go/chi-basic/qual-logging-audit-contract/with_baseline.json"
       }
     }
   ],
   "failures": [],
   "source": {
     "digest_version": 4,
-    "digest": "ad5463392518fa768dd2695f35dc567b78065027cb7c87bb5670374c154e4cf6",
+    "digest": "ada118246b57b611cd34deb9cb5df4758572be01b4bce87fce286030848b823e",
     "eval_kinds": [
       "rubric"
     ],
     "evaluator_semantics_version": 1,
     "files": {
       "evals/codex-evals.toml": "d89dac81794f47361a312db0b9e303f37a0e5ff60a075e2924ff3c9589ee472b",
-      "evals/go/chi-basic/eval/inputs/logging-contract-evidence.json": "b4355e81014afd62332bd17f61e1142b8b8799a7b25fb8d6490a05df5fafb8d2",
-      "evals/go/chi-basic/eval/qual/logging-audit-contract.json": "a58e6c69a873d48ba233e0c3e0b2c3c59fb0405c2dbb7a42b9b41bfdd0649a47",
+      "evals/go/chi-basic/Makefile": "4fa7a1c389866c15986b27d22da0bee109bf6bc438f0d29e2b42d7f6d36ea68a",
+      "evals/go/chi-basic/README.md": "6e17e9f1e65f52a9268ed19a4e4c7d449efdf4789c404232c98bf04777702688",
+      "evals/go/chi-basic/eval/qual/logging-audit-contract.json": "2d66a6c412e80929f73061a7c07d1c385e7350ba4100e56718b50f2f481d7635",
       "evals/go/chi-basic/go.mod": "3180c726d9dfb307fcbebbd0f02e93dc833a8df2f36cbef9101d681e5048ba00",
-      "evals/go/chi-basic/main.go": "98fc93b9ffcd0a996424992672480e110976bbe4d721a8e3a5fefe96fb57512d",
-      "skills/otel-audit/SKILL.md": "f2a83084f338f8b9bc617bab9202e5fa5d1e06744590f2f741ce94347e2e6b63",
+      "evals/go/chi-basic/go.sum": "568d7c01fdccc1b581965e736138e294497e891d01ec8b78e3509479a6a52e2e",
+      "evals/go/chi-basic/main.go": "bb8ca564254a9fc733166fccb1b60aacb3a2ee04d8fc5932a25b1a8cd31ba70b",
+      "skills/otel-audit/SKILL.md": "145e93401d76ad0547f6d7babce6bff97c1b85d4668742016d61a6792454d339",
       "skills/otel-audit/scripts/observe_report.py": "b9f2ff513850d2b6405f47000cd0b6fe8697fd35d47a15e9adaee5fa10094f4d",
       "skills/otel-audit/scripts/scan_python_otel_topology.py": "dc16553cdd3f89052bd4f8ececeaaacdce398c93dad3d6914cfa05f5d64f0fc0",
       "skills/otel-audit/tests/test_scan_python_otel_topology.py": "cf430e62143ef17b693555383cafef06f056c582f9c586ab23b9a4bf401a073e",
@@ -504,13 +221,13 @@
       "skills/references/full-runtime-acceptance.md": "585f42079d71460bbf7c68e4320ceabab6fcc1ba7c711948806c78c9d46736c5",
       "skills/references/genai-readiness.md": "b06758e80805b09ab485d81c3cc6284acf5e2d18c2af1c0359644f61b80deff4",
       "skills/references/incident-readiness.md": "787fb441106abcb148f541befd403e5f7889a2234c6cbe590d0c6bce48a3b59a",
-      "skills/references/languages/go.md": "5a971867caaac32350fb4d49b07180c458bdf2bbafa3c701fdfb40436b3e745f",
-      "skills/references/languages/java.md": "52fea13cae72eede9f72b6983ef67dad2188bcf6a5542aa49c9beed143a6b471",
-      "skills/references/languages/node.md": "8c184f2e42cb8db55ef52c1b3dfa2212beae7c92daf926817033ecbfd140d274",
-      "skills/references/languages/python.md": "2bfd572c4d93faa6eae04c1b71a1ce696df392bed256cfa896444b0b6128adeb",
+      "skills/references/languages/go.md": "6607a4c85c3dc3629027524fe6109a6cf5a8da6bcf62ac079ab2814a68218406",
+      "skills/references/languages/java.md": "2ab8c1db2b424a16435f6db4ead5caf19ca85a6d1d8f451f7a1f1b37e503ddfe",
+      "skills/references/languages/node.md": "fff6fe285a71f65882b4909634136ced0cf98eb1e153ed5d82df3ccb75628e4f",
+      "skills/references/languages/python.md": "c0b77e16348d4fe3e6dc9ea7c5ed79f40efe0f866178f257f5b65a4eff78e342",
       "skills/references/ledger-template.md": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc",
       "skills/references/local-otlp-receiver.md": "6f58148de9ef2fd3e617ddc2622ee09ba785b202100b91261a727af6e3dc7cec",
-      "skills/references/logging-readiness.md": "661590009b5780ac7588ac64989aee127eb54d5495ff93ce605d25f7280a6f7e",
+      "skills/references/logging-readiness.md": "701521da5671c896c136eba4f39f5f109e9af202b2d8b519d9a660f0f0f6db34",
       "skills/references/report-flow-contract.md": "d00ca857d4a875dcdb8a699cbf82eda612f42a4f88152ff7a83b4a74eb1b4d0f",
       "skills/references/scripts/observe_report.py": "3c1dc1386357e2cc9dc4f2d0f183cc8f4d0c7f45bb064de15196d071212be8cc",
       "skills/references/scripts/observe_report_core.py": "88419036c5c1a1096361b10da730dc5bbae931f2c890d6dba2c7791cd78b96c4",
@@ -523,23 +240,7 @@
       "skills/references/tests/test_observe_report.py": "cf79f1a74e4b2260d8010145ce2ff0c6122554e6c7eb19984941b6a89418c2c0",
       "skills/references/tests/test_observe_report_flow.py": "a895ca4165a196ff8ab0ffb73a1c6dcf859d27cf59cd5f335ce4fe1c9ca7392e",
       "skills/references/tests/test_observe_report_html.py": "32183996d90eb073b9ece7bcd05613ea3552512af7f6f8acfc7171d45eaf2382",
-      "skills/references/tests/test_observe_report_selection.py": "c2a441002d8392b9ea5cfdb52cee7e0b75000542334c2a3eb3bc8cff48a0d7c7",
-      "evals/java/springboot-basic/eval/inputs/logging-contract-evidence.json": "c2ba9b5071dfdf38e04780d30d6e84006db256a12eb438ef57d73e5725feb088",
-      "evals/java/springboot-basic/eval/qual/logging-audit-contract.json": "84de1782769fc3e29f536da2af35a15a64186e6b3ad99551a82b9ba322ea6f58",
-      "evals/java/springboot-basic/pom.xml": "2b6e5f88faf91bf8891d728bd51bc6737ca8919bd657caaaa416ff3c6550f625",
-      "evals/java/springboot-basic/src/main/java/com/example/tasks/Task.java": "97437951adcb1592b1f4e48af10f799501858ed40949575f8278d9a644f80cfc",
-      "evals/java/springboot-basic/src/main/java/com/example/tasks/TaskController.java": "a32f9883586bd13b5ecf6f015f587b25ac696a55423398a01e3fe1619f9020fa",
-      "evals/java/springboot-basic/src/main/java/com/example/tasks/TasksApplication.java": "2aeefcee33840914b4118f0b6615205c37ae50ecf5cb774c32a6f5d9431f62c5",
-      "evals/java/springboot-basic/src/main/resources/application.properties": "80bbb064ac6230150fdb6db61f2ce53248fbf798026e4828c3cb5d4c5f9998fd",
-      "evals/node/express-basic/app.js": "e21a658ea62dd0aba6890cb8514a37eb08d10282ae078165473371db042934b5",
-      "evals/node/express-basic/eval/inputs/logging-contract-evidence.json": "7ff3f1efa4ded736b7caba479ae1ac302638f5cc6bb3473333670bd83b0cb292",
-      "evals/node/express-basic/eval/qual/logging-audit-contract.json": "174710d5adb56f1e3e6788dbcd584c013af1eeab68a8d8cc511eec9982532c1d",
-      "evals/node/express-basic/package.json": "9a6b2e4619c27d59d7911017d38caf37cecc4c5dc0a443b7eabd54ce0c554ae9",
-      "evals/python/flask-basic/Makefile": "9638ea37751505b6f4a4018a30477ad3c69633c7669796322e1738d7b75a0bbe",
-      "evals/python/flask-basic/app.py": "5fcca84aacb85fb64cceec468d669718b163566742c5a7343bd65316923e840c",
-      "evals/python/flask-basic/eval/inputs/logging-contract-evidence.json": "6c355413f16ed3ea8722c38cfbaa35191b679ad533a6064cc4367e494e2f4a0d",
-      "evals/python/flask-basic/eval/qual/logging-audit-contract.json": "42af20d8139780de9a8fb8214dfb3fd005b4f571646b8eaa3dcbc773148a3899",
-      "evals/python/flask-basic/pyproject.toml": "3b624f5c0a1c9766603fc0e591341e7fe8cd44af5386521970f30673d34e6c8f"
+      "skills/references/tests/test_observe_report_selection.py": "c2a441002d8392b9ea5cfdb52cee7e0b75000542334c2a3eb3bc8cff48a0d7c7"
     },
     "skill_path": "skills/otel-audit",
     "shared_reference_consumers": [
@@ -561,38 +262,9 @@
       {
         "definition_path": "evals/go/chi-basic/eval/qual/logging-audit-contract.json",
         "fixture_dir": "evals/go/chi-basic",
-        "prompt_id": "logging-trial-3",
+        "prompt_id": "logging-trial-1",
         "eval_kind": "rubric",
-        "eval_inputs": [
-          "eval/inputs/logging-contract-evidence.json"
-        ]
-      },
-      {
-        "definition_path": "evals/java/springboot-basic/eval/qual/logging-audit-contract.json",
-        "fixture_dir": "evals/java/springboot-basic",
-        "prompt_id": "logging-trial-3",
-        "eval_kind": "rubric",
-        "eval_inputs": [
-          "eval/inputs/logging-contract-evidence.json"
-        ]
-      },
-      {
-        "definition_path": "evals/node/express-basic/eval/qual/logging-audit-contract.json",
-        "fixture_dir": "evals/node/express-basic",
-        "prompt_id": "logging-trial-3",
-        "eval_kind": "rubric",
-        "eval_inputs": [
-          "eval/inputs/logging-contract-evidence.json"
-        ]
-      },
-      {
-        "definition_path": "evals/python/flask-basic/eval/qual/logging-audit-contract.json",
-        "fixture_dir": "evals/python/flask-basic",
-        "prompt_id": "logging-trial-3",
-        "eval_kind": "rubric",
-        "eval_inputs": [
-          "eval/inputs/logging-contract-evidence.json"
-        ]
+        "eval_inputs": []
       }
     ],
     "config_path": "evals/codex-evals.toml"

@@ -82,6 +82,18 @@ class LoggingContract(unittest.TestCase):
             self.assertEqual((record.trace_id, record.span_id, int(record.trace_flags)), (0x11, 0x22, flags))
         self.assertEqual((outside.trace_id, outside.span_id), (0, 0))
 
+    def test_preserves_meaningful_zero_false_and_empty_attributes(self):
+        self.logger.info("falsy-values", extra={"zero": 0, "disabled": False, "empty": "", "items": []})
+        self.assertEqual(len(self.records()), 1)
+        attributes = self.records()[0].attributes
+        self.assertIs(type(attributes["zero"]), int)
+        self.assertEqual(attributes["zero"], 0)
+        self.assertIs(attributes["disabled"], False)
+        self.assertEqual(attributes["empty"], "")
+        self.assertIsInstance(attributes["items"], (list, tuple))
+        self.assertEqual(len(attributes["items"]), 0)
+        self.assertEqual(self.sink.getvalue(), "falsy-values\n")
+
     def test_async_context_isolation(self):
         async def task(value):
             ctx = trace.SpanContext(value, value, False, trace.TraceFlags(1))

@@ -32,6 +32,18 @@ function setup(exporter = new InMemoryLogRecordExporter(), failure = false) {
 
 const spanContext = flags => ({ traceId: '1'.repeat(32), spanId: '2'.repeat(16), traceFlags: flags });
 
+test('preserves meaningful zero, false and empty attributes through Winston', async () => {
+  const s = setup();
+  try {
+    s.logger.info('falsy-values', { zero: 0, disabled: false, empty: '', items: [] });
+    await s.provider.forceFlush();
+    const records = s.exporter.getFinishedLogRecords();
+    assert.equal(records.length, 1);
+    assert.deepEqual(records[0].attributes, { zero: 0, disabled: false, empty: '', items: [] });
+    assert.equal(s.sink.filter(value => value.includes('falsy-values')).length, 1);
+  } finally { s.logger.close(); await s.provider.shutdown(); }
+});
+
 test('official Winston mapping, original sink and precise SDK event time', async () => {
   const s = setup();
   s.logger.error('failed');

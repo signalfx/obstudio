@@ -27,6 +27,9 @@ import io.opentelemetry.sdk.resources.Resource;
 import io.opentelemetry.sdk.testing.exporter.InMemoryLogRecordExporter;
 import java.time.Duration;
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -40,6 +43,7 @@ class LoggingContractTest {
   LoggerContext context;
   Logger logger;
   ListAppender<ILoggingEvent> sink;
+  OpenTelemetryAppender bridge;
 
   @BeforeEach void setup() {
     exporter = InMemoryLogRecordExporter.create();
@@ -60,7 +64,7 @@ class LoggingContractTest {
   }
 
   void attachBridge(SdkLoggerProvider owner) {
-    OpenTelemetryAppender bridge = new OpenTelemetryAppender();
+    bridge = new OpenTelemetryAppender();
     bridge.setContext(context);
     bridge.setOpenTelemetry(OpenTelemetrySdk.builder().setLoggerProvider(owner).build());
     bridge.start();
@@ -98,6 +102,25 @@ class LoggingContractTest {
       assertEquals(i == 1, records.get(i).getSpanContext().isSampled());
     }
     assertFalse(records.get(2).getSpanContext().isValid());
+  }
+
+  @Test void preservesMeaningfulScalarsAndTypedSdkEmptyArray() {
+    bridge.stop();
+    bridge.setKeyValuePairAttributesIncluded("zero,disabled,empty");
+    bridge.start();
+    logger.atInfo().addKeyValue("zero", 0L).addKeyValue("disabled", false)
+        .addKeyValue("empty", "").log("falsy-values");
+    var records = exporter.getFinishedLogRecordItems();
+    assertEquals(1, records.size());
+    var attributes = new HashMap<String, Object>();
+    records.get(0).getAttributes().forEach((key, value) -> attributes.put(key.getKey(), value));
+    assertEquals(Map.of("zero", 0L, "disabled", false, "empty", ""), attributes);
+    assertEquals(1, sink.list.size());
+    provider.get("typed-values").logRecordBuilder().setBody("empty-array")
+        .setAttribute(AttributeKey.stringArrayKey("items"), List.of()).emit();
+    var typed = exporter.getFinishedLogRecordItems().get(1).getAttributes();
+    assertTrue(typed.asMap().containsKey(AttributeKey.stringArrayKey("items")));
+    assertEquals(List.of(), typed.get(AttributeKey.stringArrayKey("items")));
   }
 
   @Test void concurrentContextIsolation() {

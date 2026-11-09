@@ -587,7 +587,8 @@ inventing arguments, metadata, native node IDs/counts or execution:
   matching protocol. Name the planned or captured bounded/redacted body,
   severity, shared service resource and trace/span IDs matching the owning
   span, alongside separate span and metric-datapoint receipts. Assert one
-  native LogRecord per application log call, retention of the actual original
+  SDK LogRecord emitted per application log call and one received copy on a
+  healthy path, retention of the actual original
   stdout/file sinks, owned log-provider/bridge drain and close, and local-only
   routing with no cloud log forwarding. SDK `@log` spans, stdout correlation
   and exporter settings alone do not supply this application LogRecord proof.
@@ -1557,10 +1558,14 @@ detected bridge, and include their applicable positive and fault scenarios in
 the verification handoff. Preserve supported SDK defaults and operator policy;
 do not add application code merely to duplicate SDK-owned behavior.
 
+- Resolve effective configuration and any existing Collector forwarding route
+  using the shared logging reference before applying the environment-based
+  local-SDK recipe below. Preserve an established collection owner; do not add
+  a second route or treat an ignored environment value as effective policy.
 - Classify application logs during preflight as `local-otlp-default`,
   `explicitly-disabled`, `operator-owned`, `correlation-only`, or
-  `unsupported-stack`. Trace/MDC fields in stdout are correlation-only, not an
-  OTLP log pipeline.
+  `unsupported-stack`. Trace/MDC fields alone are correlation-only evidence;
+  prove a selected forwarding route separately.
 - For a supported Python, Node.js, Java, or Go application logging stack,
   configure local Splunk Observability Studio OTLP export by default. Use the official log SDK,
   batch processor/exporter, and the official bridge for the detected stack.
@@ -1622,7 +1627,10 @@ do not add application code merely to duplicate SDK-owned behavior.
 - Add focused and full-runtime proof for log body/category, severity, shared
   resource identity, trace/span correlation in an active span, redaction,
   preservation of the existing sink, explicit `none` opt-out, and exactly one
-  OTLP record per application log call. When cloud trace/metric forwarding is
+  received OTLP record per application log call on a healthy delivery path.
+  For fault/retry tests, distinguish SDK emissions and bridge ownership from
+  transport attempts and receiver copies; zero receipt is possible during an
+  outage. Preserve the original sink's per-call count. When cloud trace/metric forwarding is
   configured, also prove the log is visible in local Splunk Observability Studio and no cloud log
   exporter or forwarding path was configured.
 - When `OTEL_LOGS_EXPORTER=none`, disable or bypass any previously discovered

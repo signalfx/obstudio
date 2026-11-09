@@ -1,569 +1,381 @@
 # OpenTelemetry logging rules and issue remediation
 
-This change adds nine shared logging rules to `otel-audit`, `otel-instrument`
-and `otel-verify`. The first six rules originated in the assessment at commit
-`8600493b`; the follow-up adds explicit async handoff, fresh verification and
-source-to-evidence closure. The rules cover record meaning, real trace
-correlation, exception privacy, limits, delivery and diagnostic isolation.
+This PR adds nine shared logging rules for `otel-audit`, `otel-instrument` and
+`otel-verify`, strengthens their language-specific guidance, and maintains real
+Java, Python, Go and Node.js SDK/bridge tests. The rules help agents identify
+concrete logging defects, implement selected repairs through existing owners,
+and prove behavior at the claimed boundary. They do not certify every application
+or require optional SDK features to be implemented in application code.
 
-These are agent instructions backed by maintained SDK/bridge fixtures and
-skill evaluations. Application repairs still require implementation through
-the existing provider and bridge, followed by proof at the claimed boundary.
-The four verified test-infrastructure findings have code and regression fixes
-in this change. This report explains the rules, their repair paths and the
-scope of the evidence. Final review and CI status are tracked in
-[PR 352](https://github.com/signalfx/obstudio/pull/352).
+**Current state:** Claude completed the 183-row primary-source verification of
+the preceding instruction snapshot. Its five verified wording corrections are
+applied and verified. Claude found one further empty/null-value omission; its
+correction is applied and independently verified. A bare-prompt development audit then
+exposed incomplete Go reconciliation and an arbitrary Node Body cap. Those two
+clarifications plus version-neutral Java guidance are applied and submitted to
+Claude for source verification. All four follow-up audits passed14/14 criteria;
+the development workflows are now exercising implementation. A fresh strict
+three-pass gate is required after the source and upstream baseline updates. The earlier three clean passes at `62e0391` are historical. Current
+source changes reset the streak to **0/3**. A fresh whole-PR combined review
+starts after three consecutive complete clean passes. Publication and current-head
+CI status are tracked in [PR 352](https://github.com/signalfx/obstudio/pull/352).
 
-The completion gate requires **three consecutive complete clean passes** on
-unchanged source across all four languages and all three skills before
-combined review starts. Failed and interrupted attempts remain retained;
-passing older-source results do not count toward the current streak.
+## What was missing and why
 
-## Language reference organization
+The [baseline evidence](logging-skill-analysis-evidence.json) binds the first findings
+to merge base `4e1e51f3`, with source paths, hashes and surrounding policy.
+Search absence alone was not treated as runtime failure. Existing instructions
+already required trace correlation and preserving application sinks; the missing
+parts were explicit record/context/loss policies and proof strong enough to
+support the claimed coverage.
 
-Language-specific recipes now live in the existing four language guides under
-`skills/references/languages/`, shared by audit, instrumentation and verification.
-The old `otel-instrument/references/languages/` paths remain forwarding references.
-Each original guide is preserved, with its relative skill link repaired and a
-**Logging Readiness Checks** section added. The common logging reference keeps
-the rules, source-coverage decisions and acceptance requirements, and directs
-the agent to only the detected language's section.
+The first correlation tests injected known `SpanContext` IDs. They proved
+context copying, including unsampled and async controls, but could pass while
+real tracer initialization or span export was broken. The corrected native
+scenario creates real SDK parent/child spans, traverses the owned executor,
+thread/goroutine or callback, logs inside that worker, then joins the emitted
+log's canonical TraceId/SpanId to its exact received span. It checks flags,
+parentage and resource identity. Independent known-ID async and synchronous
+real-span tests cannot substitute for that joint scenario.
 
-The language sections own the concrete bridge mapping, async handoff, queue
-placement, public log-limit options, complete deadline examples and diagnostic
-routing. All three consumers are declared in `consumers.json`. Seven structural
-checks prove those references are present in actual isolated skill workspaces
-and that the old paths resolve to the canonical guides. The semantic evaluations
-also add a foreign-SDK-options proposal: each skill must reject the wrong API
-shape and unauthorized provider replacement while retaining the existing
-resource and processors. This adds behavior coverage beyond relocating text.
-The installed skill namespace has been backed up and synchronized: all 70
-canonical files match, and existing aliases are preserved.
+The process gap was a theme-based checklist without a required reconciliation
+of source clause, requirement level, owner, installed capability, selected
+application path and proof boundary. `otel-verify` also did not originally
+consume the shared logging guide. `LOG-SPEC-CLOSURE`, per-consumer semantic
+controls and source-bound execution receipts correct that omission. The
+expanded Claude inventory below then exposed environment-first classification
+and several conditional-feature decisions that needed clarification.
 
-## Current three-pass gate
+## Rules added and expected repairs
 
-The preceding source completed two full clean passes. Its third complete pass
-met 131/132 criteria despite all 79 native cases passing. A Go audit plan
-proposed known-context async checks and synchronous real-span joins separately,
-without requiring the same async worker log to join its actual received span.
-That omission reset the streak to **0/3**. The failed plan and grades remain
-retained; the earlier two clean passes do not count for the corrected source.
-
-The common proof-closure/context/handoff rules and all four language sections
-now require an explicitly linked joint scenario through the owned boundary.
-All four inputs add a split-proof counterexample, graded by all twelve
-skill/language definitions. This addresses the integration-proof gap without
-inventing a production defect from missing evidence or adding duplicate SDKs.
-The maintained native correlation fixtures already execute that combined path.
-
-The corrected 150-input source completed **three consecutive full clean
-passes**. Each met 132/132 declared checks and passed 79 native cases, 37
-regressions and skill-copy parity. Independent reconciliation confirms all
-396 declared checks, 237 native cases and 240 real span/log joins, including
-fresh XML, snapshot and wire evidence. Source and baseline hashes stayed
-unchanged. The generated Go audit now names a joint `S-ASYNC-JOIN` scenario
-through the owned goroutine and marks the separate-probe claim partial. The
-three-pass prerequisite is satisfied; combined review follows on the frozen
-complete PR scope.
-
-## Why the trace-correlation proof was incomplete
-
-`LOG-CONTEXT` and the four native bridges already populate the log record's
-canonical trace/span context. The earlier 222-result matrix checked that
-behavior with supplied non-recording contexts. It did **not** configure a real
-tracer and prove that the corresponding spans were exported. The report's
-fixture limitation was correct, but those results could not establish a real
-application log-to-trace join. That distinction should have been made explicit
-at the correlation claim.
-
-The original language recipes already prescribe correlation:
-[Java agent/appender proof](/Users/tithumma/code/splunk/obstudio-logging-analysis/skills/references/languages/java.md:700),
-[Python bridge/context injection](/Users/tithumma/code/splunk/obstudio-logging-analysis/skills/references/languages/python.md:82),
-[Go context-aware calls](/Users/tithumma/code/splunk/obstudio-logging-analysis/skills/references/languages/go.md:547),
-and [Node bridge correlation](/Users/tithumma/code/splunk/obstudio-logging-analysis/skills/references/languages/node.md:414).
-The omission was the requirement-to-proof reconciliation in this review, rather
-than an absence of correlation guidance across those recipes. Source guidance
-still has to be applied to each selected application's actual call sites.
-
-| Root cause | Correction | Evidence now available |
+| Rule | Gap addressed | Expected behavior and proof |
 |---|---|---|
-| Context-copying tests were used without a real span producer/exporter. | Each language now starts real SDK parent/child spans and directly exports both traces and bridged application logs. | Every trial receives 20 sampled spans and 22 logs: 20 exact joins, one valid unsampled log and one outside-span log. |
-| Nonempty IDs or an arbitrary `trace_id` attribute can look correlated without matching the actual operation. | Match canonical OTLP TraceId **and** SpanId, full SDK flags, async parentage and the service resource. Keep ordinary attributes distinct. | All 12 new correlation trials pass; receiver negative control preserves attribute-only IDs without promoting them to canonical fields. |
-| The thematic checklist had no mandatory reconciliation of all applicable official source clauses. | Added `LOG-SPEC-CLOSURE`: source/version, requirement level, applicability, owner, configuration/default, finding/scenario and proof boundary. Any omitted applicable row keeps completeness partial. | New source catalog, false-coverage observation and valid unsampled/outside controls are graded for audit, instrument and verify in all four languages. Current semantic run status is recorded below. |
-| Earlier verification did not consume the shared logging reference. | The verifier now loads it and independently checks obligations at real call sites. | Matching verifier rubric definitions exist for all four languages; canonical/plugin copies are synchronized. |
+| `LOG-RECORD` | Source numeric severity, timestamps and structured meaning could be misrepresented. | Use the detected bridge mapping; preserve occurrence versus observation time and supported precision. Check actual records, optional fields and selected event/attribute conventions. |
+| `LOG-CONTEXT` | Unsampled flags, stale context and real log/span joins were insufficiently explicit. | Check exact canonical IDs/flags for sampled, valid unsampled and outside-span logs. Join the same owned async log to a real received SDK span; never fabricate IDs or force sampling. |
+| `LOG-ASYNC-HANDOFF` | Executor and logging-queue placement could lose caller context or leak a reused worker's context. | Capture per work item before dispatch, reuse verified propagation, restore/detach after success/error/cancellation, and prove request pairing under concurrency. |
+| `LOG-EXCEPTION` | Invented aliases, raw exception serialization and formatter/MDC paths could bypass capture policy. | Apply the selected allowlist before capture/export, retain permitted type/category and assert forbidden field absence. Bridge messages and instrumentation exception events keep their different convention scope. |
+| `LOG-LIMITS` | Span limits could be mistaken for log limits; attribute limits could be mistaken for a Body cap. | Name supported log count/value settings on the existing provider. Test below/at/above boundaries and separate Body/privacy policy. Preserve adequate defaults; guard expensive construction using supported current enablement. |
+| `LOG-DELIVERY` | Enqueue, flush or HTTP200 could be mistaken for full acceptance; retries and shutdown could exceed the budget. | Identify the actual processor, bound supported batch/export/lifecycle waits, and distinguish attempted, received, rejected, dropped and unknown outcomes. A simple processor has different obligations. |
+| `LOG-DIAGNOSTICS` | Exporter failures could re-enter their own bridge recursively or flood diagnostics. | Name safe routing/suppression, preserve the original sink and application progress, and test bounded diagnostics/attempts under a fault. Check other configured signals separately. |
+| `LOG-VERIFY-FRESH` | Stale XML, zero child exit and aggregate counts could hide skipped or mismatched runs. | Use unique report storage, actual pass/fail/error/skip counts, source/version/command bindings, incremental results and timeout cleanup. Missing evidence cannot pass. |
+| `LOG-SPEC-CLOSURE` | Mentioning a rule or counting tests could conceal an omitted applicable guideline. | Reconcile official clauses with owner, applicability, effective configuration/default, finding/scenario and proof boundary. Unverified and unselected features stay explicit; combined claims require the same owned path. |
 
-Real Python SDK spans exposed an additional test assumption: sampled flags were
-`3`, rather than the supplied control's `1`. Assertions now compare the actual
-SDK flags, preserving supported bits. This was a test correction, not an SDK
-correlation defect. Concurrent probes also required a larger listen backlog in
-the owned test receiver; the failed initial probes remain retained.
+The canonical [common guide](../skills/references/logging-readiness.md) owns
+these decisions. Concrete bridge APIs, numeric mappings, async mechanisms,
+limits, whole-deadline options and diagnostic routing live in the existing
+[Java](../skills/references/languages/java.md#logging-readiness-checks),
+[Python](../skills/references/languages/python.md#logging-readiness-checks),
+[Go](../skills/references/languages/go.md#logging-readiness-checks) and
+[Node.js](../skills/references/languages/node.md#logging-readiness-checks) guides.
+Only the detected language section is loaded. The Java guide resolves supported value mapping from the actual dependency and
+appender test, with no fixed release assumption or internal main-branch mapper
+link. Release pins remain in reproducible test evidence. The old instrumentation paths
+remain forwarding references, and all three consumers are declared in
+`skills/references/consumers.json`. Canonical/plugin mirrors match.
 
-**The broader correction is a source-to-evidence gate.** It covers record
-semantics, resource/scope, initialization/ownership, context and propagation,
-filtering/opt-out, privacy, limits, delivery, diagnostics and lifecycle. Further
-applicable source clauses must also be reconciled. SDK defaults can satisfy SDK
-requirements; optional fields are not universally mandatory. A missing or
-unexecuted proof remains partial/unverified. This prevents a claim of complete
-guideline coverage based only on a named rule or total passing tests.
+A real isolated-workspace probe exposed a refactoring defect: the shared guides
+still referenced a sibling instrumentation skill that is not staged for audit
+or verification. **8 of 12 references were missing.** The focused regression
+failed for audit and verification before the fix (**2 failed / 1 passed**),
+then passed for all three. Shared logging checks now work with only the selected
+skill, without requiring another skill installation or widening read-only scope.
 
-## Rules and expected behavior
+## Expanded Claude guidance inventory and corrections
 
-| Added rule | Gap addressed | Expected result when applied |
+
+Claude Desktop produced an official-source inventory against the prior frozen
+`62e0391` instructions: **183 clauses from 30 source entries**, comprising 148
+applicable instruction rows (87 covered, 35 partial, 26 missing) and 35 not
+applicable. These are Claude's original instruction verdicts, not runtime
+results or a current-source clean review. Its 16 grouped findings expand to
+**25 candidates** when the ten minor sub-findings are counted individually.
+The [machine-readable evidence](logging-skill-analysis-evidence.json) preserves
+all 183 rows, source links, original verdicts, limitations and the 25 Codex
+verification dispositions. It also records the actual Desktop session and
+raw output digest. No Codex conclusion has been relabeled as a Claude rereview.
+
+The following corrections extend the existing nine rules. Conditional features
+remain conditional; absence of an optional SDK feature is not missing application
+code. The root cause was an environment-first decision path and a thematic
+checklist that did not consistently resolve each clause's owner and proof
+boundary. Searching for `log` also missed existing requirement-level, resource
+and privacy instructions. The source-to-owner matrix and negative controls now
+require those surrounding rules to be read and reconciled.
+
+| Candidate | Verified instruction correction or disposition | How it prevents a wrong repair |
 |---|---|---|
-| LOG-RECORD | Incorrect severity, timestamp conversion or record shape | Logs retain the meaning of the original event. |
-| LOG-CONTEXT | Missing, stale or mixed request correlation | Logs match the request that emitted them, including unsampled and asynchronous work. |
-| LOG-EXCEPTION | Incorrect exception fields or unauthorized sensitive capture | Allowed exception information survives without exporting prohibited content. |
-| LOG-LIMITS | Span settings mistaken for log limits, or unbounded payloads | Log costs follow the selected attribute and Body policies. |
-| LOG-DELIVERY | Unbounded buffering, misleading delivery claims or incomplete shutdown | Export remains bounded and loss is reported accurately. |
-| LOG-DIAGNOSTICS | Exporter failures feeding back into their own logging bridge | Telemetry faults do not create recursive export storms or stop application work. |
-| LOG-ASYNC-HANDOFF (follow-up rule) | Context loss at executors/callbacks/logging queues, or MDC leakage | Capture before scheduling, verify exact pairing and restore worker state. |
-| LOG-SPEC-CLOSURE (follow-up rule) | Guideline clauses omitted or marked complete without the claimed proof | Map official sources to applicability, owner, implementation and independent acceptance evidence. |
-| LOG-VERIFY-FRESH (follow-up rule) | Stale XML, skipped tests or incomplete matrices reported as success | Bind each verdict to fresh execution and retain failure/timeout evidence. |
+| GAP-1 | Resolve a supported active declarative loader, substitutions and overlays before flat environment recipes. | An ignored `OTEL_LOGS_EXPORTER=none` cannot falsely disable a file-configured route; unsupported loaders stay unverified. |
+| GAP-2, 6h | Inspect effective SDK disable, supported logger filters and current native enablement. | Distinguishes intentional filtering from missing wiring, retains severity-0/no-context controls, and avoids expensive disabled-record construction without suppressing an enabled original sink. |
+| GAP-3 | Name the Collector boundary, retaining pre-SDK/pre-writer privacy policy. | Approved downstream redaction is coverage only at that boundary; it cannot erase an earlier forbidden capture. |
+| GAP-4, 10 | Selected semantic event names exclude dynamic IDs; custom keys avoid reserved/colliding namespaces. | Preserves queryable categories without demanding EventName on ordinary messages or moving forbidden data to attributes. |
+| GAP-5, 7 | Verify server throttling, status-specific retry and supported byte bounds separately from Body limits. | HTTP400 retry and per-attempt deadline reasoning cannot be called conformant; no application retry loop replaces SDK behavior. |
+| GAP-6a | User exception attributes win when a selected supported Emit API derives fields. | Prevents supported exception processing from overwriting an explicit allowed value. |
+| GAP-6b, 6c | Selected event-to-span processing continues the log; custom async mutation needs a verified safe snapshot. | Avoids log loss and shared-record races while retaining built-in processors and unsupported-feature limits. |
+| GAP-6d, 6i, 6j | Scope instrumentation exception rules and deprecations to the selected producer/version. | Artificial status exceptions and type/message requirements cannot force extra bridge events, forbidden capture or an unrequested migration. |
+| GAP-6e, 6f | Check per-record discard diagnostics and consistent scope identity. | Prevents per-attribute diagnostic storms and conflicting identity; SDK-owned internals stay SDK-owned. |
+| GAP-6g, 16 | Syslog and HEC sinks are not selected. | Their optional/non-normative format examples do not create mandatory work from language choice or Splunk branding. |
+| GAP-8 | An SDK console exporter can use a simple processor. | Avoids false missing-BLRP/queue findings and assesses synchronous cost on the actual path. Native console sinks are separate. |
+| GAP-9 | State code-over-environment resource merge and effective decoding; preserve operator identity when adding defaults by avoiding conflicts. | The prior preservation policy was valid, but assuming env overrides explicit code was not. Existing resource/provider owners remain intact. |
+| GAP-11 | Inspect an already selected development `_ref` path only. | Requires a registry-defined base and string reference without authorizing new storage or sensitive-content offload. |
+| GAP-12 | Inspect selected development UID/stream/original fields. | Distinguishable records cannot share a UID; trace IDs are not record IDs, and original content is bounded before construction. No mandatory UID on every log. |
+| GAP-13 | Follow verified bridge/convention version for call-site attributes. | Avoids blindly rewriting an SDK or upgrading solely to copy newer dotted keys. |
+| GAP-14 | Use supported SDK self-metrics with their documented pipeline stage. | A created/processed count cannot establish receiver acceptance; no duplicate application metrics are introduced. |
+| GAP-15 | Record language Logs signal and feature maturity. | Development/RC status triggers capability verification, not an automatic upgrade or skipped language. |
 
-The canonical implementation is
-[logging-readiness.md](/Users/tithumma/code/splunk/obstudio-logging-analysis/skills/references/logging-readiness.md).
-Both the [audit entrypoint](/Users/tithumma/code/splunk/obstudio-logging-analysis/skills/otel-audit/SKILL.md:301)
-and [instrumentation entrypoint](/Users/tithumma/code/splunk/obstudio-logging-analysis/skills/otel-instrument/SKILL.md:1554)
-load it, as does the updated [verification entrypoint](/Users/tithumma/code/splunk/obstudio-logging-analysis/skills/otel-verify/SKILL.md:31).
-The plugin copies match the canonical sources.
-The updated rules are also installed under `/Users/tithumma/.codex/skills/obstudio`;
-the existing skill aliases are preserved and the changed files were backed up.
+These decisions follow the [SDK configuration specification](https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/),
+[Logs SDK](https://opentelemetry.io/docs/specs/otel/logs/sdk/),
+[event conventions](https://opentelemetry.io/docs/specs/semconv/general/events/),
+[OTLP delivery](https://opentelemetry.io/docs/specs/otlp/), and
+[resource merge contract](https://opentelemetry.io/docs/specs/otel/resource/sdk/).
+The complete per-candidate source catalog is in the linked evidence JSON.
+Codex also read the previously deferred filelog configuration, declarative SDK
+configuration and four language log-instrumentation sections. Unrelated
+span/metric tutorial sections and unselected sink formats remain outside scope.
 
-**LOG-RECORD — preserve record meaning.** Before this change, the skills covered
-severity and body generally but lacked explicit occurrence-versus-observation
-time and numeric mapping guidance. The new rule directs the agent to use the
-detected bridge's mapping rather than copying a source logger's numeric level.
-For example, Python source level 40 and Go slog ERROR level 8 must map to the
-bridge's supported OTel ERROR range, commonly 17. It also preserves an available
-event timestamp separately from collection time, avoids unsafe JavaScript
-nanosecond conversion, and retains structured values. Unknown severity and
-optional absent fields remain valid where applicable. Native probes cover
-severity and timestamps; Node's historical precision subcase uses the SDK
-directly, and Python remains subject to its source timestamp precision.
+All twelve skill/language eval definitions now have **14 semantic criteria**
+and three prompt variants. Every task is exactly `$otel-audit ./service`,
+`$otel-instrument ./service`, or `$otel-verify ./service`. The previous coached,
+plan-only synthetic overlays have been removed. Their old results remain
+historical decision evidence and do not satisfy the current gate.
 
-**LOG-CONTEXT — preserve the emitting request's identity.** Existing guidance
-required in-span correlation but did not make unsampled behavior, flags,
-asynchronous handoff and post-detach isolation equally explicit. The rule
-requires exact TraceId, SpanId and TraceFlags checks at the log call. It prevents
-using a remembered last span, leaking one request's IDs into another, or
-introducing sampled-only logging as a default. An explicitly supported operator
-filter remains respected. The follow-up probes below demonstrate both working
-handoff and concrete context-loss controls in all four languages.
+The real fixtures expose bounded sync and owned async logging paths plus an
+outside-span startup record. The host runner keeps each service through the
+normal audit → instrumentation → verification handoff, stages the three skills,
+and independently runs the generated app after implementation and verification.
+Two concurrent requests share a trace but have different client/server ancestry;
+each worker log must join its exact received SDK span and its own request tree.
+Original native output, WARN mapping, Resource identity and outside-span context
+are checked too. The actor receives no extra repair prompt. Detailed expectations
+belong to the fixture, runtime checker and grader.
 
-**LOG-EXCEPTION — apply the actual capture policy.** The rule adds explicit
-exception attribute and applicability decisions. Where exception collection is
-selected, the agent must use supported mappings such as `exception.type`,
-sanitize permitted content before export, and omit message or stack content
-when capture is not authorized. It must inspect nested values and formatter/MDC
-fields rather than treating truncation as redaction. Existing logging bridges
-keep their supported semantics; the rule does not force an extra EventName or
-duplicate exception event. The stronger fixtures now pass real exception
-objects and synthetic nested/MDC secret canaries through unsafe controls and
-a producer allowlist. They verify permitted type/category retention and
-prohibited-field absence through the bridge and original sink. This proves
-the selected producer policy, not arbitrary application payload sanitization.
+Each language gained a real native worker/callback test that first demonstrates
+eager construction of an INFO payload discarded at ERROR level, then checks
+current enablement before construction through disabled/enabled/disabled states.
+Java uses Logback `isInfoEnabled`, Python uses `isEnabledFor`, Go uses `Enabled`
+and Node uses Winston `isLevelEnabled`. All retain the original sink when an
+intentionally disabled OTel path has no processors. Node's Console planning
+control uses the supplied application predicate; the Winston runtime result
+is not Console runtime proof. The Go test exposed an additional fixture bug:
+its fanout dispatched to a disabled native handler when only the OTel side was
+enabled. It now checks each handler and preserves both errors without preventing
+the other handler from running. The focused race-enabled native run passes
+**83/83**: Java 23, Python 22, Go 19 and Node 19, with zero skips/errors/failures.
 
-**LOG-LIMITS — bound the correct surfaces.** The rule prevents an agent from
-claiming that span limits configure logs, or that attribute length limits cap
-the log Body. It requires checking effective supported log attribute settings
-and a separate Body policy when the application needs one. Adequate SDK defaults
-count as coverage. The native tests show attribute limits and drop accounting;
-they also show that a 400-character Body survives attribute limiting. That
-counterexample explains why an application needing a Body cap must implement
-and test it separately. No universal Body cap was added to application code.
+## Retry-After acceptance-plan correction
 
-**LOG-DELIVERY — distinguish bounded export from successful receipt.** The rule
-requires log-specific batching settings or supported public options, a batch
-size within queue capacity, bounded export/shutdown behavior, and separate
-attempted, accepted, rejected and dropped evidence. It prevents applying
-span-only `OTEL_BSP_*` settings to logs or treating HTTP 200, enqueue or flush as
-complete delivery. For the synthetic partial-success case, the correct outcome
-is three attempted, one accepted and two rejected. Plans were tested against
-that distinction. The stronger suites now test bounded-queue overload and
-replay bridge-produced SDK records through official OTLP/HTTP exporters into a
-local test receiver, including partial success and stalling. They prove that
-the receiver can accept after a client timeout. Acceptance remains unknown
-until receipt evidence resolves it; a per-request timeout must not be assumed
-to bound the whole retry path. In-memory batching provides no durable or
-exactly-once promise.
+The first expanded complete pass met **155/156 criteria** with all **83 native
+cases passing**. Node audit's saved plan proposed `Retry-After=100ms` for an
+HTTP429/503 response. This is invalid header syntax: the
+[OTLP throttling specification](https://opentelemetry.io/docs/specs/otlp/#otlphttp-throttling)
+requires an HTTP-date or a number of seconds. The failure was an acceptance-plan
+defect, not evidence of an installed Node SDK or application defect. The original
+grade and plan are retained; a high aggregate score and successful task command
+did not satisfy the every-criterion gate.
 
-**LOG-DIAGNOSTICS — isolate telemetry's own failures.** The rule extends the
-existing Go recursion warning into a cross-language requirement. The agent must
-trace diagnostic routing and use supported suppression or separate diagnostics
-so an exporter failure does not return through the same application bridge.
-Acceptance must check bounded diagnostics/export attempts, application progress,
-the original sink, and every other configured signal. The stronger probes now
-observe actual SDK failure diagnostics outside the application bridge, bound
-attempts and prove subsequent original-sink output. Java observes the pinned
-SDK's JUL FINE failure message. Go isolates its one-way global error-handler
-transition in a child test process. The separate correlation cases configure trace export on the healthy path.
-Metrics and cross-signal outage continuity remain unverified.
+`LOG-DELIVERY` now names the valid representation and its interaction with the
+earlier whole deadline. A new control supplies `Retry-After: 1` arriving 100ms
+into an 800ms export budget, inside a 1000ms caller budget: the one-second wait
+cannot fit, so the plan must retain the initial request, forbid an early/forced
+retry and finish within the earlier budget. It must not lengthen operator
+budgets to make a retry occur. All twelve rubrics assess the invalid-header
+observation and that independent control. Native fixtures are unchanged; actual
+server-throttle conformance stays conditional on installed support and a future
+controlled receiver test. This correction resets the current streak to zero.
 
-## Configuration precedence follow-up
+## Remaining inventory clauses and final source verification
 
-A public-SDK probe found an additional Python recipe gap. With log-specific
-environment limits of 128 attributes and 64 characters, generic
-`LogRecordLimits(max_attributes=8, max_attribute_length=32)` fallbacks retained
-20 attributes at length 64. The SDK correctly followed its documented precedence;
-the guidance had not made that conflict explicit. The supported log-specific
-arguments `max_log_record_attributes=8` and
-`max_log_record_attribute_length=32` produced eight attributes at length 32,
-with 12 drops from 20. See the
-[Python API documentation](https://opentelemetry-python.readthedocs.io/en/latest/sdk/_logs.html#opentelemetry.sdk._logs.LogRecordLimits).
+The 25 grouped findings do not enumerate every partial row: **12 of the 61
+original partial/missing instruction rows** sit outside those candidate groups.
+The evidence JSON now records a separate disposition for all twelve, so a
+complete inventory check cannot stop at the grouped findings. Clarifications
+cover selected event definitions and signal choice (G1/G5), conditional exception
+API/name preferences (H4/H7), low-entropy hashing limits (L4), SDK-owned OTLP
+header parsing (M7) and supported canonical EventName rather than a deprecated
+attribute (U1). Existing per-destination and empty-env rules cover I11/K2.
+Direct-API alternatives (A4), upstream release maintenance (H10) and SDK codec
+internals (I13) do not mandate new application implementations.
 
-The Python guide, fixture setup and all three consumer rubrics now cover that
-environment-present scenario and preserve an independent authorized 128/64
-operator policy. No SDK replacement or upgrade is required. Three native
-regression repetitions pass. Separate focused checks show the existing Go,
-Node and Java explicit APIs retain their selected 8/32 limits under the same
-environment values. This is SDK configuration evidence, not proof of every
-deployment surface. The exact before/after values and source hashes are in the
-[precedence evidence](/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/remediation/python-limit-precedence-evidence.json).
+A fourteenth criterion in every language/consumer rubric exercises those
+conditional decisions, ordinary-log controls, privacy permissions and SDK/upstream
+ownership. These source-derived checks do not add optional features to the native
+fixtures or certify unsupported SDK behavior.
 
-An auxiliary diagnostic probe initially used an incorrect Node command and
-reused one Java XML report path. That dataset is retained as historical and
-excluded from final evidence. The fresh 237-case matrix uses a different clean
-snapshot and output directory; all six Python/Java XML directories reconcile
-with the recorded counts, and 52 raw output files are hashed. No partial or
-mutated report counts toward the clean gate. The precedence correction resets
-the unchanged-source streak to 0/3 again.
+Claude Desktop independently verified all 13 supplied files at instruction
+snapshot `c89c166b`, then opened the 23 remaining primary sources. All **183
+inventory rows** now have directly read source corroboration; zero rely only
+on supplied paraphrases. One shared SDK-duration instrument outside the inspected
+log-metrics section remained unverified and is included in the changed-clause
+follow-up. The source review does not establish runtime behavior.
 
-The first complete post-precedence semantic pass met 130/132 criteria despite
-all 79 native cases and all three rubric commands passing. Two Python handoffs
-were incomplete: one omitted replaying the same 20-attribute positive case;
-the other allowed at-most counts that could accept excessive loss. The guide
-now requires the controlled SDK-input example to retain exactly eight valid
-attributes at length 32 with 12 drops, alongside boundary tests. The input and
-rubrics distinguish that isolated mechanism test from application logging,
-where bridge-added attributes and unrelated processing must be counted
-separately. This does not replace application proof or force 12 drops on a
-different payload. That failed pass remains retained and the fresh streak
-starts from zero.
+Five independently checked corrections extend the existing rules:
 
-## Java export deadline follow-up
+| Source-verification correction | Expected effect |
+|---|---|
+| OTLP populated partial success forbids retrying the request, including an inferred rejected subset and a zero-rejection warning. | Prevents duplicate acceptance; keeps request attempts, accepted/rejected records and local queue drops separate. |
+| Instrumentation libraries and semantic-convention authors have distinct ownership. | Avoids filing upstream release duties as missing application code while retaining obligations on a library this repository actually owns. |
+| A known erroneous event from a source with no level concept has a recommendation for ERROR17. | Retains unknown severity0 for levelled sources and avoids elevating the narrow recommendation to a universal MUST. |
+| Supported environment Booleans treat only case-insensitive true as true. | `1`/`yes` cannot falsely establish an SDK opt-out; active file configuration keeps its own precedence. |
+| Exactly-one receiver counts apply to healthy delivery. | Observed acknowledgement-loss retries are counted separately from SDK emissions; healthy duplicate bridges and native sink duplication remain defects. |
 
-The next gate exposed a Java retry fixture assumption: a 200 ms timeout was
-described as per-attempt and expected to allow two received requests. The
-installed SDK 1.68 OkHttp sender uses that timeout for the whole HTTP call,
-including retry waits. Its retry limit is a ceiling; an earlier deadline can
-correctly stop before the second request. This agrees with the
-[OTLP exporter timeout contract](https://opentelemetry.io/docs/specs/otel/protocol/exporter/#retry),
-which covers all attempts and waits in one batch export. The SDK was behaving
-correctly; the fixture and guidance needed correction.
+The common guide also clarifies meaningful zero/false/empty values, Resource's
+SHOULD exemption from common limits, and recursive attribute versus nested-Body
+limits. Non-normative security guidance and stronger local policies are labeled.
+Every language/consumer rubric has meaningful new negative and positive cases
+for these distinctions. Claude verified all five corrections and every changed file at `bb3d38c8`.
+It found one additional omission: the enumeration lacked supported empty/null
+AnyValue. That source-backed correction now preserves accepted null array
+positions and scopes permitted substitution to exporters unable to represent
+null. All twelve rubrics include deletion/misalignment, valid same-position
+substitution and unknown installed API controls. The interrupted `fd180b1d`
+attempt earns no clean credit; Claude verified this final D1-only change
+at `d9ae5700` and confirms D1 closed with no remaining verified mismatch in
+the inspected source scope. Source verification remains separate from the final whole-PR
+combined review, which waits for three complete clean runs.
 
-A controlled receiver now delays retryable 503 responses by 150 ms. The old
-200 ms configuration fails the two-request assertion in all three reproduced
-trials. The corrected fixture uses an 800 ms whole-call deadline for that
-scenario, retaining a maximum of two attempts, 100 ms base backoff with jitter,
-and the measured 1000 ms overall ceiling. A separate stalled case keeps its
-200 ms early deadline. Twenty cold Java trials pass all 440 cases, including
-exactly two received requests and zero accepted records in each controlled
-retry case. The fresh four-language matrix then passes 237/237. These are
-fixture budgets, not production defaults or a promise that every export will
-reach its maximum attempt count.
+Four new native value tests pass. Python, Go and Winston preserve approved
+zero, false, empty string and empty array attributes. Java's pinned official
+Logback appender preserves enabled approved scalar fields but **omits empty
+collections**. The failed probe and official tagged mapper independently prove
+that limitation. The evidence JSON includes the exact disposable test method,
+fixture setup reference, command, actual failure message and source/XML hashes
+so the counterexample is reviewable without the local cache. Java's separate
+typed SDK empty-array assertion passes; it is
+not presented as a bridge repair. A required empty-array bridge field stays
+uncovered until an authorized supported mapping is proven. The new rule/evals
+require that honest classification rather than a second provider, duplicate
+bridge or mandatory dependency upgrade. Current focused totals are **87/87**:
+Java24, Python23, Go20 and Node20, zero failures/errors/skips. Null-array rules
+have plan/decision coverage; installed SDK/bridge null acceptance and actual
+exporter fallback stay unverified until a selected capability test runs.
 
-The common rule, Java guide, source evidence and all three Java rubrics now
-distinguish whole-batch, connection and caller deadlines. The receiver delays
-outside its receipt lock; a regression proves another request can succeed
-while the retry response remains pending. Source provenance and red/green
-results are recorded in the machine-readable report.
+The preceding retry batch timed out all twelve model subprocesses across recorded
+clamshell/maintenance sleep; 83 native cases passed, but no completed semantic
+reports were available. It earns no clean-run credit. A new awake attempt was
+interrupted before grades completed to finish the twelve-clause reconciliation;
+its partial evidence is retained. No timeout or interrupted run is reported as clean.
 
-## How the rules lead to a repair
+## Current validation and three-run gate
 
-The audit first checks source, configuration, installed capability and SDK
-defaults. It classifies each applicable rule as covered, partial, missing,
-unverified or not applicable. Only concrete application-owned gaps become
-selectable findings. Missing execution evidence is recorded separately from
-missing implementation.
+The current 13-file instruction snapshot for changed-clause verification is
+`b117b9959784994311645676afef4c4161c860203b636d493f89c569d458b652`.
+Claude verification is complete through the preceding D9 identity; B1/B2/B3
+are pending its bounded source check. Development snapshot
+`e3d88ddc9cb9f9e5a3a0da11d1ccf8054f59a6dceffbb40cbfa1e7e838a5056f`
+is superseded by native-loading provenance, sandbox-compatible cleanup and
+version-neutral Java changes. No complete current real-workflow pass is credited.
+The preceding development attempt is retained with all raw failures: Java and
+Python met 14/14 audit criteria each; Go and Node met 13/14 each. The old loading
+guard also rejected all four despite byte-bound native full-skill injection. The
+new direct-invocation path fixes that mismatch and preserves legacy task behavior.
+Each complete pass requires all four languages and all three skills:
+**12 bare-skill stages / 168 individual criteria, eight independent real-app
+startup checks, 87 native cases, 55 runner/receiver/workflow checks and plugin
+parity**. Pass 2 starts only after pass 1 is clean; pass 3
+starts only after pass 2 is clean. Any source fix, failed obligation or stale
+receipt resets the streak. Expected faults in deliberately bad fixtures must
+still be found; they are not hidden to obtain a clean result.
 
-For a selected gap, `otel-instrument` applies the smallest change through the
-existing provider and detected bridge. It preserves operator policy, original
-sinks and adequate defaults. It then supplies explicit positive and fault
-scenarios in the verification handoff.
+| Current native language | Cases per pass | Three-pass result |
+|---|---:|---|
+| Java | 24 | Pending |
+| Python | 23 | Pending |
+| Go, race enabled | 20 | Pending |
+| Node.js | 20 | Pending |
 
-The added
-[acceptance handoff checklist](/Users/tithumma/code/splunk/obstudio-logging-analysis/skills/references/logging-readiness.md:338)
-requires the relevant source values, settings, identities and assertions to be
-written down. An omitted obligation leaves the handoff partial. An unexecuted
-scenario cannot become a passing runtime result. This closes an instruction and
-evidence gap; it does not automatically execute or repair an application.
+The separate focused development run and interrupted setup attempts passed **87/87**, with zero skips, errors
+or failures. It does not count as three complete passes. Each native pass also
+contains **80 actual sampled async log/span joins**, four valid unsampled
+non-export controls and four outside-span controls. Healthy receipts, partial
+success and client-timeout/late-acceptance cases are distinct. A successful
+client enqueue/flush is never used as receiver acceptance.
 
-## Asynchronous logging results
+| Deterministic command | Current result |
+|---|---|
+| From `evals/`: `UV_NO_CONFIG=1 uv run pytest -q test_default_local_log_export_guidance.py test_incident_readiness_skill_guidance.py test_logging_contract_runner.py test_logging_receiver.py test_logging_workflow_check.py` | 203 passed |
+| `UV_NO_CONFIG=1 make eval-validation SKILL=skills/otel-audit` | 743 passed, 5 scoped skips |
+| `UV_NO_CONFIG=1 make eval-validation SKILL=skills/otel-instrument` | 774 passed, 5 scoped skips |
+| `UV_NO_CONFIG=1 make eval-validation SKILL=skills/otel-verify` | 709 passed, 5 scoped skips |
+| `PATH="$PWD/evals/.venv/bin:$PATH" make agent-policy-check` | 49 unit + 8 contract checks passed; policy passed |
+| `PATH="$PWD/evals/.venv/bin:$PATH" make test-interactive-otel-scripts` | 188 passed |
+| `make check-obstudio-plugin-skills` | Passed |
 
-The follow-up checks create context in the caller before scheduling work. They
-compare exact IDs and sampling flags, exercise 20 concurrent request contexts
-through real batch processors, and check detach, worker reuse, error/cancel
-cleanup and preservation of the context captured when the log was emitted.
+The five validation skips are one optional module and four Python cases that
+require the runner-owned receiver. Formal native trials supply that receiver
+and require zero skips. The full-harness target initially rejected the previous
+rubric summaries as stale; it must pass again after current semantic reports.
+The freshness guard has not been bypassed. The earlier source's full harness
+passed 880 checks / 5 scoped skips and verified 26 manifests; that is historical,
+not the result for this revision.
 
-| Language | Trial 1 | Trial 2 | Trial 3 |
-|---|---|---|---|
-| Java | 8/8 | 8/8 | 8/8 |
-| Python | 7/7 | 7/7 | 7/7 |
-| Go | 5/5, race detector clean | 5/5, race detector clean | 5/5, race detector clean |
-| Node.js | 5/5 | 5/5 | 5/5 |
-
-All **75 test-case executions passed** across 12 test commands. This includes
-deliberately unsafe controls whose assertions expect context loss; passing those
-controls does not make the unsafe configuration correct.
-
-| Demonstrated boundary | Observed issue | Working handling tested |
-|---|---|---|
-| Java prestarted executor without propagation | Child log has zero OTel IDs. | Capture parent Context and wrap the work. Verify existing agent/framework propagation before adding wrappers. |
-| Java Context wrapping without MDC handoff | Trace IDs survive but selected `request.id` is absent. | Carry approved MDC fields separately and restore the prior worker map in `finally`. |
-| Python raw `run_in_executor` | Worker log has zero OTel IDs. | Use `asyncio.to_thread` or a fresh copied context for the work item. |
-| Go worker using background context | The log loses the request's IDs. | Pass request context into the goroutine and use `InfoContext`/`ErrorContext`. |
-| Node EventEmitter listener invoked outside the request | Registration inside the request alone does not preserve correlation. | Bind the callback to captured context or prove the framework supplies propagation. |
-| Java/Python OTel bridge after an asynchronous logging queue | The bridge reads the logging worker's context and loses caller correlation. | Keep the existing bridge on the caller side beside the original asynchronous sink, then use SDK batch export. A supported context-preserving agent/queue path is another option that needs its own proof. |
-
-These are disposable SDK/bridge probes with in-memory exporters. They do not
-execute the actual Spring Boot, Flask, chi or Express applications, a Java
-agent, process/distributed-queue handoff, or collector/cloud delivery.
-[Detailed async evidence](/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/async-check/.observe/otel-verify.md)
-and the
-[machine assessment](/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/async-check/assessment.json)
-retain the commands, assertions, limitations and receipts.
-
-## Additional acceptance rules
-
-**LOG-ASYNC-HANDOFF** turns the demonstrated boundary cases into a more
-specific acceptance checklist under LOG-CONTEXT: capture context per work item,
-handle permitted MDC separately, restore worker state, locate record creation
-relative to queues, and include exact request pairing plus a missing-propagation
-control. LOG-CONTEXT already contains the general async requirement. This named
-refinement is now in the canonical reference. The stronger probes are also
-persisted in all four maintained native fixtures.
-
-**LOG-SPEC-CLOSURE** requires the source-to-evidence reconciliation above.
-It separates SDK-author obligations, application wiring, selected operator policy
-and observed runtime proof, including requirements outside the named rules.
-
-**LOG-VERIFY-FRESH** requires fresh results for each repetition, separate
-executed/passed/failed/skipped counts, and durable timeout/failure records. It
-addresses the false-pass and missing-partial-report findings below. It is a
-repository verification rule, not an upstream OTel specification requirement.
-
-All three new names are present in the local canonical shared reference and acceptance
-table. The verifier now consumes it while retaining its read-only application
-boundary. Matching semantic rubric cases add async handoff and stale-evidence
-decisions for each consumer in all four languages. The Python synthetic ERROR
-observation now uses 40 consistently with its source overlay.
-
-## Verified findings and corrections
-
-The earlier combined Claude Desktop and Codex review at `8600493b` retained
-four findings. Adding logging guidance alone does not close them. The code
-and regression fixes below are included in this change; the final source
-receives a fresh combined review after the three-pass gate.
-
-| Finding | Original evidence | Local correction and verification |
-|---|---|---|
-| F1 Java runner can report a false pass | All three reproduced Java trials report 6/6 passed while Maven says tests were skipped; old Surefire XML supplies the count. | Unique report directories and actual testcase outcome parsing reject missing/stale, failed, errored or skipped evidence. A current-source `MAVEN_ARGS=-DskipTests` rerun rejects all three trials despite Maven exit 0 and 22 valid old testcases left in the default XML directory; each fresh report directory has zero executed cases. |
-| F2 Clean-checkout dependency setup is incomplete | Tracked-only Go and Node fixtures fail before tests with missing checksums/modules. | Preflight runs Go module download, locked `npm ci`, Java test compilation and Python dependency checks. A clean snapshot without copied `go.sum`, `node_modules` or Java `target` passed all three repetitions. Python uses the existing locked eval environment. |
-| F3 Committed concurrency tests provide weaker handoff proof | The Go case creates context inside the worker and checks distinctness rather than exact pairing; Java/Python also create context inside workers/tasks. | All four maintained fixtures now contain caller-handoff, exact-pairing, cleanup and expected-loss controls. The original Go case also checks exact record-to-request pairing. |
-| F4 Timeout can prevent a structured partial matrix | `TimeoutExpired` escapes before the trial log write; final JSON is written only after all trials. Earlier stdout remains available. | Timeout becomes a failed trial with saved output and incremental JSON. Owned POSIX process groups are cleaned up and independent trials continue. Actual timeout and orchestration regression tests cover persistence, interruption and continuation. |
-
-The
-[combined review](/Users/tithumma/code/splunk/obstudio-logging-analysis/.workspace/logging-analysis/combined-review/combined-review.md)
-contains narrow code locations, reproductions and the disposition of Claude's
-other candidates. [Runner source](/Users/tithumma/code/splunk/obstudio-logging-analysis/evals/run_logging_contract.py)
-and [regression tests](/Users/tithumma/code/splunk/obstudio-logging-analysis/evals/test_logging_contract_runner.py)
-contain the fixes and checks. The adapted Toolkit simplifier pass clarified
-parsing, lifecycle cleanup and result construction while preserving behavior;
-all 37 runner/receiver regressions passed again afterwards.
-
-An additional report-accuracy bug is also fixed locally: xdist workers reported
-one worker even when two were running. A real two-worker reproduction failed
-the new assertion before the fix. Serial and two-worker regression cases now
-pass, and all 214 reusable-plugin tests pass. This preserves the report schema
-while correcting its effective worker count.
-
-The default rubric judge also now receives an explicit ID for each declared
-criterion and must return one check per item. A compound item keeps all its
-obligations in that check. This corrects the observed 12-check result for an
-11-item rubric; all 133 generated checks were positive, but that attempt could
-not satisfy the declared 132-check matrix. The strict gate rejects extra,
-missing or duplicate criterion IDs. Existing custom judge templates and public
-JSON schemas are preserved. The focused prompt regression failed before the
-fix and passes afterwards; all 214 plugin tests pass again.
-
-## Latest maintained native results
-
-The skill task and rubric judge both run with **`gpt-6.1-sol` and high
-reasoning**, pinned in `evals/codex-evals.toml` and verified in the live process
-arguments. These model evaluations run locally on the PR branch and bind their
-results to source hashes. The disabled GitHub live-eval template does not
-establish a GitHub Actions model-eval result; PR CI is recorded separately.
-
-
-| Language | Trial 1 | Trial 2 | Trial 3 | Async cases included per trial |
-|---|---|---|---|---|
-| Java | 22/22 | 22/22 | 22/22 | 8 |
-| Python | 21/21 | 21/21 | 21/21 | 7 |
-| Go | 18/18 | 18/18 | 18/18 | 5; race detector clean |
-| Node.js | 18/18 | 18/18 | 18/18 | 5 |
-
-All **237/237 native test-case results** passed across 12 fresh test commands,
-with zero failures, errors or skips. This includes 72 original-contract, 75
-async, 36 real-exception/overload/diagnostic, 39 OTLP wire and 12 real-span
-correlation results, plus three log-limit precedence regression executions. Go's
-diagnostic case uses a child test process for isolation. Deliberately skipped
-Java controls are correctly rejected and are not counted as logging successes.
-The dedicated correlation cases configure real trace and log exporters; the
-other fixtures retain their declared signal scope. These tests do not execute
-full framework applications or a Java agent.
-
-The 12 dedicated correlation trials produced **240 exact sampled log/span
-joins**, 12 valid unsampled logs and 12 outside-span logs. Each sampled child
-also matches its actual parent and service resource. These are real SDK-created
-IDs; one child from trial 3 of each language is shown below. The log SpanId
-and independently received span SpanId match exactly.
-
-| Language | TraceId | Log SpanId = received SpanId |
-|---|---|---|
-| java | `d0da7a5041adfd3a4f0d4f5991f27a5e` | `b9c0ddd4f5290f54` |
-| python | `e029a02bd08578ca8e9fc8cf5318168a` | `c58b1017e35f4c39` |
-| go | `f574707ddf29a1fb5a77db2a05e2e50b` | `3e853d148e660ab4` |
-| node | `1805ae6a9c5d1cb1e6eda8c522e550b0` | `74ed2b3b2c317b79` |
-
-The live-correlation path uses bounded SDK batch processors: queue 128,
-batch 64, scheduled delay 60s and processor export budget 3s. Each trial
-asserts one HTTP log batch containing all 22 records and one trace batch
-containing all 20 spans. Context therefore survives both application async
-handoff and the SDK export worker. Java uses a 1s whole HTTP-call timeout, at most two
-attempts with 100ms backoff, a 4s flush wait and a 15s test ceiling. Other
-languages use their supported public batch and timeout options. These
-controlled budgets are separate from the dedicated wire-fault settings below.
-
-The earlier Java failure occurred with the Simple processor: its flush result
-did not complete within 2s even though all 22 logs and 20 spans eventually
-arrived. Installed SDK bytecode passes a live concurrent pending-export set to
-an aggregate that counts its size separately from iterating callbacks. A
-controlled collection interleaving reproduces an incomplete aggregate after
-both individual exports succeed. This demonstrates a matching race mechanism;
-it does not establish the exact interleaving of the failed trial or claim an
-upstream SDK fix. The maintained correction uses public batch processors and
-asserts actual batch requests. Ten additional Java repetitions passed.
-
-Each local wire trial records three received/three accepted on the healthy
-path; three received/one accepted/two rejected on partial success, without a
-whole-batch retry; and one pending then one late acceptance after the client
-times out. Java uses an 800ms whole-call timeout for healthy, partial and
-controlled delayed-503 exports, and a 200ms timeout for the stalled case.
-Its retry policy permits at most two attempts with 100ms base backoff
-(80–120ms with jitter). The controlled 503 case receives exactly two requests
-within the measured 1000ms overall budget. Go supplies a caller context deadline in addition to
-the exporter timeout. Exact SDK timestamps are checked after protobuf export.
-These are controlled fixture settings, not universal
-production defaults. The overload test distinguishes queue capacity from
-in-flight/export buffers and derives local loss after healthy draining.
-
-[Machine-readable remediation results](/Users/tithumma/code/splunk/obstudio-logging-analysis/docs/logging-remediation-results.json)
-retain source hashes, setup commands and per-trial receipts. The final run
-used an isolated fixture snapshot with no copied dependency/build directories.
-The machine-readable
-results also record the tested SDK, bridge and runtime versions.
-The exact command is recorded in those receipts; the standard local command is:
+The full host workflow command for one language/trial is:
 
 ```sh
 cd evals
-UV_NO_CONFIG=1 uv sync --frozen
-UV_NO_CONFIG=1 uv run python run_logging_contract.py --trials 3 --output ../.workspace/logging-contract
+UV_NO_CONFIG=1 uv run python run_logging_workflow.py --language python --trial 1 --studio-binary /path/to/obstudio --codex-home ../.workspace/codex-evals/codex-home --output ../.workspace/logging-workflow/python-trial-1
 ```
 
-Go 1.25+, Node 22.15+ with npm, JDK 17 and Maven must be installed. The runner accepts
-explicit `--go`, `--npm`, `--maven`, `--python`, `--java-home` and
-`--maven-settings` paths. This four-language matrix is a local gate rather
-than a CI job. Python dependencies are already declared and locked in
-`evals/pyproject.toml` and `evals/uv.lock`.
+The gate supplies the installed receiver binary and prepared Java 21/Maven/Go
+paths, runs all four languages concurrently within each pass, and runs passes
+1–3 sequentially. Every task and grader is checked against its actual isolated
+Codex session `model` and `effort` metadata. HTTP success, a model's self-report
+or a plan with “Not run” cannot establish positive runtime coverage.
 
-## Evidence and completion criteria
-
-The baseline already covered bridge/provider ownership, original sinks,
-destination policy, privacy and basic correlation. The
-[baseline evidence](/Users/tithumma/code/splunk/obstudio-logging-analysis/docs/logging-skill-analysis-evidence.json)
-establishes the missing explicit guidance at the original commit through source
-hashes and searches. Search absence establishes an instruction gap; it does not
-prove an SDK failure or a model's inability to infer correct behavior.
-
-The original rule evaluation passed **24/24 plan-only cases and 168/168 rubric
-criteria**, with three trials for each skill in each language. The original
-native suites passed **72/72 test-case executions**. The disposable async check
-passed **75/75**. These historical datasets are separate from the latest
-237-result maintained run. They are documented in the
-[original analysis](/Users/tithumma/code/splunk/obstudio-logging-analysis/docs/logging-skill-analysis.md),
-[original results](/Users/tithumma/code/splunk/obstudio-logging-analysis/docs/logging-skill-test-results.json)
-and linked async assessment. The first expanded semantic round completed 36
-tasks but satisfied only 315/324 individual criteria. Missing acceptance
-details remain recorded, including dependency preparation, unique report
-storage and timeout-output capture. The handoff guidance is now more explicit.
-The second round satisfied 355/360 criteria across 36 tasks. Its five omissions
-concerned an excluded exception alias, concrete deadline mechanisms and an
-ambiguous output destination. Those contracts are now explicit. Rounds three
-and four were cancelled after deterministic source guards failed; their partial
-artifacts are retained and do not count as passing runs. A fresh 36-task,
-360-criterion round completed with 358/360 criteria. Its two generated-plan
-omissions were a final-log shutdown case and a named diagnostic-routing repair;
-the handoff now names both explicitly. The current source adds the broader
-closure and real-span correlation checks. That evaluation was stopped after a
-Node audit plan omitted named limit APIs and the observed request-versus-retry
-budget distinction. Its failed criteria and partial artifacts are retained.
-The guide now provides checked public limit options, below/at/above-limit
-acceptance, and observed-versus-proposed deadline evidence. All three
-deterministic validations passed again. The strict sequential gate now runs
-12 skill/language cases, 132 criteria and 79 native cases per pass; it stops
-on a failure and requires three consecutive clean passes before combined review. Task execution success
-is not presented as full semantic success. Deterministic validation passed
-721 audit, 752 instrumentation and 687 verification checks, each with five
-skips: one unrelated optional module and four wire/correlation cases that require the
-runner-owned receiver. The formal native matrix has zero skipped cases.
-
-The first current-source clean pass used these exact rubric commands from
-the repository root; each pattern includes all four languages. Subsequent
-passes use `PROMPT=logging-trial-2` and `PROMPT=logging-trial-3` with the same
-settings. Their individual results are recorded in the three-pass evidence:
+The repository also requires representative local per-skill commands:
 
 ```sh
-UV_NO_CONFIG=1 make eval-rubric SKILL=skills/otel-audit CASE=python/flask-basic EVAL_PATTERN='*/*/eval/qual/logging-audit-contract.json' PROMPT=logging-trial-1 EVAL_WORKERS=4 EVAL_PROGRESS=0
-UV_NO_CONFIG=1 make eval-rubric SKILL=skills/otel-instrument CASE=python/flask-basic EVAL_PATTERN='*/*/eval/qual/logging-instrument-contract.json' PROMPT=logging-trial-1 EVAL_WORKERS=4 EVAL_PROGRESS=0
-UV_NO_CONFIG=1 make eval-rubric SKILL=skills/otel-verify CASE=python/flask-basic EVAL_PATTERN='*/*/eval/qual/logging-verify-contract.json' PROMPT=logging-trial-1 EVAL_WORKERS=4 EVAL_PROGRESS=0
+UV_NO_CONFIG=1 make eval-rubric SKILL=skills/otel-audit CASE=go/chi-basic EVAL_PATTERN=go/chi-basic/eval/qual/logging-audit-contract.json PROMPT=logging-trial-1 MODEL=gpt-6.1-sol
+UV_NO_CONFIG=1 make eval-rubric SKILL=skills/otel-instrument CASE=go/chi-basic EVAL_PATTERN=go/chi-basic/eval/qual/logging-instrument-contract.json PROMPT=logging-trial-1 MODEL=gpt-6.1-sol
+UV_NO_CONFIG=1 make eval-rubric SKILL=skills/otel-verify CASE=go/chi-basic EVAL_PATTERN=go/chi-basic/eval/qual/logging-verify-contract.json PROMPT=logging-trial-1 MODEL=gpt-6.1-sol
 ```
 
-| Deterministic validation command | Result |
-|---|---|
-| `UV_NO_CONFIG=1 make eval-validation SKILL=skills/otel-audit EVAL_PROGRESS=0` | 721 passed, 5 scoped skips |
-| `UV_NO_CONFIG=1 make eval-validation SKILL=skills/otel-instrument EVAL_PROGRESS=0` | 752 passed, 5 scoped skips |
-| `UV_NO_CONFIG=1 make eval-validation SKILL=skills/otel-verify EVAL_PROGRESS=0` | 687 passed, 5 scoped skips |
+These commands are pending for the new task definitions. A standalone verify
+on a fresh uninstrumented fixture exercises its missing-precondition behavior;
+positive verification is supplied only by the same-workspace workflow above.
 
-Exact focused commands: `UV_NO_CONFIG=1 .venv/bin/python -m pytest
-test_logging_contract_runner.py test_logging_receiver.py -q` from `evals/`
-passed 37 checks; `UV_NO_CONFIG=1 make test-pytest-plugin` from the repository
-root passed 214 checks. Each consumer also passed `UV_NO_CONFIG=1 make
-eval-validation SKILL=skills/<consumer> EVAL_PROGRESS=0`. The rubric invocation
-for each consumer uses `CASE=python/flask-basic`, the matching four-language
-`EVAL_PATTERN='*/*/eval/qual/logging-<audit|instrument|verify>-contract.json'`,
-`EVAL_WORKERS=4` and `EVAL_PROGRESS=0`.
+Both task and judge request **`gpt-6.1-sol` with high reasoning**, using
+`evals/codex-evals.toml`. These are local PR-branch evaluations. The disabled
+GitHub live-model workflow is not described as a GitHub Actions eval run.
+A prior Go-only 33-criterion semantic check proved the isolated-reference fix;
+it predates the expanded 13-criterion revision and does not count toward this gate.
 
-The reference was checked against official OTel documentation on 2026-11-08:
-[data model](https://opentelemetry.io/docs/specs/otel/logs/data-model/),
-[Logs SDK](https://opentelemetry.io/docs/specs/otel/logs/sdk/) and
-[exception log conventions](https://opentelemetry.io/docs/specs/semconv/exceptions/exceptions-logs/).
-The follow-up also reconciles
-[non-OTLP trace-context formats](https://opentelemetry.io/docs/specs/otel/compatibility/logging_trace_context/)
-and [logging context guidance](https://opentelemetry.io/docs/specs/otel/logs/supplementary-guidelines/).
-It preserves optional fields, SDK-owned defaults and explicit operator policy.
-Development features such as `trace_based` still require installed capability
-checks; exception-event guidance is not forced onto existing logging bridges.
+Native runs use `evals/run_logging_contract.py` against the source-frozen fixture
+revision for each pass. Dependencies belong to the parent `evals/pyproject.toml`
+and `uv.lock`, Node `package-lock.json`, pinned Go module graph and Maven POM.
+The runner performs dependency preflight, uses Go `-race -count=1`, and records
+exact interpreter/toolchain commands, dependency versions, fixture hashes,
+report paths, receipts and actual counts. The local JDK/Maven settings/toolchain
+paths are execution evidence, not portable required repository locations.
 
-To establish that an application issue is fixed, implement its selected repair,
-run the relevant positive and failure scenarios through the real logging call
-sites, and complete actual framework/agent startup and local receiver checks
-where those claims depend on runtime wiring. Successful focused probes do not
-establish universal OTel logging compliance. Full application/Java-agent,
-distributed queue, arbitrary sanitization, configured cross-signal outage and
-production collector/cloud proof remain unverified. Final combined-review
-and current-head CI outcomes are tracked separately in PR 352.
+## Evidence, review and limits
 
-The final deterministic command `PATH="$PWD/evals/.venv/bin:$PATH"
-UV_NO_CONFIG=1 make test-eval-harness` verified 26 report source manifests and
-passed 880 checks with the five documented scoped skips above. The separate
-formal native matrix and every native clean-pass trial had zero skips.
+[Structured remediation results](logging-remediation-results.json) preserve
+source-bound outcomes, failed/interrupted attempts, dependency versions,
+correlation examples and historical datasets. The original 72-case assessment,
+disposable 75-case async assessment and previous maintained 237-case matrix
+are separate datasets; they are not added to the current 261-case native target.
+Raw `.workspace/logging-analysis/` artifacts are local untracked receipts,
+explicitly distinct from portable report links and committed test sources.
+
+The completed Desktop inventory and prior `62e0391` reviews are retained with
+their scope limits: the standard pass fully read 64/98 paths, while the adapted
+Toolkit continuation declared 98/98. They are not final current-source reviews.
+A fresh complete merge-base review in Codex protocol/Toolkit/baseline and
+independent Claude Desktop standard/Toolkit passes follows the new streak of
+three. The Toolkit code-simplifier criteria were applied directly to the cohesive
+fixes; no further code simplification was needed. No review or current-head CI
+success is claimed before its actual result.
+
+The native fixtures prove selected SDK/bridge and owned loopback OTLP receiver
+behavior. Full Spring/Flask/chi/Express and Java-agent startup is pending in the
+new real-workflow gate. The host checker does not expose every trace flag bit;
+the native fixtures separately check those flags. Neither suite proves
+distributed queues, arbitrary payload sanitization, configured cross-signal
+outage continuity, production Collector/cloud delivery, or every optional
+Development feature. An actual service needs selected repairs and verification
+through its real call sites and runtime wiring before those claims can close.
+OTel also does not prescribe every business event an application should log;
+that selection remains tied to the service's incident and privacy requirements.
+
+The previously reviewed 70-file skill bundle was backed up and installed with
+the existing aliases preserved. The current follow-up needs validated reinstall
+before task completion; the old installation is not current-source proof.

@@ -1,6 +1,7 @@
 const { test, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
+const { Writable } = require('node:stream');
 const { context, trace, logs } = require('@opentelemetry/api');
 const { AsyncLocalStorageContextManager } = require('@opentelemetry/context-async-hooks');
 const { LoggerProvider, SimpleLogRecordProcessor, BatchLogRecordProcessor, InMemoryLogRecordExporter } = require('@opentelemetry/sdk-logs');
@@ -103,4 +104,41 @@ test('batch export keeps emit-time context after caller detach', { timeout: 3000
     await context.with(ctx(99), () => s.provider.forceFlush());
     await expect(s, { queued: [51, 0] });
   } finally { await s.provider.shutdown(); }
+});
+
+test('worker checks current native enablement before expensive work and preserves original sink', { timeout: 3000 }, async () => {
+  let constructed = 0;
+  const payload = () => `guard-${++constructed}`;
+  const original = [];
+  const transport = () => new winston.transports.Stream({
+    stream: new Writable({ write(chunk, _, done) { original.push(chunk.toString()); done(); } }),
+  });
+  const guarded = async logger => {
+    await immediate();
+    if (logger.isLevelEnabled('info')) { logger.info(payload()); }
+    await immediate();
+  };
+  const s = setup();
+  s.logger.add(transport());
+  try {
+    s.logger.level = 'error';
+    await immediate(); s.logger.info(payload()); await immediate();
+    assert.equal(constructed, 1); assert.equal(original.length, 0);
+    assert.equal(s.exporter.getFinishedLogRecords().length, 0);
+    for (const [level, expected] of [['error', 1], ['info', 2], ['error', 2]]) {
+      s.logger.level = level; await guarded(s.logger); assert.equal(constructed, expected);
+    }
+    await expect(s, { 'guard-2': [0, 0] });
+    assert.equal(original.length, 1); assert.match(original[0], /guard-2/);
+  } finally { s.logger.close(); await s.provider.shutdown(); }
+
+  logs.disable();
+  const empty = new LoggerProvider({ processors: [] });
+  logs.setGlobalLoggerProvider(empty);
+  const logger = winston.createLogger({ level: 'info', transports: [transport(), new OpenTelemetryTransportV3()] });
+  try {
+    await guarded(logger);
+    assert.equal(constructed, 3); assert.equal(original.length, 2);
+    assert.match(original[1], /guard-3/);
+  } finally { logger.close(); await empty.shutdown(); }
 });

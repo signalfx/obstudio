@@ -8,9 +8,9 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-audit",
-    "run_id": "20261109T042848870121Z",
-    "config_path": "evals/codex-evals.toml",
-    "agent_model": "gpt-6.1-sol",
+    "run_id": "20261109T184108787790Z",
+    "config_path": "evals/codex-evals.validation.toml",
+    "agent_model": "gpt-6-luna",
     "judge_model": "",
     "agent_backend": "codex",
     "agent_timeout": "1200",
@@ -18,9 +18,687 @@
     "rubric_enabled": false,
     "runtime_enabled": false,
     "workers": "1",
-    "validation_scope": "filtered"
+    "validation_scope": "full"
   },
   "evals": [
+    {
+      "id": "go/chi-basic/qual/audit",
+      "case": "go/chi-basic",
+      "language": "go",
+      "service": "chi-basic",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "definition_path": "evals/go/chi-basic/eval/qual/audit.json",
+      "eval_dir": "evals/go/chi-basic",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 12,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "go/chi-basic/qual/logging-audit-contract",
+      "case": "go/chi-basic",
+      "language": "go",
+      "service": "chi-basic",
+      "prompt_count": 3,
+      "prompts": [
+        "logging-trial-1",
+        "logging-trial-2",
+        "logging-trial-3"
+      ],
+      "definition_path": "evals/go/chi-basic/eval/qual/logging-audit-contract.json",
+      "eval_dir": "evals/go/chi-basic",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 14,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "go/chi-partial/qual/audit",
+      "case": "go/chi-partial",
+      "language": "go",
+      "service": "chi-partial",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "definition_path": "evals/go/chi-partial/eval/qual/audit.json",
+      "eval_dir": "evals/go/chi-partial",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "go/kvstore/qual/audit",
+      "case": "go/kvstore",
+      "language": "go",
+      "service": "kvstore",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "definition_path": "evals/go/kvstore/eval/qual/audit.json",
+      "eval_dir": "evals/go/kvstore",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 7,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "go/native-genai-demo/qual/audit",
+      "case": "go/native-genai-demo",
+      "language": "go",
+      "service": "native-genai-demo",
+      "prompt_count": 1,
+      "prompts": [
+        "audit-native-go-fallback"
+      ],
+      "definition_path": "evals/go/native-genai-demo/eval/qual/audit.json",
+      "eval_dir": "evals/go/native-genai-demo",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "java/kafka-batch-consumer/qual/audit",
+      "case": "java/kafka-batch-consumer",
+      "language": "java",
+      "service": "kafka-batch-consumer",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "definition_path": "evals/java/kafka-batch-consumer/eval/qual/audit.json",
+      "eval_dir": "evals/java/kafka-batch-consumer",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "java/kafka-listener-container/qual/audit",
+      "case": "java/kafka-listener-container",
+      "language": "java",
+      "service": "kafka-listener-container",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "definition_path": "evals/java/kafka-listener-container/eval/qual/audit.json",
+      "eval_dir": "evals/java/kafka-listener-container",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "java/kafka-producer-consumer/qual/audit",
+      "case": "java/kafka-producer-consumer",
+      "language": "java",
+      "service": "kafka-producer-consumer",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "definition_path": "evals/java/kafka-producer-consumer/eval/qual/audit.json",
+      "eval_dir": "evals/java/kafka-producer-consumer",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "java/kafka-streams/qual/audit",
+      "case": "java/kafka-streams",
+      "language": "java",
+      "service": "kafka-streams",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "definition_path": "evals/java/kafka-streams/eval/qual/audit.json",
+      "eval_dir": "evals/java/kafka-streams",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 7,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "java/springboot-basic/qual/audit",
+      "case": "java/springboot-basic",
+      "language": "java",
+      "service": "springboot-basic",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "definition_path": "evals/java/springboot-basic/eval/qual/audit.json",
+      "eval_dir": "evals/java/springboot-basic",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "java/springboot-basic/qual/logging-audit-contract",
+      "case": "java/springboot-basic",
+      "language": "java",
+      "service": "springboot-basic",
+      "prompt_count": 3,
+      "prompts": [
+        "logging-trial-1",
+        "logging-trial-2",
+        "logging-trial-3"
+      ],
+      "definition_path": "evals/java/springboot-basic/eval/qual/logging-audit-contract.json",
+      "eval_dir": "evals/java/springboot-basic",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 14,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "node/express-basic/qual/audit",
+      "case": "node/express-basic",
+      "language": "node",
+      "service": "express-basic",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "definition_path": "evals/node/express-basic/eval/qual/audit.json",
+      "eval_dir": "evals/node/express-basic",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "node/express-basic/qual/logging-audit-contract",
+      "case": "node/express-basic",
+      "language": "node",
+      "service": "express-basic",
+      "prompt_count": 3,
+      "prompts": [
+        "logging-trial-1",
+        "logging-trial-2",
+        "logging-trial-3"
+      ],
+      "definition_path": "evals/node/express-basic/eval/qual/logging-audit-contract.json",
+      "eval_dir": "evals/node/express-basic",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 14,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/ai-assistant-demo/qual/ao-name-inputs-audit",
+      "case": "python/ai-assistant-demo",
+      "language": "python",
+      "service": "ai-assistant-demo",
+      "prompt_count": 1,
+      "prompts": [
+        "ao-name-inputs-audit"
+      ],
+      "definition_path": "evals/python/ai-assistant-demo/eval/qual/ao-name-inputs-audit.json",
+      "eval_dir": "evals/python/ai-assistant-demo",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/ai-assistant-demo/qual/ao-root-compatibility-audit",
+      "case": "python/ai-assistant-demo",
+      "language": "python",
+      "service": "ai-assistant-demo",
+      "prompt_count": 1,
+      "prompts": [
+        "ao-root-compatibility-audit"
+      ],
+      "definition_path": "evals/python/ai-assistant-demo/eval/qual/ao-root-compatibility-audit.json",
+      "eval_dir": "evals/python/ai-assistant-demo",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 8,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/ai-assistant-demo/qual/ao-target-handoff-audit",
+      "case": "python/ai-assistant-demo",
+      "language": "python",
+      "service": "ai-assistant-demo",
+      "prompt_count": 1,
+      "prompts": [
+        "ao-target-handoff-audit"
+      ],
+      "definition_path": "evals/python/ai-assistant-demo/eval/qual/ao-target-handoff-audit.json",
+      "eval_dir": "evals/python/ai-assistant-demo",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 4,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/ai-assistant-demo/qual/audit",
+      "case": "python/ai-assistant-demo",
+      "language": "python",
+      "service": "ai-assistant-demo",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "genai-readiness"
+      ],
+      "definition_path": "evals/python/ai-assistant-demo/eval/qual/audit.json",
+      "eval_dir": "evals/python/ai-assistant-demo",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 15,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/ai-assistant-demo/qual/audit-focused-decorator-logs",
+      "case": "python/ai-assistant-demo",
+      "language": "python",
+      "service": "ai-assistant-demo",
+      "prompt_count": 1,
+      "prompts": [
+        "audit-decorator-version-logs"
+      ],
+      "definition_path": "evals/python/ai-assistant-demo/eval/qual/audit-focused-decorator-logs.json",
+      "eval_dir": "evals/python/ai-assistant-demo",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 3,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/ai-assistant-demo/qual/audit-focused-metadata",
+      "case": "python/ai-assistant-demo",
+      "language": "python",
+      "service": "ai-assistant-demo",
+      "prompt_count": 1,
+      "prompts": [
+        "audit-metadata-capability"
+      ],
+      "definition_path": "evals/python/ai-assistant-demo/eval/qual/audit-focused-metadata.json",
+      "eval_dir": "evals/python/ai-assistant-demo",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 4,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/ai-assistant-demo/qual/content-coverage-audit",
+      "case": "python/ai-assistant-demo",
+      "language": "python",
+      "service": "ai-assistant-demo",
+      "prompt_count": 1,
+      "prompts": [
+        "content-in-existing-findings"
+      ],
+      "definition_path": "evals/python/ai-assistant-demo/eval/qual/content-coverage-audit.json",
+      "eval_dir": "evals/python/ai-assistant-demo",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 4,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/ai-assistant-demo/qual/env-resource-plan",
+      "case": "python/ai-assistant-demo",
+      "language": "python",
+      "service": "ai-assistant-demo",
+      "prompt_count": 1,
+      "prompts": [
+        "env-resource-plan"
+      ],
+      "definition_path": "evals/python/ai-assistant-demo/eval/qual/env-resource-plan.json",
+      "eval_dir": "evals/python/ai-assistant-demo",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 4,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/ai-assistant-demo/qual/finding-group-audit",
+      "case": "python/ai-assistant-demo",
+      "language": "python",
+      "service": "ai-assistant-demo",
+      "prompt_count": 1,
+      "prompts": [
+        "finding-group-audit"
+      ],
+      "definition_path": "evals/python/ai-assistant-demo/eval/qual/finding-group-audit.json",
+      "eval_dir": "evals/python/ai-assistant-demo",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 7,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/ai-assistant-demo/qual/gateway-env-plan",
+      "case": "python/ai-assistant-demo",
+      "language": "python",
+      "service": "ai-assistant-demo",
+      "prompt_count": 1,
+      "prompts": [
+        "gateway-env-plan"
+      ],
+      "definition_path": "evals/python/ai-assistant-demo/eval/qual/gateway-env-plan.json",
+      "eval_dir": "evals/python/ai-assistant-demo",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 4,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/ai-assistant-demo/qual/genai-sdk-default-audit",
+      "case": "python/ai-assistant-demo",
+      "language": "python",
+      "service": "ai-assistant-demo",
+      "prompt_count": 1,
+      "prompts": [
+        "genai-sdk-default-audit"
+      ],
+      "definition_path": "evals/python/ai-assistant-demo/eval/qual/genai-sdk-default-audit.json",
+      "eval_dir": "evals/python/ai-assistant-demo",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 9,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/ai-assistant-demo/qual/per-function-decorator-audit",
+      "case": "python/ai-assistant-demo",
+      "language": "python",
+      "service": "ai-assistant-demo",
+      "prompt_count": 1,
+      "prompts": [
+        "per-function-decorator-audit"
+      ],
+      "definition_path": "evals/python/ai-assistant-demo/eval/qual/per-function-decorator-audit.json",
+      "eval_dir": "evals/python/ai-assistant-demo",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/ai-assistant-demo/qual/resource-selector-length-audit",
+      "case": "python/ai-assistant-demo",
+      "language": "python",
+      "service": "ai-assistant-demo",
+      "prompt_count": 1,
+      "prompts": [
+        "resource-selector-length-audit"
+      ],
+      "definition_path": "evals/python/ai-assistant-demo/eval/qual/resource-selector-length-audit.json",
+      "eval_dir": "evals/python/ai-assistant-demo",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 3,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/ai-assistant-demo/qual/tool-message-mapping-audit",
+      "case": "python/ai-assistant-demo",
+      "language": "python",
+      "service": "ai-assistant-demo",
+      "prompt_count": 1,
+      "prompts": [
+        "tool-message-mapping-audit"
+      ],
+      "definition_path": "evals/python/ai-assistant-demo/eval/qual/tool-message-mapping-audit.json",
+      "eval_dir": "evals/python/ai-assistant-demo",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 4,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/assistant-v3-framework-bridge-demo/qual/audit",
+      "case": "python/assistant-v3-framework-bridge-demo",
+      "language": "python",
+      "service": "assistant-v3-framework-bridge-demo",
+      "prompt_count": 1,
+      "prompts": [
+        "framework-bridge"
+      ],
+      "definition_path": "evals/python/assistant-v3-framework-bridge-demo/eval/qual/audit.json",
+      "eval_dir": "evals/python/assistant-v3-framework-bridge-demo",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/checkout-red-demo/qual/audit",
+      "case": "python/checkout-red-demo",
+      "language": "python",
+      "service": "checkout-red-demo",
+      "prompt_count": 1,
+      "prompts": [
+        "direct"
+      ],
+      "definition_path": "evals/python/checkout-red-demo/eval/qual/audit.json",
+      "eval_dir": "evals/python/checkout-red-demo",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 5,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/existing-otel-agent-demo/qual/audit",
+      "case": "python/existing-otel-agent-demo",
+      "language": "python",
+      "service": "existing-otel-agent-demo",
+      "prompt_count": 1,
+      "prompts": [
+        "active-signal-matrix-audit"
+      ],
+      "definition_path": "evals/python/existing-otel-agent-demo/eval/qual/audit.json",
+      "eval_dir": "evals/python/existing-otel-agent-demo",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 7,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/existing-otel-agent-demo/qual/route-recovery-audit",
+      "case": "python/existing-otel-agent-demo",
+      "language": "python",
+      "service": "existing-otel-agent-demo",
+      "prompt_count": 1,
+      "prompts": [
+        "route-recovery-audit"
+      ],
+      "definition_path": "evals/python/existing-otel-agent-demo/eval/qual/route-recovery-audit.json",
+      "eval_dir": "evals/python/existing-otel-agent-demo",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 5,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/fastapi-celery/qual/audit",
+      "case": "python/fastapi-celery",
+      "language": "python",
+      "service": "fastapi-celery",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "definition_path": "evals/python/fastapi-celery/eval/qual/audit.json",
+      "eval_dir": "evals/python/fastapi-celery",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 5,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/flask-basic/qual/audit",
+      "case": "python/flask-basic",
+      "language": "python",
+      "service": "flask-basic",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "readiness-review"
+      ],
+      "definition_path": "evals/python/flask-basic/eval/qual/audit.json",
+      "eval_dir": "evals/python/flask-basic",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/flask-basic/qual/logging-audit-contract",
+      "case": "python/flask-basic",
+      "language": "python",
+      "service": "flask-basic",
+      "prompt_count": 3,
+      "prompts": [
+        "logging-trial-1",
+        "logging-trial-2",
+        "logging-trial-3"
+      ],
+      "definition_path": "evals/python/flask-basic/eval/qual/logging-audit-contract.json",
+      "eval_dir": "evals/python/flask-basic",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 14,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/galileo-agent-demo/qual/audit",
+      "case": "python/galileo-agent-demo",
+      "language": "python",
+      "service": "galileo-agent-demo",
+      "prompt_count": 2,
+      "prompts": [
+        "galileo-native-default",
+        "preserve-galileo"
+      ],
+      "definition_path": "evals/python/galileo-agent-demo/eval/qual/audit.json",
+      "eval_dir": "evals/python/galileo-agent-demo",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 7,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/mcp-ai-tool-demo/qual/audit",
+      "case": "python/mcp-ai-tool-demo",
+      "language": "python",
+      "service": "mcp-ai-tool-demo",
+      "prompt_count": 2,
+      "prompts": [
+        "direct",
+        "mcp-readiness"
+      ],
+      "definition_path": "evals/python/mcp-ai-tool-demo/eval/qual/audit.json",
+      "eval_dir": "evals/python/mcp-ai-tool-demo",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/model-directed-agent/qual/audit",
+      "case": "python/model-directed-agent",
+      "language": "python",
+      "service": "model-directed-agent",
+      "prompt_count": 1,
+      "prompts": [
+        "agent-role-from-behavior"
+      ],
+      "definition_path": "evals/python/model-directed-agent/eval/qual/audit.json",
+      "eval_dir": "evals/python/model-directed-agent",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 5,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/model-directed-agent/qual/connection-modes-audit",
+      "case": "python/model-directed-agent",
+      "language": "python",
+      "service": "model-directed-agent",
+      "prompt_count": 1,
+      "prompts": [
+        "studio-connection-modes"
+      ],
+      "definition_path": "evals/python/model-directed-agent/eval/qual/connection-modes-audit.json",
+      "eval_dir": "evals/python/model-directed-agent",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 5,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/model-directed-agent/qual/resource-table-audit",
+      "case": "python/model-directed-agent",
+      "language": "python",
+      "service": "model-directed-agent",
+      "prompt_count": 1,
+      "prompts": [
+        "agent-resource-table-audit"
+      ],
+      "definition_path": "evals/python/model-directed-agent/eval/qual/resource-table-audit.json",
+      "eval_dir": "evals/python/model-directed-agent",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 7,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/splunk-ao-integration-demo/qual/audit",
+      "case": "python/splunk-ao-integration-demo",
+      "language": "python",
+      "service": "splunk-ao-integration-demo",
+      "prompt_count": 1,
+      "prompts": [
+        "integration-paths"
+      ],
+      "definition_path": "evals/python/splunk-ao-integration-demo/eval/qual/audit.json",
+      "eval_dir": "evals/python/splunk-ao-integration-demo",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "python/splunk-ao-langchain-demo/qual/audit",
+      "case": "python/splunk-ao-langchain-demo",
+      "language": "python",
+      "service": "splunk-ao-langchain-demo",
+      "prompt_count": 1,
+      "prompts": [
+        "langchain-callback"
+      ],
+      "definition_path": "evals/python/splunk-ao-langchain-demo/eval/qual/audit.json",
+      "eval_dir": "evals/python/splunk-ao-langchain-demo",
+      "skill_path": "skills/otel-audit",
+      "sanity_check_count": 0,
+      "rubric_check_count": 6,
+      "runtime_check_count": 0
+    },
     {
       "id": "sanity/skill-smoke/sanity/audit",
       "case": "sanity/skill-smoke",
@@ -40,25 +718,30 @@
     }
   ],
   "summary": {
-    "eval_count": 1,
-    "case_count": 2,
-    "prompt_count": 2,
+    "eval_count": 42,
+    "case_count": 65,
+    "prompt_count": 65,
     "sanity_check_count": 0,
-    "rubric_check_count": 0,
+    "rubric_check_count": 494,
     "runtime_check_count": 0
   },
   "source": {
     "digest_version": 4,
-    "digest": "79e8d0d8e1b53cc1a167abec62f5df26c6ac9d66938897e6dab3a89f76751576",
+    "digest": "2f93a8e98591ede435d35a0c8d3599437446095ca7c31f1ba41e1c7b48ebb1e0",
     "eval_kinds": [
+      "rubric",
       "sanity"
     ],
     "evaluator_semantics_version": 1,
     "files": {
-      "evals/codex-evals.toml": "d89dac81794f47361a312db0b9e303f37a0e5ff60a075e2924ff3c9589ee472b",
-      "evals/sanity/skill-smoke/eval/sanity/audit.json": "c4cff2ee3e25984e1a0ffb60052dce0a2cf3c44fd9b3d1d06fb49851d4abd44b",
-      "evals/sanity/skill-smoke/service.txt": "f12a15fa6558c9a6bffef960c13d4e59bfa029470fe42c81b9c3491b5e4368e9",
-      "skills/otel-audit/SKILL.md": "f2a83084f338f8b9bc617bab9202e5fa5d1e06744590f2f741ce94347e2e6b63",
+      "evals/codex-evals.validation.toml": "503794fa37e80a742e98969f1d4bbdd17d1f9cfe7d6607c4012498c43905b53e",
+      "evals/go/chi-basic/Makefile": "4fa7a1c389866c15986b27d22da0bee109bf6bc438f0d29e2b42d7f6d36ea68a",
+      "evals/go/chi-basic/README.md": "6e17e9f1e65f52a9268ed19a4e4c7d449efdf4789c404232c98bf04777702688",
+      "evals/go/chi-basic/eval/qual/audit.json": "e255cfa18954eeec98430cbba25f03b51be5622750a91bf50f5673023845a8aa",
+      "evals/go/chi-basic/go.mod": "3180c726d9dfb307fcbebbd0f02e93dc833a8df2f36cbef9101d681e5048ba00",
+      "evals/go/chi-basic/go.sum": "568d7c01fdccc1b581965e736138e294497e891d01ec8b78e3509479a6a52e2e",
+      "evals/go/chi-basic/main.go": "bb8ca564254a9fc733166fccb1b60aacb3a2ee04d8fc5932a25b1a8cd31ba70b",
+      "skills/otel-audit/SKILL.md": "145e93401d76ad0547f6d7babce6bff97c1b85d4668742016d61a6792454d339",
       "skills/otel-audit/scripts/observe_report.py": "b9f2ff513850d2b6405f47000cd0b6fe8697fd35d47a15e9adaee5fa10094f4d",
       "skills/otel-audit/scripts/scan_python_otel_topology.py": "dc16553cdd3f89052bd4f8ececeaaacdce398c93dad3d6914cfa05f5d64f0fc0",
       "skills/otel-audit/tests/test_scan_python_otel_topology.py": "cf430e62143ef17b693555383cafef06f056c582f9c586ab23b9a4bf401a073e",
@@ -67,13 +750,13 @@
       "skills/references/full-runtime-acceptance.md": "585f42079d71460bbf7c68e4320ceabab6fcc1ba7c711948806c78c9d46736c5",
       "skills/references/genai-readiness.md": "b06758e80805b09ab485d81c3cc6284acf5e2d18c2af1c0359644f61b80deff4",
       "skills/references/incident-readiness.md": "787fb441106abcb148f541befd403e5f7889a2234c6cbe590d0c6bce48a3b59a",
-      "skills/references/languages/go.md": "5a971867caaac32350fb4d49b07180c458bdf2bbafa3c701fdfb40436b3e745f",
-      "skills/references/languages/java.md": "52fea13cae72eede9f72b6983ef67dad2188bcf6a5542aa49c9beed143a6b471",
-      "skills/references/languages/node.md": "8c184f2e42cb8db55ef52c1b3dfa2212beae7c92daf926817033ecbfd140d274",
-      "skills/references/languages/python.md": "2bfd572c4d93faa6eae04c1b71a1ce696df392bed256cfa896444b0b6128adeb",
+      "skills/references/languages/go.md": "6607a4c85c3dc3629027524fe6109a6cf5a8da6bcf62ac079ab2814a68218406",
+      "skills/references/languages/java.md": "15048ec8f34e5cd03e76fd8bcfcee648233219c1462fed34757c4268eedfc562",
+      "skills/references/languages/node.md": "fff6fe285a71f65882b4909634136ced0cf98eb1e153ed5d82df3ccb75628e4f",
+      "skills/references/languages/python.md": "c0b77e16348d4fe3e6dc9ea7c5ed79f40efe0f866178f257f5b65a4eff78e342",
       "skills/references/ledger-template.md": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc",
       "skills/references/local-otlp-receiver.md": "6f58148de9ef2fd3e617ddc2622ee09ba785b202100b91261a727af6e3dc7cec",
-      "skills/references/logging-readiness.md": "661590009b5780ac7588ac64989aee127eb54d5495ff93ce605d25f7280a6f7e",
+      "skills/references/logging-readiness.md": "701521da5671c896c136eba4f39f5f109e9af202b2d8b519d9a660f0f0f6db34",
       "skills/references/report-flow-contract.md": "d00ca857d4a875dcdb8a699cbf82eda612f42a4f88152ff7a83b4a74eb1b4d0f",
       "skills/references/scripts/observe_report.py": "3c1dc1386357e2cc9dc4f2d0f183cc8f4d0c7f45bb064de15196d071212be8cc",
       "skills/references/scripts/observe_report_core.py": "88419036c5c1a1096361b10da730dc5bbae931f2c890d6dba2c7791cd78b96c4",
@@ -86,7 +769,220 @@
       "skills/references/tests/test_observe_report.py": "cf79f1a74e4b2260d8010145ce2ff0c6122554e6c7eb19984941b6a89418c2c0",
       "skills/references/tests/test_observe_report_flow.py": "a895ca4165a196ff8ab0ffb73a1c6dcf859d27cf59cd5f335ce4fe1c9ca7392e",
       "skills/references/tests/test_observe_report_html.py": "32183996d90eb073b9ece7bcd05613ea3552512af7f6f8acfc7171d45eaf2382",
-      "skills/references/tests/test_observe_report_selection.py": "c2a441002d8392b9ea5cfdb52cee7e0b75000542334c2a3eb3bc8cff48a0d7c7"
+      "skills/references/tests/test_observe_report_selection.py": "c2a441002d8392b9ea5cfdb52cee7e0b75000542334c2a3eb3bc8cff48a0d7c7",
+      "evals/go/chi-basic/eval/qual/logging-audit-contract.json": "2d66a6c412e80929f73061a7c07d1c385e7350ba4100e56718b50f2f481d7635",
+      "pytest-codex-evals/src/pytest_codex_evals/ab.py": "a100dcc1e6c99ea54fc619c0a80b1ebf863529cff5c18ac42da59f80de65b952",
+      "pytest-codex-evals/src/pytest_codex_evals/graders/shared.py": "f56238f0ea3a0dd52184391b3b76f5214a9bf354293bf68854bcffa175d357ba",
+      "pytest-codex-evals/src/pytest_codex_evals/report.py": "82d78295d07cce02b6fb4a976c9ce3852b262a2fe63e99256c6ac034985b7cd4",
+      "evals/go/chi-partial/eval/qual/audit.json": "f3ee529239047e5771c74fdf99feba0b1b3cdcc8a4a815bc8123dfd60b9476d9",
+      "evals/go/chi-partial/go.mod": "244c715a3ba6df3d65f09d0d71775db17e551ee2a9f6a0de70cc9ee64d8626c6",
+      "evals/go/chi-partial/go.sum": "4050499935ba75f7faef6e9ff6e29ab4bc1829376b1f9f38c5972ed63e78f916",
+      "evals/go/chi-partial/main.go": "e395c48e36e43de4537eb493003c9d682557d496304a2d680006a96bea35a7d3",
+      "evals/go/kvstore/.vscode/launch.json": "91385f78513beaadd967bbfddfe03e992f8d2fa54a7f86e6a17ef3562a1691c8",
+      "evals/go/kvstore/Makefile": "557b16aa60d316634e43c3650f02c06305ddcc006e07ded16bee7452cabe9fa7",
+      "evals/go/kvstore/README.md": "c2a26d0c47d09fd3a3c1c0bce2bea508429a58df8788048724619621dcb15ac2",
+      "evals/go/kvstore/cmd/kvstore-server/main.go": "1596386f423b0b52f043025469fa182d95db9bc4ddeb0c6f1c64e1c6c85c4524",
+      "evals/go/kvstore/eval/qual/audit.json": "519ee1c2782df51d8745b96f48143c181a77abe0046cd22a8b3e369f3d90d603",
+      "evals/go/kvstore/go.mod": "c1c4cd5d7467d1ac3c999f0a424f6b7d38bfa368f826f77ff5b1d1836c935d3e",
+      "evals/go/kvstore/kvstore/http.go": "697458d084a0ed413c78c75f7dfcbd3fa13d13704a78e9d7dd609cf817bd9f5c",
+      "evals/go/kvstore/kvstore/http_test.go": "a12102b9726850b60830d36f924446b2c0044b893319e6d184d1daf25355ac3d",
+      "evals/go/kvstore/kvstore/store.go": "eb8c09d0220e8816f3f6bb8a6fae9c86c44823048065ed12cf56cf9f6e6b98fd",
+      "evals/go/kvstore/kvstore/store_test.go": "23532aff7f33ce9ce0937e10b915c0b3e136b6382c98c16aada5fcf711b0c96b",
+      "evals/go/kvstore/spec.md": "4eb0f6f554cb707e1a3290b6b76a1f5e74af5100d2938fb2734e079798d29c7a",
+      "evals/go/native-genai-demo/README.md": "853f6a873bddbf273efd915b14c9e2ef4372c1c4a622f628cb525f70085d69e1",
+      "evals/go/native-genai-demo/eval/inputs/audit-metric-inventory-evidence.json": "186bf0c34d353d3c9266ffb0c0b84d992d5720c4120acbd12ef4d5ccecf9f8cd",
+      "evals/go/native-genai-demo/eval/inputs/genai-profile-evidence.json": "aa816ae1e830e83a99289d326264d53e050cccd0c50648d49c3f2f8627ce7343",
+      "evals/go/native-genai-demo/eval/inputs/native-baseline-capture.json": "9991dd0218de75043bde04ee2ed0abf69e78603418aa61e5509da5d81443d470",
+      "evals/go/native-genai-demo/eval/inputs/native-module-evidence.json": "450d81069099780c28e3a105394662a5713d004cf23a7f1f92289a8b252b996c",
+      "evals/go/native-genai-demo/eval/inputs/nativeprobe/main.go": "2a2dcfeffb8bb6a370f8dc342e18d3432514cf849b423107b728940173be64ca",
+      "evals/go/native-genai-demo/eval/inputs/schemacheck/main.go": "c0049f5ecbd169dfc0ac6a576b126054a49feabdd46c7f96c3eb1717beefc3c8",
+      "evals/go/native-genai-demo/eval/qual/audit.json": "b6dbe0bb4550f01db642827740014f442f91aa68f7249937224a058ea9b1447d",
+      "evals/go/native-genai-demo/go.mod": "81fbdf643df4bcdee512f33b7fd9b3cddfda49488da4eca00f5d77d516633e09",
+      "evals/go/native-genai-demo/go.sum": "5ab9f296e66959a6a223bacf165f6540fa2b49f63dc8a7698a8cdbc93978c04d",
+      "evals/go/native-genai-demo/main.go": "7ff08c72f55f98255c93762056f8816f2a4351975365e2c03dfc3b1f39bee09f",
+      "evals/go/native-genai-demo/main_test.go": "a0f03b2b02fb3611808b500c198dd96d1fe9eaeda4372ceed389998b8449c23e",
+      "evals/go/native-genai-demo/telemetry.go": "1a6a265bbf7e72ab6b1a4cbfe5c99bfac66af61dd4bd9e1eddb4dfe392e0a22d",
+      "evals/java/kafka-batch-consumer/README.md": "23a5dcf5ebdf24c356199041d54712966ba63a977523b352e559ae72994c3286",
+      "evals/java/kafka-batch-consumer/eval/qual/audit.json": "5a7c64397ae995c6f021b49a5cb20ff8927b79dd41e2eb2f2183917ce8dca48c",
+      "evals/java/kafka-batch-consumer/pom.xml": "9362547208f052306275f371523e8325f153472ca099d728d313acc2991adca6",
+      "evals/java/kafka-batch-consumer/src/main/java/com/example/kafkabatch/BatchConsumerApplication.java": "99020ad58b471a1470525e1a295817c88a7a687ce3e9bd24bc19b7f1219a6b0a",
+      "evals/java/kafka-batch-consumer/src/main/java/com/example/kafkabatch/BatchConsumerConfig.java": "82a32d72df7e6db654a5ab5f152e3b3842cd8d17cb7e8055560c9a77aa8540ff",
+      "evals/java/kafka-batch-consumer/src/main/java/com/example/kafkabatch/BatchResult.java": "23f71d56d4be6c5d30159189eefdb8ec4dc9b5ff45f22578920a1b820d3b68ce",
+      "evals/java/kafka-batch-consumer/src/main/java/com/example/kafkabatch/PaymentBatchConsumer.java": "0993d8568df305e360cc9fa70d2ad33b0137fcf07cef22973f2ab14a7871ed11",
+      "evals/java/kafka-batch-consumer/src/main/java/com/example/kafkabatch/PaymentBatchProcessor.java": "cafd79bdf00da087730bd6675d935a2e77fa69ad2797758a5949c0c83c4101cd",
+      "evals/java/kafka-batch-consumer/src/main/java/com/example/kafkabatch/PaymentEvent.java": "82f3d465c290b78b3a580681a6c01c51264e1c738810fe82b2995669465e0ba8",
+      "evals/java/kafka-batch-consumer/src/test/java/com/example/kafkabatch/PaymentBatchProcessorTest.java": "2ceba5e06fa063cae5390477493d2f8849a5286bda84064e756c11dbac2a093b",
+      "evals/java/kafka-listener-container/README.md": "d0d9b5825c1dfd25f95912eb002ad3f080aaea8ee02195b72ce6cc6284c28eab",
+      "evals/java/kafka-listener-container/eval/qual/audit.json": "a22d9fac08b575e620a5b9fd27e8b6637d6649bacc16c28ae49232eba219c494",
+      "evals/java/kafka-listener-container/pom.xml": "51167a36784e3ca7629459dc642a923cc3a29591f807b5eeec9d7d328c2772c1",
+      "evals/java/kafka-listener-container/src/main/java/com/example/kafkalistener/AlertEvent.java": "37190f8fe3cd24aa9b720089bf970f91e8773fce94b739321a9f34286e1d13ac",
+      "evals/java/kafka-listener-container/src/main/java/com/example/kafkalistener/AlertListener.java": "1f98d4b261b2f2c661681ef341ea8bfbcdd708bcc98770f7b86a5d1774def2ce",
+      "evals/java/kafka-listener-container/src/main/java/com/example/kafkalistener/AlertService.java": "dcf2de9c5c4489f7c22f5687c215db59f801a1f6014b9f66c57f2f4df7bc0713",
+      "evals/java/kafka-listener-container/src/main/java/com/example/kafkalistener/AlertSummary.java": "dd3709159909f6e4be094de080a4606022293d5ee60322cfbc893c08af075926",
+      "evals/java/kafka-listener-container/src/main/java/com/example/kafkalistener/KafkaListenerContainerApplication.java": "e5de3bb3ec9f3a2196d24d5ebe8ce9f15a493c30b57ea6b7806f25fd6f2ffe8a",
+      "evals/java/kafka-listener-container/src/main/resources/application.properties": "3e6995431d262c164004bafbbad6ebcf443158624b4bbd1233cf4476445b3497",
+      "evals/java/kafka-listener-container/src/test/java/com/example/kafkalistener/AlertListenerTest.java": "652e4bc7d413fc8d321de1b8d3c3b0314de55866e31a2e8bbab7f56919a519e4",
+      "evals/java/kafka-producer-consumer/README.md": "2ca6c5f9c1149043af7cc9c2519d5c86e5f9e4f4ed58f13f7d947f2da068f277",
+      "evals/java/kafka-producer-consumer/eval/qual/audit.json": "2bcad85b89aadcff688785e793da454a0753abe65132a16ea04267285ccb273d",
+      "evals/java/kafka-producer-consumer/pom.xml": "781c4c209ca85e462f5521d83327bbd9bb9b0b997fa5ba803523b0838e0adcec",
+      "evals/java/kafka-producer-consumer/src/main/java/com/example/kafka/KafkaClientConfig.java": "fd638bdda80a768cc5473a2a2cedf3369c9f15fb5bed3822061eb1647a3a3e7b",
+      "evals/java/kafka-producer-consumer/src/main/java/com/example/kafka/OrderConsumer.java": "2acbe38451a8d3c649fd81d09fe9d4d8244887fbb256f2f1590875b2549a716d",
+      "evals/java/kafka-producer-consumer/src/main/java/com/example/kafka/OrderEvent.java": "8289b174867fa1713fa48de9acfc34b99b4858b4ce2bfda33cc0883099721293",
+      "evals/java/kafka-producer-consumer/src/main/java/com/example/kafka/OrderMessageHandler.java": "e762cb6ab5e1493f2c49eed0b9a112f89f0a07e5b4be6e3d2fe3312f5b279d4d",
+      "evals/java/kafka-producer-consumer/src/main/java/com/example/kafka/ProducerConsumerApplication.java": "4d19ec6a4f9f268df321bae998ff187bea6f9f48a75ae2437c012255f8955c54",
+      "evals/java/kafka-producer-consumer/src/main/java/com/example/kafka/ShipmentCommand.java": "d041f13ef16d201e31d3ff0df54240cc9c584ac3b2ec55200bd6e113ee57889b",
+      "evals/java/kafka-producer-consumer/src/main/java/com/example/kafka/ShipmentProducer.java": "a413bb5a6f4eca018f151f677e008e8a9d4dce800acbf852ddf1e5749e63e69f",
+      "evals/java/kafka-producer-consumer/src/test/java/com/example/kafka/OrderMessageHandlerTest.java": "152745d96f5d6bc8f1419dc78c1c625c2cd7fd2990b3d0104280d4e9207ad833",
+      "evals/java/kafka-streams/README.md": "34c5c5004cefaa371f41affc2cfca31d4279a3312e81cbb43224111bb1d4be7d",
+      "evals/java/kafka-streams/eval/qual/audit.json": "b9ffa5d6023dced6caa4510f7ba1110825f055dc93d1db172f25b3780f1e59ab",
+      "evals/java/kafka-streams/pom.xml": "6684a7d80d349249133ac780829c0ad8b96c56214e9c394c67d371afcfc3c13d",
+      "evals/java/kafka-streams/src/main/java/com/example/streaming/EnrichedOrder.java": "33a71ed88c738a9e1583484636bc77b36895d98cfb8ec391d124cdc7712f63c9",
+      "evals/java/kafka-streams/src/main/java/com/example/streaming/KafkaStreamsApplication.java": "046a463cc5e5d7af8ba2612425b8d127e788e3c0fc97ac19c3447776b19723f0",
+      "evals/java/kafka-streams/src/main/java/com/example/streaming/OrderEvent.java": "8a7f60d0844d894d10eec292abb3943e4ed5e58114776b8ed6b9bc0adc25320b",
+      "evals/java/kafka-streams/src/main/java/com/example/streaming/OrderEventParser.java": "14d999fa878719f29aac8ca645f21e4c108f9faff1b3068a44d4c5bdca887214",
+      "evals/java/kafka-streams/src/main/java/com/example/streaming/OrderStreamService.java": "05f1d9b01457d252fae720b0045bc80878133ad7b67f32cffc2c66f48230dec7",
+      "evals/java/kafka-streams/src/main/java/com/example/streaming/OrderStreamTopology.java": "8b80ff43f2a62da9ffb11cd087f15db7fb69a4258ac59ecd810b88b578bb8bc6",
+      "evals/java/kafka-streams/src/main/java/com/example/streaming/RiskScorer.java": "1ce6afba8a734b0ed7a0a9018b5563a90ce7062af8d01322e522935c6aaa0d00",
+      "evals/java/kafka-streams/src/main/java/com/example/streaming/StreamConfig.java": "b36e3f0a15b573a6770de31443662301df04156b65234246a2e4c02d777418af",
+      "evals/java/kafka-streams/src/main/java/com/example/streaming/StreamProcessingModule.java": "d25445d8697923d6389f7f891e46372f5ed822ae322ca55a558ca8855fb1d406",
+      "evals/java/kafka-streams/src/main/resources/simplelogger.properties": "3294bddc68c65069b77ec48d1c84ecb1d26a59e697413f86ec1da386155ec66d",
+      "evals/java/kafka-streams/src/test/java/com/example/streaming/OrderStreamTopologyTest.java": "ac6d6948bd24050982b1a6eaca082f70469c468e5ffdad1f9eec4efd438e8ef1",
+      "evals/java/springboot-basic/Makefile": "0ec480ca132292ff86de96101afe0be26f445625e54477930162ad553a937677",
+      "evals/java/springboot-basic/README.md": "6e17e9f1e65f52a9268ed19a4e4c7d449efdf4789c404232c98bf04777702688",
+      "evals/java/springboot-basic/eval/qual/audit.json": "b09739f420ec7ee1b82f069339caba33bf9a21e1809dde14235213d385651962",
+      "evals/java/springboot-basic/pom.xml": "2b6e5f88faf91bf8891d728bd51bc6737ca8919bd657caaaa416ff3c6550f625",
+      "evals/java/springboot-basic/src/main/java/com/example/tasks/Task.java": "97437951adcb1592b1f4e48af10f799501858ed40949575f8278d9a644f80cfc",
+      "evals/java/springboot-basic/src/main/java/com/example/tasks/TaskController.java": "ccace7793ab0b02f7b20d3ae8c0698451f45734ad6a25f5147c9f0fff71fdbfa",
+      "evals/java/springboot-basic/src/main/java/com/example/tasks/TasksApplication.java": "0db42555e6ac0ec5d3c352d526ed0b5bdbb5cf6a0087ed2fe68b4ec62b0bab0b",
+      "evals/java/springboot-basic/src/main/resources/application.properties": "b90fa8737a65764df11a6814c6481fc53c6f092da294e73c3887d684c2a48f7b",
+      "evals/java/springboot-basic/eval/qual/logging-audit-contract.json": "bebf35abb9c5ff30305d9a9e88dd991ae75dfd056892766210ef3fe9a7ba81cd",
+      "evals/node/express-basic/Makefile": "06a7495fad4f3b89cec069d66f2acdf73bda25c3d6f587e70c8de33f2bbaec6f",
+      "evals/node/express-basic/README.md": "6e17e9f1e65f52a9268ed19a4e4c7d449efdf4789c404232c98bf04777702688",
+      "evals/node/express-basic/app.js": "7dc0b120a9cb78d104c8c5de73f45cc07e44cf1648421d7849daa159326ceaef",
+      "evals/node/express-basic/eval/qual/audit.json": "11fd51385d462669745f57fe10f070186605ec6a498348b54813f92181c2c77e",
+      "evals/node/express-basic/package.json": "9a6b2e4619c27d59d7911017d38caf37cecc4c5dc0a443b7eabd54ce0c554ae9",
+      "evals/node/express-basic/eval/qual/logging-audit-contract.json": "2d66a6c412e80929f73061a7c07d1c385e7350ba4100e56718b50f2f481d7635",
+      "evals/python/ai-assistant-demo/Makefile": "3603e3404f82d150e09de40be763c2213a05185cd302c7d2426eee61f44260b1",
+      "evals/python/ai-assistant-demo/README.md": "eebd4711ef5b6d9325e15d0488b43da6b3fde8bc48ffff91fa44841fd1dfaf0e",
+      "evals/python/ai-assistant-demo/app.py": "fa5e1ef6707b71d0faec679ba88c81052382b85b42e895ee484454fbfd056f1e",
+      "evals/python/ai-assistant-demo/eval/qual/ao-name-inputs-audit.json": "f0937a6a23d7a75c66f3fd75ec98acadb6db93386bf5aebbced3431943503d77",
+      "evals/python/ai-assistant-demo/eval_runner.py": "6b685cf5472871a9b227e652e47fd23a68b5ffe38021d4b6f3802236be65e2c8",
+      "evals/python/ai-assistant-demo/load_demo.py": "a33aef8a368b24c3351f46722f2caab5ecf4b2791a998b058d7c4a458ff8f2e0",
+      "evals/python/ai-assistant-demo/pyproject.toml": "90be0bda1c6147fc324325b0f8a65a82499d65840df190a76b633c992e511f00",
+      "evals/python/ai-assistant-demo/eval/inputs/ao-root-compatibility-evidence.json": "335ce70f9753091154b9fcc22c8fc3134ef266faa797b86e31141ef2665c44a6",
+      "evals/python/ai-assistant-demo/eval/qual/ao-root-compatibility-audit.json": "de07843addf49ef65dfbdffc8827206adeec01780b54d90126dd9fea7348d6fe",
+      "evals/python/ai-assistant-demo/eval/inputs/ao-target-handoff-validator-snapshot.json": "6e605a622e4b4f16658e3b62918a77a32f1481feec8eeb95f1055ac1bfe8e60d",
+      "evals/python/ai-assistant-demo/eval/inputs/finding-group-snapshot.json": "4d8ecff766c242dac8b4e48409681b6aa0b87487b62740128afe39ed2f41e5d6",
+      "evals/python/ai-assistant-demo/eval/qual/ao-target-handoff-audit.json": "e421dc92e771203801606c062fc920cf2c0cfedcd250a349d46dc0d915ee43db",
+      "evals/python/ai-assistant-demo/eval/inputs/audit-decorator-logs-evidence.json": "bb988baf21ad1b827fbcd9298a2f55348d24e457efad3fbb4906645c2a4fc429",
+      "evals/python/ai-assistant-demo/eval/qual/audit-focused-decorator-logs.json": "8f1015406d832f2e1e1c3d120f32c31019a11e03020f0a45cb53d3f253f43228",
+      "evals/python/ai-assistant-demo/eval/inputs/audit-metadata-capability-evidence.json": "d7f7221d0cb706edd87fc050b307f78a0d569308bb10fd8c93345d3fb919a113",
+      "evals/python/ai-assistant-demo/eval/qual/audit-focused-metadata.json": "b304b84bfe791a2ea3afd1b84fcc550d2dd597ae658fba4a5c967de88d2ab523",
+      "evals/python/ai-assistant-demo/eval/qual/audit.json": "0e3776a61e36b8fe5508d7154a98d060d4b10265589e2d2e800feee0ad82cc4b",
+      "evals/python/ai-assistant-demo/eval/qual/content-coverage-audit.json": "74461bcbb6962e170a3007ed1e9fc5f0a87b6b937724bc458737cf5f6edbd5c5",
+      "evals/python/ai-assistant-demo/eval/qual/env-resource-plan.json": "aa54f3166b930c13eb94840e3d765839fba6db2691eae9ce76d0291a62b2ec9b",
+      "evals/python/ai-assistant-demo/eval/qual/finding-group-audit.json": "ba3ab0d4ab99f4b165a9dd48c9a2cb71dd860dc85b45365de4551c26ea2bc3d7",
+      "evals/python/ai-assistant-demo/eval/inputs/ao-gateway-context.json": "ee7d7dc01c0b164afc5b84ea885434912b1812a41f918dfcdbf7ad1dc2dfe72e",
+      "evals/python/ai-assistant-demo/eval/inputs/ao-gateway-env-generator.py": "7a3defef88e132fe629e77505876d14e162dca843149f65e2978a8563c0eab39",
+      "evals/python/ai-assistant-demo/eval/inputs/ao-gateway-example.env": "ded8c48304a7f81488f54202ec138dfdab45b01a721d48a7beadca9ad38b74a6",
+      "evals/python/ai-assistant-demo/eval/inputs/ao-gateway-launcher.sh": "c1a34395cde0e8e1b2afd2843e9964b5a2646e300080078b975b1fc9f618ec32",
+      "evals/python/ai-assistant-demo/eval/inputs/ao-gateway-real.env": "77fa562a2a56806e25387cca70f918ba0c6f538cf3481b9790808cbc4a90273f",
+      "evals/python/ai-assistant-demo/eval/qual/gateway-env-plan.json": "38db6b44caed397a788fcc435d23cd4bd43b36b3fe1e90c0e281f5928b31b05b",
+      "evals/python/ai-assistant-demo/eval/inputs/audit-core-helper-evidence.json": "a4ad2228f7e72d380d7fe81b3cec15b35c200594f5f3717138717c3af4a54178",
+      "evals/python/ai-assistant-demo/eval/inputs/genai-default-scenarios.json": "2d4640f2f910a698de2a6155fff4fbfbbb8f66583d1986dd53dd4b825941ab6f",
+      "evals/python/ai-assistant-demo/eval/inputs/genai-required-evidence.json": "b0b3e76d7a66065b4a8d83e77cf207497221e738ba9852447eb441a9c7793c2d",
+      "evals/python/ai-assistant-demo/eval/inputs/genai-sdk-source-snapshot.json": "9d4bb13d28c1892c96cf069f65fe129674e4dc5c86b21adb3823a82b2a378ef6",
+      "evals/python/ai-assistant-demo/eval/inputs/genai-semconv-source-snapshot.json": "37dcf51de2138b706b7272c32e4215d280a94790b3d4bb454000ef66ef24e3ae",
+      "evals/python/ai-assistant-demo/eval/qual/genai-sdk-default-audit.json": "e83d3961ec1548ba161ab0d2cbf7791474df178017622f4a53abc4b5d63168e8",
+      "evals/python/ai-assistant-demo/eval/inputs/per-function-decorator-gate-evidence.json": "ade2556c260fef65e1952236e26e474c9f24333f78ce18f87667b189505752b9",
+      "evals/python/ai-assistant-demo/eval/inputs/per-function-full-conformance-evidence.json": "cfeb7eb26410f9aa70fb7e2c77355ea4a67b5d92b0f9e7f02cd15a8ff528c805",
+      "evals/python/ai-assistant-demo/eval/qual/per-function-decorator-audit.json": "ca45a84c11d0d5885fda4b7bbea4463c53049b03600eb996e50e8569449cd5c0",
+      "evals/python/ai-assistant-demo/eval/inputs/otel-audit.json": "0aa217a1410c384a8afda2ab7608e19c93bb9e5ae5483a87e5bec66e8bf5ea1d",
+      "evals/python/ai-assistant-demo/eval/qual/resource-selector-length-audit.json": "5350468996bb2de3250007101cbaa233476a54ed844a498396a765c33a4b799f",
+      "evals/python/ai-assistant-demo/eval/inputs/genai-tool-enrichment-evidence.json": "5b991c48950fece0a6935a5ae652f90f8bf3479916c197c3885f6a3361de000e",
+      "evals/python/ai-assistant-demo/eval/inputs/genai-tool-message-mapping.json": "4cbd7c4f59c8dd85096cfa1209528b65d29d5772095cc1fef0627e01dfc0c77c",
+      "evals/python/ai-assistant-demo/eval/qual/tool-message-mapping-audit.json": "fac0c9ed5c0a0e56af65a9837b16f7d1bfa49231ac48badb0386f6eff73ac839",
+      "evals/python/assistant-v3-framework-bridge-demo/Makefile": "8b7c714132b889fa15ae8ae47455eeb3656a43a8718235f90c785245f9c62552",
+      "evals/python/assistant-v3-framework-bridge-demo/README.md": "0a6160c84501a12983836675474cbf92ba2f3b42286d0e9528c55e083c12c7b5",
+      "evals/python/assistant-v3-framework-bridge-demo/app.py": "4bddb33ef46ede5311f545c5c62a36b8fbbfabbec8fbad1fafcd0b26d560551d",
+      "evals/python/assistant-v3-framework-bridge-demo/eval/qual/audit.json": "e42ca7a6bdca9c0b12fcc6ffbf70332b53b7e70bbaa2ad943b0b268976c49d32",
+      "evals/python/assistant-v3-framework-bridge-demo/pyproject.toml": "8c43a60cae17aad9747730e304f8392018e0f661c1ed8a7c28e18551eebd3d7b",
+      "evals/python/checkout-red-demo/Makefile": "bcc602c9a686ee2eb91518ce64e2e73c4e2172f6384a7472406886e14c89da4d",
+      "evals/python/checkout-red-demo/README.md": "c0c3ff5df10cfc74ce0df5a59c64d4bcb59f00b5d10f1c3f217a0c3f771aa48c",
+      "evals/python/checkout-red-demo/app.py": "eeadd6651322a1c84ff6c4ed56a31dafdd26d24c23248e8853f24eab63c9073f",
+      "evals/python/checkout-red-demo/eval/qual/audit.json": "2984a8927fc6c8c53dd530074ca06c667f7ab42721aa9be9675ce32958d72c71",
+      "evals/python/checkout-red-demo/load_demo.py": "38a4f7802c1ce90f4b12f05e81b3f8e77a07e49b8d11a6604b168c95b0ab201d",
+      "evals/python/checkout-red-demo/pyproject.toml": "5a8fb56e5fdd467f32dbbe43a5ba4838fb5b5d25d446d68dfd2d8c69b3229802",
+      "evals/python/existing-otel-agent-demo/Makefile": "a2beb661c8e836e44bb31e4c9430592848e522d2c48b2fa416a2363bcbea6a7a",
+      "evals/python/existing-otel-agent-demo/README.md": "c3b4c2f4260c34551330992b92cd3156604399a0d54eda1d904eb943d42993cd",
+      "evals/python/existing-otel-agent-demo/app.py": "bd65b5623b2f1997eb1523deadca5fce090f76f551609d7b3e0dff680c1e1d5f",
+      "evals/python/existing-otel-agent-demo/eval/inputs/content-counterexamples.json": "cb2a137c61432b814f6fca5d7094140c922989b75cdffaee67b131d87e18c76b",
+      "evals/python/existing-otel-agent-demo/eval/inputs/genai-schema-evidence.json": "cb2d154a37cd662e4ddbcae6d30f7ce5588524d660d6ce19abdf42adc5032a5d",
+      "evals/python/existing-otel-agent-demo/eval/inputs/python-preflight-requirements.txt": "9bc8378353b95a0405d8b052226aa3075aa7f7f32d30c29c235b0a343df6fa3f",
+      "evals/python/existing-otel-agent-demo/eval/qual/audit.json": "fac868c9ea4a9ada1dabec2ff8461e77471af6d651d18b6b6d46cd9d14bc7509",
+      "evals/python/existing-otel-agent-demo/probe.py": "8cc9dd2ba1124e3bf5a20ee65c500c688a0db7429eed9396013485d46d0f737a",
+      "evals/python/existing-otel-agent-demo/pyproject.toml": "dfc360d25da6e430e782c891bdbc92fb5d7b2ddf6a901629d09bc3a874635a25",
+      "evals/python/existing-otel-agent-demo/eval/inputs/route-recovery-capture.json": "1258c9c3dccc58afd416fa96e7bb0a5cc69b7d22832ab6e9c5651a0a0a275b93",
+      "evals/python/existing-otel-agent-demo/eval/inputs/route_recovery_source.py": "07b8ba11dac16c041d57fb0018ac65fab90e6eadcca0675cdd3cae01d3635a77",
+      "evals/python/existing-otel-agent-demo/eval/inputs/vendor-route-capture.json": "6505493b4367a977e8cc9808ad21027fc802a12fe6a2b64fa93d783cee1abfef",
+      "evals/python/existing-otel-agent-demo/eval/qual/route-recovery-audit.json": "8698248fac57fb93ad1c5a71152ddbcd943efe1ac9683b550d9a6eb0b3e45512",
+      "evals/python/fastapi-celery/Dockerfile": "3e969493246aedab9e8853cf67d46349927bb8bf539cec91f339801e21abc47f",
+      "evals/python/fastapi-celery/Makefile": "8403be2e415c0666604e4311051933595559f5272ffe891de4328cc8d7df25aa",
+      "evals/python/fastapi-celery/app.py": "2dcc2c24037dba31b4dee309a005be4179ab3396e97d2a1e87a93c5aae6d760c",
+      "evals/python/fastapi-celery/docker-compose.yml": "8170f2f746522ea541976a0900991c9b39914e5bdee9424e0831f6d8f3e2d751",
+      "evals/python/fastapi-celery/eval/qual/audit.json": "5c7fd1196b7ea5afe030c6e0e6d1f1719a2189a65c36c32546e9e2a3c8111cf3",
+      "evals/python/fastapi-celery/pyproject.toml": "486ece182067449ec1cbd8f0cdb18184cfe0278fedb7fee81e9c6975da0e1e79",
+      "evals/python/fastapi-celery/worker.py": "ac138d80a191757a1dba95cc57d6f69628486e9aee73efa8925d605e72ccd65d",
+      "evals/python/flask-basic/Makefile": "8a847a2b1ce96ec3c324c7ec63058d3f94dbfe7a93d6a05aee033548ba1a8053",
+      "evals/python/flask-basic/README.md": "551f12261e9278c324c6966952cd26bad8f6032a0a3a4c13be4dfa863ae12db2",
+      "evals/python/flask-basic/app.py": "1209172394d85fc8244799b9ea13d0633ef39b9cedb4b1f1e95190fedb2903de",
+      "evals/python/flask-basic/eval/qual/audit.json": "0c0251332a39010a7b9231589ecfe6186700c030180212860b8798a2d3c25080",
+      "evals/python/flask-basic/pyproject.toml": "3b624f5c0a1c9766603fc0e591341e7fe8cd44af5386521970f30673d34e6c8f",
+      "evals/python/flask-basic/eval/qual/logging-audit-contract.json": "2d66a6c412e80929f73061a7c07d1c385e7350ba4100e56718b50f2f481d7635",
+      "evals/python/galileo-agent-demo/Makefile": "d73ee26d7e47fcf4fbfb25a6352c62aa50378c3f32ee7604860a4ac0c96dbe08",
+      "evals/python/galileo-agent-demo/README.md": "c6188d7963a790b8bb9045297f9cb6e9021e2d5f3788a5b4ac21eab3b51a2f3e",
+      "evals/python/galileo-agent-demo/agent.py": "4aaff22556af904048ceb3febb342184ea8c84ce6c88053f1352b93e7abf89ed",
+      "evals/python/galileo-agent-demo/app.py": "cf37aa733e6cd6f51ed90a8b53956b2cb8fb4460a640837528b2a7f985c7d03b",
+      "evals/python/galileo-agent-demo/eval/qual/audit.json": "4e94c535de6283553a6c7345b2ed9ed26271f96ca2cf80007e5f236de442bda3",
+      "evals/python/galileo-agent-demo/pyproject.toml": "0d6c5cb045beb14b8cb1465ff0fe3321963818b1028dd0720670db1f5b7202f6",
+      "evals/python/galileo-agent-demo/tests/test_agent.py": "33d5fea1eebfbdc855fafd00e7a3600a06a1a90f1b97d1c8942e8e0460b4f124",
+      "evals/python/mcp-ai-tool-demo/Makefile": "87d12c2866f8dbd360a98ed53448c98ee805fa7f55a7b61e03862734fa4f63a2",
+      "evals/python/mcp-ai-tool-demo/README.md": "56f9c6b444d4fc18a62c0f8bed5dbcd21c81ac5753911d25a8d61cb2816b6d73",
+      "evals/python/mcp-ai-tool-demo/app.py": "3e224b78e316ad5ee07fa06f2773be2a5299e1b3a8d8e12febd0b33ef17718c4",
+      "evals/python/mcp-ai-tool-demo/eval/qual/audit.json": "59431a4ce48c1d680d3259c85356a9f755516e417da94381f5a85435601411c7",
+      "evals/python/mcp-ai-tool-demo/load_demo.py": "5bec26d9d8fd272dbdd779ab2dfb7bbb7134648ee65960537516354fcb428660",
+      "evals/python/mcp-ai-tool-demo/pyproject.toml": "d0aed70f07d1a77a413afe435daa70c5e403da903e07511ba23b0232fc0e4375",
+      "evals/python/model-directed-agent/README.md": "4df0874e3a6d9596a7362376aa7d143ae4a8537ba5de86033a468702f1e87519",
+      "evals/python/model-directed-agent/agent.py": "a9b953d189a35ac1e7518918651e5d8144754615d6592a5fdcb0e0d2d85da5dd",
+      "evals/python/model-directed-agent/app.py": "f3fefd95b7d2cc84ab2eb58b35b9fecd7b032930776f7052d3affcffbd11ffda",
+      "evals/python/model-directed-agent/chat_core.py": "c228f81a2dbc7e9b66ea1ff7b0280ffbe2879c0421deeb5c0e20ed21655465db",
+      "evals/python/model-directed-agent/checks/review_regressions.py": "6e5d2144c521fea6770844242f7bc4f0fbf2ed9c3cc350c0df8e1e8b528b5c2c",
+      "evals/python/model-directed-agent/eval/inputs/prior-audit.json": "caa997d57a71c06a288f0b8f4b606edc1e6de1058279df292787403378bfca4f",
+      "evals/python/model-directed-agent/eval/qual/audit.json": "492caa234f35abf70d4a16bcc538844e9ee033dfdf8e23025719f185899859ca",
+      "evals/python/model-directed-agent/historical_check.py": "ef408c69e11dc0d60ab584ec881cbb3750a037bece37dfab357adb316a2426fa",
+      "evals/python/model-directed-agent/otel_setup.py": "d7d591e2ca3aeef688aa2df30e4c2d89286917102c22439864fbb5c6a9d53b12",
+      "evals/python/model-directed-agent/probe.py": "f190d42c2b2308660ba60c1f6d12d74207ef62b33162bc526cadbc12295db929",
+      "evals/python/model-directed-agent/recommendations.py": "c0704e3b6baba32477943c826d9e4a2fa9b94e9fcda3c20ad0f4b57179255a09",
+      "evals/python/model-directed-agent/requirements.txt": "fa39473fff95e58feb9dce8bbd6b7129b203f9d1e0209cd62d4a05b9130ac5d4",
+      "evals/python/model-directed-agent/roles.py": "8d254346b01cbcf7bda6d38778732d44656ff585b5f0fbb56bdf3f65d818bbdc",
+      "evals/python/model-directed-agent/templates/index.html": "499ff2bfcefb3e0263b6c2af41f7d81a1dc20c1417854350bcf44b9465e6ce81",
+      "evals/python/model-directed-agent/eval/inputs/agent-resource-cases.json": "1dc1244eb619248ccfda204d8b4d03131aaccdeb7312b21e1fe4232025a9b7f2",
+      "evals/python/model-directed-agent/eval/inputs/sdk-local-routing-evidence.json": "2b10f295f7cf2049bd168f3d30d89d12756f63c1ec3c47c42753610cf5b710e1",
+      "evals/python/model-directed-agent/eval/qual/connection-modes-audit.json": "7f4b4e9dbda4b8d8144dd77b0a2906f8d5953a269f05cc59c255889c558a5768",
+      "evals/python/model-directed-agent/eval/inputs/routing-acceptance-counterexamples.json": "aab834050aeb8b4ef2b1c24dd7962dc0d15fe0d80623c936080ac327af69e0aa",
+      "evals/python/model-directed-agent/eval/qual/resource-table-audit.json": "a02291d9af8f8fb1e2d04b4bbc72d2c25542f7fc8c5b766674787d75fb804c74",
+      "evals/python/splunk-ao-integration-demo/decorator_app.py": "65cbdeb9ba515386d6f122ae085bd299f640952cf3e338c76bc285c8df01cd56",
+      "evals/python/splunk-ao-integration-demo/eval/qual/audit.json": "b0131ecd6235022f8276935e6cc777e27036d3b8c06e91cad9f142ffa0f88600",
+      "evals/python/splunk-ao-integration-demo/existing_otel_app.py": "11103e93e200d4f35bb2e3c230ca06da3cbc9180af105baa2a4caa9bec9c81d4",
+      "evals/python/splunk-ao-integration-demo/pyproject.toml": "0799ce288f4f42331ab6eae1625a2a554266ea9d77b14d945e1dbcd7a8cfd89d",
+      "evals/python/splunk-ao-langchain-demo/Makefile": "c9da5dd95276d141b0a32e21a2011ac263117a3e449121688573b882fe87fc0d",
+      "evals/python/splunk-ao-langchain-demo/README.md": "30a1e175482d6071a5a8746b1c61b208b2756aa157205c268466cdd336578b9b",
+      "evals/python/splunk-ao-langchain-demo/app.py": "05d2a0a640aedc252b3b38626fe12099ef8ad805a842607a6e59bf666644fda5",
+      "evals/python/splunk-ao-langchain-demo/eval/qual/audit.json": "12dbf29728093a3a47ebaa40b16330e1ce372a1ef9b55820ada41ef89a5b0159",
+      "evals/python/splunk-ao-langchain-demo/pyproject.toml": "4400a876430531a23291aa826f8eb266b77f0d5b393d3b0aba5a720f02d7b3a3",
+      "evals/python/splunk-ao-langchain-demo/tests/test_app.py": "843b89e1f95650214876c4ca61d4cce82b7038664e893a4f87cea90278b1c40e",
+      "evals/sanity/skill-smoke/eval/sanity/audit.json": "c4cff2ee3e25984e1a0ffb60052dce0a2cf3c44fd9b3d1d06fb49851d4abd44b",
+      "evals/sanity/skill-smoke/service.txt": "f12a15fa6558c9a6bffef960c13d4e59bfa029470fe42c81b9c3491b5e4368e9"
     },
     "skill_path": "skills/otel-audit",
     "shared_reference_consumers": [
@@ -106,6 +1002,503 @@
     ],
     "selections": [
       {
+        "definition_path": "evals/go/chi-basic/eval/qual/audit.json",
+        "fixture_dir": "evals/go/chi-basic",
+        "prompt_id": "direct",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/go/chi-basic/eval/qual/audit.json",
+        "fixture_dir": "evals/go/chi-basic",
+        "prompt_id": "readiness-review",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/go/chi-basic/eval/qual/logging-audit-contract.json",
+        "fixture_dir": "evals/go/chi-basic",
+        "prompt_id": "logging-trial-1",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/go/chi-basic/eval/qual/logging-audit-contract.json",
+        "fixture_dir": "evals/go/chi-basic",
+        "prompt_id": "logging-trial-2",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/go/chi-basic/eval/qual/logging-audit-contract.json",
+        "fixture_dir": "evals/go/chi-basic",
+        "prompt_id": "logging-trial-3",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/go/chi-partial/eval/qual/audit.json",
+        "fixture_dir": "evals/go/chi-partial",
+        "prompt_id": "direct",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/go/chi-partial/eval/qual/audit.json",
+        "fixture_dir": "evals/go/chi-partial",
+        "prompt_id": "readiness-review",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/go/kvstore/eval/qual/audit.json",
+        "fixture_dir": "evals/go/kvstore",
+        "prompt_id": "direct",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/go/kvstore/eval/qual/audit.json",
+        "fixture_dir": "evals/go/kvstore",
+        "prompt_id": "readiness-review",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/go/native-genai-demo/eval/qual/audit.json",
+        "fixture_dir": "evals/go/native-genai-demo",
+        "prompt_id": "audit-native-go-fallback",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/genai-profile-evidence.json",
+          "eval/inputs/native-module-evidence.json",
+          "eval/inputs/nativeprobe/main.go",
+          "eval/inputs/schemacheck/main.go",
+          "eval/inputs/native-baseline-capture.json",
+          "eval/inputs/audit-metric-inventory-evidence.json"
+        ]
+      },
+      {
+        "definition_path": "evals/java/kafka-batch-consumer/eval/qual/audit.json",
+        "fixture_dir": "evals/java/kafka-batch-consumer",
+        "prompt_id": "direct",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/java/kafka-batch-consumer/eval/qual/audit.json",
+        "fixture_dir": "evals/java/kafka-batch-consumer",
+        "prompt_id": "readiness-review",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/java/kafka-listener-container/eval/qual/audit.json",
+        "fixture_dir": "evals/java/kafka-listener-container",
+        "prompt_id": "direct",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/java/kafka-listener-container/eval/qual/audit.json",
+        "fixture_dir": "evals/java/kafka-listener-container",
+        "prompt_id": "readiness-review",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/java/kafka-producer-consumer/eval/qual/audit.json",
+        "fixture_dir": "evals/java/kafka-producer-consumer",
+        "prompt_id": "direct",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/java/kafka-producer-consumer/eval/qual/audit.json",
+        "fixture_dir": "evals/java/kafka-producer-consumer",
+        "prompt_id": "readiness-review",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/java/kafka-streams/eval/qual/audit.json",
+        "fixture_dir": "evals/java/kafka-streams",
+        "prompt_id": "direct",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/java/kafka-streams/eval/qual/audit.json",
+        "fixture_dir": "evals/java/kafka-streams",
+        "prompt_id": "readiness-review",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/java/springboot-basic/eval/qual/audit.json",
+        "fixture_dir": "evals/java/springboot-basic",
+        "prompt_id": "direct",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/java/springboot-basic/eval/qual/audit.json",
+        "fixture_dir": "evals/java/springboot-basic",
+        "prompt_id": "readiness-review",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/java/springboot-basic/eval/qual/logging-audit-contract.json",
+        "fixture_dir": "evals/java/springboot-basic",
+        "prompt_id": "logging-trial-1",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/java/springboot-basic/eval/qual/logging-audit-contract.json",
+        "fixture_dir": "evals/java/springboot-basic",
+        "prompt_id": "logging-trial-2",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/java/springboot-basic/eval/qual/logging-audit-contract.json",
+        "fixture_dir": "evals/java/springboot-basic",
+        "prompt_id": "logging-trial-3",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/node/express-basic/eval/qual/audit.json",
+        "fixture_dir": "evals/node/express-basic",
+        "prompt_id": "direct",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/node/express-basic/eval/qual/audit.json",
+        "fixture_dir": "evals/node/express-basic",
+        "prompt_id": "readiness-review",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/node/express-basic/eval/qual/logging-audit-contract.json",
+        "fixture_dir": "evals/node/express-basic",
+        "prompt_id": "logging-trial-1",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/node/express-basic/eval/qual/logging-audit-contract.json",
+        "fixture_dir": "evals/node/express-basic",
+        "prompt_id": "logging-trial-2",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/node/express-basic/eval/qual/logging-audit-contract.json",
+        "fixture_dir": "evals/node/express-basic",
+        "prompt_id": "logging-trial-3",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/ai-assistant-demo/eval/qual/ao-name-inputs-audit.json",
+        "fixture_dir": "evals/python/ai-assistant-demo",
+        "prompt_id": "ao-name-inputs-audit",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/ai-assistant-demo/eval/qual/ao-root-compatibility-audit.json",
+        "fixture_dir": "evals/python/ai-assistant-demo",
+        "prompt_id": "ao-root-compatibility-audit",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/ao-root-compatibility-evidence.json"
+        ]
+      },
+      {
+        "definition_path": "evals/python/ai-assistant-demo/eval/qual/ao-target-handoff-audit.json",
+        "fixture_dir": "evals/python/ai-assistant-demo",
+        "prompt_id": "ao-target-handoff-audit",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/ao-target-handoff-validator-snapshot.json",
+          "eval/inputs/finding-group-snapshot.json"
+        ]
+      },
+      {
+        "definition_path": "evals/python/ai-assistant-demo/eval/qual/audit-focused-decorator-logs.json",
+        "fixture_dir": "evals/python/ai-assistant-demo",
+        "prompt_id": "audit-decorator-version-logs",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/audit-decorator-logs-evidence.json"
+        ]
+      },
+      {
+        "definition_path": "evals/python/ai-assistant-demo/eval/qual/audit-focused-metadata.json",
+        "fixture_dir": "evals/python/ai-assistant-demo",
+        "prompt_id": "audit-metadata-capability",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/audit-metadata-capability-evidence.json"
+        ]
+      },
+      {
+        "definition_path": "evals/python/ai-assistant-demo/eval/qual/audit.json",
+        "fixture_dir": "evals/python/ai-assistant-demo",
+        "prompt_id": "direct",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/ai-assistant-demo/eval/qual/audit.json",
+        "fixture_dir": "evals/python/ai-assistant-demo",
+        "prompt_id": "genai-readiness",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/ai-assistant-demo/eval/qual/content-coverage-audit.json",
+        "fixture_dir": "evals/python/ai-assistant-demo",
+        "prompt_id": "content-in-existing-findings",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/ai-assistant-demo/eval/qual/env-resource-plan.json",
+        "fixture_dir": "evals/python/ai-assistant-demo",
+        "prompt_id": "env-resource-plan",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/ai-assistant-demo/eval/qual/finding-group-audit.json",
+        "fixture_dir": "evals/python/ai-assistant-demo",
+        "prompt_id": "finding-group-audit",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/finding-group-snapshot.json"
+        ]
+      },
+      {
+        "definition_path": "evals/python/ai-assistant-demo/eval/qual/gateway-env-plan.json",
+        "fixture_dir": "evals/python/ai-assistant-demo",
+        "prompt_id": "gateway-env-plan",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/ao-gateway-context.json",
+          "eval/inputs/ao-gateway-real.env",
+          "eval/inputs/ao-gateway-example.env",
+          "eval/inputs/ao-gateway-launcher.sh",
+          "eval/inputs/ao-gateway-env-generator.py"
+        ]
+      },
+      {
+        "definition_path": "evals/python/ai-assistant-demo/eval/qual/genai-sdk-default-audit.json",
+        "fixture_dir": "evals/python/ai-assistant-demo",
+        "prompt_id": "genai-sdk-default-audit",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/genai-default-scenarios.json",
+          "eval/inputs/genai-required-evidence.json",
+          "eval/inputs/genai-sdk-source-snapshot.json",
+          "eval/inputs/genai-semconv-source-snapshot.json",
+          "eval/inputs/audit-core-helper-evidence.json"
+        ]
+      },
+      {
+        "definition_path": "evals/python/ai-assistant-demo/eval/qual/per-function-decorator-audit.json",
+        "fixture_dir": "evals/python/ai-assistant-demo",
+        "prompt_id": "per-function-decorator-audit",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/per-function-decorator-gate-evidence.json",
+          "eval/inputs/per-function-full-conformance-evidence.json"
+        ]
+      },
+      {
+        "definition_path": "evals/python/ai-assistant-demo/eval/qual/resource-selector-length-audit.json",
+        "fixture_dir": "evals/python/ai-assistant-demo",
+        "prompt_id": "resource-selector-length-audit",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/otel-audit.json"
+        ]
+      },
+      {
+        "definition_path": "evals/python/ai-assistant-demo/eval/qual/tool-message-mapping-audit.json",
+        "fixture_dir": "evals/python/ai-assistant-demo",
+        "prompt_id": "tool-message-mapping-audit",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/genai-tool-message-mapping.json",
+          "eval/inputs/genai-sdk-source-snapshot.json",
+          "eval/inputs/genai-semconv-source-snapshot.json",
+          "eval/inputs/genai-tool-enrichment-evidence.json"
+        ]
+      },
+      {
+        "definition_path": "evals/python/assistant-v3-framework-bridge-demo/eval/qual/audit.json",
+        "fixture_dir": "evals/python/assistant-v3-framework-bridge-demo",
+        "prompt_id": "framework-bridge",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/checkout-red-demo/eval/qual/audit.json",
+        "fixture_dir": "evals/python/checkout-red-demo",
+        "prompt_id": "direct",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/existing-otel-agent-demo/eval/qual/audit.json",
+        "fixture_dir": "evals/python/existing-otel-agent-demo",
+        "prompt_id": "active-signal-matrix-audit",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/genai-schema-evidence.json",
+          "eval/inputs/python-preflight-requirements.txt",
+          "eval/inputs/content-counterexamples.json"
+        ]
+      },
+      {
+        "definition_path": "evals/python/existing-otel-agent-demo/eval/qual/route-recovery-audit.json",
+        "fixture_dir": "evals/python/existing-otel-agent-demo",
+        "prompt_id": "route-recovery-audit",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/route_recovery_source.py",
+          "eval/inputs/route-recovery-capture.json",
+          "eval/inputs/vendor-route-capture.json"
+        ]
+      },
+      {
+        "definition_path": "evals/python/fastapi-celery/eval/qual/audit.json",
+        "fixture_dir": "evals/python/fastapi-celery",
+        "prompt_id": "direct",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/fastapi-celery/eval/qual/audit.json",
+        "fixture_dir": "evals/python/fastapi-celery",
+        "prompt_id": "readiness-review",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/flask-basic/eval/qual/audit.json",
+        "fixture_dir": "evals/python/flask-basic",
+        "prompt_id": "direct",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/flask-basic/eval/qual/audit.json",
+        "fixture_dir": "evals/python/flask-basic",
+        "prompt_id": "readiness-review",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/flask-basic/eval/qual/logging-audit-contract.json",
+        "fixture_dir": "evals/python/flask-basic",
+        "prompt_id": "logging-trial-1",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/flask-basic/eval/qual/logging-audit-contract.json",
+        "fixture_dir": "evals/python/flask-basic",
+        "prompt_id": "logging-trial-2",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/flask-basic/eval/qual/logging-audit-contract.json",
+        "fixture_dir": "evals/python/flask-basic",
+        "prompt_id": "logging-trial-3",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/galileo-agent-demo/eval/qual/audit.json",
+        "fixture_dir": "evals/python/galileo-agent-demo",
+        "prompt_id": "galileo-native-default",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/galileo-agent-demo/eval/qual/audit.json",
+        "fixture_dir": "evals/python/galileo-agent-demo",
+        "prompt_id": "preserve-galileo",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/mcp-ai-tool-demo/eval/qual/audit.json",
+        "fixture_dir": "evals/python/mcp-ai-tool-demo",
+        "prompt_id": "direct",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/mcp-ai-tool-demo/eval/qual/audit.json",
+        "fixture_dir": "evals/python/mcp-ai-tool-demo",
+        "prompt_id": "mcp-readiness",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/model-directed-agent/eval/qual/audit.json",
+        "fixture_dir": "evals/python/model-directed-agent",
+        "prompt_id": "agent-role-from-behavior",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/prior-audit.json"
+        ]
+      },
+      {
+        "definition_path": "evals/python/model-directed-agent/eval/qual/connection-modes-audit.json",
+        "fixture_dir": "evals/python/model-directed-agent",
+        "prompt_id": "studio-connection-modes",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/agent-resource-cases.json",
+          "eval/inputs/sdk-local-routing-evidence.json"
+        ]
+      },
+      {
+        "definition_path": "evals/python/model-directed-agent/eval/qual/resource-table-audit.json",
+        "fixture_dir": "evals/python/model-directed-agent",
+        "prompt_id": "agent-resource-table-audit",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/agent-resource-cases.json",
+          "eval/inputs/routing-acceptance-counterexamples.json"
+        ]
+      },
+      {
+        "definition_path": "evals/python/splunk-ao-integration-demo/eval/qual/audit.json",
+        "fixture_dir": "evals/python/splunk-ao-integration-demo",
+        "prompt_id": "integration-paths",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/splunk-ao-langchain-demo/eval/qual/audit.json",
+        "fixture_dir": "evals/python/splunk-ao-langchain-demo",
+        "prompt_id": "langchain-callback",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
         "definition_path": "evals/sanity/skill-smoke/eval/sanity/audit.json",
         "fixture_dir": "evals/sanity/skill-smoke",
         "prompt_id": "direct",
@@ -120,7 +1513,7 @@
         "eval_inputs": []
       }
     ],
-    "config_path": "evals/codex-evals.toml",
-    "selection_scope": "filtered"
+    "config_path": "evals/codex-evals.validation.toml",
+    "selection_scope": "full"
   }
 }

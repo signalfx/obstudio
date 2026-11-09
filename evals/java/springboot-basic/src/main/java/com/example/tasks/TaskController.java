@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.CompletableFuture;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,6 +32,13 @@ public class TaskController {
 
     @GetMapping("/health")
     public Map<String, String> health() {
+        return Map.of("status", "ok");
+    }
+
+    @GetMapping("/logging-workflow/{slot:left|right}")
+    public Map<String, String> loggingWorkflow(@PathVariable String slot) {
+        LOGGER.warn("workflow sync completed {}", slot);
+        CompletableFuture.runAsync(() -> LOGGER.warn("workflow async completed {}", slot)).join();
         return Map.of("status", "ok");
     }
 

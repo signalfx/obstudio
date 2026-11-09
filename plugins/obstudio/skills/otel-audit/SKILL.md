@@ -303,6 +303,16 @@ Apply its LOG-* rules to the source and effective SDK/bridge configuration,
 including defaults and explicit policies; put concrete gaps and their required
 proof in the normal findings and verification plan. Do not call a missing
 application override a defect when the SDK already supplies correct behavior.
+Before finalizing a logging audit, check the shared guide's LOG-SPEC-CLOSURE
+matrix in the canonical `evidence` rows. Each applicable clause needs its
+source/version, requirement strength, owner, disposition, source/config/default
+evidence, finding/scenario mapping when needed and proof boundary. A source
+list followed by LOG-* summaries without those decisions is incomplete. This
+matrix is the repository's audit evidence contract, not an additional OTel
+requirement. For bounded fixed messages without an existing Body policy or a
+source-backed size problem, record no new Body cap is needed; do not turn an
+arbitrary example threshold or the separate GenAI capture defaults into a
+mandatory application-log repair.
 
 - OTel log bridge or SDK log packages
   (`opentelemetry-instrumentation-logging` for current Python releases, with
@@ -324,9 +334,12 @@ application override a defect when the SDK already supplies correct behavior.
   formatters, and exception helpers that can add request, user, tenant,
   session, trace, raw URL, exception text, or traceback data. Check the final
   formatting path, not only application logger call arguments.
+- Resolve effective configuration and any existing Collector forwarding route
+  using the shared logging reference before the environment-only branches below.
+  An ignored environment value is not an opt-out or proof of an exporter.
 - Classify logs as `local-otlp-default`, `explicitly-disabled`,
   `operator-owned`, `correlation-only`, `unsupported-stack`, or `not
-  configured`. Trace/MDC fields in stdout are not an OTLP log pipeline.
+  configured`. Trace/MDC fields alone do not prove an OTLP log pipeline.
   `OTEL_LOGS_EXPORTER=none` is an explicit opt-out, while an absent exporter on
   a supported Python, Node.js, Java, or Go application logging stack requires a
   default local Splunk Observability Studio OTLP pipeline only when the logs endpoint is absent or
@@ -367,10 +380,13 @@ proof.
   body/category, severity, the same service resource identity as traces and
   metrics, trace/span correlation inside an active span, final-pipeline
   redaction, preservation of the existing stdout/file sink, exactly one OTLP
-  record per log call, provider shutdown/flush, and
+  received record per log call on a healthy delivery path, provider shutdown/flush, and
   `OTEL_LOGS_EXPORTER=none` producing no OTLP record. When cloud trace/metric
   export or forwarding exists, also prove the application record remains
   visible in local Splunk Observability Studio without any cloud log path.
+  For fault/retry scenarios, separate SDK emissions, transport attempts and
+  receiver copies before attributing duplicates to a second bridge. An outage
+  can have zero receipt; preserve the original sink's per-call count.
 - Require the normal generated launch profile to set
   `OTEL_LOGS_EXPORTER=otlp`, the resolved local Studio logs endpoint and its
   matching protocol alongside trace and metric settings. An absent logs bridge

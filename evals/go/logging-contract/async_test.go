@@ -1,11 +1,14 @@
 package loggingcontract
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -192,4 +195,71 @@ func TestBatchExportUsesEmitContextAfterHandoff(t *testing.T) {
 		t.Fatal(err)
 	}
 	expect(t, e, map[string]want{"queued": {51, 0}})
+}
+
+func TestWorkerChecksCurrentNativeEnablementBeforeExpensiveWork(t *testing.T) {
+	ctx := context.Background()
+	empty := sdklog.NewLoggerProvider()
+	t.Cleanup(func() { _ = empty.Shutdown(ctx) })
+	var output bytes.Buffer
+	var level slog.LevelVar
+	level.Set(slog.LevelError)
+	sink := slog.NewJSONHandler(&output, &slog.HandlerOptions{Level: &level})
+	logger := slog.New(teeHandler{otelslog.NewHandler("guard", otelslog.WithLoggerProvider(empty)), sink})
+	var constructed atomic.Int32
+	payload := func() string { return fmt.Sprintf("guard-%d", constructed.Add(1)) }
+	type job struct {
+		logger  *slog.Logger
+		guarded bool
+		done    chan struct{}
+	}
+	jobs := make(chan job)
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		for work := range jobs {
+			if !work.guarded || work.logger.Enabled(ctx, slog.LevelInfo) {
+				work.logger.InfoContext(ctx, payload())
+			}
+			close(work.done)
+		}
+	}()
+	defer func() { close(jobs); await(t, stopped) }()
+	run := func(l *slog.Logger, guarded bool) {
+		done := make(chan struct{})
+		jobs <- job{l, guarded, done}
+		await(t, done)
+	}
+	run(logger, false)
+	if constructed.Load() != 1 || output.Len() != 0 {
+		t.Fatal("discarded native call did not demonstrate eager payload construction")
+	}
+	for _, state := range []struct {
+		level slog.Level
+		count int32
+	}{{slog.LevelError, 1}, {slog.LevelInfo, 2}, {slog.LevelError, 2}} {
+		level.Set(state.level)
+		run(logger, true)
+		if constructed.Load() != state.count {
+			t.Fatalf("construction count=%d expected=%d", constructed.Load(), state.count)
+		}
+	}
+	var record map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(output.Bytes()), &record); err != nil || record["msg"] != "guard-2" {
+		t.Fatalf("original sink with no SDK processors: record=%v err=%v", record, err)
+	}
+	e, _, active := setupAsync(t, false)
+	run(slog.New(teeHandler{active.Handler(), sink}), true)
+	expect(t, e, map[string]want{"guard-3": {}})
+	if constructed.Load() != 3 || bytes.Count(output.Bytes(), []byte("\n")) != 1 {
+		t.Fatal("SDK-enabled route changed the original sink's disabled-level policy")
+	}
+	t.Run("enabled sink failures remain isolated and observable", func(t *testing.T) {
+		originalErr, telemetryErr := errors.New("original sink"), errors.New("telemetry sink")
+		original, telemetry := &countHandler{err: originalErr}, &countHandler{err: telemetryErr}
+		err := (teeHandler{telemetry, original}).Handle(ctx, slog.NewRecord(time.Now(), slog.LevelInfo, "failure-control", 0))
+		if original.count != 1 || telemetry.count != 1 || !errors.Is(err, originalErr) || !errors.Is(err, telemetryErr) {
+			t.Fatal("one sink failure prevented the other sink or lost its error")
+		}
+	})
 }

@@ -1,4 +1,7 @@
 {
+  "status": "historical-superseded",
+  "superseded_by": "logging-remediation-results.json",
+  "fixture_revision": "Original disposable six-test-per-language fixtures before the maintained suites; no committed fixture revision is claimed.",
   "baseline_commit": "4e1e51f300510b26114fdc1b5ef528b3b6f09760",
   "date": "2026-11-08",
   "semantic_scope": "Plan-only audit/repair decisions against synthetic observations and independent valid controls, not implementation or receiver proof.",

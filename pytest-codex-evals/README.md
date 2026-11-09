@@ -87,6 +87,13 @@ use `{case_id}`, `{prompt_id}`, `{task}`, `{rubric}`, and `{inputs}` template
 fields. Use `judge_inputs` to tell the judge what artifacts matter for that
 skill; the default prompt does not assume every eval has service files.
 
+An exact `$skill-name` or `$skill-name ./service` task is sent unchanged to
+the actor. For a direct Codex invocation, the loading guard accepts the complete
+skill input injected before assistant actions only when its executed thread,
+workspace, skill path and content match the staged source. Missing, altered or
+late input fails the guard. Other task wording retains the existing explicit
+file-loading wrapper and first-read check.
+
 Sanity checks can assert final text, files, trace command evidence, or
 run local commands in the produced `service/` workspace. Command checks use an
 argv list, not a shell string, so they work well with ecosystem tools:
