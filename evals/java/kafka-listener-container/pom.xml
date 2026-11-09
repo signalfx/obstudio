@@ -20,12 +20,19 @@
     <properties>
         <java.version>21</java.version>
         <jackson-bom.version>2.21.7</jackson-bom.version>
+        <log4j2.version>2.25.5</log4j2.version>
         <spring-kafka.version>3.3.16</spring-kafka.version>
         <lz4.version>1.11.2</lz4.version>
+        <snappy.version>1.1.10.9</snappy.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>org.xerial.snappy</groupId>
+                <artifactId>snappy-java</artifactId>
+                <version>${snappy.version}</version>
+            </dependency>
             <dependency>
                 <groupId>at.yawk.lz4</groupId>
                 <artifactId>lz4-java</artifactId>
