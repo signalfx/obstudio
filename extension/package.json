@@ -193,7 +193,22 @@
     "test": "vscode-test"
   },
   "overrides": {
-    "serialize-javascript": "7.0.7"
+    "serialize-javascript": "7.1.4",
+    "@typescript-eslint/typescript-estree": {
+      "minimatch": "11.0.5"
+    },
+    "@vscode/test-cli": {
+      "minimatch": "11.0.5"
+    },
+    "glob": {
+      "minimatch": "11.0.5"
+    },
+    "mocha": {
+      "minimatch": "11.0.5"
+    },
+    "test-exclude": {
+      "minimatch": "11.0.5"
+    }
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
