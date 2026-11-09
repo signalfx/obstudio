@@ -706,6 +706,18 @@ OTel application bridge. Do not route exporter errors back through the same
 Winston/Pino/Console export path. Prove bounded attempts, observable diagnostics,
 application progress and original transport output during an exporter fault.
 
+### Fault receipt accounting
+
+When testing the selected OTLP exporter, decode each transmitted batch and its
+response and save per-batch N/R accounting before reporting trial totals. For a
+valid partial success, acknowledged accepted is N-R; warning-only R=0 accepts
+all N without retry. Keep received copies and persistence separate. A mixed
+fault test containing a completed negative response or stall cannot take an
+unqualified `otlp_accepted` visibility from another subtrial. Split its canonical
+observations or explain each outcome using the report's supported visibility;
+retain unresolved acceptance counts where the protocol/evidence leaves them open.
+These are local report checks derived from the common OTLP delivery contract.
+
 ### Log limits and export budgets
 
 For expensive construction with Winston, check `logger.isLevelEnabled('info')`

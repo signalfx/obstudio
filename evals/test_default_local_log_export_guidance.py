@@ -66,6 +66,12 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
         text = _read(guide)
         assert "## Logging Readiness Checks" in text
         readiness = text.split("## Logging Readiness Checks", 1)[1].split("\n## ", 1)[0]
+        if target == "languages/java.md":
+            assert "whitespace" in readiness and "resource-only" in readiness
+            assert "substring" in readiness and "normal launcher" in readiness
+        if target == "languages/node.md":
+            assert "per-batch" in readiness and "acknowledged" in readiness
+            assert "mixed" in readiness and "otlp_accepted" in readiness
         if target == "languages/python.md":
             assert "SystemExit" in readiness and "repeated" in readiness
             assert "signal handler" in readiness and "drain" in readiness
@@ -76,6 +82,8 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
             assert (guide.parent / relative).is_file(), (skill, target, relative)
         assert skill in consumers[target]
     assert "read only the detected stack's" in common
+    assert "per-batch" in common and "per-outcome" in common
+    assert "mixed fault scenario" in common and "otlp_accepted" in common
 
 
 @pytest.mark.parametrize("language", ["java", "python", "go", "node"])

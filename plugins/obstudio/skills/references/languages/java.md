@@ -780,6 +780,17 @@ Apply the [common logging rules](../logging-readiness.md) and this guide's
 read-only. Verify the installed SDK/agent/appender capabilities; the options
 below are leads for the existing owner, not permission to create another SDK.
 
+### Resource identity through the normal launcher
+
+Check resource-only identity with `OTEL_SERVICE_NAME` absent through the normal
+launcher, including whitespace around entries when the resolved Java SDK accepts
+it. A shell substring test for `,service.name=` misses `, service.name=`; an
+appended fallback can then win as a later duplicate. Preserve the supplied
+resource configuration and let the existing SDK/agent parse and merge it.
+Use a supported lower-priority defaults mechanism or omit the new fallback;
+do not introduce a resource parser in shell. Also retain explicit service-name
+override and absent-identity controls, checking emitted resources for all signals.
+
 ### Context, mapping and diagnostics
 
 Test Logback/Log4j's supported severity and timestamp mapping through the

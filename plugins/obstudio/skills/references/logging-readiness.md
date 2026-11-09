@@ -76,7 +76,12 @@ application defaults underneath supplied values, and inspect the actual merge
 order. Verify the normal launcher as well as the helper with resource-only
 identity, explicit service-name override and absent-identity controls. These
 preservation checks are local workflow; SDK configuration defines each setting's
-precedence, and an active file loader retains its own contract.
+precedence, and an active file loader retains its own contract. Include resource
+encodings accepted by that installed configuration owner, such as whitespace
+around resource entries where supported. A shell substring match is not SDK
+parsing: appending a default after an unrecognized supplied key can overwrite
+operator identity when later duplicate keys win. Preserve the supplied resource
+configuration intact when no supported lower-priority defaults mechanism exists.
 
 Let the installed exporter parse OTLP header environment values using its
 supported `key=value,key2=value2` encoding. W3C Baggage-style semicolon metadata
@@ -454,6 +459,16 @@ retry decision separately, such as non-retryable HTTP 400 or a completed HTTP 50
 whose server wait cannot fit the remaining export budget. Assess that evidence
 across the report and raw observations; do not invent zero acceptance or rejection
 counts merely to fill a field.
+
+For the local evidence report, reconcile per-batch request and response counts
+before summing a multi-batch trial. Save per-outcome attempted, received,
+acknowledged accepted, rejected and unresolved counts in the canonical report,
+with links to raw receipts. A compact shared fault test may cover multiple
+outcomes; do not mark the mixed fault scenario `otlp_accepted` because one
+healthy or partial-success subtrial was acknowledged. Split the observations or
+use the report's supported visibility with an explicit per-outcome explanation.
+Warning-only partial success with R=0 acknowledges all N records without retry;
+receipt alone, completed failure and a stall retain their distinct meanings.
 
 The standard OTLP exporter timeout covers a whole batch export, including all
 attempts and retry waits; it must not restart for each attempt, and an earlier
