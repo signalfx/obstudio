@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-instrument |
-| Run ID | 20261021T231111930863Z |
+| Run ID | 20261106T215915504866Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -18,7 +18,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Eval | Service | Prompts | Eval File | Sanity Checks | Rubric Checks | Runtime Checks |
 |---|---|---:|---|---:|---:|---:|
 | go/chi-basic/qual/benchmark-instrument | go/chi-basic | 1 | evals/go/chi-basic/eval/qual/benchmark-instrument.json | 0 | 3 | 0 |
-| go/chi-basic/qual/instrument | go/chi-basic | 2 | evals/go/chi-basic/eval/qual/instrument.json | 0 | 7 | 0 |
+| go/chi-basic/qual/instrument | go/chi-basic | 2 | evals/go/chi-basic/eval/qual/instrument.json | 0 | 8 | 0 |
 | go/chi-basic/qual/instrument-decision-gated | go/chi-basic | 1 | evals/go/chi-basic/eval/qual/instrument-decision-gated.json | 0 | 4 | 0 |
 | go/chi-basic/runtime/instrument | go/chi-basic | 1 | evals/go/chi-basic/eval/runtime/instrument.json | 0 | 0 | 1 |
 | go/chi-partial/qual/instrument | go/chi-partial | 2 | evals/go/chi-partial/eval/qual/instrument.json | 0 | 6 | 0 |
@@ -33,22 +33,27 @@ This report validates eval JSON, eval directory availability, and skill source a
 | java/kafka-producer-consumer/qual/instrument | java/kafka-producer-consumer | 2 | evals/java/kafka-producer-consumer/eval/qual/instrument.json | 0 | 5 | 0 |
 | java/kafka-streams/qual/incident-readiness | java/kafka-streams | 1 | evals/java/kafka-streams/eval/qual/incident-readiness.json | 0 | 6 | 0 |
 | java/kafka-streams/qual/instrument | java/kafka-streams | 2 | evals/java/kafka-streams/eval/qual/instrument.json | 0 | 6 | 0 |
-| java/springboot-basic/qual/instrument | java/springboot-basic | 2 | evals/java/springboot-basic/eval/qual/instrument.json | 0 | 11 | 0 |
+| java/springboot-basic/qual/instrument | java/springboot-basic | 2 | evals/java/springboot-basic/eval/qual/instrument.json | 0 | 12 | 0 |
 | java/springboot-basic/qual/logging-compatible-plan | java/springboot-basic | 1 | evals/java/springboot-basic/eval/qual/logging-compatible-plan.json | 0 | 6 | 0 |
 | node/express-basic/qual/dependency-log-compatibility | node/express-basic | 1 | evals/node/express-basic/eval/qual/dependency-log-compatibility.json | 0 | 6 | 0 |
 | node/express-basic/qual/instrument | node/express-basic | 2 | evals/node/express-basic/eval/qual/instrument.json | 0 | 10 | 0 |
 | node/express-basic/runtime/instrument | node/express-basic | 1 | evals/node/express-basic/eval/runtime/instrument.json | 0 | 0 | 2 |
 | python/agent-connection-demo/qual/instrument | python/agent-connection-demo | 1 | evals/python/agent-connection-demo/eval/qual/instrument.json | 0 | 5 | 0 |
+| python/ai-assistant-demo/qual/ao-name-inputs-instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/ao-name-inputs-instrument.json | 0 | 6 | 0 |
+| python/ai-assistant-demo/qual/ao-root-compatibility-instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/ao-root-compatibility-instrument.json | 0 | 8 | 0 |
 | python/ai-assistant-demo/qual/ao-target-handoff-instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/ao-target-handoff-instrument.json | 0 | 4 | 0 |
 | python/ai-assistant-demo/qual/content-coverage-instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/content-coverage-instrument.json | 0 | 6 | 0 |
+| python/ai-assistant-demo/qual/finding-group-instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/finding-group-instrument.json | 0 | 7 | 0 |
 | python/ai-assistant-demo/qual/gateway-env-bootstrap | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/gateway-env-bootstrap.json | 0 | 5 | 0 |
 | python/ai-assistant-demo/qual/genai-instrument-decorator-profile | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/genai-instrument-decorator-profile.json | 0 | 6 | 0 |
 | python/ai-assistant-demo/qual/genai-instrument-operation-contract | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/genai-instrument-operation-contract.json | 0 | 4 | 0 |
 | python/ai-assistant-demo/qual/genai-sdk-default-instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/genai-sdk-default-instrument.json | 0 | 8 | 0 |
 | python/ai-assistant-demo/qual/instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/instrument.json | 0 | 15 | 0 |
 | python/ai-assistant-demo/qual/per-function-decorator-instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/per-function-decorator-instrument.json | 0 | 6 | 0 |
+| python/ai-assistant-demo/qual/required-input-preflight | python/ai-assistant-demo | 2 | evals/python/ai-assistant-demo/eval/qual/required-input-preflight.json | 0 | 3 | 0 |
 | python/ai-assistant-demo/qual/resource-env-bootstrap | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/resource-env-bootstrap.json | 0 | 8 | 0 |
 | python/ai-assistant-demo/qual/resource-sdk-errors | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/resource-sdk-errors.json | 0 | 5 | 0 |
+| python/ai-assistant-demo/qual/stale-selection-recovery | python/ai-assistant-demo | 4 | evals/python/ai-assistant-demo/eval/qual/stale-selection-recovery.json | 0 | 4 | 0 |
 | python/ai-assistant-demo/qual/tool-message-mapping-instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/tool-message-mapping-instrument.json | 0 | 4 | 0 |
 | python/assistant-v3-framework-bridge-demo/qual/instrument | python/assistant-v3-framework-bridge-demo | 1 | evals/python/assistant-v3-framework-bridge-demo/eval/qual/instrument.json | 0 | 7 | 0 |
 | python/checkout-red-demo/qual/instrument | python/checkout-red-demo | 1 | evals/python/checkout-red-demo/eval/qual/instrument.json | 0 | 8 | 0 |
@@ -59,6 +64,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | python/fastapi-celery/qual/incident-readiness | python/fastapi-celery | 1 | evals/python/fastapi-celery/eval/qual/incident-readiness.json | 0 | 7 | 0 |
 | python/fastapi-celery/qual/instrument | python/fastapi-celery | 2 | evals/python/fastapi-celery/eval/qual/instrument.json | 0 | 5 | 0 |
 | python/fastapi-celery/runtime/instrument | python/fastapi-celery | 1 | evals/python/fastapi-celery/eval/runtime/instrument.json | 0 | 0 | 1 |
+| python/flask-basic/qual/dotenv-profiles | python/flask-basic | 4 | evals/python/flask-basic/eval/qual/dotenv-profiles.json | 0 | 7 | 0 |
 | python/flask-basic/qual/instrument | python/flask-basic | 3 | evals/python/flask-basic/eval/qual/instrument.json | 0 | 12 | 0 |
 | python/flask-basic/qual/local-log-launcher-policy | python/flask-basic | 1 | evals/python/flask-basic/eval/qual/local-log-launcher-policy.json | 0 | 6 | 0 |
 | python/flask-basic/runtime/instrument | python/flask-basic | 1 | evals/python/flask-basic/eval/runtime/instrument.json | 0 | 0 | 2 |

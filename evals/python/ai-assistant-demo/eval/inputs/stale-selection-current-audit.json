@@ -1,0 +1,264 @@
+{
+  "anti_patterns": [],
+  "current_instrumentation": {
+    "incident_readiness": [],
+    "logs": [],
+    "metrics": [],
+    "spans": []
+  },
+  "evidence": [
+    {
+      "check": "Manifest",
+      "finding": "Optional pinned splunk-ao SDK dependency",
+      "source": "pyproject.toml"
+    },
+    {
+      "check": "Entry point",
+      "finding": "run_evaluation owns independent resource resolution and logger lifecycle",
+      "source": "eval_runner.py:10-44"
+    },
+    {
+      "check": "Route source",
+      "finding": "Offline process has no HTTP routes",
+      "source": "eval_runner.py:47-48"
+    },
+    {
+      "check": "Runtime/startup",
+      "finding": "Python 3.11 optional evaluation entrypoint",
+      "source": "pyproject.toml; eval_runner.py:47-48"
+    },
+    {
+      "check": "GenAI ownership",
+      "finding": "Yes",
+      "source": "eval_runner.py:27-40"
+    }
+  ],
+  "findings": [
+    {
+      "acceptance_criteria": [
+        "Both-existing reuses IDs with zero creates; both-missing creates project before stream; existing project with missing stream creates only its stream; repeated calls and create races converge by exact relookup.",
+        "Wrong ownership, ambiguous identity, 401/403, transport failures, and 5xx are blockers rather than absence; no speculative create or half-bound sink is permitted.",
+        "Fake SDK success is local app-code proof only and does not prove actual resource creation or fresh cloud Agent Stream receipt.",
+        "After resource setup initializes the logger, independent start_trace, add_llm_span, conclude, and flush failures propagate while actual finally calls terminate exactly once; zero logger initialization on resource-setup failure is a separate outcome."
+      ],
+      "area": "Offline project resource",
+      "constraints": [
+        "Do not fabricate a project or identifier, and keep access tokens in operator-owned secret storage."
+      ],
+      "dependencies": [],
+      "effort": "small",
+      "evidence": [
+        "eval_runner.py:10-44"
+      ],
+      "expected_telemetry": [
+        {
+          "attributes": [],
+          "name": "agent-observability.project-resource",
+          "product_view": "Agent Observability project resource",
+          "type": "configuration"
+        }
+      ],
+      "finding_group": "splunk-agent-observability",
+      "follow_up_actions": [
+        "Repair failed resource-resolution branches through instrumentation and verify fresh cloud receipt separately."
+      ],
+      "gap": "Projects().get raises when a named project is absent; there is no project-create or conflict-recovery path.",
+      "id": "AO-001",
+      "impact": "Agent traces have no verified project destination.",
+      "instrument_mode": "default",
+      "priority": "required",
+      "product_outcome": "An existing or authorized newly created project resource is available as the trace destination.",
+      "required_fix": "Proof-only snapshot: execute current run_evaluation resource paths with fake SDK/network boundaries and classify unmet resolve-or-create criteria; application repair belongs to instrumentation.",
+      "resolution": null,
+      "resolved_commit": null,
+      "severity": "high",
+      "status": "proposed",
+      "title": "Resolve the current audit project binding",
+      "verification_scenarios": [
+        "ao.offline.resources",
+        "ao.offline.logger_failure"
+      ]
+    },
+    {
+      "acceptance_criteria": [
+        "Both-existing reuses IDs with zero creates; both-missing creates project before stream; existing project with missing stream creates only its stream; repeated calls and create races converge by exact relookup.",
+        "Wrong ownership, ambiguous identity, 401/403, transport failures, and 5xx are blockers rather than absence; no speculative create or half-bound sink is permitted.",
+        "Fake SDK success is local app-code proof only and does not prove actual resource creation or fresh cloud Agent Stream receipt.",
+        "After resource setup initializes the logger, independent start_trace, add_llm_span, conclude, and flush failures propagate while actual finally calls terminate exactly once; zero logger initialization on resource-setup failure is a separate outcome."
+      ],
+      "area": "Offline Agent Stream resource",
+      "constraints": [
+        "Do not fabricate a stream or identifier, and keep access tokens out of tracked files."
+      ],
+      "dependencies": [
+        "AO-001"
+      ],
+      "effort": "small",
+      "evidence": [
+        "eval_runner.py:10-44"
+      ],
+      "expected_telemetry": [
+        {
+          "attributes": [],
+          "name": "agent-observability.agent-stream-resource",
+          "product_view": "Dedicated Agent Stream resource",
+          "type": "configuration"
+        }
+      ],
+      "finding_group": "splunk-agent-observability",
+      "follow_up_actions": [
+        "Repair failed resource-resolution branches through instrumentation and verify fresh cloud receipt separately."
+      ],
+      "gap": "AgentStreams().get may be followed by create, without returned project ownership checks or duplicate-create recovery.",
+      "id": "AO-002",
+      "impact": "The application has no verified stream destination and its traces can mix with unrelated agents.",
+      "instrument_mode": "default",
+      "priority": "required",
+      "product_outcome": "A dedicated Agent Stream exists in the resolved project and can be selected as the trace destination.",
+      "required_fix": "Proof-only snapshot: execute current run_evaluation resource paths with fake SDK/network boundaries and classify unmet resolve-or-create criteria; application repair belongs to instrumentation.",
+      "resolution": null,
+      "resolved_commit": null,
+      "severity": "high",
+      "status": "proposed",
+      "title": "Verify offline Agent Stream resolution",
+      "verification_scenarios": [
+        "ao.offline.resources",
+        "ao.offline.logger_failure"
+      ]
+    },
+    {
+      "acceptance_criteria": [
+        "Preserve the original trace-envelope and model-span call sites; start_trace alone is not exported workflow coverage. A workflow operation requires established applicability and a real matching creator.",
+        "When separately authorized, capture actual installed-SDK spans while faking only external transport or resource boundaries; verify applicable model/provider/usage, safe bounded input/output and terminal error/cancellation behavior without duplicating operations.",
+        "Fake resource calls and canonical validator binding do not prove span emission or fresh cloud Agent Stream receipt."
+      ],
+      "area": "Offline synthetic evaluation envelope and model",
+      "constraints": [
+        "This optional finding is not selected by the AO-001/AO-002 resource selection and authorizes no application change or cloud creation."
+      ],
+      "dependencies": [],
+      "effort": "small",
+      "evidence": [
+        "eval_runner.py:25-37",
+        "pyproject.toml"
+      ],
+      "expected_telemetry": [
+        {
+          "attributes": [
+            "gen_ai.operation.name",
+            "gen_ai.provider.name",
+            "gen_ai.request.model",
+            "gen_ai.usage.input_tokens",
+            "gen_ai.usage.output_tokens",
+            "gen_ai.input.messages",
+            "gen_ai.output.messages"
+          ],
+          "name": "evaluation_answer",
+          "product_view": "Verified offline model operation; workflow applicability assessed separately",
+          "type": "span"
+        }
+      ],
+      "follow_up_actions": [
+        "Select this finding separately before instrumentation or test repair; prove actual span semantics and cloud delivery at their own boundaries."
+      ],
+      "gap": "The pinned splunk-ao 0.4.0 source starts and concludes a Trace envelope and calls add_llm_span, but has no add_workflow_span call. Workflow applicability and emission, full GenAI field coverage, bounded redacted content, and error or cancellation span semantics remain unproven.",
+      "id": "OTEL-001",
+      "impact": "Resource-path acceptance cannot establish complete GenAI operation semantics or observable offline execution.",
+      "instrument_mode": "default",
+      "priority": "recommended",
+      "product_outcome": "Existing model operations and any actually applicable coordinated workflow have source-backed, verified GenAI coverage.",
+      "required_fix": "Only if separately selected: assess the existing Splunk AO model-span hook and its exported semantics, safe content and lifecycle proof. Establish whether the offline runner owns a composed workflow before proposing add_workflow_span. Preserve the existing producer and do not count start_trace as a workflow operation or treat this audit row as approval to repair the application.",
+      "resolution": null,
+      "resolved_commit": null,
+      "severity": "medium",
+      "status": "proposed",
+      "title": "Assess offline GenAI span coverage",
+      "verification_scenarios": [
+        "genai.offline.coverage"
+      ]
+    }
+  ],
+  "flow": "audit -> select -> instrument -> verify",
+  "genai_readiness": [
+    {
+      "acceptance_criteria": "The source-owned logger starts and concludes a Trace envelope, calls add_llm_span for evaluation_answer, and terminates in finally. In the pinned splunk-ao 0.4.0 SDK, start_trace does not emit a workflow operation span; workflow applicability and emission, full GenAI field coverage, and live delivery remain unproven.",
+      "evidence": "eval_runner.py:25-37; pyproject.toml",
+      "impact": "Resource failures prevent this offline evaluation route from reaching its intended destination.",
+      "owner": "App-owned: eval_runner.py:25-37",
+      "required_signals": "Existing evaluation_answer model-span call and offline_assistant_evaluation Trace envelope; no exported workflow operation is established.",
+      "status": "partial",
+      "surface": "Offline synthetic evaluation envelope and model"
+    }
+  ],
+  "kind": "otel-audit",
+  "meta": {
+    "audit_id": "python-ai-assistant-stale-recovery-current",
+    "commit": "stale-recovery-fixture",
+    "date": "2026-10-27",
+    "framework": "splunk-ao",
+    "genai_ownership_detected": true,
+    "language": "python",
+    "service_name": "python-ai-assistant-offline-evaluation",
+    "status": "Partial"
+  },
+  "recommendation": [
+    "Verify existing offline resource behavior without modifying application code; report missing resolve-or-create branches accurately."
+  ],
+  "routes": [],
+  "scan_blockers": [],
+  "schema_version": 2,
+  "signal_flow": {
+    "component_flow_map": "Offline evaluation\nrun_evaluation -> project lookup [GAP: Offline project resource] -> Agent Stream lookup or create [GAP: Offline Agent Stream resource] -> SDK logger [GAP: Offline synthetic evaluation envelope and model] -> flush -> terminate"
+  },
+  "summary": [
+    "The offline runner has project get-only and Agent Stream get-or-create behavior; resource absence, ownership, and duplicate races need verification.",
+    "Synthetic current-audit handoff fixture; no application or cloud execution."
+  ],
+  "verification": {
+    "environments": [
+      {
+        "config_evidence": "pyproject.toml; eval_runner.py",
+        "id": "python.local",
+        "prerequisites": "project runtime; no Splunk or model credentials",
+        "runner": "project-managed Python with fake supported SDK/network boundaries",
+        "scope": "service",
+        "surface": "offline evaluation resource resolution"
+      }
+    ],
+    "scenarios": [
+      {
+        "acceptance_criteria": "Tests execute current source and inspect call counts, resource identity, project ownership, and sink lifecycle. Missing create or conflict recovery is Not Working; application code is unchanged. No live service is required, and real cloud creation or stream receipt stays unproven.",
+        "entrypoint": "eval_runner.py:10",
+        "environments": [
+          "python.local"
+        ],
+        "expected_signals": "Exact ordered resource lookups and minimal creates; verified project ownership; no speculative create after failed lookup; no logger initialization on setup failure; termination on completed work.",
+        "id": "ao.offline.resources",
+        "proof_level": "focused call-site",
+        "trigger": "Execute actual eval_runner.run_evaluation with fake Projects, AgentStreams, and SplunkAOLogger for both existing, both missing, existing project with missing stream, repeated calls, project and stream create races, wrong ownership, ambiguous lookups, and lookup/create authorization or outage outcomes."
+      },
+      {
+        "acceptance_criteria": "Durable executed evidence records each independent fault point, injected exception, initialization count, and terminate count. Every case initializes once and terminates exactly once while preserving error propagation. Resource-setup failures with zero initialized loggers cannot substitute for this post-initialization lifecycle proof.",
+        "entrypoint": "eval_runner.py:27-42",
+        "environments": [
+          "python.local"
+        ],
+        "expected_signals": "One initialized fake logger per case, the injected post-initialization error propagates, and exactly one terminate call from actual finally; no live provider or cloud calls",
+        "id": "ao.offline.logger_failure",
+        "proof_level": "focused call-site",
+        "trigger": "Resolve existing fake project and stream, initialize fake SplunkAOLogger, then inject independent errors from start_trace, add_llm_span, conclude, and flush while executing actual eval_runner.run_evaluation"
+      },
+      {
+        "acceptance_criteria": "Source call sites remain unchanged. Actual SDK span emission is captured rather than fabricated by SDK mocks; trace-envelope creation alone proves no workflow operation. Known parameters, usage, content bounds and error/cancellation lifecycle are verified only if executed; resource-only success and canonical binding leave this optional GenAI coverage unproven.",
+        "entrypoint": "eval_runner.py:10",
+        "environments": [
+          "python.local"
+        ],
+        "expected_signals": "The existing evaluation_answer model operation with applicable GenAI fields and safe bounded content; correct terminal lifecycle and no duplicate operations. A workflow span is expected only after applicability and its actual creator are established.",
+        "id": "genai.offline.coverage",
+        "proof_level": "focused call-site",
+        "trigger": "Only when separately authorized, run original eval_runner.run_evaluation with the installed SDK and fake external transport/resource responses; capture real exported model spans and assess whether an actual coordinated workflow exists."
+      }
+    ]
+  }
+}

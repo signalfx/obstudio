@@ -1,17 +1,28 @@
-import type { RegistrationAndAuthProtocol, SISCIMDSessionStatus, SplunkExportStatus } from "../api/types";
+import { cloudInitializeHostRequestTimeoutMs, cloudHostRequestTimeoutMs, logsHostRequestTimeoutMs } from "../../../../shared/connection-limits.cjs";
+import type { O11yOAuthSessionStatus, RegistrationAndAuthProtocol, SISCIMDSessionStatus, SplunkExportStatus } from "../api/types";
 
 export const observerHostCloudActions = [
   "connect",
   "create-free-account",
   "detect-free-account-region",
   "disconnect-cimd",
+  "disconnect-o11y-oauth",
   "forget",
+  "get-o11y-oauth-session",
   "initialize",
   "login-cimd",
+  "login-o11y-oauth",
   "open-audit-report",
   "open-free-edition",
   "open-free-edition-terms",
   "open-ingest-token-help",
+  "open-credential-storage-help",
+  "open-hec-token-help",
+  "open-splunk-platform-trial",
+  "open-observability-cloud",
+  "open-observability-metrics",
+  "open-observability-traces",
+  "open-splunk-search",
   "open-realm-help",
   "open-observability-cloud-demo",
   "open-observability-data-course",
@@ -19,16 +30,17 @@ export const observerHostCloudActions = [
   "open-skill-docs",
   "register-o11y-oauth",
   "resolve-realm",
+  "refresh",
   "set-enabled",
   "setup-cimd",
 ] as const;
 
 export type ObserverHostCloudAction = typeof observerHostCloudActions[number];
 
-// login-cimd/setup-cimd block on a human completing an out-of-band browser sign-in
-// (or a slower SIS round trip), which can easily exceed the default cloud-action
-// timeout below -- give them a much longer allowance.
-const cimdCloudActions: ReadonlySet<ObserverHostCloudAction> = new Set(['login-cimd', 'setup-cimd']);
+// login-cimd/setup-cimd/login-o11y-oauth block on a human completing an out-of-band
+// browser sign-in (or a slower SIS round trip), which can easily exceed the default
+// cloud-action timeout below -- give them a much longer allowance.
+const cimdCloudActions: ReadonlySet<ObserverHostCloudAction> = new Set(['login-cimd', 'login-o11y-oauth', 'setup-cimd']);
 
 export const observerHostSkillIds = [
   "otel-audit",
@@ -42,14 +54,21 @@ export const observerHostSkillIds = [
 export type ObserverHostSkillId = typeof observerHostSkillIds[number];
 
 export interface ObserverHostCloudPayload {
+  sessionOnly?: boolean;
+  platform?: string;
   accessToken?: string;
+  reuseSavedToken?: boolean;
+  preserveEnabled?: boolean;
   adminToken?: string;
+  clientId?: string;
+  clientSecret?: string;
   destination?: string;
   email?: string;
   enabled?: boolean;
   expectedVersion?: string;
   firstName?: string;
   lastName?: string;
+  orgId?: string;
   realm?: string;
   region?: string;
   skill?: ObserverHostSkillId;
@@ -64,17 +83,19 @@ export interface ObserverHostCloudResponse {
   o11yOAuthClientCreated?: boolean;
   o11yOAuthClientId?: string;
   o11yOAuthClientSecret?: string;
+  o11yOAuthSession?: O11yOAuthSessionStatus;
   realm?: string;
   region?: string;
   registrationAndAuthProtocol?: RegistrationAndAuthProtocol;
   status?: SplunkExportStatus;
   warning?: string;
+  warningCode?: string;
 }
 
 export interface ObserverHostTelemetryMessage {
   data?: unknown;
   signal?: string;
-  type: "connected" | "disconnected" | "paused-update" | "reload" | "update";
+  type: "config-changed" | "connected" | "disconnected" | "paused-update" | "reload" | "update";
 }
 
 interface VSCodeWebviewAPI {
@@ -107,6 +128,7 @@ interface ObserverHostCancelEnvelope {
 
 interface ObserverHostResponseEnvelope {
   code?: string;
+  platform?: string;
   error?: string;
   ok: boolean;
   requestId: string;
@@ -127,13 +149,21 @@ interface PendingHostRequest {
   timeoutId?: number;
 }
 
+const connectionCloudActions = new Set(["initialize", "connect", "forget", "set-enabled", "refresh"]);
 const hostRequestTimeoutMs = 15_000;
 const hostCloudRequestTimeoutMs = 60_000;
 const cimdCloudRequestTimeoutMs = 6 * 60_000;
 
+function isLogsMutation(request: ObserverHostRequest): boolean {
+  return request.kind === "http" && request.method === "POST" && (request.path === "/api/splunk/logs" || request.path.startsWith("/api/splunk/logs/"));
+}
+
 function requestTimeoutMs(request: ObserverHostRequest): number {
-  if (request.kind === "http") return hostRequestTimeoutMs;
-  return cimdCloudActions.has(request.action) ? cimdCloudRequestTimeoutMs : hostCloudRequestTimeoutMs;
+  if (request.kind === "http") return isLogsMutation(request) ? logsHostRequestTimeoutMs : hostRequestTimeoutMs;
+  if (cimdCloudActions.has(request.action)) return cimdCloudRequestTimeoutMs;
+  if (request.action === "initialize") return cloudInitializeHostRequestTimeoutMs;
+  if (connectionCloudActions.has(request.action)) return cloudHostRequestTimeoutMs;
+  return hostCloudRequestTimeoutMs;
 }
 const pendingHostRequests = new Map<string, PendingHostRequest>();
 const telemetryListeners = new Set<(message: ObserverHostTelemetryMessage) => void>();
@@ -142,8 +172,8 @@ let hostAPI: VSCodeWebviewAPI | null = null;
 let messageListenerInstalled = false;
 
 export class ObserverHostCloudTimeoutError extends Error {
-  constructor() {
-    super("The IDE did not confirm the cloud request. Reload the window to reconcile its final state before trying again.");
+  constructor(message = "The IDE did not confirm the cloud request. Reload the window to reconcile its final state before trying again.") {
+    super(message);
     this.name = "ObserverHostCloudTimeoutError";
   }
 }
@@ -153,6 +183,7 @@ export class ObserverHostCloudRequestError extends Error {
     message: string,
     readonly code?: string,
     readonly retrySafe?: boolean,
+    readonly platform?: string,
   ) {
     super(message);
     this.name = "ObserverHostCloudRequestError";
@@ -278,7 +309,7 @@ function installMessageListener(): void {
       } else {
         const message = event.data.error ?? "The IDE request failed.";
         pending.reject(event.data.code !== undefined || event.data.retrySafe !== undefined
-          ? new ObserverHostCloudRequestError(message, event.data.code, event.data.retrySafe)
+          ? new ObserverHostCloudRequestError(message, event.data.code, event.data.retrySafe, event.data.platform)
           : new Error(message));
       }
       return;
@@ -301,7 +332,7 @@ function callObserverHost(request: ObserverHostRequest, signal?: AbortSignal): P
         if (!pending) return;
         pendingHostRequests.delete(requestId);
         pending.cleanup?.();
-        if (request.kind === "http") {
+        if (request.kind === "http" && !isLogsMutation(request)) {
           api.postMessage({ requestId, type: "obstudio.host.cancel" } satisfies ObserverHostCancelEnvelope);
           reject(new Error("The IDE did not respond. Try again."));
           return;
@@ -309,7 +340,10 @@ function callObserverHost(request: ObserverHostRequest, signal?: AbortSignal): P
         // Do not cancel an accepted cloud mutation: the extension must finish
         // synchronizing Splunk Observability Studio state and secure storage. The caller fails
         // closed until reload instead of permitting an uncertain retry.
-        reject(new ObserverHostCloudTimeoutError());
+        let message: string | undefined;
+        if (isLogsMutation(request)) message = "The logs request outcome is unknown. Reload saved logs settings before trying again.";
+        else if (request.kind === "cloud" && connectionCloudActions.has(request.action)) message = "The connection request outcome is unknown. Reload saved connection before trying again.";
+        reject(new ObserverHostCloudTimeoutError(message));
       }, requestTimeoutMs(request));
     const abort = signal
       ? () => {
@@ -377,13 +411,15 @@ function isObserverHostCloudResponse(value: unknown): value is ObserverHostCloud
     && (response.region === undefined || typeof response.region === "string")
     && (response.status === undefined || isSplunkExportStatus(response.status))
     && (response.warning === undefined || typeof response.warning === "string")
+    && (response.warningCode === undefined || typeof response.warningCode === "string")
     && (response.message === undefined || typeof response.message === "string")
     && (response.registrationAndAuthProtocol === undefined || isRegistrationAndAuthProtocol(response.registrationAndAuthProtocol))
     && (response.cimdRegistrationVerified === undefined || typeof response.cimdRegistrationVerified === "boolean")
     && (response.cimdSession === undefined || isSISCIMDSessionStatus(response.cimdSession))
     && (response.o11yOAuthClientId === undefined || typeof response.o11yOAuthClientId === "string")
     && (response.o11yOAuthClientCreated === undefined || typeof response.o11yOAuthClientCreated === "boolean")
-    && (response.o11yOAuthClientSecret === undefined || typeof response.o11yOAuthClientSecret === "string");
+    && (response.o11yOAuthClientSecret === undefined || typeof response.o11yOAuthClientSecret === "string")
+    && (response.o11yOAuthSession === undefined || isO11yOAuthSessionStatus(response.o11yOAuthSession));
 }
 
 function isSISCIMDSessionStatus(value: unknown): value is SISCIMDSessionStatus {
@@ -398,16 +434,34 @@ function isSISCIMDSessionStatus(value: unknown): value is SISCIMDSessionStatus {
     && (status.expiresAt === undefined || typeof status.expiresAt === "string");
 }
 
-function isSplunkExportStatus(value: unknown): value is SplunkExportStatus {
+function isO11yOAuthSessionStatus(value: unknown): value is O11yOAuthSessionStatus {
   if (typeof value !== "object" || value === null) return false;
   const status = value as Record<string, unknown>;
-  return typeof status.connected === "boolean"
+  return (status.phase === "disconnected" || status.phase === "pending"
+    || status.phase === "connected" || status.phase === "error")
+    && (status.error === undefined || typeof status.error === "string")
+    && (status.issuer === undefined || typeof status.issuer === "string")
+    && (status.realm === undefined || typeof status.realm === "string")
+    && (status.orgId === undefined || typeof status.orgId === "string")
+    && (status.connectedAt === undefined || typeof status.connectedAt === "string")
+    && (status.expiresAt === undefined || typeof status.expiresAt === "string");
+}
+
+export function isSplunkExportStatus(value: unknown): value is SplunkExportStatus {
+  if (typeof value !== "object" || value === null) return false;
+  const status = value as Record<string, unknown>;
+  return (status.sessionOnly === undefined || typeof status.sessionOnly === "boolean")
+    && (status.cleanupPending === undefined || typeof status.cleanupPending === "boolean")
+    && typeof status.connected === "boolean"
     && typeof status.enabled === "boolean"
     && (status.realm === undefined || typeof status.realm === "string")
     && typeof status.version === "string"
     && /^[A-Za-z0-9_-]{43}$/.test(status.version)
+    && (status.cloudVersion === undefined
+      || (typeof status.cloudVersion === "string" && /^[A-Za-z0-9_-]{43}$/.test(status.cloudVersion)))
     && isSplunkExportSignalStatus(status.metrics)
     && isSplunkExportSignalStatus(status.traces)
+    && (status.logs === undefined || isSplunkExportSignalStatus(status.logs))
     && (status.registrationAndAuthProtocol === undefined
       || isRegistrationAndAuthProtocol(status.registrationAndAuthProtocol));
 }
@@ -441,6 +495,7 @@ function isObserverHostResponseEnvelope(value: unknown): value is ObserverHostRe
     && typeof response.ok === "boolean"
     && (response.code === undefined
       || (typeof response.code === "string" && /^[a-z0-9_]{1,64}$/.test(response.code)))
+    && (response.platform === undefined || typeof response.platform === "string")
     && (response.error === undefined || typeof response.error === "string")
     && (response.retrySafe === undefined || typeof response.retrySafe === "boolean");
 }
@@ -452,6 +507,6 @@ function isObserverHostTelemetryEnvelope(value: unknown): value is ObserverHostT
   if (typeof envelope.message !== "object" || envelope.message === null) return false;
   const message = envelope.message as Record<string, unknown>;
   return typeof message.type === "string"
-    && ["connected", "disconnected", "paused-update", "reload", "update"].includes(message.type)
+    && ["config-changed", "connected", "disconnected", "paused-update", "reload", "update"].includes(message.type)
     && (message.signal === undefined || typeof message.signal === "string");
 }

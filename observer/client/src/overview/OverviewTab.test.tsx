@@ -1,8 +1,10 @@
 // @vitest-environment happy-dom
+// @vitest-environment-options {"url":"http://localhost:17900"}
 
 import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { CLOUD_CONNECT_DESCRIPTION } from "../cloud/copy";
 import { OverviewTab, formatScoreValue, scoreTone, shortCommit } from "./OverviewTab";
 
 interface BridgeRequest {
@@ -389,6 +391,31 @@ describe("OverviewTab", () => {
     expect(container.querySelector(".overview-score__meta")?.textContent).toContain("$otel-audit");
   });
 
+  it("explains how to send telemetry when none has arrived", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: unknown) => {
+      if (String(input).includes("/api/health")) return ok({ endpoints: { otlpHttp: "http://127.0.0.1:14318" } });
+      if (String(input).includes("/api/splunk/export")) return ok(statusBody(false));
+      return ok(makeScore({}));
+    }));
+    render(<OverviewTab hasTelemetry={false} />);
+
+    const card = screen.getByRole("region", { name: "No telemetry received yet." });
+    await waitFor(() => expect(card.textContent).toContain("OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:14318"));
+    expect(screen.getByRole("button", { name: "Copy OTLP endpoint environment variable" })).toBeTruthy();
+    // The Instrumentation Skills card already offers $otel-instrument.
+    expect(screen.getAllByRole("button", { name: "Copy $otel-instrument command" })).toHaveLength(1);
+  });
+
+  it("hides that card once telemetry arrives or while loading", async () => {
+    stubStatusFetch({ connected: false });
+    const view = render(<OverviewTab hasTelemetry />);
+    await waitFor(() => expect(view.container.querySelector(".overview-score__value")).toBeTruthy());
+    expect(screen.queryByRole("region", { name: "No telemetry received yet." })).toBeNull();
+
+    view.rerender(<OverviewTab />);
+    expect(screen.queryByRole("region", { name: "No telemetry received yet." })).toBeNull();
+  });
+
   it("falls back to the empty state when the score request fails", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
     const { container } = render(<OverviewTab />);
@@ -453,11 +480,10 @@ describe("OverviewTab", () => {
 
     const cloudCard = container.querySelector("#overview-cloud-skills")!;
     await waitFor(() => {
-      expect(cloudCard.querySelector(".stream-toggle")).toBeTruthy();
+      expect(cloudCard.querySelector(".stream-toggle")?.textContent).toContain("Connected");
     });
 
     const badge = cloudCard.querySelector(".stream-toggle")!;
-    expect(badge.textContent).toContain("Connected");
     expect(badge.className).toContain("stream-toggle--live");
   });
 
@@ -467,11 +493,10 @@ describe("OverviewTab", () => {
 
     const cloudCard = container.querySelector("#overview-cloud-skills")!;
     await waitFor(() => {
-      expect(cloudCard.querySelector(".stream-toggle")).toBeTruthy();
+      expect(cloudCard.querySelector(".stream-toggle")?.textContent).toContain("Not connected");
     });
 
     const badge = cloudCard.querySelector(".stream-toggle")!;
-    expect(badge.textContent).toContain("Not connected");
     expect(badge.className).toContain("stream-toggle--muted");
   });
 
@@ -522,8 +547,10 @@ describe("OverviewTab", () => {
       expect(container.querySelector(".overview-skills__empty-title")?.textContent)
         .toBe("Connect Splunk Observability Cloud");
     });
-    expect(container.querySelector(".overview-skills__empty-hint")?.textContent?.replace(/\s+/g, " ").trim())
-      .toBe("Configure alerting and monitoring by publishing detectors and dashboards right from the IDE");
+    // Same copy as the Cloud tab's connect prompt, so the two never drift apart.
+    expect(container.querySelector(".overview-skills__empty-hint")?.textContent)
+      .toBe(CLOUD_CONNECT_DESCRIPTION);
+    expect(CLOUD_CONNECT_DESCRIPTION).toBe("Connect to export metrics and traces and publish detectors and dashboards.");
   });
 
   it.each([

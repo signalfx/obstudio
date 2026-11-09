@@ -2,6 +2,7 @@
 
 import React from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MetricGroup, SplunkExportStatus, TraceDetail, TraceSummary, ValidationFinding, ValidationSummary } from "./api/types";
 import { AppView } from "./AppView";
@@ -151,13 +152,43 @@ function stubCloudStatusFetch(status: SplunkExportStatus = {
   metrics: { configured: false, enabled: false, exportedBatches: 0, exportedItems: 0, failedBatches: 0 },
   traces: { configured: false, enabled: false, exportedBatches: 0, exportedItems: 0, failedBatches: 0 },
 }): void {
-  vi.stubGlobal("fetch", vi.fn(async () => ({
+  vi.stubGlobal("fetch", vi.fn(async (path: string) => ({
     ok: true,
     status: 200,
     statusText: "OK",
-    json: async () => status,
+    // The Config Manager capability is on unless a test says otherwise.
+    json: async () => CONFIG_ANSWERS[path] ?? status,
   })));
 }
+
+const HEALTH_ON = { apiVersion: "v1", kind: "obstudio", configManager: true, endpoints: {} };
+
+// Test-only settings in the shape GET /api/config/definitions serves.
+const CONFIG_DEFINITIONS = {
+  type: "object",
+  properties: {
+    telemetry: {
+      type: "object",
+      title: "Fixture section",
+      properties: {
+        enabled: {
+          type: "boolean",
+          title: "Fixture title",
+          description: "Fixture description.",
+          default: true,
+          "x-obstudio-failSafe": false,
+          "x-obstudio-apply": "live",
+        },
+      },
+    },
+  },
+};
+
+const CONFIG_ANSWERS: Record<string, unknown> = {
+  "/api/health": HEALTH_ON,
+  "/api/config/definitions": CONFIG_DEFINITIONS,
+  "/api/config": { telemetry: { enabled: true } },
+};
 
 beforeEach(() => {
   stubCloudStatusFetch();
@@ -260,8 +291,25 @@ describe("AppView validation tab", () => {
     expect(screen.getByRole("tab", { name: /services/i }).getAttribute("aria-selected")).toBe("false");
   });
 
+  it("falls back to the stats metric count until the metric list loads", () => {
+    const telemetry = makeTelemetryHandle([]);
+    telemetry.state.metrics = [];
+
+    render(<AppView telemetry={telemetry} />);
+
+    const metricsTab = screen.getByRole("tab", { name: /metrics/i });
+    expect(metricsTab.querySelector(".tab-button__count")?.textContent).toBe("3");
+    expect(metricsTab.getAttribute("aria-label")).toBe("Metrics, 3 metrics");
+  });
+
   it("renders tab labels with count badges", () => {
     const telemetry = makeTelemetryHandle([makeFinding({})]);
+    // One metric name reported by three services is three table rows; the badge counts rows, not names.
+    telemetry.state.metrics = ["checkout", "payments", "orders"].map((serviceName) => ({
+      ...makeMetric("db.client.operation.duration"),
+      serviceName,
+    }));
+    telemetry.state.stats = { ...telemetry.state.stats!, metricNameCount: 1 };
 
     const { container } = render(<AppView telemetry={telemetry} />);
 
@@ -276,7 +324,7 @@ describe("AppView validation tab", () => {
     expect(servicesTab.getAttribute("aria-label")).toBe("Services, 1 service");
     expect(metricsTab.textContent).toContain("Metrics");
     expect(metricsTab.querySelector(".tab-button__count")?.textContent).toBe("3");
-    expect(metricsTab.getAttribute("aria-label")).toBe("Metrics, 3 metric names");
+    expect(metricsTab.getAttribute("aria-label")).toBe("Metrics, 3 metrics");
     expect(tracesTab.textContent).toContain("Traces");
     expect(tracesTab.querySelector(".tab-button__count")?.textContent).toBe("2");
     expect(tracesTab.getAttribute("aria-label")).toBe("Traces, 2 traces");
@@ -345,9 +393,10 @@ describe("AppView validation tab", () => {
     expect(telemetry.toggle).toHaveBeenCalledTimes(2);
   });
 
-  it("keyboard help lists shortcuts that match AppView key bindings", () => {
+  it("keyboard help lists shortcuts that match AppView key bindings", async () => {
     const telemetry = makeTelemetryHandle([]);
     render(<AppView telemetry={telemetry} />);
+    await screen.findByRole("tab", { name: "Config" });
 
     fireEvent.click(screen.getByRole("button", { name: "Keyboard shortcuts" }));
     const dialog = screen.getByRole("dialog", { name: "Keyboard Shortcuts" });
@@ -364,6 +413,7 @@ describe("AppView validation tab", () => {
     expect(helpMap["6"]).toMatch(/validation/i);
     expect(helpMap["7"]).toMatch(/dashboards/i);
     expect(helpMap["8"]).toMatch(/cloud/i);
+    expect(helpMap["9"]).toMatch(/config/i);
     expect(helpMap["P"]).toMatch(/pause/i);
   });
 
@@ -377,6 +427,36 @@ describe("AppView validation tab", () => {
 
     expect(screen.getByRole("tab", { name: /cloud/i }).getAttribute("aria-selected")).toBe("true");
     await waitFor(() => expect(screen.getByRole("heading", { name: "Splunk Observability Cloud" })).toBeTruthy());
+  });
+
+  it("switches to the Config tab with the 9 shortcut", async () => {
+    window.history.replaceState({}, "", "/?tab=metrics");
+    stubCloudStatusFetch();
+    const telemetry = makeTelemetryHandle([]);
+    await act(async () => {
+      render(<AppView telemetry={telemetry} />);
+    });
+    await screen.findByRole("tab", { name: "Config" });
+
+    fireEvent.keyDown(window, { key: "9" });
+
+    expect(screen.getByRole("tab", { name: "Config" }).getAttribute("aria-selected")).toBe("true");
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Configuration" })).toBeTruthy());
+    expect(await screen.findByRole("switch", { name: "Fixture title" })).toBeTruthy();
+  });
+
+  it("opens the Config tab from the tab query parameter and hides the telemetry stream controls", async () => {
+    window.history.replaceState({}, "", "/?tab=config");
+    stubCloudStatusFetch();
+    const telemetry = makeTelemetryHandle([]);
+    telemetry.state.error = "telemetry stream failed";
+    render(<AppView telemetry={telemetry} />);
+
+    expect((await screen.findByRole("tab", { name: "Config" })).getAttribute("aria-selected")).toBe("true");
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Configuration" })).toBeTruthy());
+    expect(await screen.findByRole("switch", { name: "Fixture title" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /pause|resume/i })).toBeNull();
+    expect(screen.queryByText("telemetry stream failed")).toBeNull();
   });
 
   it("closes keyboard help without clearing the selected trace", async () => {
@@ -478,8 +558,9 @@ describe("AppView cloud connection status chip", () => {
     const telemetry = makeTelemetryHandle([]);
     render(<AppView telemetry={telemetry} />);
 
-    await waitFor(() => expect(screen.getByRole("status").textContent).toContain("Configured, not connected"));
-    expect(screen.getByRole("status").className).toContain("stream-toggle--paused");
+    const connectionStatus = await screen.findByText("Configured, not connected");
+    expect(connectionStatus.getAttribute("role")).toBe("status");
+    expect(connectionStatus.className).toContain("stream-toggle--paused");
   });
 
   it("shows Connected with live style when the connection is active", async () => {
@@ -520,11 +601,12 @@ describe("AppView main tab keyboard navigation", () => {
     expect(document.activeElement).toBe(metricsTab);
   });
 
-  it("ArrowRight wraps focus from last tab back to first", () => {
+  it("ArrowRight wraps focus from last tab back to first", async () => {
     stubCloudStatusFetch();
-    window.history.replaceState({}, "", "/?tab=cloud");
+    window.history.replaceState({}, "", "/?tab=config");
     const telemetry = makeTelemetryHandle([]);
     render(<AppView telemetry={telemetry} />);
+    expect((await screen.findByRole("tab", { name: "Config" })).getAttribute("aria-selected")).toBe("true");
 
     const tablist = screen.getByRole("tablist", { name: "Splunk Observability Studio sections" });
     fireEvent.keyDown(tablist, { key: "ArrowRight" });
@@ -534,31 +616,33 @@ describe("AppView main tab keyboard navigation", () => {
     expect(document.activeElement).toBe(overviewTab);
   });
 
-  it("ArrowLeft from first tab wraps focus to last", () => {
+  it("ArrowLeft from first tab wraps focus to last", async () => {
     stubCloudStatusFetch();
     window.history.replaceState({}, "", "/?tab=overview");
     const telemetry = makeTelemetryHandle([]);
     render(<AppView telemetry={telemetry} />);
+    await screen.findByRole("tab", { name: "Config" });
 
     const tablist = screen.getByRole("tablist", { name: "Splunk Observability Studio sections" });
     fireEvent.keyDown(tablist, { key: "ArrowLeft" });
 
-    const cloudTab = screen.getByRole("tab", { name: /cloud/i });
-    expect(cloudTab.getAttribute("aria-selected")).toBe("true");
-    expect(document.activeElement).toBe(cloudTab);
+    const configTab = screen.getByRole("tab", { name: "Config" });
+    expect(configTab.getAttribute("aria-selected")).toBe("true");
+    expect(document.activeElement).toBe(configTab);
   });
 
-  it("End key moves focus to the last tab", () => {
+  it("End key moves focus to the last tab", async () => {
     stubCloudStatusFetch();
     const telemetry = makeTelemetryHandle([]);
     render(<AppView telemetry={telemetry} />);
+    await screen.findByRole("tab", { name: "Config" });
 
     const tablist = screen.getByRole("tablist", { name: "Splunk Observability Studio sections" });
     fireEvent.keyDown(tablist, { key: "End" });
 
-    const cloudTab = screen.getByRole("tab", { name: /cloud/i });
-    expect(cloudTab.getAttribute("aria-selected")).toBe("true");
-    expect(document.activeElement).toBe(cloudTab);
+    const configTab = screen.getByRole("tab", { name: "Config" });
+    expect(configTab.getAttribute("aria-selected")).toBe("true");
+    expect(document.activeElement).toBe(configTab);
   });
 
   it("Home key moves focus to the first tab from any position", () => {
@@ -704,6 +788,93 @@ describe("AppView KeyboardHelp focus management", () => {
     act(() => { fireEvent.keyDown(window, { key: "Escape" }); });
     expect(screen.queryByRole("dialog", { name: "Keyboard Shortcuts" })).toBeNull();
     expect(document.activeElement).toBe(helpButton);
+  });
+});
+
+describe("AppView live status and pause control", () => {
+  it("shows Live as a status and exposes Pause as its own keyboard-operable button", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState({}, "", "/?tab=services");
+    const telemetry = makeTelemetryHandle([]);
+    render(<AppView telemetry={telemetry} />);
+
+    const status = screen.getByText("Live").closest('[role="status"]');
+    expect(status?.className).toContain("stream-toggle--live");
+    expect(status?.tagName).not.toBe("BUTTON");
+    expect(screen.queryByRole("button", { name: /^live$/i })).toBeNull();
+
+    const pause = screen.getByRole("button", { name: "Pause live updates" });
+    expect(pause.getAttribute("title")).toBe("Pause live updates (P)");
+    await user.click(pause);
+    expect(telemetry.toggle).toHaveBeenCalledTimes(1);
+
+    pause.focus();
+    expect(document.activeElement).toBe(pause);
+    await user.keyboard("{Enter}");
+    expect(telemetry.toggle).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows Paused as a status with a Resume button while paused", () => {
+    window.history.replaceState({}, "", "/?tab=services");
+    const telemetry = { ...makeTelemetryHandle([]), paused: true };
+    render(<AppView telemetry={telemetry} />);
+
+    expect(screen.getByText("Paused").closest('[role="status"]')?.className).toContain("stream-toggle--paused");
+    fireEvent.click(screen.getByRole("button", { name: "Resume live updates" }));
+    expect(telemetry.toggle).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Pause live updates" })).toBeNull();
+  });
+
+  it("replaces the stream controls with the connection status on the Cloud tab", async () => {
+    stubCloudStatusFetch();
+    window.history.replaceState({}, "", "/?tab=cloud");
+    render(<AppView telemetry={makeTelemetryHandle([])} />);
+
+    await waitFor(() => expect(screen.getByRole("status").textContent).toBe("Not connected"));
+    expect(screen.queryByRole("button", { name: /live updates/i })).toBeNull();
+  });
+});
+
+describe("AppView tab overflow affordances", () => {
+  it("shows scroll arrows only on the side the tab strip overflows and scrolls the strip", () => {
+    window.history.replaceState({}, "", "/?tab=services");
+    render(<AppView telemetry={makeTelemetryHandle([])} />);
+    const tablist = screen.getByRole("tablist", { name: "Splunk Observability Studio sections" });
+    expect(screen.queryByRole("button", { name: "Scroll tabs right" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Scroll tabs left" })).toBeNull();
+
+    let scrollLeft = 0;
+    Object.defineProperty(tablist, "scrollWidth", { configurable: true, get: () => 700 });
+    Object.defineProperty(tablist, "clientWidth", { configurable: true, get: () => 300 });
+    Object.defineProperty(tablist, "scrollLeft", {
+      configurable: true,
+      get: () => scrollLeft,
+      set: (value: number) => { scrollLeft = value; },
+    });
+    const scrollBy = vi.fn((options: ScrollToOptions) => {
+      scrollLeft = Math.min(400, Math.max(0, scrollLeft + (options.left ?? 0)));
+      tablist.dispatchEvent(new Event("scroll"));
+    });
+    tablist.scrollBy = scrollBy as unknown as typeof tablist.scrollBy;
+    fireEvent.scroll(tablist);
+
+    const right = screen.getByRole("button", { name: "Scroll tabs right" });
+    expect(right.getAttribute("tabindex")).toBe("-1");
+    expect(within(tablist).queryByRole("button", { name: /scroll tabs/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Scroll tabs left" })).toBeNull();
+
+    fireEvent.click(right);
+    expect(scrollBy).toHaveBeenLastCalledWith(expect.objectContaining({ left: 210 }));
+    expect(screen.getByRole("button", { name: "Scroll tabs left" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Scroll tabs right" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Scroll tabs right" }));
+    expect(scrollLeft).toBe(400);
+    expect(screen.queryByRole("button", { name: "Scroll tabs right" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Scroll tabs left" }));
+    expect(scrollBy).toHaveBeenLastCalledWith(expect.objectContaining({ left: -210 }));
+    expect(screen.getByRole("button", { name: "Scroll tabs right" })).toBeTruthy();
   });
 });
 

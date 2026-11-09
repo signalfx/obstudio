@@ -14,6 +14,7 @@ EVALS_DIR  := evals
 PYTEST_PLUGIN_DIR := pytest-codex-evals
 AGENT_POLICY_BASE ?=
 AGENT_POLICY_ARGS := $(if $(strip $(AGENT_POLICY_BASE)),--base-ref "$(AGENT_POLICY_BASE)",)
+EVAL_MODEL_POLICY_BASE ?= origin/main
 
 ABS_BUILD  := $(CURDIR)/$(BUILD_DIR)
 PLUGIN_RELEASE_DIR ?= $(CURDIR)/.release/plugins
@@ -30,6 +31,13 @@ RELEASE_TAG_ARG = $(if $(strip $(RELEASE_TAG)),--release-tag "$(RELEASE_TAG)",)
 help: ## Show available targets
 	@grep -hE '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*## "}; {printf "  %-20s %s\n", $$1, $$2}'
+
+.PHONY: test-eval-models check-eval-models
+test-eval-models: ## Test eval model policy success and rejection paths
+	$(PYTHON) -m unittest discover -s tests -p 'test_eval_models.py'
+
+check-eval-models: test-eval-models ## Check new/changed eval models and effort against repo defaults
+	$(PYTHON) scripts/check_eval_models.py --base-ref "$(EVAL_MODEL_POLICY_BASE)"
 
 # --- Client build ---
 
@@ -60,8 +68,9 @@ sync-obstudio-plugin-skills: ## Refresh committed unified plugin skills from can
 check-obstudio-plugin-skills: ## Verify committed unified plugin skills match canonical skills
 	$(PYTHON) plugins/obstudio/scripts/stage_obstudio_plugin.py --check-plugin-skills
 
-check-plugin-manifest-versions: ## Verify plugin versions and Codex marketplace ref agree (and match RELEASE_TAG when set)
+check-plugin-manifest-versions: ## Verify plugin versions, Codex marketplace ref, and the pinned runtime manifest agree (and match RELEASE_TAG when set)
 	$(PYTHON) plugins/obstudio/scripts/stage_obstudio_plugin.py --check-manifest-versions $(RELEASE_TAG_ARG)
+	$(PYTHON) plugins/obstudio/scripts/stage_obstudio_plugin.py --check-runtime-manifest $(RELEASE_TAG_ARG)
 
 check-claude-plugin-validate: ## Validate the obstudio plugin and root marketplace manifest with the Claude CLI
 	claude plugin validate ./plugins/obstudio --strict
@@ -155,6 +164,7 @@ release: release-prep ## Build and publish a release via GoReleaser (requires GI
 eval-codex-home eval-codex-login eval-codex-auth:
 	$(MAKE) -C $(EVALS_DIR) $@
 
+# `make eval-validation SKILL=skills/otel-instrument` for re-running a particular skill that might have failed.
 eval-validation: ## Validate eval JSONs, eval directories, and skill sources
 	$(MAKE) -C $(EVALS_DIR) $@
 

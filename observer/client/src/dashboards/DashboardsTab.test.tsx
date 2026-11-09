@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
 
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import React from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -23,11 +25,30 @@ function stubFetchOnce(payload: unknown): ReturnType<typeof vi.fn> {
 }
 
 describe("DashboardsTab", () => {
-  it("always shows the approximate badge", async () => {
+  it("uses the app's sans-serif font for the toolbar hints and time window picker", () => {
+    const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
+    for (const selector of ["dashboards-tab__hint", "dashboards-tab__hint--live", "dashboards-tab__window-select"]) {
+      const rule = css.match(new RegExp(`\\.${selector}\\s*\\{([^}]*)\\}`))?.[1] ?? "";
+      expect(rule, selector).not.toBe("");
+      expect(rule, selector).not.toMatch(/font-family:\s*var\(--font-family-mono\)/);
+    }
+  });
+
+  it("hides the preview badge and controls until there is a preview", async () => {
     stubFetchOnce(makePreviewResponse({ available: false, groups: [], message: "Run $splunk-dashboard." }));
-    render(<DashboardsTab />);
-    expect(screen.getByText(/Approximate · local-data preview/i)).toBeTruthy();
+    const { container } = render(<DashboardsTab />);
     await waitFor(() => expect(screen.getByText(/No dashboard preview yet/i)).toBeTruthy());
+    expect(container.querySelector(".dashboards-tab__bar")?.hasAttribute("hidden")).toBe(true);
+    expect(screen.queryByRole("combobox", { name: "Time window" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Copy $splunk-dashboard command" })).toBeTruthy();
+  });
+
+  it("shows the preview badge and controls once there is a preview", async () => {
+    stubFetchOnce(makePreviewResponse());
+    const { container } = render(<DashboardsTab />);
+    await waitFor(() => expect(screen.getByText("Checkout RED")).toBeTruthy());
+    expect(container.querySelector(".dashboards-tab__bar")?.hasAttribute("hidden")).toBe(false);
+    expect(screen.getByRole("combobox", { name: "Time window" })).toBeTruthy();
   });
 
   it("renders the available:false empty state with the spec message", async () => {

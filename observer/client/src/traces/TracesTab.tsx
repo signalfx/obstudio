@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { EmptyState } from "../components/EmptyState";
+import { TelemetryEmptyState, type EmptyStateSkeleton } from "../components/EmptyState";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { TraceSummary, TraceDetail, ValidationFinding } from "../api/types";
 import { fetchTraceDetail, fetchTraceFilterValues, fetchTraces, type TracesQuery } from "../api/client";
@@ -11,6 +11,7 @@ import { SpanDetailsPanel } from "./SpanDetailsPanel";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import type { ValidationIndex } from "../validation/utils";
 import { lookupSpanValidation } from "../validation/utils";
+import { formatDurationMs, formatUtcTimestamp } from "../format";
 
 interface TracesTabProps {
   traces: TraceSummary[];
@@ -41,6 +42,20 @@ const TRACE_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: "maxSpanCount", label: "Max Span Count", kind: "number", placeholder: "10", chipLabel: "Max Span Count", operatorLabels: { eq: "<=", neq: ">" }, step: 1 },
 ];
 const TRACE_SUGGESTIBLE_FIELDS = new Set(["rootSpanName", "serviceName"]);
+// Matches the table head below.
+const TRACES_SKELETON: EmptyStateSkeleton = {
+  headClassName: "data-table__head data-table__head--traces",
+  rowClassName: "data-table__row data-table__row--traces",
+  columns: [
+    { label: "Operation", className: "data-table__th--operation" },
+    { label: "Start", className: "data-table__th--start" },
+    { label: "Trace ID", className: "data-table__th--trace-id" },
+    { label: "Service", className: "data-table__th--service" },
+    { label: "Status", className: "data-table__th--status" },
+    { label: "Duration", className: "data-table__th--duration data-table__th--numeric" },
+    { label: "Spans", className: "data-table__th--spans data-table__th--numeric" },
+  ],
+};
 const TRACE_DETAIL_PANEL_DEFAULT_WIDTH = "min(1600px, calc(100vw - 320px))";
 const TRACE_DETAIL_PANEL_MIN_WIDTH = 560;
 const TRACE_DETAIL_PANEL_MAX_WIDTH = 1600;
@@ -52,7 +67,7 @@ function spanCountLabel(spanCount: number, retentionTruncated?: boolean, retenti
 }
 
 function traceDurationLabel(durationMs: number | undefined, retentionTruncated?: boolean, retentionUnknown?: boolean): string {
-  const duration = formatTraceDuration(durationMs);
+  const duration = formatDurationMs(durationMs ?? 0);
   if (retentionUnknown) return `${duration} retained duration; full duration unknown`;
   return retentionTruncated ? `at least ${duration} retained duration` : duration;
 }
@@ -343,6 +358,8 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
 
   const hasDetail = Boolean(selectedTraceId && (traceDetail || detailLoading || detailError));
 
+  const now = new Date();
+
   return (
     <section id="panel-traces" className="tab-panel" role="tabpanel" aria-label="Traces">
       <div
@@ -370,10 +387,7 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
           ) : null}
 
           {liveTraces.length === 0 && !hasActiveFilter ? (
-            <EmptyState
-              title="No traces received yet."
-              hint="Send OTLP telemetry to port 4318 to begin exploring."
-            />
+            <TelemetryEmptyState title="No traces received yet." skeleton={TRACES_SKELETON} />
           ) : isFiltering && hasActiveFilter && visibleTraces.length === 0 ? (
             <p className="explorer__status" role="status">Updating filtered traces...</p>
           ) : visibleTraces.length === 0 ? (
@@ -382,6 +396,7 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
             <>
           <div ref={headRef} className="data-table__head data-table__head--traces data-table__head--left-cluster data-table__head--scroll-sync">
             <span className="data-table__th data-table__th--operation">Operation</span>
+            <span className="data-table__th data-table__th--start">Start</span>
             <span className="data-table__th data-table__th--trace-id">Trace ID</span>
             <span className="data-table__th data-table__th--service">Service</span>
             <span className="data-table__th data-table__th--status">Status</span>
@@ -403,7 +418,8 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
                 const t = visibleTraces[vi.index];
                 if (!t) return null;
                 const active = t.traceId === selectedTraceId;
-                const duration = formatTraceDuration(t.durationMs);
+                const duration = formatDurationMs(t.durationMs ?? 0);
+                const start = parseTraceStart(t.startTime);
                 const durationLabel = traceDurationLabel(t.durationMs, t.retentionTruncated, t.retentionUnknown);
                 const countLabel = spanCountLabel(t.spanCount, t.retentionTruncated, t.retentionUnknown);
                 const retentionSuffix = t.retentionUnknown ? "?" : t.retentionTruncated ? "+" : "";
@@ -433,8 +449,14 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
                         <span className="trace-row__operation explorer-row__primary">{t.rootSpanName}</span>
                       </span>
                     </span>
+                    <span className="data-table__td data-table__td--start">
+                      <span className="explorer-row__secondary" title={start?.toISOString()}>
+                        {start ? formatUtcTimestamp(start, { now }) : "--"}
+                      </span>
+                    </span>
+                    {/* Short ID only: the row is a button, so the copy action lives in the trace panel it opens. */}
                     <span className="data-table__td data-table__td--trace-id">
-                      <span className="trace-row__trace-id explorer-row__secondary">{t.traceId}</span>
+                      <span className="trace-row__trace-id explorer-row__secondary" title={t.traceId}>{t.traceId.slice(0, 8)}</span>
                     </span>
                     <span className="data-table__td data-table__td--service">
                       <span className="trace-row__service explorer-row__secondary">{t.serviceName ?? "unknown"}</span>
@@ -540,8 +562,10 @@ export function TracesTab({ traces, telemetryError, onInteract, validationFindin
   );
 }
 
-function formatTraceDuration(durationMs?: number): string {
-  return `${(durationMs ?? 0).toFixed(1)}ms`;
+function parseTraceStart(value: string | undefined): Date | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) || date.getTime() <= 0 ? null : date;
 }
 
 export function traceStatusLabel(status: string): string | null {

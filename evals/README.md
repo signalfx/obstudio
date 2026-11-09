@@ -91,7 +91,7 @@ Runtime checks are top-level `checks[]` entries in `eval/runtime/*.json`.
 file and declares telemetry expectations. The Compose file owns service
 topology, Splunk Observability Studio startup, app startup, and a profiled `traffic` service that
 generates requests with tools such as `siege`. The harness runs Compose,
-discovers Splunk Observability Studio host port with `docker compose port observer 3000`,
+discovers Splunk Observability Studio host port with `docker compose port observer 17900`,
 invokes `traffic`, queries that isolated Splunk Observability Studio instance, then tears the stack
 down. Compose can use `${CODEX_EVAL_SERVICE_DIR}` when it must build the
 instrumented temp service workspace rather than the source fixture. Shared
@@ -120,12 +120,11 @@ require it only in the preserved sink and require zero service records in
 Splunk Observability Studio.
 
 The standard Python, Node.js, and Go runtime topologies use an isolated local
-Splunk Observability Studio. A shared Splunk Observability Studio OTLP-handler integration test enables its trace and
-metric forwarding surfaces, ingests all three signals, proves the matching
-exporters receive traces and metrics, and proves logs remain locally queryable
-without any log-forwarding surface. This supplies live receiver-side proof of
-the trace/metric-only cloud boundary without duplicating a fake cloud service in
-every language topology.
+Splunk Observability Studio. Shared OTLP receiver integration tests ingest all
+three signals and verify remote metrics and traces. Logs remain locally
+queryable while independent HEC forwarding is enabled, paused, or failing.
+This supplies live receiver-side proof of local and remote delivery without
+duplicating a fake cloud service in every language topology.
 
 ## Isolated Codex Home for Live Evals
 
@@ -233,8 +232,8 @@ Set the judge model with:
 
 ```toml
 [models]
-agent = "gpt-5.5"
-judge = "gpt-5.5"
+agent = "gpt-6.1-sol"
+judge = "gpt-6.1-sol"
 
 [runtime]
 enabled = false
