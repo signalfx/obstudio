@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-audit |
-| Run ID | 20261109T204825989125Z |
+| Run ID | 20261109T180310485767Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -18,7 +18,6 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Eval | Service | Prompts | Eval File | Sanity Checks | Rubric Checks | Runtime Checks |
 |---|---|---:|---|---:|---:|---:|
 | go/chi-basic/qual/audit | go/chi-basic | 2 | evals/go/chi-basic/eval/qual/audit.json | 0 | 12 | 0 |
-| go/chi-basic/qual/logging-audit-contract | go/chi-basic | 3 | evals/go/chi-basic/eval/qual/logging-audit-contract.json | 0 | 14 | 0 |
 | go/chi-partial/qual/audit | go/chi-partial | 2 | evals/go/chi-partial/eval/qual/audit.json | 0 | 6 | 0 |
 | go/kvstore/qual/audit | go/kvstore | 2 | evals/go/kvstore/eval/qual/audit.json | 0 | 7 | 0 |
 | go/native-genai-demo/qual/audit | go/native-genai-demo | 1 | evals/go/native-genai-demo/eval/qual/audit.json | 0 | 6 | 0 |
@@ -27,9 +26,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | java/kafka-producer-consumer/qual/audit | java/kafka-producer-consumer | 2 | evals/java/kafka-producer-consumer/eval/qual/audit.json | 0 | 6 | 0 |
 | java/kafka-streams/qual/audit | java/kafka-streams | 2 | evals/java/kafka-streams/eval/qual/audit.json | 0 | 7 | 0 |
 | java/springboot-basic/qual/audit | java/springboot-basic | 2 | evals/java/springboot-basic/eval/qual/audit.json | 0 | 6 | 0 |
-| java/springboot-basic/qual/logging-audit-contract | java/springboot-basic | 3 | evals/java/springboot-basic/eval/qual/logging-audit-contract.json | 0 | 14 | 0 |
 | node/express-basic/qual/audit | node/express-basic | 2 | evals/node/express-basic/eval/qual/audit.json | 0 | 6 | 0 |
-| node/express-basic/qual/logging-audit-contract | node/express-basic | 3 | evals/node/express-basic/eval/qual/logging-audit-contract.json | 0 | 14 | 0 |
 | python/ai-assistant-demo/qual/ao-name-inputs-audit | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/ao-name-inputs-audit.json | 0 | 6 | 0 |
 | python/ai-assistant-demo/qual/ao-root-compatibility-audit | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/ao-root-compatibility-audit.json | 0 | 8 | 0 |
 | python/ai-assistant-demo/qual/ao-target-handoff-audit | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/ao-target-handoff-audit.json | 0 | 4 | 0 |
@@ -50,7 +47,6 @@ This report validates eval JSON, eval directory availability, and skill source a
 | python/existing-otel-agent-demo/qual/route-recovery-audit | python/existing-otel-agent-demo | 1 | evals/python/existing-otel-agent-demo/eval/qual/route-recovery-audit.json | 0 | 5 | 0 |
 | python/fastapi-celery/qual/audit | python/fastapi-celery | 2 | evals/python/fastapi-celery/eval/qual/audit.json | 0 | 5 | 0 |
 | python/flask-basic/qual/audit | python/flask-basic | 2 | evals/python/flask-basic/eval/qual/audit.json | 0 | 6 | 0 |
-| python/flask-basic/qual/logging-audit-contract | python/flask-basic | 3 | evals/python/flask-basic/eval/qual/logging-audit-contract.json | 0 | 14 | 0 |
 | python/galileo-agent-demo/qual/audit | python/galileo-agent-demo | 2 | evals/python/galileo-agent-demo/eval/qual/audit.json | 0 | 7 | 0 |
 | python/mcp-ai-tool-demo/qual/audit | python/mcp-ai-tool-demo | 2 | evals/python/mcp-ai-tool-demo/eval/qual/audit.json | 0 | 6 | 0 |
 | python/model-directed-agent/qual/audit | python/model-directed-agent | 1 | evals/python/model-directed-agent/eval/qual/audit.json | 0 | 5 | 0 |

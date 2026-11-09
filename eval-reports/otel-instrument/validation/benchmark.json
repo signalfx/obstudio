@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-instrument",
-    "run_id": "20261109T204825989132Z",
+    "run_id": "20261109T180402192105Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-6-luna",
     "judge_model": "",
@@ -68,24 +68,6 @@
       "skill_path": "skills/otel-instrument",
       "sanity_check_count": 0,
       "rubric_check_count": 4,
-      "runtime_check_count": 0
-    },
-    {
-      "id": "go/chi-basic/qual/logging-instrument-contract",
-      "case": "go/chi-basic",
-      "language": "go",
-      "service": "chi-basic",
-      "prompt_count": 3,
-      "prompts": [
-        "logging-trial-1",
-        "logging-trial-2",
-        "logging-trial-3"
-      ],
-      "definition_path": "evals/go/chi-basic/eval/qual/logging-instrument-contract.json",
-      "eval_dir": "evals/go/chi-basic",
-      "skill_path": "skills/otel-instrument",
-      "sanity_check_count": 0,
-      "rubric_check_count": 14,
       "runtime_check_count": 0
     },
     {
@@ -336,24 +318,6 @@
       "runtime_check_count": 0
     },
     {
-      "id": "java/springboot-basic/qual/logging-instrument-contract",
-      "case": "java/springboot-basic",
-      "language": "java",
-      "service": "springboot-basic",
-      "prompt_count": 3,
-      "prompts": [
-        "logging-trial-1",
-        "logging-trial-2",
-        "logging-trial-3"
-      ],
-      "definition_path": "evals/java/springboot-basic/eval/qual/logging-instrument-contract.json",
-      "eval_dir": "evals/java/springboot-basic",
-      "skill_path": "skills/otel-instrument",
-      "sanity_check_count": 0,
-      "rubric_check_count": 14,
-      "runtime_check_count": 0
-    },
-    {
       "id": "node/express-basic/qual/dependency-log-compatibility",
       "case": "node/express-basic",
       "language": "node",
@@ -384,24 +348,6 @@
       "skill_path": "skills/otel-instrument",
       "sanity_check_count": 0,
       "rubric_check_count": 10,
-      "runtime_check_count": 0
-    },
-    {
-      "id": "node/express-basic/qual/logging-instrument-contract",
-      "case": "node/express-basic",
-      "language": "node",
-      "service": "express-basic",
-      "prompt_count": 3,
-      "prompts": [
-        "logging-trial-1",
-        "logging-trial-2",
-        "logging-trial-3"
-      ],
-      "definition_path": "evals/node/express-basic/eval/qual/logging-instrument-contract.json",
-      "eval_dir": "evals/node/express-basic",
-      "skill_path": "skills/otel-instrument",
-      "sanity_check_count": 0,
-      "rubric_check_count": 14,
       "runtime_check_count": 0
     },
     {
@@ -899,24 +845,6 @@
       "runtime_check_count": 0
     },
     {
-      "id": "python/flask-basic/qual/logging-instrument-contract",
-      "case": "python/flask-basic",
-      "language": "python",
-      "service": "flask-basic",
-      "prompt_count": 3,
-      "prompts": [
-        "logging-trial-1",
-        "logging-trial-2",
-        "logging-trial-3"
-      ],
-      "definition_path": "evals/python/flask-basic/eval/qual/logging-instrument-contract.json",
-      "eval_dir": "evals/python/flask-basic",
-      "skill_path": "skills/otel-instrument",
-      "sanity_check_count": 0,
-      "rubric_check_count": 14,
-      "runtime_check_count": 0
-    },
-    {
       "id": "python/flask-basic/runtime/instrument",
       "case": "python/flask-basic",
       "language": "python",
@@ -1049,16 +977,16 @@
     }
   ],
   "summary": {
-    "eval_count": 62,
-    "case_count": 96,
-    "prompt_count": 96,
+    "eval_count": 58,
+    "case_count": 84,
+    "prompt_count": 84,
     "sanity_check_count": 0,
-    "rubric_check_count": 680,
+    "rubric_check_count": 512,
     "runtime_check_count": 9
   },
   "source": {
     "digest_version": 4,
-    "digest": "c4cd36d302dbc3707cef39fa8fed56c01c9d5ba741e1bdecb274abf7609447ea",
+    "digest": "a92c0c4d5dbf5e3eda5ad8509b272d82ec67d73239112a9bfb211d65f9b32182",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -1067,19 +995,16 @@
     "evaluator_semantics_version": 1,
     "files": {
       "evals/codex-evals.validation.toml": "503794fa37e80a742e98969f1d4bbdd17d1f9cfe7d6607c4012498c43905b53e",
-      "evals/go/chi-basic/Makefile": "4fa7a1c389866c15986b27d22da0bee109bf6bc438f0d29e2b42d7f6d36ea68a",
-      "evals/go/chi-basic/README.md": "6e17e9f1e65f52a9268ed19a4e4c7d449efdf4789c404232c98bf04777702688",
       "evals/go/chi-basic/eval/inputs/otel-audit.json": "983cff8a66b0933677d770a0ad4a21b5c28a9065c225d01a6f7d3b0eab6c548c",
       "evals/go/chi-basic/eval/qual/benchmark-instrument.json": "ca365bb19d97128b41e3e89b17ed52d73e360a49e42cdb0ed5c87d68c90728e0",
       "evals/go/chi-basic/go.mod": "585e9c5a128baf66cc508e074aa3e019875979a6fad497fa892aa967c20ba62c",
-      "evals/go/chi-basic/go.sum": "568d7c01fdccc1b581965e736138e294497e891d01ec8b78e3509479a6a52e2e",
-      "evals/go/chi-basic/main.go": "bb8ca564254a9fc733166fccb1b60aacb3a2ee04d8fc5932a25b1a8cd31ba70b",
-      "skills/otel-instrument/SKILL.md": "22dea03a25349a7f63ced842b1732f1d5d97a1fe49f025f2b30a85a3373f49bb",
+      "evals/go/chi-basic/main.go": "98fc93b9ffcd0a996424992672480e110976bbe4d721a8e3a5fefe96fb57512d",
+      "skills/otel-instrument/SKILL.md": "c9ab56d8b664de7310d825e3bd01aee9f53caffe929ff3e74f8454954862f495",
       "skills/otel-instrument/references/json-approval-handoff.md": "eaafa393d5eacd566522f926e814136408076539b2b000f964357e048f4e5fe8",
-      "skills/otel-instrument/references/languages/go.md": "1597efa032918f881dca166d4794b015084d6eba5c4958023fbf20f07bedbf2c",
-      "skills/otel-instrument/references/languages/java.md": "a39c0611a0902e87e1bd435b3ad4240159661d0595b3cc3207c85817dbf5e82a",
-      "skills/otel-instrument/references/languages/node.md": "8954c2567121b684ad61d57aa9e5687f2af4c88e0553e038fcfb264c41e09523",
-      "skills/otel-instrument/references/languages/python.md": "a2cf913e0830cd907a2a23ad5d49828f853acd77f19360ff762351ef709ea7af",
+      "skills/otel-instrument/references/languages/go.md": "62ba4d47f1685230a1eec2ce6929c9b3c9f3b8228f62af729367a1db45fa4d5d",
+      "skills/otel-instrument/references/languages/java.md": "01e27e16262c253e70d921a0c9f2a47286cdd97fb538fd9b192aeee27e62ebd2",
+      "skills/otel-instrument/references/languages/node.md": "3e86dadec6b8ebf1e6c344c7528772e08d8ec25706bd6b6962edfa37f407c63c",
+      "skills/otel-instrument/references/languages/python.md": "d8ffc96d962c1ddbe85acce44f1781de6bfe264adf9b4917479b7a2ac71e2f76",
       "skills/otel-instrument/references/project-runtime-validation.md": "cdbac8880d21bf8b47c7865c8ef21648e7701ca3c6dceb512d666281815ccc38",
       "skills/otel-instrument/references/signal-mapping-guide.md": "83a5e52a01a1c5b98530a3f7b320b410d364e2799a400b25a155ee1db780efed",
       "skills/otel-instrument/scripts/observe_report.py": "687f9801e563eb4ad4410eafce10b8bba7191601d654c3c5cb3360baa3dd08af",
@@ -1088,18 +1013,13 @@
       "skills/otel-instrument/tests/test_json_approval_flow.py": "bf1c8eef2055a0c1fb579dbb21f6f2b3aa2edf1cd78d083966eb90ecfa7e4aa0",
       "skills/otel-instrument/tests/test_resolve_ao_resources.py": "8a69aca1164ff064c11cc32715549479079f784fdf9333b6c4d44b98de55c6be",
       "skills/otel-instrument/tests/test_validate_gap_closure.py": "750f196fe279ed05c95e53d45f8b2d773ff996ee86468541688b586df7dede18",
-      "skills/references/consumers.json": "f0ea05c16628348545c7f4910a7179f254528d958dbde233a878c82f8098b67d",
+      "skills/references/consumers.json": "ffb910be59c07a0a555b7e0cbedea36c183298e686b404bd3c28fafa9ec46f71",
       "skills/references/coverage-decision-tree.md": "f1b071d4d8365a98d0c21b1192a1f474d0b2944755a4b5cb51b3b5c102573ead",
       "skills/references/full-runtime-acceptance.md": "585f42079d71460bbf7c68e4320ceabab6fcc1ba7c711948806c78c9d46736c5",
       "skills/references/genai-readiness.md": "b06758e80805b09ab485d81c3cc6284acf5e2d18c2af1c0359644f61b80deff4",
       "skills/references/incident-readiness.md": "787fb441106abcb148f541befd403e5f7889a2234c6cbe590d0c6bce48a3b59a",
-      "skills/references/languages/go.md": "ebb8179064c31e06c3f7f18a854cac9e4f45d74f2c533f0ada4faa158034d06b",
-      "skills/references/languages/java.md": "25923b86f1280733c7a818edee85bfcece2d521f3dfc310d748bf48fafb081cc",
-      "skills/references/languages/node.md": "c998806540480844b937bf9c894e7ae6d5713f1d0cc499b14739f58071cc0b09",
-      "skills/references/languages/python.md": "429e6fe2788f063ea764f8088b573f216b6c9c03e6f82a8efbb1ccdd30f1c624",
       "skills/references/ledger-template.md": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc",
       "skills/references/local-otlp-receiver.md": "6f58148de9ef2fd3e617ddc2622ee09ba785b202100b91261a727af6e3dc7cec",
-      "skills/references/logging-readiness.md": "d7d95fa9c2e4390e1f3379023d8c56d6f08f0024188da9be43c1bb12c116497f",
       "skills/references/report-flow-contract.md": "d00ca857d4a875dcdb8a699cbf82eda612f42a4f88152ff7a83b4a74eb1b4d0f",
       "skills/references/scripts/observe_report.py": "3c1dc1386357e2cc9dc4f2d0f183cc8f4d0c7f45bb064de15196d071212be8cc",
       "skills/references/scripts/observe_report_core.py": "88419036c5c1a1096361b10da730dc5bbae931f2c890d6dba2c7791cd78b96c4",
@@ -1115,10 +1035,6 @@
       "skills/references/tests/test_observe_report_selection.py": "c2a441002d8392b9ea5cfdb52cee7e0b75000542334c2a3eb3bc8cff48a0d7c7",
       "evals/go/chi-basic/eval/qual/instrument-decision-gated.json": "1604ebf6626a7ebc97406d3bc8299a7bf44003d6f2eb6f9bda6f89b408d934df",
       "evals/go/chi-basic/eval/qual/instrument.json": "fc36dddc0501df8c89eaee182822df2e5fee21d17e6c37c3d8d6dd312d7561f1",
-      "evals/go/chi-basic/eval/qual/logging-instrument-contract.json": "bcacccfd65b665c8f7e4398053f051e778765c4d05085ada57a9654cce950c8f",
-      "pytest-codex-evals/src/pytest_codex_evals/ab.py": "a100dcc1e6c99ea54fc619c0a80b1ebf863529cff5c18ac42da59f80de65b952",
-      "pytest-codex-evals/src/pytest_codex_evals/graders/shared.py": "f56238f0ea3a0dd52184391b3b76f5214a9bf354293bf68854bcffa175d357ba",
-      "pytest-codex-evals/src/pytest_codex_evals/report.py": "82d78295d07cce02b6fb4a976c9ce3852b262a2fe63e99256c6ac034985b7cd4",
       "docs/examples.md": "894a8483b2099588d32bd389164df1d4aa528486b35205bd08120a122243e819",
       "evals/go/chi-basic/eval/runtime/App.Dockerfile": "a31ffaaedcf0ebdb3075b2ca807ebdd0030774fe36740f201bd11516447b7e47",
       "evals/go/chi-basic/eval/runtime/docker-compose.yml": "d5f7c4998d2c092649cd8f6e97ee1b673e5eee6d1f66c40ca3dd0919e53ef24f",
@@ -1140,7 +1056,7 @@
       "observer/client/scripts/build-client.mjs": "6dd5b67a8efa40e053588836028c0ccf709ed7fb25d41648b27bd68562305668",
       "observer/client/src/App.tsx": "bac4263d8b9a90f85cafbd38c013ff82e776a1ca088eaa08b27e219abb3a220d",
       "observer/client/src/AppView.test.tsx": "cfcd85d8d3b9bd169a44e238d47bc334639552452d09564ec9c18cd6ddae4e6f",
-      "observer/client/src/AppView.tsx": "e62d5bf71ed6f40a31b0a894af350618e60e9e7aef264e6150ba3e590c785134",
+      "observer/client/src/AppView.tsx": "924054ecaa167adc7c2e8155e85499a08d157fc3bc351edddb4ef67e825a522b",
       "observer/client/src/FilterBar.test.tsx": "4db18298451be44e9ca572c85818ee0283d814b1d0433e0333eff27e0e7bfae0",
       "observer/client/src/FilterBar.tsx": "dd0a8532eb95259a26d10b2cc1d01fed5a42c4087bece8435d120bd1d0f98d3f",
       "observer/client/src/api/client.ts": "f23dc5144ee0a2c1d952897e3ae72cfbb4171237fa8d01caff0c465e1aee9412",
@@ -1197,7 +1113,7 @@
       "observer/client/src/layout/useAnimatedPanel.test.ts": "48fd2675e56cea2ce61ae3c62a23ead3d9195b27198b64076a345eaec9f96556",
       "observer/client/src/layout/useAnimatedPanel.ts": "cd99f08f87af632ee29e04fdb7fe181e6c670bce38a97997d4736d0780a02fcf",
       "observer/client/src/logs/LogsTab.test.tsx": "08670023797183bed6d2436e8c1705eecbb912faf3c58b860f6abcada8e85fee",
-      "observer/client/src/logs/LogsTab.tsx": "38266439a7c4f6dfe17edaf328eae4accaf9df41750e5550988605ea7389d38f",
+      "observer/client/src/logs/LogsTab.tsx": "b67f09a8e50388a3184ac1541c8e35e2deffa9bfe5ae7b82aef355a38feedf87",
       "observer/client/src/logs/index.ts": "2c739e806d8e0fe3f995dc4f4eae6b9b70344dcf9fcdebd75e5a329382a5dae8",
       "observer/client/src/main.tsx": "291311db796d1d6cf3a96e85a658e0d916e69498996007fb17606edcd8d54a0c",
       "observer/client/src/metrics/MetricsTab.test.tsx": "0eb278ad33c21758e0b72cf5a8feb69215d7c3bafdc2ea14cb18a2db807db1df",
@@ -1206,14 +1122,14 @@
       "observer/client/src/metrics/TimeSeriesChart.tsx": "b1730b9cb362555e3fd254ba6dfb0578f00dad4e355c9a71173402690e79da3e",
       "observer/client/src/metrics/index.ts": "8b5886fa59bd2468faa5b0969f1418f8ac16bc13043fab2ba3bd034512699443",
       "observer/client/src/metrics/useMetricTimeSeries.ts": "7bf8d616a1f98a6dd587923a5bce0068e56cb07f27bd3461ab3d38b0c46b4ce9",
-      "observer/client/src/overview/OverviewTab.test.tsx": "b77e2de3dcc3869d7d5cf705071ad8adca206f3b5e28e6e60e12378dc02ae958",
-      "observer/client/src/overview/OverviewTab.tsx": "be1b23db4e06a2991acb362b0c29d8141eb993fa724db31054e8b1a79dec11f8",
+      "observer/client/src/overview/OverviewTab.test.tsx": "f63fafb53d4b19a34ce3b06f652e3c2c03191ed94b2a4c8f2702b8b2a178f768",
+      "observer/client/src/overview/OverviewTab.tsx": "84c933621501e44944be60e0bc38dc00751c082aee97fce32a19ba0aaeb1155e",
       "observer/client/src/overview/index.ts": "f52ca71f90aa6eec53a4fea0bb6d8abffe3dd8252bed3373f9edb8390d889896",
       "observer/client/src/palette.ts": "cde1d9253b714b74175125a05f0993e774a41120378f260b8c96f5e30a367369",
       "observer/client/src/services/ServicesTab.test.tsx": "82fc808fcfb757e925e71cbcfa85fc5e6dfe392547ea78aa71ebfc0e3f48a097",
       "observer/client/src/services/ServicesTab.tsx": "9536d21335b033d27964fa8cbfc81fe77c24075d4acec486173ee7d952d0c715",
       "observer/client/src/services/index.ts": "64cb652abccb7d3ea9953295c27247daa781f38acc9d486e8e97129087e7f366",
-      "observer/client/src/styles.css": "be192d8739c71e669e448f9782336c12eb8be566f1ff22e8e4cd0014fd9728e4",
+      "observer/client/src/styles.css": "5d11029f2a99c6c7af9eca29a4ae900f96710ec03d7aa963e1510392c20e7aec",
       "observer/client/src/telemetry/configSignal.ts": "73718793c6dd23b408122c7076a9bb60d1c405e477b16b3f5ec1edad9e7577ed",
       "observer/client/src/telemetry/index.ts": "8fe1b3ae87f180076040c9dededa9d9dda2abccd4af52bfec4961d95ed0c564f",
       "observer/client/src/telemetry/useTelemetry.test.tsx": "a434fa7b66b6149e4028baa7acacb7678a442d06b15f5ce2612050773c7ada10",
@@ -1406,11 +1322,11 @@
       "skills/connect-splunk-observability-cloud/agents/openai.yaml": "206b920092a097ec7ab0f92b97d457a6e794bdddcc7f2def837955ff8a756407",
       "skills/create-splunk-free-account/SKILL.md": "a51331ebfc35deaf154848808bbe624e860e3fe13fce13483a3fdf4a181264c2",
       "skills/create-splunk-free-account/agents/openai.yaml": "7767ebaee1f22c7cc76c22ff75676dcaf24e02821939b7229cc80a8b66e0a237",
-      "skills/otel-audit/SKILL.md": "145e93401d76ad0547f6d7babce6bff97c1b85d4668742016d61a6792454d339",
+      "skills/otel-audit/SKILL.md": "fef834d77d8d6d0230228a4d8f52f277850cb8e6e9b56fd0b46c156ee3c9fa40",
       "skills/otel-audit/scripts/observe_report.py": "b9f2ff513850d2b6405f47000cd0b6fe8697fd35d47a15e9adaee5fa10094f4d",
       "skills/otel-audit/scripts/scan_python_otel_topology.py": "dc16553cdd3f89052bd4f8ececeaaacdce398c93dad3d6914cfa05f5d64f0fc0",
       "skills/otel-audit/tests/test_scan_python_otel_topology.py": "cf430e62143ef17b693555383cafef06f056c582f9c586ab23b9a4bf401a073e",
-      "skills/otel-verify/SKILL.md": "2a7c0e92819efed9ecdf62c7c841c1029c24af9a01f9c58627b032b65e128bee",
+      "skills/otel-verify/SKILL.md": "118d399def93429d47d58a55028150ef0ab129f8db1509187e2bf8adc3a0ac35",
       "skills/otel-verify/references/app-code-test-authoring.md": "d535a0acb3d123ee01eb5b39c3247378b4900f4977672021022dd0fe3885f91f",
       "skills/otel-verify/references/explorer-witness.md": "ee76d5856b1c0858a6bcb22e4c9c4526ddf550f2ae3122ea01ea21d505b8931a",
       "skills/otel-verify/references/json-approval-handoff.md": "e8c258074665349efecdc5d7e9b25fd0ab6217e3cdc40ae21a434c2c5d11f763",
@@ -1502,7 +1418,7 @@
       "evals/java/kafka-producer-consumer/src/test/java/com/example/kafka/OrderMessageHandlerTest.java": "152745d96f5d6bc8f1419dc78c1c625c2cd7fd2990b3d0104280d4e9207ad833",
       "evals/java/kafka-streams/README.md": "34c5c5004cefaa371f41affc2cfca31d4279a3312e81cbb43224111bb1d4be7d",
       "evals/java/kafka-streams/eval/qual/incident-readiness.json": "387cf30d9845061c88f1a713c30d11e50667580b531a3d366dff689a4d91e7f5",
-      "evals/java/kafka-streams/pom.xml": "6684a7d80d349249133ac780829c0ad8b96c56214e9c394c67d371afcfc3c13d",
+      "evals/java/kafka-streams/pom.xml": "d03784b093c970f535b65aced01577454f1c427c430f9c23bcfb658284333d41",
       "evals/java/kafka-streams/src/main/java/com/example/streaming/EnrichedOrder.java": "33a71ed88c738a9e1583484636bc77b36895d98cfb8ec391d124cdc7712f63c9",
       "evals/java/kafka-streams/src/main/java/com/example/streaming/KafkaStreamsApplication.java": "046a463cc5e5d7af8ba2612425b8d127e788e3c0fc97ac19c3447776b19723f0",
       "evals/java/kafka-streams/src/main/java/com/example/streaming/OrderEvent.java": "8a7f60d0844d894d10eec292abb3943e4ed5e58114776b8ed6b9bc0adc25320b",
@@ -1515,25 +1431,19 @@
       "evals/java/kafka-streams/src/main/resources/simplelogger.properties": "3294bddc68c65069b77ec48d1c84ecb1d26a59e697413f86ec1da386155ec66d",
       "evals/java/kafka-streams/src/test/java/com/example/streaming/OrderStreamTopologyTest.java": "ac6d6948bd24050982b1a6eaca082f70469c468e5ffdad1f9eec4efd438e8ef1",
       "evals/java/kafka-streams/eval/qual/instrument.json": "a0f6d6085af022ffe941d09f34536270ac31dbf70e06ad90f639dadb6302757c",
-      "evals/java/springboot-basic/Makefile": "0ec480ca132292ff86de96101afe0be26f445625e54477930162ad553a937677",
-      "evals/java/springboot-basic/README.md": "6e17e9f1e65f52a9268ed19a4e4c7d449efdf4789c404232c98bf04777702688",
       "evals/java/springboot-basic/eval/qual/instrument.json": "6ec505436c131f1ecebe0f97fdd8142d7f9e9440f7968b429a939deb112ab296",
       "evals/java/springboot-basic/pom.xml": "2b6e5f88faf91bf8891d728bd51bc6737ca8919bd657caaaa416ff3c6550f625",
       "evals/java/springboot-basic/src/main/java/com/example/tasks/Task.java": "97437951adcb1592b1f4e48af10f799501858ed40949575f8278d9a644f80cfc",
-      "evals/java/springboot-basic/src/main/java/com/example/tasks/TaskController.java": "ccace7793ab0b02f7b20d3ae8c0698451f45734ad6a25f5147c9f0fff71fdbfa",
-      "evals/java/springboot-basic/src/main/java/com/example/tasks/TasksApplication.java": "0db42555e6ac0ec5d3c352d526ed0b5bdbb5cf6a0087ed2fe68b4ec62b0bab0b",
-      "evals/java/springboot-basic/src/main/resources/application.properties": "b90fa8737a65764df11a6814c6481fc53c6f092da294e73c3887d684c2a48f7b",
+      "evals/java/springboot-basic/src/main/java/com/example/tasks/TaskController.java": "a32f9883586bd13b5ecf6f015f587b25ac696a55423398a01e3fe1619f9020fa",
+      "evals/java/springboot-basic/src/main/java/com/example/tasks/TasksApplication.java": "2aeefcee33840914b4118f0b6615205c37ae50ecf5cb774c32a6f5d9431f62c5",
+      "evals/java/springboot-basic/src/main/resources/application.properties": "80bbb064ac6230150fdb6db61f2ce53248fbf798026e4828c3cb5d4c5f9998fd",
       "evals/java/springboot-basic/eval/inputs/java-compatible-logging-candidates.json": "6bee5f8959ff583cfa8b03922f5afbc59175a7f8aedf880241a13ce0b5c1d9c6",
       "evals/java/springboot-basic/eval/qual/logging-compatible-plan.json": "2a82993aadd1a7859203250a38f5d8e757fb5459093b61a1d2bcab1917911144",
-      "evals/java/springboot-basic/eval/qual/logging-instrument-contract.json": "ace60b286ded9a9a7217bb92e6c1bd806815c5c9e35a42c1dc89555a395ae32f",
-      "evals/node/express-basic/Makefile": "06a7495fad4f3b89cec069d66f2acdf73bda25c3d6f587e70c8de33f2bbaec6f",
-      "evals/node/express-basic/README.md": "6e17e9f1e65f52a9268ed19a4e4c7d449efdf4789c404232c98bf04777702688",
-      "evals/node/express-basic/app.js": "7dc0b120a9cb78d104c8c5de73f45cc07e44cf1648421d7849daa159326ceaef",
+      "evals/node/express-basic/app.js": "e21a658ea62dd0aba6890cb8514a37eb08d10282ae078165473371db042934b5",
       "evals/node/express-basic/eval/inputs/node-dependency-log-compatibility.json": "70258b66c554ec94a86b6b95999cf6925801600d4919e204acfdffa6794a9a06",
       "evals/node/express-basic/eval/qual/dependency-log-compatibility.json": "f61ffc160044e14d2173d6bcb9dd3e036efb42342c56c76be99ef312a6aac1ae",
       "evals/node/express-basic/package.json": "9a6b2e4619c27d59d7911017d38caf37cecc4c5dc0a443b7eabd54ce0c554ae9",
       "evals/node/express-basic/eval/qual/instrument.json": "46fab66154d62f2637d1b6d0afd7cd4b8a8956334be5295215083ae1797bb38f",
-      "evals/node/express-basic/eval/qual/logging-instrument-contract.json": "bcacccfd65b665c8f7e4398053f051e778765c4d05085ada57a9654cce950c8f",
       "evals/node/express-basic/eval/runtime/App.Dockerfile": "5e44b534e2e8d8c4a7dfe088043d91bd96a606ae1e826566b0010d2ad984c07a",
       "evals/node/express-basic/eval/runtime/docker-compose.yml": "e4b1d38fb8f621610c4509146b8b37bdb23e4e67595fcd9b213fc028c262c455",
       "evals/node/express-basic/eval/runtime/instrument.json": "0d75513d55d5e0b55e4545e7ed3e27a319d3e48f54a3f969a0e9db425e71ee8f",
@@ -1643,9 +1553,8 @@
       "evals/python/fastapi-celery/eval/runtime/docker-compose.yml": "ca4562205db4a51d18bedc24fefc75cf73122df300b0cad72f8b6901fc629de9",
       "evals/python/fastapi-celery/eval/runtime/instrument.json": "531234b650ada2b772be5072cbd23be89dadaa7a370c8d66ee37210e93d9b1e3",
       "evals/python/fastapi-celery/eval/runtime/run-traffic.sh": "fc891220f9dd8ca788f33c0ccad6d7982c13cd3504fb1d3c60b1ee47dd27510a",
-      "evals/python/flask-basic/Makefile": "8a847a2b1ce96ec3c324c7ec63058d3f94dbfe7a93d6a05aee033548ba1a8053",
-      "evals/python/flask-basic/README.md": "551f12261e9278c324c6966952cd26bad8f6032a0a3a4c13be4dfa863ae12db2",
-      "evals/python/flask-basic/app.py": "1209172394d85fc8244799b9ea13d0633ef39b9cedb4b1f1e95190fedb2903de",
+      "evals/python/flask-basic/Makefile": "9638ea37751505b6f4a4018a30477ad3c69633c7669796322e1738d7b75a0bbe",
+      "evals/python/flask-basic/app.py": "5fcca84aacb85fb64cceec468d669718b163566742c5a7343bd65316923e840c",
       "evals/python/flask-basic/eval/inputs/dotenv-existing.env": "f2466bedbb8498db92032477586d05b7095a31805c122c9a543f23cf9bb1784f",
       "evals/python/flask-basic/eval/inputs/dotenv-launch.sh": "aec3e5f1639e7b0c9598e5193a28a14382a7fe2bd1eb1e9e6182eec772e944f0",
       "evals/python/flask-basic/eval/qual/dotenv-profiles.json": "164d9cc9803467e3de1bb8b024ab16c1e1a4ef07b9ac949bdf5c1d604d4f399b",
@@ -1655,7 +1564,6 @@
       "evals/python/flask-basic/eval/qual/instrument.json": "ab95eaf1e80a5f8567f1e0e5a18a6a19d39bd5af1d787eeca20b416bb0f4e6a8",
       "evals/python/flask-basic/eval/inputs/python-cli-launcher-policy-cases.json": "63dad2814d1e6b0c9020c898c32ab743079ec77e896633bd5b5bb69ce706c27a",
       "evals/python/flask-basic/eval/qual/local-log-launcher-policy.json": "e5ae5bf6f37b840d917e352d4dcfacec9e0d676988d381a498656923cc3ec0bd",
-      "evals/python/flask-basic/eval/qual/logging-instrument-contract.json": "bcacccfd65b665c8f7e4398053f051e778765c4d05085ada57a9654cce950c8f",
       "evals/python/flask-basic/eval/runtime/App.Dockerfile": "d0fe3f537e8365ac5c554006235e38b164269aa9a47d3b0d5d7da0cdf77847fa",
       "evals/python/flask-basic/eval/runtime/docker-compose.yml": "70b52f92235ebd98e61c89d9b47ea02aa63bae97263b812b9fd307162aada72b",
       "evals/python/flask-basic/eval/runtime/instrument.json": "c771d69ff92406b905e82cea6fbaee4d5720dd38038bb7423dab589bcdaf78b9",
@@ -1709,12 +1617,7 @@
       "skills/references/full-runtime-acceptance.md",
       "skills/references/genai-readiness.md",
       "skills/references/incident-readiness.md",
-      "skills/references/languages/go.md",
-      "skills/references/languages/java.md",
-      "skills/references/languages/node.md",
-      "skills/references/languages/python.md",
       "skills/references/local-otlp-receiver.md",
-      "skills/references/logging-readiness.md",
       "skills/references/report-flow-contract.md",
       "skills/references/scripts/observe_report.py",
       "skills/references/scripts/observe_report_core.py",
@@ -1757,27 +1660,6 @@
         "eval_inputs": [
           "eval/inputs/otel-audit.json"
         ]
-      },
-      {
-        "definition_path": "evals/go/chi-basic/eval/qual/logging-instrument-contract.json",
-        "fixture_dir": "evals/go/chi-basic",
-        "prompt_id": "logging-trial-1",
-        "eval_kind": "rubric",
-        "eval_inputs": []
-      },
-      {
-        "definition_path": "evals/go/chi-basic/eval/qual/logging-instrument-contract.json",
-        "fixture_dir": "evals/go/chi-basic",
-        "prompt_id": "logging-trial-2",
-        "eval_kind": "rubric",
-        "eval_inputs": []
-      },
-      {
-        "definition_path": "evals/go/chi-basic/eval/qual/logging-instrument-contract.json",
-        "fixture_dir": "evals/go/chi-basic",
-        "prompt_id": "logging-trial-3",
-        "eval_kind": "rubric",
-        "eval_inputs": []
       },
       {
         "definition_path": "evals/go/chi-basic/eval/runtime/instrument.json",
@@ -1943,27 +1825,6 @@
         ]
       },
       {
-        "definition_path": "evals/java/springboot-basic/eval/qual/logging-instrument-contract.json",
-        "fixture_dir": "evals/java/springboot-basic",
-        "prompt_id": "logging-trial-1",
-        "eval_kind": "rubric",
-        "eval_inputs": []
-      },
-      {
-        "definition_path": "evals/java/springboot-basic/eval/qual/logging-instrument-contract.json",
-        "fixture_dir": "evals/java/springboot-basic",
-        "prompt_id": "logging-trial-2",
-        "eval_kind": "rubric",
-        "eval_inputs": []
-      },
-      {
-        "definition_path": "evals/java/springboot-basic/eval/qual/logging-instrument-contract.json",
-        "fixture_dir": "evals/java/springboot-basic",
-        "prompt_id": "logging-trial-3",
-        "eval_kind": "rubric",
-        "eval_inputs": []
-      },
-      {
         "definition_path": "evals/node/express-basic/eval/qual/dependency-log-compatibility.json",
         "fixture_dir": "evals/node/express-basic",
         "prompt_id": "dependency-log-compatibility",
@@ -1983,27 +1844,6 @@
         "definition_path": "evals/node/express-basic/eval/qual/instrument.json",
         "fixture_dir": "evals/node/express-basic",
         "prompt_id": "runtime-preserving",
-        "eval_kind": "rubric",
-        "eval_inputs": []
-      },
-      {
-        "definition_path": "evals/node/express-basic/eval/qual/logging-instrument-contract.json",
-        "fixture_dir": "evals/node/express-basic",
-        "prompt_id": "logging-trial-1",
-        "eval_kind": "rubric",
-        "eval_inputs": []
-      },
-      {
-        "definition_path": "evals/node/express-basic/eval/qual/logging-instrument-contract.json",
-        "fixture_dir": "evals/node/express-basic",
-        "prompt_id": "logging-trial-2",
-        "eval_kind": "rubric",
-        "eval_inputs": []
-      },
-      {
-        "definition_path": "evals/node/express-basic/eval/qual/logging-instrument-contract.json",
-        "fixture_dir": "evals/node/express-basic",
-        "prompt_id": "logging-trial-3",
         "eval_kind": "rubric",
         "eval_inputs": []
       },
@@ -2449,27 +2289,6 @@
         "eval_inputs": [
           "eval/inputs/python-cli-launcher-policy-cases.json"
         ]
-      },
-      {
-        "definition_path": "evals/python/flask-basic/eval/qual/logging-instrument-contract.json",
-        "fixture_dir": "evals/python/flask-basic",
-        "prompt_id": "logging-trial-1",
-        "eval_kind": "rubric",
-        "eval_inputs": []
-      },
-      {
-        "definition_path": "evals/python/flask-basic/eval/qual/logging-instrument-contract.json",
-        "fixture_dir": "evals/python/flask-basic",
-        "prompt_id": "logging-trial-2",
-        "eval_kind": "rubric",
-        "eval_inputs": []
-      },
-      {
-        "definition_path": "evals/python/flask-basic/eval/qual/logging-instrument-contract.json",
-        "fixture_dir": "evals/python/flask-basic",
-        "prompt_id": "logging-trial-3",
-        "eval_kind": "rubric",
-        "eval_inputs": []
       },
       {
         "definition_path": "evals/python/flask-basic/eval/runtime/instrument.json",
