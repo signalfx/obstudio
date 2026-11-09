@@ -79,8 +79,8 @@ preservation checks are local workflow; SDK configuration defines each setting's
 precedence, and an active file loader retains its own contract. Include resource
 encodings accepted by that installed configuration owner, such as whitespace
 around resource entries where supported. A shell substring match is not SDK
-parsing: appending a default after an unrecognized supplied key can overwrite
-operator identity when later duplicate keys win. Preserve the supplied resource
+parsing: appending a default after a supplied key the substring test missed can
+overwrite operator identity when later duplicate keys win. Preserve the supplied resource
 configuration intact when no supported lower-priority defaults mechanism exists.
 
 Let the installed exporter parse OTLP header environment values using its
@@ -144,6 +144,16 @@ different proof boundaries. Passing one cannot close the others. A rule mention,
 schema check, total test count or supplied ID strings cannot establish full
 guideline coverage. Any omitted applicable row leaves that claim incomplete.
 
+Before finalizing, perform a per-scenario check of every required assertion and
+control named by its trigger and acceptance criteria, including negative controls.
+Keep missing checks not proven rather than completing a row from related passes.
+Choose each row's `proof_mode` at its own boundary: a focused SDK/bridge probe
+with a loopback receiver is `unit+otlp`, even when a separate test starts the app.
+Use `full_runtime` only when the claimed event traverses the normal application
+entrypoint and call site to the observed boundary. Audit plans these checks;
+instrumentation and verification reconcile their actual results. These are local
+report-contract checks, not additional normative OTel SDK requirements.
+
 For a claim combining properties, bind its evidence to the same owned path and
 operation. Separate passing unit tests for context copying and synchronous
 real-span receipt do not prove an asynchronous log-to-span join. Mark that
@@ -157,6 +167,11 @@ coverage from unrelated paths or independent probes.
 Check the real bridge's numeric severity mapping, source severity text, body,
 logger/scope and timestamps. Common single-level mappings are DEBUG=5, INFO=9,
 WARN=13 and ERROR=17; finer source levels can use their documented range.
+These range labels do not prescribe `SeverityText` or its casing. Preserve the
+selected bridge's actual source-text mapping; do not uppercase it to match a
+numeric band name. The [data model](https://opentelemetry.io/docs/specs/otel/logs/data-model/#field-severitytext)
+allows a short-name substitution when SeverityText is absent, not replacement
+of a present source value.
 Never copy a source logger's numeric level directly into SeverityNumber.
 Unknown severity in a source with a level concept may remain 0/absent; do not
 invent an ERROR classification. If an event is known erroneous and its source
@@ -462,13 +477,15 @@ counts merely to fill a field.
 
 For the local evidence report, reconcile per-batch request and response counts
 before summing a multi-batch trial. Save per-outcome attempted, received,
-acknowledged accepted, rejected and unresolved counts in the canonical report,
-with links to raw receipts. A compact shared fault test may cover multiple
+acknowledged accepted, rejected and unresolved counts with raw-receipt links in
+the canonical runtime report's existing `evidence`/`observed_telemetry` fields,
+or its Markdown evidence section. A compact shared fault test may cover multiple
 outcomes; do not mark the mixed fault scenario `otlp_accepted` because one
 healthy or partial-success subtrial was acknowledged. Split the observations or
-use the report's supported visibility with an explicit per-outcome explanation.
-Warning-only partial success with R=0 acknowledges all N records without retry;
-receipt alone, completed failure and a stall retain their distinct meanings.
+explain each outcome using an existing visibility state; do not invent a mixed
+visibility enum or new JSON keys. The [shared report contract](scripts/observe_report_core.py)
+defines `proof_mode`, `visibility` and the existing evidence fields. Receipt alone,
+completed failure, a stall and protocol acknowledgement retain distinct meanings.
 
 The standard OTLP exporter timeout covers a whole batch export, including all
 attempts and retry waits; it must not restart for each attempt, and an earlier
@@ -577,12 +594,12 @@ across the applicable rules.
 | Rule | Required acceptance detail |
 |---|---|
 | LOG-SPEC-CLOSURE | Applicable source clauses with requirement level, owner, source/config/default evidence, classification, selected finding/scenario mapping and explicit proof boundary. Combined claims need evidence from the same owned path; unrelated passing probes cannot be combined into end-to-end coverage. Unmapped clauses or missing evidence keep the relevant completeness claim partial. |
-| LOG-RECORD | Name the detected/proposed bridge and verified version or unverified capability; specify source occurrence value/precision, observation time separately, source level to numeric severity, and actual body/category. |
+| LOG-RECORD | Name the detected/proposed bridge and verified version or unverified capability; specify source occurrence value/precision, observation time separately, source level to numeric severity, actual SeverityText/casing independently of the numeric band name, and actual body/category. |
 | LOG-CONTEXT | Exact sampled/unsampled/outside IDs and SDK flags; real SDK-created sampled parent/child spans joined to their logs at the claimed boundary, with parentage/resource checks. Explicitly name one joint scenario traversing an owned async handoff and joining that worker/callback log to its received real span; separate known-ID async and synchronous join tests are insufficient. Separate unsampled non-export and outside-span controls, canonical OTLP fields from ordinary attributes, and non-OTLP formatter proof where selected. |
 | LOG-ASYNC-HANDOFF | Caller capture before scheduling; exact request pairing, permitted MDC handling where applicable, worker cleanup and bridge placement relative to queues. Link the joint real-span async scenario, supported propagation and expected-loss controls. |
 | LOG-EXCEPTION | Allowed exception fields and excluded sensitive fields, with bridge/event convention applicability and optional-field decisions. |
 | LOG-LIMITS | Name the effective/proposed log attribute count/value settings or public API fields, separately from Body policy. Specify below/at/above-limit inputs, units, expected outcomes and supported drop accounting; generic limits plus numbers are insufficient. For an expensive construction path, name the supported native/direct-OTel enablement query, check current policy inside the owned worker, and prove construction/output counts across disabled/enabled/disabled states. Preserve cheap direct emits and original sinks when the OTel path is disabled. |
-| LOG-DELIVERY | Record observed attempt/retry/caller deadlines and missing bounds with units/source separately from proposed queue/batch/schedule/export/shutdown settings and the composed budget. Assert batch <= queue on a batch path; a selected simple processor needs synchronous-cost evidence instead. Include a stalled receiver/caller deadline and a final log immediately before shutdown, with healthy receipt and bounded fault behavior checked independently. Record attempted/accepted/rejected/dropped separately, retaining unknown acceptance after a client timeout until a receipt resolves it. Name observed completed failure responses and terminal retry decisions separately from unresolved acceptance/persistence counts; a null count alone is not a failed response-classification check. |
+| LOG-DELIVERY | Record observed attempt/retry/caller deadlines and missing bounds with units/source separately from proposed queue/batch/schedule/export/shutdown settings and the composed budget. Assert batch <= queue on a batch path; a selected simple processor needs synchronous-cost evidence instead. Include a stalled receiver/caller deadline and a final log immediately before shutdown, with healthy receipt and bounded fault behavior checked independently. Record per-batch N/R request/response accounting before multi-batch totals, plus per-outcome attempted/received/acknowledged accepted/rejected/dropped and unresolved counts with raw-receipt links. Do not give a mixed fault scenario an unqualified accepted visibility from another successful subtrial; use existing report fields/states and explain each outcome. Retain unknown acceptance after a client timeout until a receipt resolves it. Name observed completed failure responses and terminal retry decisions separately from unresolved acceptance/persistence counts; a null count alone is not a failed response-classification check. |
 | LOG-DIAGNOSTICS | Name the supported separate routing or suppression mechanism. One exporter-fault scenario asserts bounded diagnostic volume and export attempts, application progress, original sink output, and continued operation of each other configured signal. Explicitly mark absent signals not configured; preserving configuration alone is not operation proof. |
 | LOG-VERIFY-FRESH | Unique report storage for each trial; planned manifest/lockfile dependency preparation; binding to source, command and dependency versions; actual success/failure/error/skip counts; preserved timeout console output, failed timeout verdict, owned-process cleanup and incremental structured partial results; explicit evidence scope. |
 

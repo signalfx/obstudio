@@ -787,8 +787,9 @@ launcher, including whitespace around entries when the resolved Java SDK accepts
 it. A shell substring test for `,service.name=` misses `, service.name=`; an
 appended fallback can then win as a later duplicate. Preserve the supplied
 resource configuration and let the existing SDK/agent parse and merge it.
-Use a supported lower-priority defaults mechanism or omit the new fallback;
-do not introduce a resource parser in shell. Also retain explicit service-name
+Omit new launcher resource defaults unless the existing configuration owner
+already supplies a verified lower-priority default; do not introduce a resource
+parser in shell. Also retain explicit service-name
 override and absent-identity controls, checking emitted resources for all signals.
 
 ### Context, mapping and diagnostics

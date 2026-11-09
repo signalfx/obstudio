@@ -706,6 +706,14 @@ OTel application bridge. Do not route exporter errors back through the same
 Winston/Pino/Console export path. Prove bounded attempts, observable diagnostics,
 application progress and original transport output during an exporter fault.
 
+### Severity text mapping
+
+Derive `SeverityText` and its exact casing from the selected bridge's resolved
+mapping, independently of the numeric severity band. `WARN=13` does not imply
+that the text must be `WARN`; a bridge may preserve a source label such as
+`warn`. Keep audit expectations conditional on the verified bridge capability
+rather than rewriting source severity text to fit an assumed uppercase label.
+
 ### Fault receipt accounting
 
 When testing the selected OTLP exporter, decode each transmitted batch and its

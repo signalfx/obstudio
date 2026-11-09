@@ -72,6 +72,7 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
         if target == "languages/node.md":
             assert "per-batch" in readiness and "acknowledged" in readiness
             assert "mixed" in readiness and "otlp_accepted" in readiness
+            assert "SeverityText" in readiness and "casing" in readiness
         if target == "languages/python.md":
             assert "SystemExit" in readiness and "repeated" in readiness
             assert "signal handler" in readiness and "drain" in readiness
@@ -84,6 +85,8 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
     assert "read only the detected stack's" in common
     assert "per-batch" in common and "per-outcome" in common
     assert "mixed fault scenario" in common and "otlp_accepted" in common
+    assert "per-scenario" in common and "unit+otlp" in common
+    assert "trigger and acceptance criteria" in common
 
 
 @pytest.mark.parametrize("language", ["java", "python", "go", "node"])
