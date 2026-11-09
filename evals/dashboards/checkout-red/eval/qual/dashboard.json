@@ -11,7 +11,8 @@
   "judge_inputs": [
     "Inspect ./service/.observe for the resulting files when present, especially ./service/.observe/terraform/dashboards.tf, ./service/.observe/terraform/variables.tf, ./service/.observe/dashboards.md, and ./service/.observe/dashboards.preview.json.",
     "Read ./last_message.md for the agent final response.",
-    "Read ./grade.json for run guard checks."
+    "Read ./grade.json for run guard checks.",
+    "Read ./.agents/skills/splunk-dashboard/SKILL.md and inspect its allowed-tools frontmatter."
   ],
   "rubric": [
     "Reads the audit at .observe/otel-audit.json and groups the checkout RED metrics into panels: a latency/duration time-series panel from http.server.request.duration, an error-rate panel from checkout.payment.errors, and a throughput/rate panel; saturation or KPI single-value panels are reasonable additions.",
@@ -22,6 +23,7 @@
     "Writes .observe/dashboards.preview.json as valid JSON with schemaVersion 1 and a groups -> dashboards -> charts tree whose chartType values come from the time_series|single_value|list|heatmap|text|table vocabulary and whose layout matches the Terraform grid placement.",
     "Writes a .observe/dashboards.md report explaining the panel classification rationale and hands off to terraform apply or the dashboard publish skill without performing any network call.",
     "Does not claim in the final response that the generated Terraform or .observe/dashboards.preview.json was already validated, verified, or checked (for example 'verified locally'); unlike splunk-configure, this skill has no bundled validator script and does not run terraform itself, so it directs the user to run terraform validate/plan or use $splunk-dashboard-publish next instead of asserting prior verification.",
-    "Any local Splunk Observability Studio Dashboards preview reference it gives uses localhost:17900 and never the retired UI port 3000."
+    "Any local Splunk Observability Studio Dashboards preview reference it gives uses localhost:17900 and never the retired UI port 3000.",
+    "The skill's SKILL.md allowed-tools frontmatter grants file writes only through the scoped rule Edit(**/.observe/**) instead of an unrestricted Write or Edit grant, and the run created no new file under ./service outside ./service/.observe/."
   ]
 }

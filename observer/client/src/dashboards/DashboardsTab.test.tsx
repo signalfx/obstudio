@@ -34,11 +34,21 @@ describe("DashboardsTab", () => {
     }
   });
 
-  it("always shows the approximate badge", async () => {
+  it("hides the preview badge and controls until there is a preview", async () => {
     stubFetchOnce(makePreviewResponse({ available: false, groups: [], message: "Run $splunk-dashboard." }));
-    render(<DashboardsTab />);
-    expect(screen.getByText(/Approximate · local-data preview/i)).toBeTruthy();
+    const { container } = render(<DashboardsTab />);
     await waitFor(() => expect(screen.getByText(/No dashboard preview yet/i)).toBeTruthy());
+    expect(container.querySelector(".dashboards-tab__bar")?.hasAttribute("hidden")).toBe(true);
+    expect(screen.queryByRole("combobox", { name: "Time window" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Copy $splunk-dashboard command" })).toBeTruthy();
+  });
+
+  it("shows the preview badge and controls once there is a preview", async () => {
+    stubFetchOnce(makePreviewResponse());
+    const { container } = render(<DashboardsTab />);
+    await waitFor(() => expect(screen.getByText("Checkout RED")).toBeTruthy());
+    expect(container.querySelector(".dashboards-tab__bar")?.hasAttribute("hidden")).toBe(false);
+    expect(screen.getByRole("combobox", { name: "Time window" })).toBeTruthy();
   });
 
   it("renders the available:false empty state with the spec message", async () => {

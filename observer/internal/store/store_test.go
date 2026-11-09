@@ -2257,6 +2257,56 @@ func TestSessionReset_GapGreaterThan30sClears(t *testing.T) {
 	}
 }
 
+func TestInternalLogsPreserveTelemetryAndApplicationSessionClock(t *testing.T) {
+	s := New()
+	now := time.Now()
+	s.AddSpansForConnection("app", []Span{newTestSpan("trace", "span", "request", now, 10)})
+	s.AddMetricsForConnection("app", []MetricDataPoint{newTestMetric("requests", 1, now)})
+	s.AddLogsForConnection("app", []LogRecord{newTestLog("application", now)})
+	idle := now.Add(-35 * time.Second)
+	s.mu.Lock()
+	s.lastIngest = idle
+	s.mu.Unlock()
+	changed := 0
+	s.SetChangeCallback(func(time.Time) { changed++ })
+	s.AddInternalLogs([]LogRecord{newTestLog("connection probe", now)})
+	if changed != 0 || len(s.SnapshotTelemetry().Logs) != 1 {
+		t.Fatal("internal diagnostics affected application validation")
+	}
+	if stats := s.Stats(); stats.SpanCount != 1 || stats.DataPointCount != 1 || stats.LogCount != 2 {
+		t.Fatalf("internal log erased the application capture: %+v", stats)
+	}
+	s.mu.RLock()
+	unchanged := s.lastIngest.Equal(idle)
+	probe := s.logs.snapshot()[1]
+	s.mu.RUnlock()
+	if !unchanged || probe.Body != "connection probe" || probe.ID == "" {
+		t.Fatalf("internal log changed the clock or was not retained: clock unchanged=%v probe=%+v", unchanged, probe)
+	}
+	s.AddLogsForConnection("app", []LogRecord{newTestLog("next session", now)})
+	if stats := s.Stats(); stats.SpanCount != 0 || stats.DataPointCount != 0 || stats.LogCount != 1 {
+		t.Fatalf("application ingestion no longer resets an expired session: %+v", stats)
+	}
+}
+
+func TestInternalLogEvictionMarksApplicationValidationChanged(t *testing.T) {
+	s := New()
+	s.logs = newRingBuffer[LogRecord](1)
+	now := time.Now()
+	s.AddLogsForConnection("app", []LogRecord{newTestLog("application", now)})
+	lastIngest := s.lastIngest
+	changed := 0
+	s.SetChangeCallback(func(time.Time) { changed++ })
+	s.AddInternalLogs([]LogRecord{newTestLog("connection probe", now)})
+	if changed != 1 || len(s.SnapshotTelemetry().Logs) != 0 || !s.lastIngest.Equal(lastIngest) {
+		t.Fatal("probe eviction must invalidate the changed application snapshot without advancing its session", changed)
+	}
+	s.AddInternalLogs([]LogRecord{newTestLog("next probe", now)})
+	if changed != 1 || s.QueryLogs(1)[0].Body != "next probe" {
+		t.Fatal("replacing an internal diagnostic must retain it without invalidating application validation", changed)
+	}
+}
+
 func TestSessionReset_GapLessThan30sDoesNotClear(t *testing.T) {
 	s := New()
 	now := time.Now()
@@ -2559,6 +2609,34 @@ func TestQueryTraces_ZeroDurationIsIncludedInJSON(t *testing.T) {
 	}
 	if !strings.Contains(string(detailJSON), `"durationMs":0`) {
 		t.Fatalf("expected detail JSON to include zero duration, got %s", detailJSON)
+	}
+}
+
+func TestTraceSummaries_StartTimeIsEarliestSpanStart(t *testing.T) {
+	s := New()
+	start := time.Date(2026, 10, 28, 14, 3, 21, 0, time.UTC)
+	root := newTestSpan("trace-1", "span-1", "root", start.Add(5*time.Millisecond), 10)
+	child := newTestSpan("trace-1", "span-2", "child", start, 2)
+	child.ParentSpanID = "span-1"
+	s.AddSpansForConnection("conn-1", []Span{root, child})
+
+	for name, results := range map[string][]TraceSummary{
+		"QueryTraceSummariesFiltered": s.QueryTraceSummariesFiltered(TraceSummaryFilter{Limit: 10}),
+		"QueryTracesFiltered":         s.QueryTracesFiltered("", "", "", "", 10, 8),
+	} {
+		if len(results) != 1 {
+			t.Fatalf("%s: expected 1 trace, got %d", name, len(results))
+		}
+		if !results[0].StartTime.Equal(start) {
+			t.Fatalf("%s: start time = %v, want %v", name, results[0].StartTime, start)
+		}
+		summaryJSON, err := json.Marshal(results[0])
+		if err != nil {
+			t.Fatalf("%s: marshal summary: %v", name, err)
+		}
+		if !strings.Contains(string(summaryJSON), `"startTime":"2026-10-28T14:03:21Z"`) {
+			t.Fatalf("%s: expected start time in summary JSON, got %s", name, summaryJSON)
+		}
 	}
 }
 

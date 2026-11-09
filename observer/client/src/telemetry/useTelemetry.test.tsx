@@ -7,14 +7,17 @@ import type {
   ObserverHostTelemetryMessage,
   ObserverHostTelemetrySubscription,
 } from "../host/transport";
+import { onConfigRefresh } from "./configSignal";
 import { useTelemetry } from "./useTelemetry";
 
 const hostTransportMock = vi.hoisted(() => ({
   subscribe: vi.fn(),
+  actualSubscribe: undefined as undefined | typeof import("../host/transport").subscribeObserverHostTelemetry,
 }));
 
 vi.mock("../host/transport", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../host/transport")>();
+  hostTransportMock.actualSubscribe = actual.subscribeObserverHostTelemetry;
   return {
     ...actual,
     subscribeObserverHostTelemetry: hostTransportMock.subscribe,
@@ -311,5 +314,79 @@ describe("useTelemetry", () => {
     await waitFor(() => {
       expect(reloadSpy).toHaveBeenCalledTimes(1);
     });
+  });
+  it("routes config-changed and reconnects to the config refresh notifier, not to telemetry state", async () => {
+    // client-signal-routing: notified, old-form-ignored, not-applied.
+    const listener = vi.fn();
+    const unsubscribe = onConfigRefresh(listener);
+    try {
+      render(<Harness />);
+      await waitFor(() => {
+        expect(MockWebSocket.instances.length).toBe(1);
+        expect(listener).toHaveBeenCalledTimes(1);
+        expect(screen.getByTestId("snapshot").textContent).toContain('"traceCount":1');
+      });
+      listener.mockClear();
+      const before = screen.getByTestId("snapshot").textContent;
+
+      const ws = MockWebSocket.instances.at(-1);
+      act(() => ws?.onmessage?.({ data: JSON.stringify({ type: "config-changed" }) }));
+      expect(listener).toHaveBeenCalledTimes(1);
+      act(() => ws?.onmessage?.({ data: JSON.stringify({ type: "update", signal: "config" }) }));
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("snapshot").textContent).toBe(before);
+
+      act(() => ws?.onclose?.());
+      await waitFor(() => {
+        expect(MockWebSocket.instances.length).toBe(2);
+        expect(listener).toHaveBeenCalledTimes(2);
+      }, { timeout: 3000 });
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it("refreshes config on a config-changed host envelope and a host connection", async () => {
+    // client-signal-routing: host-path. The hook's handler is also registered
+    // with the real transport, so the envelope goes through
+    // isObserverHostTelemetryEnvelope.
+    let hostListener: ((message: ObserverHostTelemetryMessage) => void) | undefined;
+    hostTransportMock.subscribe.mockImplementation(
+      (l: (message: ObserverHostTelemetryMessage) => void) => {
+        hostListener = l;
+        return { dispose: vi.fn(), pause: vi.fn(), resume: vi.fn() };
+      },
+    );
+    const listener = vi.fn();
+    const unsubscribe = onConfigRefresh(listener);
+    render(<Harness />);
+    await waitFor(() => {
+      expect(hostTransportMock.subscribe).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("snapshot").textContent).toContain('"traceCount":1');
+    });
+    vi.stubGlobal("acquireVsCodeApi", () => ({ postMessage() {} }));
+    const real = hostTransportMock.actualSubscribe?.((m) => hostListener?.(m));
+    try {
+      expect(real).toBeTruthy();
+      const before = screen.getByTestId("snapshot").textContent;
+      act(() => {
+        window.dispatchEvent(new MessageEvent("message", {
+          data: { type: "obstudio.host.telemetry-message", message: { type: "config-changed" } },
+        }));
+      });
+      expect(listener).toHaveBeenCalledTimes(1);
+      act(() => {
+        window.dispatchEvent(new MessageEvent("message", {
+          data: { type: "obstudio.host.telemetry-message", message: { type: "update", signal: "config" } },
+        }));
+      });
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("snapshot").textContent).toBe(before);
+      act(() => hostListener?.({ type: "connected" }));
+      expect(listener).toHaveBeenCalledTimes(2);
+    } finally {
+      real?.dispose();
+      unsubscribe();
+    }
   });
 });

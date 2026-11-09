@@ -73,8 +73,10 @@ See [evals/README.md](evals/README.md) for skill evaluation.
 
 ## Security and privacy
 
-See the plugin [security](plugins/obstudio/SECURITY.md) and
-[privacy](plugins/obstudio/PRIVACY.md) documentation for details about data
+See the plugin [security](plugins/obstudio/SECURITY.md) documentation, including
+the [reviewer summary](plugins/obstudio/SECURITY.md#reviewer-summary-what-runs-what-is-downloaded-which-credentials-are-read)
+of what runs locally, what is downloaded, and which credentials are read, and
+the [privacy](plugins/obstudio/PRIVACY.md) documentation for details about data
 handling and external connections.
 
 ## License

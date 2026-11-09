@@ -24,6 +24,27 @@ function selectFilterField(label: string): void {
 }
 
 describe("MetricsTab", () => {
+  it("gives service its own column so same-named metrics can be told apart", () => {
+    const base = { name: "db.client.operation.duration", description: "Database client operation duration", unit: "s", type: "histogram", scopeName: "otel", dataPointCount: 1, dataPoints: [] };
+    const { container } = render(
+      <MetricsTab
+        metrics={[
+          { ...base, serviceName: "checkout" },
+          { ...base, serviceName: "payments" },
+          { ...base, serviceName: "unknown" },
+        ]}
+        telemetryError={null}
+      />,
+    );
+
+    expect(screen.getByText("Service")).toBeTruthy();
+    const services = Array.from(container.querySelectorAll(".data-table__td--metric-service"), (cell) => cell.textContent);
+    expect(services).toEqual(["checkout", "payments", "--"]);
+    const descriptions = Array.from(container.querySelectorAll(".metric-card__description"), (cell) => cell.textContent);
+    expect(descriptions.every((text) => !text?.includes("checkout") && !text?.includes("payments"))).toBe(true);
+    expect(container.querySelector(".data-table__th--metric-description")?.textContent).toBe("Description");
+  });
+
   it("shows only the metric type when a metric has no unit", () => {
     const base = { serviceName: "checkout", scopeName: "otel", dataPointCount: 1, dataPoints: [] };
     render(
@@ -165,7 +186,8 @@ describe("MetricsTab", () => {
     await act(async () => {});
 
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/api/query/metrics/filter-values?field=serviceName"))).toBe(true);
-    expect(screen.getByText("checkout")).toBeTruthy();
+    // "checkout" is also in each row's Service column, so look for it in the suggestion menu.
+    expect(screen.getByRole("menuitem", { name: /checkout/ })).toBeTruthy();
   });
 
   it("shows metric filters in the requested order", () => {
@@ -255,7 +277,8 @@ describe("MetricsTab", () => {
     expect(names).toEqual(["alpha.metric", "zeta.metric"]);
     expect(container.querySelector(".metric-card__header")?.classList.contains("data-table__row--metrics")).toBe(true);
     expect(container.querySelector(".metric-card__name")?.classList.contains("explorer-row__primary")).toBe(true);
-    expect(container.querySelector(".metric-card__description")?.textContent).toBe("Alpha metric · checkout · otel");
+    expect(container.querySelector(".metric-card__description")?.textContent).toBe("Alpha metric · otel");
+    expect(container.querySelector(".data-table__td--metric-service")?.textContent).toBe("checkout");
     expect(container.querySelector(".metric-card__glyph")).toBeNull();
     expect(container.querySelector(".metric-card__meta")).toBeTruthy();
     expect(container.querySelector(".metric-card__meta")?.classList.contains("data-table__cell-content")).toBe(true);
@@ -444,8 +467,8 @@ describe("MetricsTab", () => {
     expect(container.querySelectorAll(".metric-card")).toHaveLength(2);
     const descriptions = Array.from(container.querySelectorAll(".metric-card__description")).map((node) => node.textContent);
     expect(descriptions).toEqual([
-      "Request duration · checkout · otel.http",
-      "Request duration · checkout · otel.rpc",
+      "Request duration · otel.http",
+      "Request duration · otel.rpc",
     ]);
   });
 
