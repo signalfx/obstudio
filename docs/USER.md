@@ -71,6 +71,12 @@ To connect every supported target to the running shared instance:
 | `windsurf` with legacy Cascade | `@otel-audit` |
 | `copilot` | MCP only; no bundled skill |
 
+The CLI `copilot` target above configures MCP only. **Copilot in VS Code 1.109+**
+can instead discover all nine skills directly from the installed
+[VS Code extension](../extension/README.md#github-copilot-in-vs-code), without
+copying skills into the project or user profile. Use `/otel-audit` in a new
+agent chat. Configure the local MCP server separately when using runtime tools.
+
 The `windsurf` skill bundle is available to Devin Local and legacy Cascade; the
 target configures Cascade automatically. For Devin Local, install the [Devin
 CLI](https://docs.devin.ai/cli), make sure `devin` is on `PATH`, and add the
@@ -165,32 +171,38 @@ The [Splunk Observability Studio guide](https://github.com/signalfx/obstudio/blo
 documents endpoints, service exporter setup, views, validation, runtime
 configuration, and APIs.
 
-## Forward to Splunk Observability Cloud
+## Forward to Splunk
 
-Splunk Observability Studio can forward received traces and metrics while
-keeping its UI available. Logs remain local.
+Splunk Observability Studio can forward metrics and traces to Observability Cloud
+and logs to Splunk Platform. Received telemetry stays available locally.
 
-Create `~/.obstudio/env` with these values:
+- Open **Cloud** in Splunk Observability Studio.
+- Each connection has its own export switch. Use the switch to pause or resume
+  forwarding for that destination. Logs received while paused or disconnected
+  stay local; enabling export sends new logs.
+- Studio saves connection settings in `~/.obstudio/connections.json` and keeps
+  tokens in the operating system credential store. Linux requires an unlocked
+  Secret Service provider.
+- Use **Edit token** to update a connection or **Disconnect** to forget its token.
+- Saved connections and export preferences persist across restarts.
+- If secure storage refuses a save, follow the setup link below the token field
+  and restart Studio, or choose **Connect for this session** to keep the
+  token in memory until Studio stops.
+  Enter the token again after Studio restarts. Session mode leaves saved
+  settings intact; restoring a saved connection requires access to secure storage.
 
-```dotenv
-OBSTUDIO_SPLUNK_METRICS_EXPORT=true
-OBSTUDIO_SPLUNK_TRACES_EXPORT=true
-SPLUNK_REALM=<your-realm>
-SPLUNK_ACCESS_TOKEN=<org-ingest-token>
-```
+### Observability Cloud metrics and traces
 
-```bash
-chmod 600 ~/.obstudio/env
-```
+Enter the realm and an organization access token with ingest scope,
+then select **Connect**. Metrics and traces share this connection and token.
 
-Then reload Splunk Observability Studio. For an agent-managed instance, fully
-restart the coding agent and begin a new task. For a standalone background
-instance, run `./obstudio restart`. For a foreground instance, stop it and
-launch it again.
+### Secure token storage
 
-The default env file is loaded automatically when present. Shell environment
-variables take precedence; use `./obstudio --env-file <path>` for another file.
-Forwarding requires an organization access token with ingest scope.
+Studio uses secure storage on the computer running the collector:
+
+- **macOS:** Unlock the login keychain in [Keychain Access](https://support.apple.com/guide/keychain-access/welcome/mac).
+- **Windows:** Use [Credential Manager](https://support.microsoft.com/en-us/windows/security/credential-manager-in-windows) in your Windows user session. If access is restricted, contact your system administrator.
+- **Linux:** Run a Secret Service provider in the collector’s desktop D-Bus session with an unlocked login or default keyring. Your distribution provides installation instructions. For GNOME, see [Unlock your keyrings](https://help.gnome.org/seahorse/keyring-unlock.html).
 
 Generating Terraform does not change Splunk; the publish skills described in
 [Using the skills](#using-the-skills) show a live diff and require confirmation
@@ -200,7 +212,73 @@ before creating resources. Both generator skills write Terraform under
 
 The local dashboard preview is approximate because SignalFlow runs in Splunk
 Observability Cloud. Publisher skills require an API token with permission to
-create their resources; an ingest-only token is not sufficient.
+create their resources; an ingest-only token is not sufficient. Set
+`SPLUNK_ACCESS_TOKEN` and, optionally, `SPLUNK_REALM` in the coding agent's
+environment before starting the agent. The Cloud UI keeps its saved export
+token in the operating system credential store.
+
+### Splunk Platform logs (HEC)
+
+1. **Prepare HEC.** Enable HTTP Event Collector and its token in Splunk. The
+   destination index must exist, and the token must be allowed to write to it.
+2. **Enter the connection.** In **Cloud → Splunk Platform**, paste the full
+   **HEC endpoint** and **HEC token**, then enter the **Logs index**.
+3. **Connect.** Studio sends one test log to check the endpoint, token and
+   index before saving. A new connection enables export; editing an existing
+   connection preserves its export switch.
+
+**Endpoint format.** Use HTTPS with the path `/services/collector` or
+`/services/collector/event`, without a query string or fragment. Plain HTTP
+is supported only for loopback hosts, such as `127.0.0.1` or `localhost`.
+
+| Deployment example | HEC endpoint |
+|---|---|
+| Splunk Cloud on AWS, port 443 | `https://http-inputs-<stack>.splunkcloud.com:443/services/collector` |
+| Splunk Enterprise, port 8088 | `https://<hec-host>:8088/services/collector/event` |
+
+Use the HEC hostname and port supplied for your deployment. Cloud hostnames
+vary by hosting platform; Cloud free trials can use port 8088, and Enterprise
+can use a custom port. See Splunk's [HEC endpoint reference](https://help.splunk.com/en/data-management/collect-http-event-data/use-hec-in-splunk-cloud-platform/set-up-and-use-http-event-collector-in-splunk-web).
+
+- **Source.** The form retains the saved source or defaults to `otel`;
+  sourcetype defaults to `otel:logs`. These fields are not shown in the form.
+- **TLS.** New endpoints verify the server certificate. Use **Skip TLS
+  certificate verification** for development indexes, such as trial accounts
+  whose HEC endpoint has an untrusted certificate. TLS still encrypts the
+  connection, but Studio skips server identity checks. Leave this unchecked
+  when the endpoint has a trusted certificate. Select **Edit token** to
+  review or change the saved TLS choice. Changing the endpoint clears it.
+- **Disconnect.** Confirm **Disconnect** to remove the HEC token and turn
+  off logs export. Logs remain available locally.
+- **Forwarding.** Only logs received while export is enabled are forwarded,
+  apart from the explicit connection test. Paused or disconnected logs stay
+  local and are not replayed on resume. Pause, Disconnect and destination
+  changes stop pending remote sends. Local retention is bounded.
+- **Find logs.** Use **Search index** when Studio can identify the Splunk Cloud
+  Web address from an HTTPS HEC endpoint on port 443 or 8088. For Enterprise or
+  other endpoints, open Splunk Web and search the index manually. Accepted
+  counts show HEC acceptance; search results confirm that events were indexed.
+
+Replace `your-index` with the configured index and use a recent time range:
+
+```spl
+index="your-index" earliest=-15m
+```
+
+Add `source="otel"` when using the default source.
+
+#### HEC troubleshooting
+
+- **Edit token.** In **Cloud → Splunk Platform**, select **Edit token** to
+  replace a rejected token, then select **Save changes**.
+- **Export counts.** Counts show logs accepted by HEC. Search Splunk to confirm
+  that the logs are searchable.
+- **Paused export.** Logs stay local while export is paused. Enabling export
+  sends new logs; it does not replay logs collected while paused.
+
+For token permissions, indexes, endpoints and certificate setup, follow Splunk's
+HEC guidance for [Splunk Cloud Platform](https://help.splunk.com/en/data-management/collect-http-event-data/use-hec-in-splunk-cloud-platform/set-up-and-use-http-event-collector-in-splunk-web)
+or [Splunk Enterprise](https://help.splunk.com/en/data-management/collect-http-event-data/use-hec-in-splunk-enterprise/set-up-and-use-http-event-collector-in-splunk-web).
 
 ## Troubleshooting
 

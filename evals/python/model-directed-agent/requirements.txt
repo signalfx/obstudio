@@ -4,8 +4,8 @@ requests>=2.33.0,<3
 flask>=3.0.0
 
 # OpenTelemetry
-opentelemetry-api>=1.45.0,<2
-opentelemetry-sdk>=1.45.0,<2
-opentelemetry-exporter-otlp-proto-http>=1.45.0,<2
+opentelemetry-api>=1.45.1,<2
+opentelemetry-sdk>=1.45.1,<2
+opentelemetry-exporter-otlp-proto-http>=1.45.1,<2
 opentelemetry-instrumentation-flask>=0.48b0
 opentelemetry-instrumentation-logging>=0.48b0

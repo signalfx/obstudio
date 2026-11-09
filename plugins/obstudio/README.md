@@ -53,13 +53,47 @@ Splunk publish skills, plus `observer-open`, `observer-status`,
   and [`hooks/claude-hooks.json`](./hooks/claude-hooks.json).
 
 The shared [`hooks/bootstrap_obstudio.py`](./hooks/bootstrap_obstudio.py)
-downloads the release when needed, validates its published checksum, and
-starts or reuses Splunk Observability Studio when the host permits managed startup.
-Claude and Codex prefer the Observer release matching their plugin version. If
-the matching Observer runtime assets return 404, the host falls back to the
-latest Observer with a warning. When a healthy shared Observer is already
-running at another version, the host reports the mismatch and reuses it rather
-than interrupting another host.
+downloads the release when needed, verifies it against the SHA-256 pinned in
+[`hooks/runtime-manifest.json`](./hooks/runtime-manifest.json), and starts or
+reuses Splunk Observability Studio when the host permits managed startup.
+Claude and Codex download only the Observer release matching their plugin
+version. If it is unavailable or does not match the pinned hash, the hook fails
+closed instead of using another version. When a healthy shared Observer is
+already running at another version, the host reports the mismatch and reuses it
+rather than interrupting another host.
+
+## Security
+
+Nothing is downloaded or started until you review and trust the SessionStart
+hook. If you trust it, the hook downloads a Splunk Observability Studio release
+binary from the `signalfx/obstudio` GitHub releases, verifies it against the
+SHA-256 shipped inside the plugin (`hooks/runtime-manifest.json`), and starts a
+local process bound to loopback
+addresses (`127.0.0.1` ports 17900, 4317, and 4318). Do not trust the hook if
+you do not want managed binary download or local process startup. Skills that
+edit files or run project commands remain subject to your host's approval
+policy. See [`SECURITY.md`](./SECURITY.md) for the full trust model, and its
+[reviewer summary](./SECURITY.md#reviewer-summary-what-runs-what-is-downloaded-which-credentials-are-read)
+for what runs locally, what is downloaded, and which credentials are read.
+
+## Privacy
+
+The plugin does not upload workspace contents to Splunk Observability Cloud.
+
+Token telemetry and repository correlation are separate and stay off unless
+you opt in with `obstudio token-telemetry enable`.
+
+The Splunk publish skills call Splunk Observability Cloud APIs only when you
+invoke them with credentials you provide. OTLP data received by the local
+instance stays local unless you configure forwarding. Your host and model provider have their own privacy
+behavior. See [`PRIVACY.md`](./PRIVACY.md) for the data flows.
+
+## Support and security contact
+
+The plugin is maintained by the Splunk Observability Studio team at Cisco. For
+support, or to report a security concern, email bkovuri@cisco.com. For
+non-security bugs, you can also open an issue in the
+[repository](https://github.com/signalfx/obstudio).
 
 ## Maintainer workflow
 

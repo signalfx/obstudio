@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-until curl -fsS http://observer:3000/api/health >/dev/null; do
+until curl -fsS http://observer:17900/api/health >/dev/null; do
   sleep 1
 done
 

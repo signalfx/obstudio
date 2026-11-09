@@ -25,7 +25,7 @@ The project and log stream remain operator-overridable through
 the runtime secret environment and are not stored in this fixture.
 
 The manifest enables Galileo's supported `otel` extra and requires patched
-OpenTelemetry 1.45 or newer. `galileo_compat.py` supplies a requests session
+OpenTelemetry 1.45.1 or newer. `galileo_compat.py` supplies a requests session
 through the exporter's public constructor and retains it for Galileo's legacy
 session access. The session preserves Galileo's per-batch project, stream, and
 experiment headers with the new transport. The real Galileo processor,

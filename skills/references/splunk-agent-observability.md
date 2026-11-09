@@ -7,6 +7,114 @@ has `finding_group: splunk-agent-observability`.
 Also use it when a fresh agent's selected default producer is Splunk AO, even
 before the SDK is installed or configured.
 
+## AO-Compatible Trace Root
+
+Read this whole section before assessing, implementing or verifying AO roots;
+an excerpt ending before the acceptance requirements is insufficient.
+
+For each in-scope AO runtime, map the actual application trace from its entry
+point through the outermost agent/workflow and its selected children before
+choosing instrumentation. Include HTTP, RPC, messaging and cross-service
+ancestors. Record each structural boundary's source owner, operation role,
+native trace/span/parent identity and kind, and intended AO representation in
+the existing plan/evidence. A valid OTel hierarchy and resolved routing IDs do
+not prove that AO retains its root. A retained agent whose parent has no AO
+record can appear as a partial trace even when ingest acknowledges every span.
+In the existing evidence/plan, name the **physical trace root** and the
+**outermost GenAI operation** separately, with their actual parent relationship.
+For example, `POST /chat SERVER -> invoke_agent INTERNAL` has an HTTP root;
+calling the inner agent "the root" does not remove that parent. A passing
+direct call to the agent function does not prove the web entrypoint's graph.
+
+Audit a missing or unsupported physical-root representation as a distinct
+canonical root-compatibility finding or explicit compatibility blocker, with
+its own root/parent acceptance. Project/stream/routing findings and an agent
+role correction alone do not cover it. If the bound audit omitted this work,
+instrument must expose that gap and obtain current root scope through the
+audit/selection flow before implementing it; do not silently add work, rebind
+the audit, or claim complete AO assembly from the selected routing changes.
+
+Check the target's current official documentation and installed producer or
+adapter contracts. The [AO distributed OTel guide](https://agent-observability-docs.splunk.com/sdk-api/logging/distributed-tracing-otel)
+shows HTTP ancestors represented as workflow nodes; do not assume a generic
+HTTP span receives that representation automatically. Follow the
+[AO integration requirements](https://agent-observability-docs.splunk.com/sdk-api/third-party-integrations/opentelemetry-and-openinference/integration-recommendations)
+for the chosen operation and content mapping. A conversation-turn root and the
+physical OTel trace root are distinct. Neither a `gen_ai.conversation_root`
+marker nor adding an AO export processor alone establishes compatible root
+representation; require target-specific support and graph evidence.
+
+When an existing request/controller span owns a genuine orchestration boundary,
+prefer its public same-span start/end hooks or a supported AO compatibility
+mapping. Supply the applicable operation/identity, bounded safe input/output
+messages and available source-owned conversation ID at that boundary. A
+source-backed workflow may use supported `invoke_workflow`, workflow-name and
+message/session metadata. Record why that role belongs to this boundary and
+which inspected contract supports the mapping. Do not relabel a transport-only
+HTTP wrapper, demote an agent's model/tool feedback loop to a workflow, or add a
+dummy workflow just to satisfy the UI. A single agent without a separate
+workflow keeps its agent role. If no supported truthful representation exists,
+record the exact compatibility blocker and affected AO surface as incomplete
+while preserving supported native instrumentation.
+
+Judge controller ownership from its lifecycle, not the number of agent children.
+A conversation controller that loads session history, records the user turn,
+invokes an agent, commits the reply and rolls back state on failure owns a
+conversation-turn workflow outside the agent. For selected root work, map that
+existing request span through its public active-span API or framework hooks;
+keep the child as `invoke_agent`. A handler that only returns
+`run_agent(payload)` remains transport-only. Health, reset, static and unrelated
+HTTP routes do not acquire workflow metadata. Do not create a new workflow
+span inside a generic HTTP parent: that leaves the physical root unresolved.
+
+Bind actual input and an available application conversation ID before the
+controller invokes its children; bind actual output only on success. Reuse
+privacy controls without assuming a generic serializer preserves AO message
+types: after redaction and byte limiting, parse the final attribute and assert
+that each message's `parts` is an array of typed objects, not a JSON string.
+Adapt a legacy role/content sanitizer with a type-preserving final encoder when
+needed. Test secret redaction and multibyte/oversized input against the final
+serialized byte limit. Preserve failed/cancelled completion and absent output.
+
+Preserve the real parent chain, span identities, correct kinds and one producer
+per logical operation. Routing-only exporter copies do not repair root semantics.
+Do not detach/reparent the agent, invent an unexported parent, replace the
+provider, duplicate exports or fabricate successful output to obtain a complete
+AO row. Preserve actual error/cancel status and missing output on a failed call.
+Apply the mapping only to authorized AO work; unrelated signals, destinations
+and unselected operations retain their contracts.
+
+Plan and test root compatibility separately from resource binding. Include a
+parentless agent, an agent under a generic transport ancestor, a genuine
+orchestration boundary with its supported root mapping, a single-agent
+conversation-state controller, unrelated HTTP routes, nested agents, and a
+provider-error outcome without a fabricated response. Negative checks must
+reject an accepted batch with an absent AO parent, marker-only assumptions,
+duplicate roots and unrelated-scope changes. Local tests prove emitted
+metadata, topology and behavior; receiver receipt proves local delivery. Only
+readback of a fresh application run in the selected AO project/stream proves
+cloud assembly: match its native/external identities, retained root and required
+operation/connecting-ancestor edges, with no unresolved parent or partial-trace
+placeholder. A transport leaf outside AO's operation model need not become a
+workflow. Keep its native telemetry intact.
+Exercise the real entrypoint through its configured launcher and framework
+instrumentation, such as an HTTP request to Flask, when claiming that runtime's
+root acceptance. Inspect the resulting physical root and full parent chain;
+bare-agent in-memory tests cannot substitute for a framework-created ancestor.
+When cloud readback shows retained children beneath an absent root or "Waiting
+for the trace record", report root assembly as failed/incomplete, separately
+from successful forwarding and resource resolution. Name the missing boundary
+and supported mapping or exact compatibility blocker; "cloud unavailable" is
+not the explanation once that partial graph was actually observed.
+
+Without remote access, implement and exercise supported mappings locally and
+mark cloud assembly unproven. Synthetic diagnostics and captured snapshots
+prove only their declared cases, never a fresh application run. Audit proposes
+source-backed gaps without edits; instrument implements selected mappings;
+verify reports missing/unsupported roots or partial cloud graphs as incomplete.
+Use the existing canonical findings, acceptance/evidence and remaining-gap
+fields rather than adding a separate selection ledger or rebinding old proof.
+
 ## Agent Resource And Producer Decision
 
 Project, dedicated Agent Stream and routing are default readiness requirements
@@ -69,9 +177,12 @@ its producer. Inspect its actual launch profile and author separate source-backe
 project binding, dedicated Agent Stream binding and routing findings where
 missing, with `ao_target_scope: resource-routing` and `instrument_mode: default`.
 Missing imports or credentials do not erase the intended-runtime assessment.
-Disclose proposed service-derived names and offer optional supplied selectors
-and reuse-only behavior. Do not infer global resource absence or create resources
-during audit. Ordinary GenAI spans stay untagged in the same findings ledger.
+Disclose proposed service-derived names as suggestions; require explicit Project
+and Agent Stream inputs for selected agent instrumentation. Reuse-only remains
+available through `select --ao-reuse-only` or a saved creation prohibition;
+it never bypasses those inputs. The report offers no reuse-only control. Do not
+infer global resource absence or create resources during audit. Ordinary GenAI
+spans stay untagged in the same findings ledger.
 
 Appropriate AO findings include source-backed work for an existing or intended:
 
@@ -118,25 +229,20 @@ missing. Its acceptance criteria must exercise both outcomes; lookup-only
 code with blank settings does not close a selected provisioning finding.
 
 Mark Project, Agent Stream, and runtime-routing configuration findings with
-`ao_target_scope: resource-routing` so the canonical selector can offer their
-resource inputs. The marker is optional and valid only on AO configuration
-findings. Unmarked legacy configuration names `agent-observability.project`,
-`agent-observability.agent-stream`, `agent-observability.project-resource`,
-`agent-observability.agent-stream-resource`, `agent-observability.runtime-routing`,
-and `agent-observability.splunk-ao-routing` remain eligible. Keep the marker
-absent for callback content-capture boundaries, datasets, prompts, and other
-configuration whose selected work does not resolve Project/Agent Stream
-identity. Neither an AO group nor a configuration type alone authorizes these
-targets. Do not insert a marker into legacy normalized findings by default.
+`ao_target_scope: resource-routing`. The optional marker describes provisioning
+and routing scope, not whether destination inputs are required. Preserve legacy
+resource/routing configuration names and absent markers. Callback, dataset,
+prompt, and other AO work also require the destination pair; supplying it never
+selects unapproved resource creation or routing work.
 
-Offer optional Project name and Agent Stream name inputs in the audit's
-selection controls for the selected resource-routing findings. Existing
-configured names or IDs take precedence over
-suggestions. When the application has no intended names, suggest the stable
-service name as the project and `<service-name>-live` as its dedicated stream,
-and label these as proposed names rather than existing resources. The user
-can provide a different pair or select reuse-only behavior. Do not turn this
-input into a manual-decision blocker or require a cloud secret in the report.
+Put Project and Agent Stream inputs first in the audit's AO subsection. Require
+both when any AO work is selected, using a name for each. The report has two
+required name fields, with no name/ID selectors or reuse-only checkbox. Show existing
+configured names or stable service-derived names as labeled suggestions
+only; do not auto-accept them when the user's inputs are blank. Instrumentation
+runs the generic required-input preflight and asks for missing values before
+editing. Values already supplied by the user need no repeated question. Keep
+credentials out of these report fields.
 
 Persist supplied targets in the schema-v3 selection's optional `ao_target`:
 
@@ -148,20 +254,28 @@ Persist supplied targets in the schema-v3 selection's optional `ao_target`:
 }
 ```
 
-Use `project_id` instead of `project_name`, or `agent_stream_id` instead of
-`agent_stream_name`, to select an existing resource by ID. When resource selectors are supplied, each resource has
-exactly one selector. A reuse-only policy may omit both selectors:
-`{"create_if_missing": false}` uses the application's effective env/config
-resource identity and forbids creation. `select --ao-reuse-only` and the audit
-checkbox preserve that policy even with both optional fields blank; partial
-resource overrides still require the complete pair. IDs are lookup-only: an unresolved ID never authorizes
-creating a replacement. `create_if_missing: false` means reuse-only. The
+New report commands use `select --ao-project <name> --ao-agent-stream <name>`.
+Reuse exact existing resources; create a missing named resource only when its
+selected resource finding authorizes creation. Names do not expand scope.
+
+Preserve backward compatibility for saved selections and existing CLI callers:
+`project_id`, `agent_stream_id`, `--ao-project-id`, `--ao-agent-stream-id`, and
+`--ao-reuse-only` remain readable. Each supplied resource has exactly one
+selector. Do not reinterpret an ID as a name or change a saved selection just
+by rendering it. For an ID-backed saved selection, leave unavailable name
+fields blank and explain that both names are needed to generate a new report
+command. Existing ID-based runs can still consume the validated saved target.
+Legacy policy-only packets `{"create_if_missing": false}` remain readable but
+require both selectors before a new instrumentation run. Preserve a saved
+creation prohibition in generated commands even though the checkbox is gone.
+Partial resource overrides require the complete pair. IDs are lookup-only:
+an unresolved ID never authorizes creating a replacement.
+`create_if_missing: false` means reuse-only. The
 target changes configuration, not selected scope, and participates in
 `selection_sha256`; changing it invalidates older instrumentation evidence.
 Keep schema-v1/v2 selections valid with their original normalized digests.
-Use the shared `select` command's `--ao-project`, `--ao-project-id`,
-`--ao-agent-stream`, `--ao-agent-stream-id`, and `--ao-reuse-only` flags to
-materialize the target rather than hand-editing bound JSON. Resource inputs
+Use the shared `select` command to materialize the target rather than
+hand-editing bound JSON. Resource inputs
 never select otherwise unapproved AO findings.
 
 ## Idempotent Resource Provisioning

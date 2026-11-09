@@ -9,8 +9,13 @@ import json
 import os
 import re
 import shutil
+import sys
 import zipfile
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import runtime_manifest  # noqa: E402
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -63,6 +68,9 @@ PLUGIN_SHARED_PATHS = (
     "assets",
 )
 MAX_DEFAULT_PROMPTS = 3
+# The Claude plugin directory cannot inspect non-image files over 256 KiB and holds the plugin for review.
+MAX_PLUGIN_FILE_BYTES = 240 * 1024
+PLUGIN_SIZE_EXEMPT_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico"})
 PLUGIN_HOSTS = ("codex", "claude")
 SKILL_REFERENCE_PATTERN = re.compile(r"\$([A-Za-z0-9_-]+)")
 SEMVER_IDENTIFIER = r"(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)"
@@ -120,13 +128,49 @@ def main() -> int:
         type=Path,
         help="release checksum manifest used by checksum update commands",
     )
+    parser.add_argument(
+        "--write-runtime-manifest",
+        action="store_true",
+        help="write hooks/runtime-manifest.json for --release-tag from --dist-dir or --checksums-file",
+    )
+    parser.add_argument(
+        "--verify-runtime-manifest",
+        action="store_true",
+        help="verify the archives in --dist-dir hash to the committed runtime manifest for --release-tag",
+    )
+    parser.add_argument(
+        "--check-runtime-manifest",
+        action="store_true",
+        help="verify the committed runtime manifest is valid and pins the committed plugin version",
+    )
+    parser.add_argument("--dist-dir", type=Path, help="GoReleaser dist directory holding the runtime archives")
     args = parser.parse_args()
 
+    if args.write_runtime_manifest:
+        if not args.release_tag or (args.dist_dir is None) == (args.checksums_file is None):
+            raise RuntimeError("--write-runtime-manifest needs --release-tag and exactly one of --dist-dir or --checksums-file")
+        version = release_version_from_tag(args.release_tag)
+        hashes = (
+            runtime_manifest.hashes_from_dist(args.dist_dir, version)
+            if args.dist_dir is not None
+            else runtime_manifest.hashes_from_checksums_file(args.checksums_file, version)
+        )
+        runtime_manifest.write_runtime_manifest(PLUGIN_ROOT, version, hashes)
+        return 0
+    if args.verify_runtime_manifest:
+        if not args.release_tag or args.dist_dir is None:
+            raise RuntimeError("--release-tag and --dist-dir are required with --verify-runtime-manifest")
+        runtime_manifest.verify_runtime_manifest(PLUGIN_ROOT, release_version_from_tag(args.release_tag), args.dist_dir)
+        return 0
+    if args.check_runtime_manifest:
+        check_committed_runtime_manifest(args.release_tag)
+        return 0
     if args.sync_plugin_skills:
         sync_plugin_skills()
         return 0
     if args.check_plugin_skills:
         verify_plugin_skills_synced()
+        verify_plugin_file_sizes()
         return 0
     if args.bump_manifests:
         if not args.release_tag:
@@ -203,9 +247,11 @@ def check_committed_manifest_versions(
     release_tag: str = "",
     plugin_root: Path = PLUGIN_ROOT,
     codex_marketplace_path: Path | None = None,
+    claude_marketplace_path: Path | None = None,
 ) -> None:
-    """Verify committed plugin versions agree with each other and the Codex marketplace ref.
+    """Verify committed plugin versions agree with each other and do not trail the marketplaces.
 
+    The Codex ref and Claude archive may lag the manifests but never lead them.
     When ``release_tag`` is given, also verify both manifests already match it.
     """
     versions: dict[str, str] = {}
@@ -233,8 +279,19 @@ def check_committed_manifest_versions(
 
     if plugin_root == PLUGIN_ROOT:
         check_codex_marketplace_ref(versions["codex"], codex_marketplace_path)
+        check_claude_marketplace_archive(versions["claude"], claude_marketplace_path)
 
     print(f"plugin manifest versions agree: {versions['claude']}")
+
+
+def check_committed_runtime_manifest(release_tag: str = "", plugin_root: Path = PLUGIN_ROOT) -> None:
+    claude_manifest = json.loads((plugin_root / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+    version = claude_manifest.get("version") if isinstance(claude_manifest, dict) else None
+    if not isinstance(version, str) or not SEMVER_PATTERN.fullmatch(version):
+        raise RuntimeError("Claude plugin manifest version must be a semver string")
+    if release_tag and release_version_from_tag(release_tag) != version:
+        raise RuntimeError(f"plugin manifest version {version!r} does not match release tag {release_tag!r}")
+    runtime_manifest.check_runtime_manifest(plugin_root, version)
 
 
 def _write_manifest_version(manifest_path: Path, version: str) -> None:
@@ -340,6 +397,47 @@ def check_codex_marketplace_ref(
         )
 
 
+def check_claude_marketplace_archive(
+    plugin_version: str,
+    marketplace_path: Path | None = None,
+) -> None:
+    target = marketplace_path or ROOT / ".claude-plugin" / "marketplace.json"
+    marketplace = json.loads(target.read_text(encoding="utf-8"))
+    plugins = marketplace.get("plugins")
+    if not isinstance(plugins, list):
+        raise RuntimeError(f"marketplace plugins must be an array: {target}")
+    entries = [
+        entry for entry in plugins if isinstance(entry, dict) and entry.get("name") == "obstudio"
+    ]
+    if len(entries) != 1:
+        raise RuntimeError(f"expected exactly one obstudio plugin entry in {target}")
+    source = entries[0].get("source")
+    url = source.get("url") if isinstance(source, dict) else None
+    match = (
+        re.fullmatch(
+            r"https://github\.com/signalfx/obstudio/releases/download/v(?P<tag>[^/]+)/obstudio_claude_(?P<file>.+)\.zip",
+            url,
+        )
+        if isinstance(url, str)
+        else None
+    )
+    if (
+        not isinstance(source, dict)
+        or source.get("source") != "archive"
+        or match is None
+        or match["tag"] != match["file"]
+        or not SEMVER_PATTERN.fullmatch(match["tag"])
+    ):
+        raise RuntimeError(
+            f"Claude marketplace source must be a versioned obstudio release archive in {target}: {source!r}"
+        )
+    # Manifests are bumped before the release exists, so the archive may lag until the sync PR merges.
+    if _semver_precedence(match["tag"]) > _semver_precedence(plugin_version):
+        raise RuntimeError(
+            f"Claude marketplace archive v{match['tag']} is newer than plugin version {plugin_version!r} in {target}"
+        )
+
+
 def _semver_precedence(version: str) -> tuple:
     """Sort key implementing SemVer 2.0.0 precedence; build metadata is ignored."""
     core, _, prerelease = version.split("+", 1)[0].partition("-")
@@ -377,6 +475,7 @@ def stage_hooks(hooks_output: Path, host: str) -> None:
     copy_path(PLUGIN_ROOT / "hooks" / "bootstrap_obstudio.py", hooks_output / "bootstrap_obstudio.py")
     if host in ("all", "claude"):
         copy_path(PLUGIN_ROOT / "hooks" / "bootstrap_claude.cjs", hooks_output / "bootstrap_claude.cjs")
+    copy_path(PLUGIN_ROOT / runtime_manifest.MANIFEST_RELATIVE_PATH, hooks_output / "runtime-manifest.json")
     hook_files = ("codex-hooks.json", "claude-hooks.json") if host == "all" else (f"{host}-hooks.json",)
     for hook_file in hook_files:
         copy_path(PLUGIN_ROOT / "hooks" / hook_file, hooks_output / hook_file)
@@ -515,6 +614,8 @@ def verify_staged_plugin(output: Path, host: str = "codex", expected_version: st
     if symlinks:
         rendered = "\n".join(str(path.relative_to(output)) for path in symlinks)
         raise RuntimeError(f"staged plugin must not contain symlinks:\n{rendered}")
+    verify_plugin_file_sizes(output)
+    runtime_manifest.read_runtime_manifest(output / runtime_manifest.MANIFEST_RELATIVE_PATH)
     for selected_host in PLUGIN_HOSTS if host == "all" else (host,):
         manifest = output / (".claude-plugin" if selected_host == "claude" else ".codex-plugin") / "plugin.json"
         if not manifest.is_file():
@@ -635,6 +736,23 @@ def verify_plugin_skills_synced() -> None:
                 "plugin skill copy differs from canonical source: "
                 f"{relative} ({source_hash} != {destination_hash})"
             )
+
+
+def verify_plugin_file_sizes(root: Path = PLUGIN_ROOT, limit: int = MAX_PLUGIN_FILE_BYTES) -> None:
+    oversized = []
+    for path in sorted(root.rglob("*")):
+        if not path.is_file() or path.is_symlink() or should_ignore(path):
+            continue
+        if ".skills-sync-tmp" in path.parts or path.suffix.lower() in PLUGIN_SIZE_EXEMPT_SUFFIXES:
+            continue
+        size = path.stat().st_size
+        if size > limit:
+            oversized.append(f"{path.relative_to(root)} ({size} bytes)")
+    if oversized:
+        raise RuntimeError(
+            f"plugin files exceed the {limit}-byte limit for the Claude plugin directory; split them:\n"
+            + "\n".join(oversized)
+        )
 
 
 def verify_local_plugin_skills(skills_root: Path) -> None:

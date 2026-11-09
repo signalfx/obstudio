@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-audit |
-| Run ID | 20261022T003838229535Z |
+| Run ID | 20261109T182031933218Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -17,9 +17,9 @@ This report validates eval JSON, eval directory availability, and skill source a
 
 | Eval | Service | Prompts | Eval File | Sanity Checks | Rubric Checks | Runtime Checks |
 |---|---|---:|---|---:|---:|---:|
-| go/chi-basic/qual/audit | go/chi-basic | 2 | evals/go/chi-basic/eval/qual/audit.json | 0 | 11 | 0 |
+| go/chi-basic/qual/audit | go/chi-basic | 2 | evals/go/chi-basic/eval/qual/audit.json | 0 | 12 | 0 |
 | go/chi-partial/qual/audit | go/chi-partial | 2 | evals/go/chi-partial/eval/qual/audit.json | 0 | 6 | 0 |
-| go/kvstore/qual/audit | go/kvstore | 2 | evals/go/kvstore/eval/qual/audit.json | 0 | 6 | 0 |
+| go/kvstore/qual/audit | go/kvstore | 2 | evals/go/kvstore/eval/qual/audit.json | 0 | 7 | 0 |
 | go/native-genai-demo/qual/audit | go/native-genai-demo | 1 | evals/go/native-genai-demo/eval/qual/audit.json | 0 | 6 | 0 |
 | java/kafka-batch-consumer/qual/audit | java/kafka-batch-consumer | 2 | evals/java/kafka-batch-consumer/eval/qual/audit.json | 0 | 6 | 0 |
 | java/kafka-listener-container/qual/audit | java/kafka-listener-container | 2 | evals/java/kafka-listener-container/eval/qual/audit.json | 0 | 6 | 0 |
@@ -27,12 +27,15 @@ This report validates eval JSON, eval directory availability, and skill source a
 | java/kafka-streams/qual/audit | java/kafka-streams | 2 | evals/java/kafka-streams/eval/qual/audit.json | 0 | 7 | 0 |
 | java/springboot-basic/qual/audit | java/springboot-basic | 2 | evals/java/springboot-basic/eval/qual/audit.json | 0 | 6 | 0 |
 | node/express-basic/qual/audit | node/express-basic | 2 | evals/node/express-basic/eval/qual/audit.json | 0 | 6 | 0 |
+| python/ai-assistant-demo/qual/ao-name-inputs-audit | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/ao-name-inputs-audit.json | 0 | 6 | 0 |
+| python/ai-assistant-demo/qual/ao-root-compatibility-audit | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/ao-root-compatibility-audit.json | 0 | 8 | 0 |
 | python/ai-assistant-demo/qual/ao-target-handoff-audit | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/ao-target-handoff-audit.json | 0 | 4 | 0 |
 | python/ai-assistant-demo/qual/audit | python/ai-assistant-demo | 2 | evals/python/ai-assistant-demo/eval/qual/audit.json | 0 | 15 | 0 |
 | python/ai-assistant-demo/qual/audit-focused-decorator-logs | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/audit-focused-decorator-logs.json | 0 | 3 | 0 |
 | python/ai-assistant-demo/qual/audit-focused-metadata | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/audit-focused-metadata.json | 0 | 4 | 0 |
 | python/ai-assistant-demo/qual/content-coverage-audit | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/content-coverage-audit.json | 0 | 4 | 0 |
 | python/ai-assistant-demo/qual/env-resource-plan | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/env-resource-plan.json | 0 | 4 | 0 |
+| python/ai-assistant-demo/qual/finding-group-audit | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/finding-group-audit.json | 0 | 7 | 0 |
 | python/ai-assistant-demo/qual/gateway-env-plan | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/gateway-env-plan.json | 0 | 4 | 0 |
 | python/ai-assistant-demo/qual/genai-sdk-default-audit | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/genai-sdk-default-audit.json | 0 | 9 | 0 |
 | python/ai-assistant-demo/qual/per-function-decorator-audit | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/per-function-decorator-audit.json | 0 | 6 | 0 |

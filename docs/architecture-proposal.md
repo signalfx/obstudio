@@ -113,8 +113,8 @@ data. It provides four surfaces:
 | MCP server          | Streamable HTTP on `:3000/mcp` | AI agents query telemetry programmatically              |
 | Web UI              | HTTP on `:3000`                | Visual trace/metric/log explorer                        |
 
-Splunk forwarding is optional. Set `SPLUNK_ACCESS_TOKEN` and `SPLUNK_REALM` to
-enable it. The same token is used by `$splunk-detector-publish` to read and
+Splunk forwarding is optional. Connect through the Cloud tab and enable export.
+Separate API credentials are used by `$splunk-detector-publish` to read and
 create detectors (`GET`/`POST /v2/detector`) and by `$splunk-dashboard-publish`
 to read and create dashboards and charts (`GET`/`POST /v2/dashboard`, `/v2/chart`,
 `/v2/dashboardgroup`) via the Splunk REST API.
@@ -178,7 +178,7 @@ telemetry and validate instrumentation results.
 | Register with AI tools   | Manual config edit  | Handled by `obstudio install`              |
 | Lifecycle management     | None                | Start, stop, restart, health check         |
 | Cross-platform binary    | Source code         | Single binary, zero deps                   |
-| Forward to Splunk O11y   | None                | `SPLUNK_ACCESS_TOKEN` + `SPLUNK_REALM`     |
+| Forward to Splunk O11y   | None                | Cloud UI connection and export enabled     |
 | Sync detectors to Splunk | None                | `$splunk-detector-publish` via Splunk REST API  |
 | Sync dashboards to Splunk | None               | `$splunk-dashboard-publish` via Splunk REST API |
 | Preview dashboards locally | None              | Splunk Observability Studio **Dashboards** tab + `GET /api/dashboards/preview` |
