@@ -1137,7 +1137,7 @@ describe("Overview telemetry summary", () => {
     const card = screen.getByRole("article", { name: "Telemetry Received" });
     expect(card.textContent).toContain("Spans42");
     expect(card.textContent).toContain("Metrics7");
-    expect(card.textContent).toContain("Latest record");
+    expect(card.textContent).toContain("Latest log or trace");
 
     const services = await screen.findByRole("region", { name: "Services with errors" });
     await waitFor(() => expect(services.querySelectorAll("li")).toHaveLength(2));
@@ -1166,6 +1166,89 @@ describe("Overview telemetry summary", () => {
     render(<OverviewTab hasTelemetry stats={stats} />);
 
     expect(await screen.findByText("Could not load service errors.")).toBeTruthy();
+  });
+
+  it("treats a log as an error by severity text like the Logs tab does", async () => {
+    stubSummaryFetch([]);
+    render(
+      <OverviewTab
+        hasTelemetry
+        stats={stats}
+        logs={[
+          makeLog({ id: "", severityNumber: undefined, severityText: "ERROR", body: "text only error" }),
+          makeLog({ id: "info", severityNumber: 9, severityText: "INFO", body: "all good" }),
+        ]}
+      />,
+    );
+
+    const logs = await screen.findByRole("region", { name: "Recent error logs" });
+    expect(Array.from(logs.querySelectorAll(".overview-summary__text")).map((el) => el.textContent)).toEqual(["text only error"]);
+  });
+
+  it("says the error list covers only the logs the Explorer holds", async () => {
+    stubSummaryFetch([]);
+    const { rerender } = render(<OverviewTab hasTelemetry stats={{ ...stats, logCount: 10_000 }} logs={[makeLog({ severityNumber: 9 })]} />);
+
+    const logs = await screen.findByRole("region", { name: "Recent error logs" });
+    expect(logs.textContent).toContain("No error logs.");
+    expect(logs.textContent).toContain("From the latest 1 logs.");
+
+    rerender(<OverviewTab hasTelemetry stats={{ ...stats, logCount: 1 }} logs={[makeLog({ severityNumber: 9 })]} />);
+    expect(logs.textContent).not.toContain("From the latest");
+  });
+
+  it("retries a failed service stats request without waiting for new spans", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      let calls = 0;
+      vi.stubGlobal("fetch", vi.fn(async (input: unknown) => {
+        const url = String(input);
+        if (url.includes("/api/query/stats/services")) {
+          calls += 1;
+          if (calls === 1) throw new Error("network down");
+          return ok([{ name: "checkout", traceCount: 1, spanCount: 5, errorCount: 2 }]);
+        }
+        if (url.includes("/api/splunk/export")) return ok(statusBody(false));
+        return ok(makeScore({}));
+      }));
+      render(<OverviewTab hasTelemetry stats={stats} />);
+
+      expect(await screen.findByText("Could not load service errors.")).toBeTruthy();
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(await screen.findByText("checkout")).toBeTruthy();
+      expect(calls).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("refetches service stats at most once a second while spans stream in", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      let calls = 0;
+      vi.stubGlobal("fetch", vi.fn(async (input: unknown) => {
+        const url = String(input);
+        if (url.includes("/api/query/stats/services")) {
+          calls += 1;
+          return ok([]);
+        }
+        if (url.includes("/api/splunk/export")) return ok(statusBody(false));
+        return ok(makeScore({}));
+      }));
+      const { rerender } = render(<OverviewTab hasTelemetry stats={stats} />);
+      await screen.findByText("No service errors.");
+      expect(calls).toBe(1);
+
+      for (const spanCount of [43, 44, 45, 46]) {
+        rerender(<OverviewTab hasTelemetry stats={{ ...stats, spanCount }} />);
+        await vi.advanceTimersByTimeAsync(200);
+      }
+      expect(calls).toBe(1);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(calls).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("is hidden until telemetry arrives", () => {

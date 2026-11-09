@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   fetchInstrumentationScore,
   fetchServiceStats,
@@ -12,6 +12,7 @@ import { CLOUD_CONNECT_DESCRIPTION } from "../cloud/copy";
 import { TelemetryEmptyState } from "../components/EmptyState";
 import { formatUtcTimestamp } from "../format";
 import { CopyTextButton } from "../layout";
+import { isErrorLog, logKey } from "../logs/LogsTab";
 
 /** Agent skill a checklist step hands off to. */
 export interface OverviewSkillRef {
@@ -239,9 +240,10 @@ function SkillCard({ id, title, items, onOpenSkillDocs, empty, badge }: {
   );
 }
 
-/** OTLP severity number where ERROR starts. */
-const ERROR_SEVERITY_NUMBER = 17;
 const SUMMARY_LIMIT = 5;
+/** Wait between service stats refetches while spans stream in, and after a failed fetch. */
+const SERVICES_REFRESH_MS = 1000;
+const SERVICES_RETRY_MS = 5000;
 
 /** Parses a log time, which the API sends as nanoseconds or RFC 3339; 0 when unset. */
 function nanosToMs(ts: string | undefined): number {
@@ -276,27 +278,45 @@ function TelemetrySummary({ stats, logs, traces, onOpenServices, onOpenLogs }: {
   onOpenLogs?: () => void;
 }): React.ReactElement {
   const [services, setServices] = useState<ServiceStats[] | "error" | null>(null);
+  const [servicesRetries, setServicesRetries] = useState(0);
+  const servicesLoaded = useRef(false);
 
+  // The first fetch is immediate. Later ones wait so a busy stream is one
+  // request a second, and a failed one retries instead of waiting for new spans.
   useEffect(() => {
     const controller = new AbortController();
-    fetchServiceStats(controller.signal)
-      .then((rows) => {
-        if (!controller.signal.aborted) setServices(rows);
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) setServices("error");
-      });
-    return () => controller.abort();
-  }, [stats.spanCount]);
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    const refetch = setTimeout(() => {
+      fetchServiceStats(controller.signal)
+        .then((rows) => {
+          if (controller.signal.aborted) return;
+          servicesLoaded.current = true;
+          setServices(rows);
+        })
+        .catch(() => {
+          if (controller.signal.aborted) return;
+          setServices("error");
+          retry = setTimeout(() => setServicesRetries((n) => n + 1), SERVICES_RETRY_MS);
+        });
+    }, servicesLoaded.current ? SERVICES_REFRESH_MS : 0);
+    return () => {
+      controller.abort();
+      clearTimeout(refetch);
+      clearTimeout(retry);
+    };
+  }, [stats.spanCount, servicesRetries]);
 
   const erroringServices = Array.isArray(services)
     ? services.filter((s) => s.errorCount > 0).sort((a, b) => b.errorCount - a.errorCount).slice(0, SUMMARY_LIMIT)
     : [];
   const errorLogs = logs
-    .filter((log) => (log.severityNumber ?? 0) >= ERROR_SEVERITY_NUMBER)
+    .filter(isErrorLog)
     .sort((a, b) => logTimeMs(b) - logTimeMs(a))
     .slice(0, SUMMARY_LIMIT);
   const latest = latestRecordMs(logs, traces);
+  // The server returns the latest 100 logs by default, so the error list covers
+  // only those. Say so rather than read as a total next to the Logs count.
+  const logsCapped = logs.length < stats.logCount;
   const counts: [string, number][] = [
     ["Traces", stats.traceCount],
     ["Spans", stats.spanCount],
@@ -309,7 +329,7 @@ function TelemetrySummary({ stats, logs, traces, onOpenServices, onOpenLogs }: {
       <div className="overview-checklist__header">
         <h2 className="overview-checklist__title" id="overview-summary-title">Telemetry Received</h2>
         {latest !== null ? (
-          <span className="overview-summary__meta">Latest record {formatUtcTimestamp(new Date(latest))}</span>
+          <span className="overview-summary__meta">Latest log or trace {formatUtcTimestamp(new Date(latest))}</span>
         ) : null}
       </div>
       <dl className="overview-summary__counts">
@@ -362,8 +382,8 @@ function TelemetrySummary({ stats, logs, traces, onOpenServices, onOpenLogs }: {
             <p className="overview-skills__empty-hint">No error logs.</p>
           ) : (
             <ul className="overview-checklist__list">
-              {errorLogs.map((log, index) => (
-                <li key={log.id || index} className="overview-checklist__item overview-summary__log">
+              {errorLogs.map((log) => (
+                <li key={logKey(log)} className="overview-checklist__item overview-summary__log">
                   {logTimeMs(log) > 0 ? (
                     <span className="overview-summary__meta">{formatUtcTimestamp(new Date(logTimeMs(log)))}</span>
                   ) : null}
@@ -375,6 +395,9 @@ function TelemetrySummary({ stats, logs, traces, onOpenServices, onOpenLogs }: {
               ))}
             </ul>
           )}
+          {logsCapped ? (
+            <p className="overview-summary__meta">From the latest {logs.length.toLocaleString()} logs.</p>
+          ) : null}
         </section>
       </div>
     </article>
