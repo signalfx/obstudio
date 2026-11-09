@@ -986,7 +986,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "dd6424f060fb27d3d1e498a2ed134a2fdffc60276adf8e4d3f81757501423e2e",
+    "digest": "a92c0c4d5dbf5e3eda5ad8509b272d82ec67d73239112a9bfb211d65f9b32182",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -1113,7 +1113,7 @@
       "observer/client/src/layout/useAnimatedPanel.test.ts": "48fd2675e56cea2ce61ae3c62a23ead3d9195b27198b64076a345eaec9f96556",
       "observer/client/src/layout/useAnimatedPanel.ts": "cd99f08f87af632ee29e04fdb7fe181e6c670bce38a97997d4736d0780a02fcf",
       "observer/client/src/logs/LogsTab.test.tsx": "08670023797183bed6d2436e8c1705eecbb912faf3c58b860f6abcada8e85fee",
-      "observer/client/src/logs/LogsTab.tsx": "b4d375dbc9d1563be277505b92da7436da9d94b7a228264100232b5199586830",
+      "observer/client/src/logs/LogsTab.tsx": "b67f09a8e50388a3184ac1541c8e35e2deffa9bfe5ae7b82aef355a38feedf87",
       "observer/client/src/logs/index.ts": "2c739e806d8e0fe3f995dc4f4eae6b9b70344dcf9fcdebd75e5a329382a5dae8",
       "observer/client/src/main.tsx": "291311db796d1d6cf3a96e85a658e0d916e69498996007fb17606edcd8d54a0c",
       "observer/client/src/metrics/MetricsTab.test.tsx": "0eb278ad33c21758e0b72cf5a8feb69215d7c3bafdc2ea14cb18a2db807db1df",
@@ -1122,8 +1122,8 @@
       "observer/client/src/metrics/TimeSeriesChart.tsx": "b1730b9cb362555e3fd254ba6dfb0578f00dad4e355c9a71173402690e79da3e",
       "observer/client/src/metrics/index.ts": "8b5886fa59bd2468faa5b0969f1418f8ac16bc13043fab2ba3bd034512699443",
       "observer/client/src/metrics/useMetricTimeSeries.ts": "7bf8d616a1f98a6dd587923a5bce0068e56cb07f27bd3461ab3d38b0c46b4ce9",
-      "observer/client/src/overview/OverviewTab.test.tsx": "3b707ed42749a2556e339750859390c80ccb0b663bace45dae63597f5d3364fd",
-      "observer/client/src/overview/OverviewTab.tsx": "12b7738dcd752b99478ac811474cbebcee3045960a3b85b4c9b06700e5b32a15",
+      "observer/client/src/overview/OverviewTab.test.tsx": "f63fafb53d4b19a34ce3b06f652e3c2c03191ed94b2a4c8f2702b8b2a178f768",
+      "observer/client/src/overview/OverviewTab.tsx": "84c933621501e44944be60e0bc38dc00751c082aee97fce32a19ba0aaeb1155e",
       "observer/client/src/overview/index.ts": "f52ca71f90aa6eec53a4fea0bb6d8abffe3dd8252bed3373f9edb8390d889896",
       "observer/client/src/palette.ts": "cde1d9253b714b74175125a05f0993e774a41120378f260b8c96f5e30a367369",
       "observer/client/src/services/ServicesTab.test.tsx": "82fc808fcfb757e925e71cbcfa85fc5e6dfe392547ea78aa71ebfc0e3f48a097",

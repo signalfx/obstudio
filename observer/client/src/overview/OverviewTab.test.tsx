@@ -1185,6 +1185,31 @@ describe("Overview telemetry summary", () => {
     expect(Array.from(logs.querySelectorAll(".overview-summary__text")).map((el) => el.textContent)).toEqual(["text only error"]);
   });
 
+  it("shows an error log that has no body under its event name", async () => {
+    stubSummaryFetch([]);
+    render(
+      <OverviewTab
+        hasTelemetry
+        stats={stats}
+        logs={[
+          makeLog({
+            id: "",
+            body: "",
+            severityNumber: 17,
+            severityText: "ERROR",
+            timeUnixNano: "2026-11-09T19:00:00Z",
+            observedTimeUnixNano: "2026-11-09T19:00:01Z",
+            attributes: { "event.name": "payment.request.failed" },
+          }),
+        ]}
+      />,
+    );
+
+    const logs = await screen.findByRole("region", { name: "Recent error logs" });
+    expect(Array.from(logs.querySelectorAll(".overview-summary__text")).map((el) => el.textContent)).toEqual(["payment.request.failed"]);
+    expect(logs.textContent).toContain("checkout");
+  });
+
   it("says the error list covers only the logs the Explorer holds", async () => {
     stubSummaryFetch([]);
     const { rerender } = render(<OverviewTab hasTelemetry stats={{ ...stats, logCount: 10_000 }} logs={[makeLog({ severityNumber: 9 })]} />);

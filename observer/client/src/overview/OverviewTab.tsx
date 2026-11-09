@@ -12,7 +12,7 @@ import { CLOUD_CONNECT_DESCRIPTION } from "../cloud/copy";
 import { TelemetryEmptyState } from "../components/EmptyState";
 import { formatUtcTimestamp } from "../format";
 import { CopyTextButton } from "../layout";
-import { isErrorLog, logKey } from "../logs/LogsTab";
+import { displayMessage, isErrorLog, logKey } from "../logs/LogsTab";
 
 /** Agent skill a checklist step hands off to. */
 export interface OverviewSkillRef {
@@ -390,7 +390,7 @@ function TelemetrySummary({ stats, logs, traces, onOpenServices, onOpenLogs }: {
                   {log.resource?.serviceName ? (
                     <span className="overview-summary__meta">{log.resource.serviceName}</span>
                   ) : null}
-                  <span className="overview-summary__text">{log.body}</span>
+                  <span className="overview-summary__text">{displayMessage(log)}</span>
                 </li>
               ))}
             </ul>

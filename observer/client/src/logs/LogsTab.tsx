@@ -151,7 +151,7 @@ export function logKey(r: LogRecord): string {
   return r.id || `${r.timeUnixNano}|${r.resource?.serviceName ?? ""}|${r.severityText ?? ""}|${r.severityNumber ?? ""}|${r.body}`;
 }
 
-function displayMessage(record: LogRecord): string {
+export function displayMessage(record: LogRecord): string {
   const body = record.body?.trim();
   if (body) return record.body;
   const eventName = record.attributes?.["event.name"];
