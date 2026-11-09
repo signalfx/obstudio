@@ -184,5 +184,14 @@
       "go_mod_url": "https://proxy.golang.org/go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp/@v/v1.46.0.mod",
       "go_directive": "go 1.25.0"
     }
-  ]
+  ],
+  "security_dependency_update": {
+    "checked_at_utc": "2026-11-09T16:57:41.247042+00:00",
+    "module": "golang.org/x/net",
+    "version": "v0.62.0",
+    "go_mod_url": "https://proxy.golang.org/golang.org/x/net/@v/v0.62.0.mod",
+    "go_directive": "go 1.26.0",
+    "cve": "CVE-2026-78661",
+    "decision": "Require Go 1.26 for the patched network dependency; retain the selected OTel 1.46.0 API/SDK/exporters to limit this security fix."
+  }
 }
