@@ -5,7 +5,7 @@
     "OTEL-001"
   ],
   "audit_id": "go-chi-basic-fixture",
-  "audit_sha256": "sha256:539e9f76793ac0bb264be190f93042e32d930ebda8769c0569ada5ea82c10b10",
+  "audit_sha256": "sha256:653451e6cf339e9abd3e3227afbc16fb0eb8195cd4d944e35874942e87e56c66",
   "kind": "otel-selection",
   "requested_ids": [
     "OTEL-001"
