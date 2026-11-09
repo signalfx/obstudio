@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-instrument",
-    "run_id": "20261109T174950801777Z",
+    "run_id": "20261109T175510579902Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-6-luna",
     "judge_model": "",
@@ -986,7 +986,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "f825f750a868901a232c97527bcb15fd36d2b819a9752ee6647179a8012ce7d0",
+    "digest": "a61ece2f2ec77086746a01a27c6c654eb80db9c4c8ee06ac3904c78b765e5372",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -1040,7 +1040,7 @@
       "evals/go/chi-basic/eval/runtime/docker-compose.yml": "d5f7c4998d2c092649cd8f6e97ee1b673e5eee6d1f66c40ca3dd0919e53ef24f",
       "evals/go/chi-basic/eval/runtime/instrument.json": "bc445f7699d4f6901be09759b95e4b6b90ecec3a1fef65385c0a8dd124e440d5",
       "evals/go/chi-basic/eval/runtime/run-traffic.sh": "82f57ed333cc123b26bfa32ad90045c6f205882c9f257f51c4cfa3d37a94951b",
-      "evals/runtime/observer.Dockerfile": "4d6ab998c737d6a731583e1169d6f8be480625525b50909f253dacd5594faabb",
+      "evals/runtime/observer.Dockerfile": "6a18bdf79cc1796fd34d4a895dc3802c2766db1e4d31684a42124eece2d06d20",
       "evals/runtime/traffic.Dockerfile": "d8baed51b1290f399d0d63173059970e1b744c4e0309c5e3ba3d2282a25d9c48",
       "observer/.golangci.yml": "46bdc771110a0fe8680e2c5265a1c5d471e8210f266f90398f67ccf6b1506fe6",
       "observer/AGENTS.md": "9dc9233e31ba23e042e0bc80bfee6dc6970b603ad1c53b1092152431d516fddf",
