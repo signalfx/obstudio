@@ -115,7 +115,12 @@ func TestSplunkLogsSlowMutationsDoNotBlockCloudStatus(t *testing.T) {
 			select {
 			case <-ready:
 			case response := <-done:
-				t.Fatalf("mutation finished before the expected probe or save: %d %s", response.Code, response.Body)
+				select {
+				case <-ready:
+					done <- response
+				default:
+					t.Fatalf("mutation finished before the expected probe or save: %d %s", response.Code, response.Body)
+				}
 			case <-time.After(2 * time.Second):
 				t.Fatal("mutation did not reach the expected probe or save")
 			}
