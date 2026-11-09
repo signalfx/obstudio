@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-audit",
-    "run_id": "20261109T172748407104Z",
+    "run_id": "20261109T175236357658Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-6-luna",
     "judge_model": "",
@@ -655,7 +655,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "3d382f35ba3e5caa3433f7efb7ce618ec49135b4c49b3820d55a6be0ede21b8c",
+    "digest": "e17db28ac98b55f102bf67a15447d4ceda15efc99177acdae856a202cc8c6a85",
     "eval_kinds": [
       "rubric",
       "sanity"
@@ -664,7 +664,7 @@
     "files": {
       "evals/codex-evals.validation.toml": "503794fa37e80a742e98969f1d4bbdd17d1f9cfe7d6607c4012498c43905b53e",
       "evals/go/chi-basic/eval/qual/audit.json": "e255cfa18954eeec98430cbba25f03b51be5622750a91bf50f5673023845a8aa",
-      "evals/go/chi-basic/go.mod": "3180c726d9dfb307fcbebbd0f02e93dc833a8df2f36cbef9101d681e5048ba00",
+      "evals/go/chi-basic/go.mod": "585e9c5a128baf66cc508e074aa3e019875979a6fad497fa892aa967c20ba62c",
       "evals/go/chi-basic/main.go": "98fc93b9ffcd0a996424992672480e110976bbe4d721a8e3a5fefe96fb57512d",
       "skills/otel-audit/SKILL.md": "fef834d77d8d6d0230228a4d8f52f277850cb8e6e9b56fd0b46c156ee3c9fa40",
       "skills/otel-audit/scripts/observe_report.py": "b9f2ff513850d2b6405f47000cd0b6fe8697fd35d47a15e9adaee5fa10094f4d",
