@@ -163,7 +163,7 @@ def test_reuse_policy_digest_comparison_isolates_only_target(tmp_path: Path) -> 
     assert {path: path.read_bytes() for path in packet_paths} == original_bytes
 
 
-def test_reuse_policy_requires_resource_routing_configuration(tmp_path: Path) -> None:
+def test_destination_inputs_are_required_without_expanding_resource_scope(tmp_path: Path) -> None:
     audit_path = FIXTURE / "ao-resource-audit.json"
     original_bytes = audit_path.read_bytes()
     engine = runpy.run_path(str(ROOT / "skills/references/scripts/observe_report.py"))
@@ -187,7 +187,8 @@ def test_reuse_policy_requires_resource_routing_configuration(tmp_path: Path) ->
         json.loads(callback_selection_path.read_text(encoding="utf-8")), callback_report,
     )
     assert "ao_target" not in callback_selection
-    assert 'id="ao-target-controls"' not in engine["render_html"](callback_report, callback_selection)
+    assert 'id="ao-target-controls"' in engine["render_html"](callback_report, callback_selection)
+    assert not engine["required_input_status"](engine["required_input_groups"](callback_report), callback_selection)["ready"]
     for target_flags in (
         ("--ao-reuse-only",),
         ("--ao-project", "review-project", "--ao-agent-stream", "review-agent"),
@@ -197,9 +198,10 @@ def test_reuse_policy_requires_resource_routing_configuration(tmp_path: Path) ->
             "select", str(callback_copy), "--ids", "OTEL-001",
             *target_flags, "-o", str(output),
         )
-        assert targeted.returncode != 0
-        assert "requires a selected Agent Observability resource or routing finding" in targeted.stderr
-        assert not output.exists()
+        assert targeted.returncode == 0, targeted.stderr
+        bound = json.loads(output.read_text(encoding="utf-8"))
+        assert bound["approved_ids"] == callback_selection["approved_ids"]
+        assert engine["required_input_status"](engine["required_input_groups"](callback_report), bound)["ready"] is (len(target_flags) > 1)
     assert callback_copy.read_bytes() == callback_bytes
     assert callback_path.read_bytes() == callback_bytes
 
@@ -234,8 +236,11 @@ def test_reuse_policy_requires_resource_routing_configuration(tmp_path: Path) ->
         rendered = engine["render_html"](report, selection)
         data_line = next(line for line in rendered.splitlines() if line.startswith("const DATA = "))
         data = json.loads(data_line.removeprefix("const DATA = ").removesuffix(";"))
-        assert data["ao_target_eligible_finding_ids"] == expected_ids
-        assert ('id="ao-target-controls"' in rendered) is marked
+        assert data["required_input_groups"][0]["finding_ids"] == [
+            finding["id"] for finding in report["findings"]
+            if finding.get("finding_group") == "splunk-agent-observability"
+        ]
+        assert 'id="ao-target-controls"' in rendered
 
         for target_flags in (
             ("--ao-reuse-only",),
@@ -246,11 +251,9 @@ def test_reuse_policy_requires_resource_routing_configuration(tmp_path: Path) ->
                 "select", str(scratch_path), "--ids", "AO-002",
                 *target_flags, "-o", str(output),
             )
-            if marked:
-                assert targeted.returncode == 0, targeted.stderr
-                assert "ao_target" in json.loads(output.read_text(encoding="utf-8"))
-            else:
-                assert targeted.returncode != 0
-                assert "requires a selected Agent Observability resource or routing finding" in targeted.stderr
-                assert not output.exists()
+            assert targeted.returncode == 0, targeted.stderr
+            bound = json.loads(output.read_text(encoding="utf-8"))
+            assert "ao_target" in bound
+            assert bound["approved_ids"] == selection["approved_ids"]
+            assert engine["required_input_status"](engine["required_input_groups"](report), bound)["ready"] is (len(target_flags) > 1)
     assert audit_path.read_bytes() == original_bytes

@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 
+import { cloudInitializeHostRequestTimeoutMs, cloudHostRequestTimeoutMs, logsHostRequestTimeoutMs } from "../../../../shared/connection-limits.cjs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   callObserverHostCloud,
@@ -27,6 +28,43 @@ afterEach(() => {
 });
 
 describe("Splunk Observability Studio host transport", () => {
+  it("allows initialization to finish its refresh and credential-import budget", async () => {
+    vi.useFakeTimers();
+    const { posted } = installHost();
+    const pending = callObserverHostCloud("initialize");
+    const request = posted.at(-1);
+    await vi.advanceTimersByTimeAsync(cloudInitializeHostRequestTimeoutMs - 1);
+    respond(request, true, { status: disconnectedStatus() });
+    expect(await pending).toEqual({ status: disconnectedStatus() });
+    expect(posted.some((message) => message.type === "obstudio.host.cancel")).toBe(false);
+  });
+
+  it("routes logs settings through the IDE adapter without affecting unrelated requests after failure", async () => {
+    const { posted } = installHost();
+    const settings = observerFetch("/api/splunk/logs", {method:"POST",body:JSON.stringify({token:"synthetic-token",index:"studio"})});
+    const request=posted.at(-1);
+    expect(request?.request).toMatchObject({kind:"http",method:"POST",path:"/api/splunk/logs"});
+    respond(request,true,{body:JSON.stringify({error:"HEC rejected token"}),status:502,statusText:"Bad Gateway"});
+    expect((await settings).status).toBe(502);
+    const health=observerFetch("/api/health");
+    respond(posted.at(-1),true,{body:JSON.stringify({kind:"obstudio"}),status:200,statusText:"OK"});
+    await expect((await health).json()).resolves.toEqual({kind:"obstudio"});
+  });
+  it.each(["", "/enabled", "/disconnect", "/refresh"])("waits for logs storage and reports an uncertain outcome without cancellation (%s)", async (suffix) => {
+    vi.useFakeTimers();
+    const { posted } = installHost();
+    const pending = observerFetch(`/api/splunk/logs${suffix}`, { method: "POST", body: "{}" });
+    const timedOut = expect(pending).rejects.toThrow(/Reload saved logs settings/);
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(posted).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(logsHostRequestTimeoutMs - 15_000);
+    await timedOut;
+    expect(posted.some((message) => message.type === "obstudio.host.cancel")).toBe(false);
+    const health = observerFetch("/api/health");
+    respond(posted.at(-1), true, { body: "{}", status: 200, statusText: "OK" });
+    expect((await health).status).toBe(200);
+  });
+
   it("keeps native fetch for the standalone browser", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response("browser", { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
@@ -67,6 +105,58 @@ describe("Splunk Observability Studio host transport", () => {
     await expect(response.json()).resolves.toEqual({ ok: true });
   });
 
+  it("refuses HTTP methods the host does not forward", async () => {
+    const { posted } = installHost();
+    for (const method of ["PUT", "PATCH", "DELETE"]) {
+      await expect(observerFetch("/api/config", { body: "{}", method })).rejects.toThrow(
+        `Splunk Observability Studio host transport does not support ${method} requests.`,
+      );
+    }
+    expect(posted).toHaveLength(0);
+  });
+
+  it("serves the Config tab's API calls through the host", async () => {
+    const { posted } = installHost();
+
+    const definitions = observerFetch("/api/config/definitions");
+    expect(posted.at(-1)).toMatchObject({ request: { kind: "http", method: "GET", path: "/api/config/definitions" } });
+    respond(posted.at(-1), true, {
+      body: JSON.stringify({ type: "object", properties: {} }),
+      headers: { "content-type": "application/json" },
+      status: 200,
+      statusText: "OK",
+    });
+    await expect((await definitions).json()).resolves.toEqual({ type: "object", properties: {} });
+
+    const values = observerFetch("/api/config");
+    expect(posted.at(-1)).toMatchObject({ request: { kind: "http", method: "GET", path: "/api/config" } });
+    respond(posted.at(-1), true, {
+      body: JSON.stringify({ telemetry: { enabled: true } }),
+      headers: { "content-type": "application/json" },
+      status: 200,
+      statusText: "OK",
+    });
+    await expect((await values).json()).resolves.toEqual({ telemetry: { enabled: true } });
+
+    const rejected = observerFetch("/api/config", {
+      body: '{"telemetry":{"enabled":null}}',
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    });
+    expect(posted.at(-1)).toMatchObject({
+      request: { body: '{"telemetry":{"enabled":null}}', kind: "http", method: "POST", path: "/api/config" },
+    });
+    respond(posted.at(-1), true, {
+      body: JSON.stringify({ error: "telemetry.enabled: null is not a valid value" }),
+      headers: { "content-type": "application/json" },
+      status: 400,
+      statusText: "Bad Request",
+    });
+    const response = await rejected;
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: "telemetry.enabled: null is not a valid value" });
+  });
+
   it("sends bounded cloud actions and validates the host status", async () => {
     const { posted } = installHost();
     const pending = callObserverHostCloud("connect", {
@@ -88,6 +178,21 @@ describe("Splunk Observability Studio host transport", () => {
     respond(posted.at(-1), true, { status: legacyDisconnectedStatus() });
     await expect(legacy).resolves.toEqual({ status: legacyDisconnectedStatus() });
 
+    const logsStatus = { ...disconnectedStatus(), logs: { ...disconnectedStatus().metrics, configured: true, exportedItems: 4 } };
+    const logs = callObserverHostCloud("initialize");
+    respond(posted.at(-1), true, { status: logsStatus });
+    await expect(logs).resolves.toEqual({ status: logsStatus });
+
+    const invalidLogs = callObserverHostCloud("initialize");
+    respond(posted.at(-1), true, { status: { ...logsStatus, logs: { exportedItems: "four" } } });
+    await expect(invalidLogs).rejects.toThrow("invalid cloud response");
+
+    for (const cloudVersion of [17, null, "invalid"]) {
+      const invalidVersion = callObserverHostCloud("initialize");
+      respond(posted.at(-1), true, { status: { ...disconnectedStatus(), cloudVersion } });
+      await expect(invalidVersion).rejects.toThrow("invalid cloud response");
+    }
+
     const invalid = callObserverHostCloud("initialize");
     respond(posted.at(-1), true, { status: { connected: "yes" } });
     await expect(invalid).rejects.toThrow("invalid cloud response");
@@ -98,6 +203,13 @@ describe("Splunk Observability Studio host transport", () => {
       status: { ...disconnectedStatus(), registrationAndAuthProtocol: "cimd" },
     });
     await expect(invalidProtocol).rejects.toThrow("invalid cloud response");
+  });
+
+  it.each(["yes", "false", 1, null])("rejects malformed credential cleanup status from host mutations (%s)", async (cleanupPending) => {
+    const { posted } = installHost();
+    const pending = callObserverHostCloud("refresh");
+    respond(posted.at(-1), true, { status: { ...disconnectedStatus(), cleanupPending } });
+    await expect(pending).rejects.toThrow("invalid cloud response");
   });
 
   it("preserves allowlisted cloud failure metadata for outcome handling", async () => {
@@ -155,9 +267,9 @@ describe("Splunk Observability Studio host transport", () => {
     });
     const request = posted.at(-1);
     const timedOut = expect(pending).rejects
-      .toThrow(/Reload the window to reconcile its final state/);
+      .toThrow(/Reload saved connection/);
 
-    await vi.advanceTimersByTimeAsync(60_000);
+    await vi.advanceTimersByTimeAsync(cloudHostRequestTimeoutMs);
 
     await timedOut;
     expect(posted.some((message) => message.type === "obstudio.host.cancel")).toBe(false);

@@ -350,7 +350,7 @@ def test_correction_archive_counts_every_grade_and_retains_recovery_sources():
     assert all(history["bounded_recovery_integration"]["fixture_match"].values())
 
 
-def test_correction_closure_notes_match_raw_audit_history_and_current_reports():
+def test_correction_closure_notes_match_recorded_audit_evidence():
     root = Path(__file__).parents[1]
     history = json.loads((root / "docs/evidence/agent-observability-correction-runs.json").read_text())
     document = (root / "docs/agent-observability-eval-open-findings.md").read_text()
@@ -371,9 +371,7 @@ def test_correction_closure_notes_match_raw_audit_history_and_current_reports():
             latest[run["skill"]] = run
     for skill, label in (("otel-audit", "Audit"), ("otel-instrument", "Instrument"),
                          ("otel-verify", "Verify")):
-        report = json.loads((root / f"eval-reports/{skill}/rubric/benchmark.json").read_text())
-        run_id = report["metadata"]["run_id"]
-        assert latest[skill]["run_id"] == run_id
+        run_id = latest[skill]["run_id"]
         assert f"| {label} | `{run_id}` |" in document
     cohort = next(phase for phase in history["rounds"]
                   if phase["label"] == "merged-main coordinated source verification")

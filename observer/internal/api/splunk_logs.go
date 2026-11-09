@@ -1,0 +1,334 @@
+package api
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/url"
+	"strings"
+	"sync"
+	"time"
+	"unicode"
+
+	"github.com/signalfx/obstudio/observer/internal/otlp"
+	"github.com/signalfx/obstudio/observer/internal/store"
+	"go.opentelemetry.io/collector/pdata/pcommon"
+	"go.opentelemetry.io/collector/pdata/plog"
+)
+
+const splunkLogsConnectionTestTimeout = 8 * time.Second
+
+// SplunkLogsSettings connects local persistence to the live logs controller.
+type SplunkLogsSettings struct {
+	Controller      *otlp.SplunkHECLogsExportController
+	Save            func(otlp.SplunkHECLogsExporterConfig) error
+	SavePreferences func(otlp.SplunkHECLogsExporterConfig) error
+	HasCredential   func() bool
+	CleanupPending  func() bool
+	Refresh         func() error
+}
+
+type splunkLogsStatusResponse struct {
+	otlp.SplunkHECLogsExportStatus
+	CanDisconnect  bool `json:"canDisconnect"`
+	CleanupPending bool `json:"cleanupPending"`
+}
+
+func registerSplunkLogs(mux *http.ServeMux, local *store.Store, settings SplunkLogsSettings) {
+	if settings.Controller == nil {
+		return
+	}
+	var mu sync.Mutex
+	snapshot := func() splunkLogsStatusResponse {
+		status := settings.Controller.Status()
+		canDisconnect := status.TokenConfigured
+		if !status.SessionOnly && settings.HasCredential != nil {
+			canDisconnect = canDisconnect || settings.HasCredential()
+		}
+		pending := settings.CleanupPending != nil && settings.CleanupPending()
+		return splunkLogsStatusResponse{status, canDisconnect, pending}
+	}
+	mux.HandleFunc("GET /api/splunk/logs", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		writeSameOriginJSON(w, snapshot())
+	})
+	refresh := func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		var request struct{}
+		if err := decodeStrictJSON(w, r, &request); err != nil {
+			writeSplunkExportError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if settings.Controller.Status().SessionOnly {
+			writeSameOriginJSON(w, snapshot())
+			return
+		}
+		if settings.Refresh == nil {
+			writeSplunkExportError(w, http.StatusServiceUnavailable, "Reloading logs settings is unavailable in this host.")
+			return
+		}
+		if err := settings.Refresh(); err != nil && !errors.Is(err, ErrConnectionCleanupPending) {
+			writeSplunkExportError(w, http.StatusInternalServerError, "Could not reload saved logs settings. Unlock secure storage and retry.")
+			return
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		writeSameOriginJSON(w, snapshot())
+	}
+	mux.HandleFunc("POST /api/splunk/logs/refresh", localMutation(refresh))
+	finish := func(w http.ResponseWriter, saveErr error) {
+		if saveErr != nil {
+			writeSplunkExportError(w, http.StatusInternalServerError, ErrConnectionCleanupPending.Error())
+			return
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		writeSameOriginJSON(w, snapshot())
+	}
+	save := func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		var request struct {
+			SessionOnly        bool   `json:"sessionOnly"`
+			Endpoint           string `json:"endpoint"`
+			Token              string `json:"token"`
+			Index              string `json:"index"`
+			Source             string `json:"source"`
+			Enabled            *bool  `json:"enabled"`
+			VerifyConnection   bool   `json:"verifyConnection"`
+			PreserveEnabled    bool   `json:"preserveEnabled"`
+			InsecureSkipVerify bool   `json:"insecureSkipVerify"`
+			ExpectedVersion    string `json:"expectedVersion"`
+		}
+		if err := decodeStrictJSON(w, r, &request); err != nil {
+			writeSplunkExportError(w, 400, err.Error())
+			return
+		}
+		if request.ExpectedVersion != settings.Controller.Status().Version {
+			writeSplunkExportError(w, 409, "Logs settings changed. Try saving again.")
+			return
+		}
+		previous := settings.Controller.Config()
+		config := previous
+		config.Endpoint, config.Index, config.Source = strings.TrimSpace(request.Endpoint), strings.TrimSpace(request.Index), strings.TrimSpace(request.Source)
+		config.InsecureSkipVerify = request.InsecureSkipVerify
+		if request.Enabled != nil {
+			config.Enabled = *request.Enabled
+		}
+		if request.PreserveEnabled {
+			config.Enabled = previous.Enabled
+		}
+		if request.Token != "" {
+			config.Token = strings.TrimSpace(request.Token)
+		} else if config.Endpoint != previous.Endpoint {
+			writeSplunkExportError(w, 400, "Paste a HEC token when changing the endpoint.")
+			return
+		}
+		for _, value := range []string{config.Endpoint, config.Token, config.Index, config.Source, config.Sourcetype} {
+			if strings.IndexFunc(value, unicode.IsControl) >= 0 {
+				writeSplunkExportError(w, http.StatusBadRequest, "Logs settings must not contain control characters.")
+				return
+			}
+		}
+		parsed, err := url.Parse(config.Endpoint)
+		if err != nil || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" ||
+			(parsed.Scheme != "https" && parsed.Scheme != "http") ||
+			(parsed.Scheme == "http" && !isLoopbackHostname(parsed.Hostname())) ||
+			(parsed.Path != "/services/collector" && parsed.Path != "/services/collector/event") || len(config.Endpoint) > 2048 {
+			writeSplunkExportError(w, 400, "Enter an HTTPS HEC endpoint ending in /services/collector or /services/collector/event. HTTP is supported only for loopback endpoints.")
+			return
+		}
+		if ((config.Enabled || request.VerifyConnection) && config.Index == "") || len(config.Index) > 256 || strings.ContainsAny(config.Index+config.Source, "\r\n") || len(config.Source) > 1024 {
+			writeSplunkExportError(w, 400, "Enter a valid index and source.")
+			return
+		}
+		if strings.TrimSpace(config.Token) == "" || len(config.Token) > 4096 || strings.ContainsAny(config.Token, "\r\n\t ") {
+			writeSplunkExportError(w, 400, "Paste the complete HEC token.")
+			return
+		}
+		if config.Sourcetype == "" {
+			config.Sourcetype = "otel:logs"
+		}
+		config.ConnectionVerified = previous.ConnectionVerified && config.Endpoint == previous.Endpoint &&
+			config.Token == previous.Token && config.Index == previous.Index && config.InsecureSkipVerify == previous.InsecureSkipVerify
+		candidate, err := otlp.NewSplunkHECLogsExporter(config)
+		if err != nil {
+			writeSplunkExportError(w, 400, "Invalid HEC configuration.")
+			return
+		}
+		defer func() {
+			if candidate != nil {
+				candidate.Shutdown(context.Background())
+			}
+		}()
+		if config.Enabled || request.VerifyConnection {
+			logs := plog.NewLogs()
+			resource := logs.ResourceLogs().AppendEmpty()
+			resource.Resource().Attributes().PutStr("service.name", "obstudio")
+			scope := resource.ScopeLogs().AppendEmpty()
+			scope.Scope().SetName("obstudio.splunk.logs")
+			record := scope.LogRecords().AppendEmpty()
+			record.SetTimestamp(pcommon.NewTimestampFromTime(time.Now()))
+			record.SetSeverityNumber(plog.SeverityNumberInfo)
+			record.SetSeverityText("INFO")
+			record.Body().SetStr("Splunk Observability Studio logs connection test")
+			local.AddInternalLogs(otlp.ConvertLogs(logs))
+			probeCtx, cancel := context.WithTimeout(r.Context(), splunkLogsConnectionTestTimeout)
+			defer cancel()
+			if err := candidate.TestConnection(probeCtx, logs); err != nil {
+				writeSplunkExportError(w, 502, fmt.Sprintf("HEC connection test failed: %s", err))
+				return
+			}
+			config.ConnectionVerified = true
+		}
+		if request.ExpectedVersion != settings.Controller.Status().Version {
+			writeSplunkExportError(w, http.StatusConflict, "Logs settings changed. Try again.")
+			return
+		}
+		if request.SessionOnly {
+			settings.Controller.ApplySession(config, candidate, request.PreserveEnabled)
+			candidate = nil
+			writeSameOriginJSON(w, snapshot())
+			return
+		}
+		if settings.Save == nil {
+			writeSplunkExportError(w, 503, "Saving logs settings is unavailable in this host.")
+			return
+		}
+		saveErr := settings.Save(config)
+		if errors.Is(saveErr, ErrConnectionSettingsChanged) {
+			writeSplunkExportError(w, http.StatusConflict, ErrConnectionSettingsChanged.Error())
+			return
+		}
+		if errors.Is(saveErr, ErrCredentialStorageUnavailable) {
+			writeCredentialStorageUnavailable(w)
+			return
+		}
+		if saveErr != nil && !errors.Is(saveErr, ErrConnectionCleanupPending) {
+			writeSplunkExportError(w, 500, "Could not save logs settings. Check secure credential storage and file permissions.")
+			return
+		}
+		if request.PreserveEnabled {
+			settings.Controller.ApplyKeepingActivity(config, candidate)
+		} else {
+			settings.Controller.Apply(config, candidate)
+		}
+		candidate = nil
+		finish(w, saveErr)
+	}
+	mux.HandleFunc("POST /api/splunk/logs", localMutation(save))
+	toggle := func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		var request struct {
+			Enabled         *bool  `json:"enabled"`
+			ExpectedVersion string `json:"expectedVersion"`
+		}
+		if err := decodeStrictJSON(w, r, &request); err != nil {
+			writeSplunkExportError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		status := settings.Controller.Status()
+		if request.Enabled == nil {
+			writeSplunkExportError(w, http.StatusBadRequest, "enabled must be a boolean")
+			return
+		}
+		if request.ExpectedVersion != status.Version {
+			writeSplunkExportError(w, http.StatusConflict, "Logs settings changed. Try again.")
+			return
+		}
+		if *request.Enabled && !status.Connected {
+			writeSplunkExportError(w, http.StatusConflict, "Verify the logs connection before enabling export.")
+			return
+		}
+		previous := settings.Controller.Config()
+		config := previous
+		config.Enabled = *request.Enabled
+		config.ConnectionVerified = status.Connected
+		if config.Enabled {
+			if err := otlp.ValidateSplunkHECLogsExporterConfig(config); err != nil {
+				writeSplunkExportError(w, http.StatusBadRequest, "Reconnect logs with a valid HEC configuration before enabling export.")
+				return
+			}
+		}
+		if status.SessionOnly {
+			if err := settings.Controller.SetEnabled(config.Enabled); err != nil {
+				writeSplunkExportError(w, 500, "Could not update logs export state.")
+				return
+			}
+			writeSameOriginJSON(w, snapshot())
+			return
+		}
+		if settings.Save == nil {
+			writeSplunkExportError(w, http.StatusServiceUnavailable, "Saving logs settings is unavailable in this host.")
+			return
+		}
+		if !config.Enabled && config.Token == "" {
+			writeSplunkExportError(w, http.StatusConflict, "Reconnect logs before changing export state.")
+			return
+		}
+		savePreference := settings.SavePreferences
+		if savePreference == nil {
+			savePreference = settings.Save
+		}
+		saveErr := savePreference(config)
+		if errors.Is(saveErr, ErrConnectionSettingsChanged) {
+			writeSplunkExportError(w, http.StatusConflict, ErrConnectionSettingsChanged.Error())
+			return
+		}
+		if saveErr != nil && !errors.Is(saveErr, ErrConnectionCleanupPending) {
+			writeSplunkExportError(w, http.StatusInternalServerError, "Could not save logs export state.")
+			return
+		}
+		if err := settings.Controller.SetEnabled(config.Enabled); err != nil {
+			if rollbackErr := savePreference(previous); rollbackErr != nil {
+				writeSplunkExportError(w, http.StatusInternalServerError, "Could not update logs export state or restore the saved settings.")
+				return
+			}
+			writeSplunkExportError(w, http.StatusInternalServerError, "Could not update logs export state.")
+			return
+		}
+		finish(w, saveErr)
+	}
+	mux.HandleFunc("POST /api/splunk/logs/enabled", localMutation(toggle))
+
+	disconnect := func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		var request struct {
+			ExpectedVersion string `json:"expectedVersion"`
+		}
+		if err := decodeStrictJSON(w, r, &request); err != nil {
+			writeSplunkExportError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if request.ExpectedVersion != settings.Controller.Status().Version {
+			writeSplunkExportError(w, http.StatusConflict, "Logs settings changed. Try again.")
+			return
+		}
+		config := settings.Controller.Config()
+		config.Enabled, config.ConnectionVerified = false, false
+		config.Token = ""
+		if settings.Controller.Status().SessionOnly {
+			settings.Controller.ApplySession(config, nil, false)
+			writeSameOriginJSON(w, snapshot())
+			return
+		}
+		if settings.Save == nil {
+			writeSplunkExportError(w, http.StatusServiceUnavailable, "Saving logs settings is unavailable in this host.")
+			return
+		}
+		saveErr := settings.Save(config)
+		if errors.Is(saveErr, ErrConnectionSettingsChanged) {
+			writeSplunkExportError(w, http.StatusConflict, ErrConnectionSettingsChanged.Error())
+			return
+		}
+		if saveErr != nil && !errors.Is(saveErr, ErrConnectionCleanupPending) {
+			writeSplunkExportError(w, http.StatusInternalServerError, "Could not disconnect logs.")
+			return
+		}
+		settings.Controller.Apply(config, nil)
+		finish(w, saveErr)
+	}
+	mux.HandleFunc("POST /api/splunk/logs/disconnect", localMutation(disconnect))
+}

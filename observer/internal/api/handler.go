@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/signalfx/obstudio/observer/internal/audit"
+	"github.com/signalfx/obstudio/observer/internal/configstatus"
 	"github.com/signalfx/obstudio/observer/internal/dashboards"
 	"github.com/signalfx/obstudio/observer/internal/freeaccount"
 	"github.com/signalfx/obstudio/observer/internal/otlp"
@@ -27,6 +28,10 @@ type ServerInfo struct {
 	StartedAt  time.Time               `json:"startedAt"`
 	Version    string                  `json:"version"`
 	Exporters  map[string]ExporterInfo `json:"exporters,omitempty"`
+	// ConfigManager is the Config Manager gate as resolved at startup, not
+	// whether a config Manager was built. The client shows the Config tab
+	// only when it is true.
+	ConfigManager bool `json:"configManager"`
 }
 
 // ExporterInfo describes optional non-secret outbound exporter state.
@@ -58,6 +63,13 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	var splunkExportRefresher SplunkExportConfigurationRefresher
 	var freeAccountSubmitter freeaccount.Submitter
 	var endpointConfig EndpointConfig
+	var logsSettings SplunkLogsSettings
+	var saveConnection SplunkCloudSettingsSaver
+	var savePreferences SplunkCloudPreferencesSaver
+	var storageManaged SplunkCloudStorageManaged
+	var cleanupPending SplunkCloudCleanupPending
+	var userConfig UserConfig
+	var configStatus *configstatus.Builder
 	info := ServerInfo{
 		Kind:       "obstudio",
 		APIVersion: "v1",
@@ -68,6 +80,14 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	}
 	for _, param := range params {
 		switch value := param.(type) {
+		case UserConfig:
+			if value != nil {
+				userConfig = value
+			}
+		case *configstatus.Builder:
+			if value != nil {
+				configStatus = value
+			}
 		case *validator.Store:
 			if value != nil {
 				validationStore = value
@@ -102,9 +122,30 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 			}
 		case EndpointConfig:
 			endpointConfig = value
+		case SplunkLogsSettings:
+			logsSettings = value
+		case SplunkCloudCleanupPending:
+			cleanupPending = value
+		case SplunkCloudStorageManaged:
+			storageManaged = value
+		case SplunkCloudPreferencesSaver:
+			savePreferences = value
+		case SplunkCloudSettingsSaver:
+			saveConnection = value
 		}
 	}
 	validationService := validator.NewService(validationStore, runner)
+	var splunkExport *splunkExportService
+	if metricsController != nil && tracesController != nil {
+		splunkExport = newSplunkExportService(metricsController, tracesController, splunkExportRefresher)
+		splunkExport.logs = logsSettings
+		splunkExport.saveConnection = saveConnection
+		splunkExport.savePreferences = savePreferences
+		splunkExport.storageManaged = storageManaged
+		splunkExport.cleanupPending = cleanupPending
+		splunkExport.register(mux)
+	}
+	registerSplunkLogs(mux, s, logsSettings)
 	dashboardResolver := dashboards.NewResolver(s, dashboardsConfig)
 	auditResolver := audit.NewResolver(auditConfig)
 	mux.HandleFunc("OPTIONS /api/", corsPreflightHandler())
@@ -134,14 +175,18 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	mux.HandleFunc("POST /api/validation/analyze", localMutation(analyzeValidation(validationService)))
 	mux.HandleFunc("GET /api/query/validation/findings", queryValidationFindings(validationService))
 	mux.HandleFunc("DELETE /api/data", localMutation(clearData(s, validationStore)))
-	if metricsController != nil && tracesController != nil {
-		newSplunkExportService(metricsController, tracesController, splunkExportRefresher).register(mux)
-	}
 	if freeAccountSubmitter != nil {
 		newFreeAccountAPI(freeAccountSubmitter).register(mux)
 	}
+	if userConfig != nil {
+		registerUserConfigRoutes(mux, userConfig)
+	}
+	if configStatus != nil {
+		registerConfigStatusRoute(mux, configStatus)
+	}
 	registerSISCIMDLoginRoutes(mux)
 	registerO11yOAuthRoutes(mux)
+	registerO11yOAuthLoginRoutes(mux)
 }
 
 func queryTraces(s *store.Store) http.HandlerFunc {
