@@ -111,6 +111,8 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
         "non-negative integer milliseconds", "normative references imported",
         "promised operation/outcome", "scalar level applies", "prose caveat",
         "same configured process", "event ordering", "not a particular tool-call order",
+        "resolve and report their effective values or unlimited behavior",
+        "future boundary test does not substitute for accessible configuration facts",
     ):
         assert term in common_words
     assert "https://opentelemetry.io/docs/specs/otel/configuration/common/" in common

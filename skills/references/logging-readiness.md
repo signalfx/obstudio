@@ -531,7 +531,13 @@ Inspect effective log attribute count/value limits and existing operator
 values; SDK defaults may already suffice. `OTEL_LOGRECORD_ATTRIBUTE_COUNT_LIMIT`
 and `OTEL_LOGRECORD_ATTRIBUTE_VALUE_LENGTH_LIMIT` are signal-specific settings,
 subject to installed SDK support and generic fallback. Span limits do not
-configure log limits. Attribute length limits do not bound Body, nested
+configure log limits. When the selected implementation and configuration are
+available, resolve and report their effective values or unlimited behavior,
+precedence and source evidence now. A future boundary test does not substitute
+for accessible configuration facts; keep those facts separate from unexecuted
+runtime behavior. If resolution is genuinely unavailable, state the exact
+missing source/configuration and its future check.
+Attribute length limits do not bound Body, nested
 payloads carried in Body or all exception formatting: use a reviewed application
 or processor policy for these surfaces when required. Avoid arbitrary new limits
 without a source-backed need. When current messages are bounded and no Body

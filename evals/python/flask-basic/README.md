@@ -20,3 +20,17 @@ writes raw evidence and `result.json` under `.observe/logging-workflow-proof/`.
 Preserve the verifier;repair application instrumentation when it fails. Do not
 run another app on the provided port while invoking it. No Docker/cloud account
 is needed.
+
+## Graceful-stop contract
+
+This service's operator policy requires repeated catchable stop requests to be
+idempotent during graceful finalization. Once final logging or provider drain
+starts, another such request must not interrupt that work or repeat final logs
+or provider shutdown. Finalization must remain within the configured stop
+budget. Deliberate forced termination is outside this graceful-stop guarantee.
+
+Acceptance must deliver a second stop request to the same process while final
+logging or provider drain is still active and retain the delivery and event
+order. Separate single-stop runs or a request after process exit do not prove
+this contract. This is application policy, not an OpenTelemetry signal-handler
+requirement.

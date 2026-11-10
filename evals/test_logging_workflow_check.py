@@ -162,7 +162,10 @@ def test_source_binding_tracks_launch_and_code_but_not_generated_proof(tmp_path)
     assert source_hashes(tmp_path) != before
 
 
-def test_logging_tasks_are_direct_skill_invocations():
+def test_logging_tasks_are_direct_skill_invocations_with_visible_operator_policy(tmp_path):
+    from pytest_codex_evals.runner import prepare_side_workspace
+    from run_logging_workflow import case_for
+
     definitions = list(Path(__file__).parent.glob("*/*/eval/qual/logging-*-contract.json"))
     assert len(definitions) == 12
     for path in definitions:
@@ -172,6 +175,22 @@ def test_logging_tasks_are_direct_skill_invocations():
         for prompt in data["prompts"]:
             assert prompt["task"] == "$" + data["skill"] + " ./service"
             assert prompt["eval_inputs"] == []
+
+    root = Path(__file__).resolve().parents[1]
+    for role in ("audit", "instrument", "verify"):
+        case = case_for(root, "python", role, 1)
+        workspace = tmp_path / role
+        prepare_side_workspace(root, case, "with_skill", workspace)
+        readme = workspace / "service/README.md"
+        assert readme.read_bytes() == (case.fixture_dir / "README.md").read_bytes()
+        assert "must not interrupt that work" in readme.read_text()
+        assert "application policy, not an OpenTelemetry signal-handler" in readme.read_text()
+        definition = json.loads((case.fixture_dir / f"eval/qual/logging-{role}-contract.json").read_text())
+        lifecycle = definition["rubric"][9]
+        assert "documented Graceful-stop contract in README.md" in lifecycle
+        assert "not an OTel signal-handler requirement" in lifecycle
+        assert "repeated-SystemExit" not in lifecycle
+        assert not (workspace / "service/eval").exists()
 
 
 @pytest.mark.skipif(os.name != "posix", reason="The host workflow uses owned POSIX process groups")
