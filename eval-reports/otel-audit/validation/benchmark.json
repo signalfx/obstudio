@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-audit",
-    "run_id": "20261109T180310485767Z",
+    "run_id": "20261110T213548903792Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-6-luna",
     "judge_model": "",
@@ -18,8 +18,7 @@
     "rubric_enabled": false,
     "runtime_enabled": false,
     "workers": "1",
-    "validation_scope": "full",
-    "source_snapshot_refreshed_without_eval_execution": true
+    "validation_scope": "full"
   },
   "evals": [
     {
@@ -656,7 +655,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "308ce96fc9960527f74ee5a5185951f7b2cdd314dfd34a017be467d89c722abf",
+    "digest": "202204096061082654290b56e902c7e50158af227365f244de8a1ec65bfd0a09",
     "eval_kinds": [
       "rubric",
       "sanity"
@@ -731,7 +730,7 @@
       "evals/java/kafka-batch-consumer/src/test/java/com/example/kafkabatch/PaymentBatchProcessorTest.java": "2ceba5e06fa063cae5390477493d2f8849a5286bda84064e756c11dbac2a093b",
       "evals/java/kafka-listener-container/README.md": "d0d9b5825c1dfd25f95912eb002ad3f080aaea8ee02195b72ce6cc6284c28eab",
       "evals/java/kafka-listener-container/eval/qual/audit.json": "a22d9fac08b575e620a5b9fd27e8b6637d6649bacc16c28ae49232eba219c494",
-      "evals/java/kafka-listener-container/pom.xml": "86079b983f268c6b77c13379eebea72ea162aa449417b379b4971485a59ede1b",
+      "evals/java/kafka-listener-container/pom.xml": "57cd710fad0976b0954b5d24ec203c8d47761a1d35a6673a2852dd99ba5c902c",
       "evals/java/kafka-listener-container/src/main/java/com/example/kafkalistener/AlertEvent.java": "37190f8fe3cd24aa9b720089bf970f91e8773fce94b739321a9f34286e1d13ac",
       "evals/java/kafka-listener-container/src/main/java/com/example/kafkalistener/AlertListener.java": "1f98d4b261b2f2c661681ef341ea8bfbcdd708bcc98770f7b86a5d1774def2ce",
       "evals/java/kafka-listener-container/src/main/java/com/example/kafkalistener/AlertService.java": "dcf2de9c5c4489f7c22f5687c215db59f801a1f6014b9f66c57f2f4df7bc0713",
@@ -765,7 +764,7 @@
       "evals/java/kafka-streams/src/main/resources/simplelogger.properties": "3294bddc68c65069b77ec48d1c84ecb1d26a59e697413f86ec1da386155ec66d",
       "evals/java/kafka-streams/src/test/java/com/example/streaming/OrderStreamTopologyTest.java": "ac6d6948bd24050982b1a6eaca082f70469c468e5ffdad1f9eec4efd438e8ef1",
       "evals/java/springboot-basic/eval/qual/audit.json": "b09739f420ec7ee1b82f069339caba33bf9a21e1809dde14235213d385651962",
-      "evals/java/springboot-basic/pom.xml": "6dd804ca259d605ce8fe23268766dc28566aef05d06f7eac42cfacf5722ff6a5",
+      "evals/java/springboot-basic/pom.xml": "6c6eb3ffe280927f6e5538292d29154e08068342582a27b4992839910b07404f",
       "evals/java/springboot-basic/src/main/java/com/example/tasks/Task.java": "97437951adcb1592b1f4e48af10f799501858ed40949575f8278d9a644f80cfc",
       "evals/java/springboot-basic/src/main/java/com/example/tasks/TaskController.java": "a32f9883586bd13b5ecf6f015f587b25ac696a55423398a01e3fe1619f9020fa",
       "evals/java/springboot-basic/src/main/java/com/example/tasks/TasksApplication.java": "2aeefcee33840914b4118f0b6615205c37ae50ecf5cb774c32a6f5d9431f62c5",

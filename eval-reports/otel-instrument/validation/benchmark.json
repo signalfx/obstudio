@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-instrument",
-    "run_id": "20261109T180402192105Z",
+    "run_id": "20261110T213608756559Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-6-luna",
     "judge_model": "",
@@ -18,8 +18,7 @@
     "rubric_enabled": false,
     "runtime_enabled": false,
     "workers": "1",
-    "validation_scope": "full",
-    "source_snapshot_refreshed_without_eval_execution": true
+    "validation_scope": "full"
   },
   "evals": [
     {
@@ -987,7 +986,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "62057ee0077f3f7d823d32ecfcfcbc945eaa4cbd75dd4edf38bcda3e45861853",
+    "digest": "ee03c7bd9751168ed1db3cbbd9e15aa91acabae70d0c8eb84cdd73e2a2341921",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -1265,9 +1264,9 @@
       "observer/internal/otlp/pidresolver_windows.go": "2f7592fdd29cd4cdd6602adefc8d6c17d7bf602fa1f3d8bc689d498e7fc13967",
       "observer/internal/otlp/receiver.go": "845cb99887adb6771dd630349e2e04e55d6eb0843be77d026856a9d70503feee",
       "observer/internal/otlp/shutdown_lock.go": "c14a7e2ba49ec206b4b528f88035a64d9517e6f617635d9a717774274fb101dc",
-      "observer/internal/otlp/splunk_export_response.go": "7e67348aceabdcfd28d38b19ff482a1dec2be2c5e5cb68b63b889edec1daf2a8",
-      "observer/internal/otlp/splunk_exporter.go": "971c5b59099e5c1c551be2561c33c47a3430bc7b94f5558f744c6e89ef1e4348",
-      "observer/internal/otlp/splunk_exporter_test.go": "3b8a7ae0ed6a5b0508d6db7def196603389c81000aaf00f76c9abe98f3618101",
+      "observer/internal/otlp/splunk_export_response.go": "fc7eb6ef1f096cc45128f74a4c7d7893d22ca1b0726781177fcfade07549124f",
+      "observer/internal/otlp/splunk_exporter.go": "d8e8e1c29521160e86ec564abbdaf584047b039d20e1b1e52977e903d7b30790",
+      "observer/internal/otlp/splunk_exporter_test.go": "241042378f423d1b33b4e11d83e72c1bb60ee93fff9f24c053a97ad60edf8a5a",
       "observer/internal/otlp/splunk_hec_logs_controller.go": "b15181638d1e570959a2c8c20a99c526ffa221fdf22532aac38aad16302d90fa",
       "observer/internal/otlp/splunk_hec_logs_controller_test.go": "242ad14761fc7ef2a391931b86d60e1c5505bc23ba71dff5a390a783f4ea0600",
       "observer/internal/otlp/splunk_hec_logs_exporter.go": "c834ca8b2d9570f208ad1ad52c8e1104e8192a0688ec62621940b03b1f8984b6",
@@ -1398,7 +1397,7 @@
       "evals/java/kafka-batch-consumer/src/test/java/com/example/kafkabatch/PaymentBatchProcessorTest.java": "2ceba5e06fa063cae5390477493d2f8849a5286bda84064e756c11dbac2a093b",
       "evals/java/kafka-listener-container/README.md": "d0d9b5825c1dfd25f95912eb002ad3f080aaea8ee02195b72ce6cc6284c28eab",
       "evals/java/kafka-listener-container/eval/qual/instrument.json": "03d604aad3d7f118e69726ffb45bf7df48348a01c4896917f03bb8c913d04a42",
-      "evals/java/kafka-listener-container/pom.xml": "86079b983f268c6b77c13379eebea72ea162aa449417b379b4971485a59ede1b",
+      "evals/java/kafka-listener-container/pom.xml": "57cd710fad0976b0954b5d24ec203c8d47761a1d35a6673a2852dd99ba5c902c",
       "evals/java/kafka-listener-container/src/main/java/com/example/kafkalistener/AlertEvent.java": "37190f8fe3cd24aa9b720089bf970f91e8773fce94b739321a9f34286e1d13ac",
       "evals/java/kafka-listener-container/src/main/java/com/example/kafkalistener/AlertListener.java": "1f98d4b261b2f2c661681ef341ea8bfbcdd708bcc98770f7b86a5d1774def2ce",
       "evals/java/kafka-listener-container/src/main/java/com/example/kafkalistener/AlertService.java": "dcf2de9c5c4489f7c22f5687c215db59f801a1f6014b9f66c57f2f4df7bc0713",
@@ -1433,7 +1432,7 @@
       "evals/java/kafka-streams/src/test/java/com/example/streaming/OrderStreamTopologyTest.java": "ac6d6948bd24050982b1a6eaca082f70469c468e5ffdad1f9eec4efd438e8ef1",
       "evals/java/kafka-streams/eval/qual/instrument.json": "a0f6d6085af022ffe941d09f34536270ac31dbf70e06ad90f639dadb6302757c",
       "evals/java/springboot-basic/eval/qual/instrument.json": "6ec505436c131f1ecebe0f97fdd8142d7f9e9440f7968b429a939deb112ab296",
-      "evals/java/springboot-basic/pom.xml": "6dd804ca259d605ce8fe23268766dc28566aef05d06f7eac42cfacf5722ff6a5",
+      "evals/java/springboot-basic/pom.xml": "6c6eb3ffe280927f6e5538292d29154e08068342582a27b4992839910b07404f",
       "evals/java/springboot-basic/src/main/java/com/example/tasks/Task.java": "97437951adcb1592b1f4e48af10f799501858ed40949575f8278d9a644f80cfc",
       "evals/java/springboot-basic/src/main/java/com/example/tasks/TaskController.java": "a32f9883586bd13b5ecf6f015f587b25ac696a55423398a01e3fe1619f9020fa",
       "evals/java/springboot-basic/src/main/java/com/example/tasks/TasksApplication.java": "2aeefcee33840914b4118f0b6615205c37ae50ecf5cb774c32a6f5d9431f62c5",
