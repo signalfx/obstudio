@@ -21,7 +21,18 @@
         <java.version>21</java.version>
         <jackson-bom.version>2.21.5</jackson-bom.version>
         <spring-kafka.version>3.3.16</spring-kafka.version>
+        <snappy.version>1.1.10.9</snappy.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.xerial.snappy</groupId>
+                <artifactId>snappy-java</artifactId>
+                <version>${snappy.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>
