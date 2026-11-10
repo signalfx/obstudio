@@ -896,6 +896,11 @@ installed provider/exporter path. Distinguish signal-specific settings from
 generic fallbacks and source-proven defaults. Test the effective selected policy
 with relevant operator overrides present; preserve independent settings.
 
+Distinguish an eagerly evaluated default argument from the value ultimately
+selected by a configuration lookup. Trace sentinels and helper results through
+outer constructor defaults; an intermediate `None` need not mean unlimited.
+Keep source-known behavior separate from unexecuted runtime checks.
+
 For limits, replay the original payload and test its boundaries. Derive expected
 retained values and drops from actual input, accounting for bridge-added fields
 and reviewed processors. Direct SDK and native-bridge controls prove different
@@ -910,6 +915,10 @@ behavior before claiming a process or shutdown profile. Validate the effective
 command and process identities; an environment assignment alone cannot override
 an explicit higher-priority runner setting. Preserve existing development and
 operator policy, and scope proof to the processes actually exercised.
+Inspect effective handler ownership after the runner initializes: supervisors,
+reloaders or workers can replace an earlier handler or stop a different process.
+A flag in an application handler proves nothing if that handler is no longer
+installed. Retain the selected graceful-stop contract on the actual process.
 
 Use the runtime's supported stop mechanism. Repeated stop requests must respect
 the selected shutdown policy and not accidentally interrupt active final logging

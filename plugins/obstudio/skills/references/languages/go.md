@@ -872,6 +872,12 @@ proposing record limits, batching or timeout changes. Reuse adequate defaults
 and the selected log configuration; do not copy options from a different signal
 or SDK. Body/privacy policy remains independent of attribute limits.
 
+Resolve the converter actually used by the selected reader rather than assuming
+the accepted values of a familiar standard-library parser. Keep integer parsing,
+duration conversion and downstream consumption separate. For an exact limit-
+diagnostic claim, inspect the record's emission/once guards as well as its
+normalizer; successful truncation alone does not establish diagnostic cadence.
+
 ### Deadlines and lifecycle
 
 Determine whether each timeout covers an attempt, whole export, processor wait
@@ -880,6 +886,9 @@ expiry separately, and distinguish retry recovery from persistent-failure
 exhaustion. Measure each claimed boundary; process shutdown duration cannot
 establish an individual export deadline. Retain the bound request/attempt and
 wait evidence required by the common delivery contract, not just aggregate counts.
+An elapsed-time eligibility check after an attempt does not necessarily bound a
+subsequent throttling/backoff wait; identify the enclosing context deadline and
+which waits and requests actually observe it before calling a value a ceiling.
 
 Prove final-log receipt through the existing launcher and lifecycle owner by
 decoding the actual record at the claimed boundary. A request count or successful

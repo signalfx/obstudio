@@ -819,6 +819,12 @@ API. Apply changes only to the existing owner and preserve adequate defaults.
 Use the detected native enablement query only when avoiding expensive work;
 keep independent original sinks enabled according to their own policy.
 
+For exact configuration claims, distinguish an absent property from an empty
+string returned by the actual getter. Follow the selected transport implementation
+through validation and final unit/range clamps. A helper that can configure a
+deadline establishes no bound unless the active sender/retry path calls it;
+identify the actual enclosing budget and its cancellation behavior.
+
 Verify effective identity and configuration through the real launcher, including
 loaded profiles and operator overrides. For selected delivery checks, distinguish
 export completion, waiting on a result, cancellation and receiver acknowledgement.

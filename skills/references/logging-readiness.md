@@ -23,46 +23,48 @@ verification do not require a sibling instrumentation skill to be installed.
 ## Source and applicability
 
 Use three related worklists before finalizing the normal report. This is a local
-completeness method, not an additional OTel implementation requirement:
+completeness method, not an additional OTel implementation requirement. Keep the
+work proportional to the selected application path and claims:
 
 1. **Contract:** extract each applicable primary-source clause and its distinct
-   conditions, input branches, strength and owner. A retained excerpt preserves
-   the text; it does not allocate that clause's controls.
-2. **Capability:** allocate each selected mechanism an owner, concrete consuming
-   function/check, source-resolved behavior and separate runtime evidence/status
-   in the existing evidence fields. Follow parser, default, normalization,
-   diagnostic and retry/deadline delegates until that behavior is established;
-   a pointer to an uninspected helper remains unresolved. “Not run” describes
-   execution, not source capability. Resolve accessible facts even for a proposed
-   SDK not installed in the application. When source genuinely cannot be obtained,
-   retain the exact checked access boundary and conditional resolution step.
-3. **Acceptance:** combine independently extracted source-clause controls,
-   operator policy and every promised telemetry item/field, then map each
-   condition to an assertion or precise conditional resolution step. The
+   conditions, strength, maturity and actual owner. Keep SDK, receiver and library
+   duties distinct from application wiring. Retain precise supported/default,
+   unsupported or unverified dispositions for delegated clauses.
+2. **Capability:** resolve mechanisms necessary to selected application/operator
+   invariants and every actual capability claim. Follow relevant parser, default,
+   normalization, diagnostic and retry/deadline delegates to their consuming
+   operation. “Not run” describes execution, not source capability; it cannot
+   substantiate a source-contradicted claim. Resolve accessible facts for proposed
+   dependencies too, or retain the exact access boundary and conditional check.
+3. **Acceptance:** combine selected source-clause controls, operator policy and
+   every promised telemetry item/field, then map each condition to an assertion
+   or precise conditional resolution step. The
    `required-controls` helper inventories audit promises only; its output
    excludes source-clause and acceptance controls. Add those independently.
 
-Derive a named configuration inventory independently from the selected
-construction path: inspect key/option declarations, readers and referenced
-constants, then follow their actual consumption. A declaration or documentation
-mention alone does not prove the selected path reads it. Classify each candidate
-as consumed, conditionally read or outside the selected path, with its source
-binding. Follow the whole requested startup path, including shared resource/
-propagator setup and other selected signal providers, without widening an isolated
-logging repair. A key queried to decide a startup branch is read even when its
-value is absent; absence alone is not an out-of-path disposition. Key the
-inventory by owner/reader as well as setting name: two consumers can apply
-different defaults or invalid-value diagnostics to the same setting. Resolve referenced conversion/helper bodies; a parser name or link is
-a pending capability, not its resolved behavior. Reconcile this inventory against
-the saved case table before finalizing; do not derive both from an already
-incomplete report. A generic SDK-disabled table does not allocate a bridge's
-separate enablement flag. Distinguish standard SDK configuration
-contracts from documented extensions and private flags; do not impose a standard
-default on an extension without establishing that contract's applicability.
+Derive a named configuration inventory independently from application-owned or
+new overrides, supplied selected settings, and dependencies necessary to the
+claimed logging behavior. Include relevant Resource, propagation/sampling,
+bridge/provider activation, filtering/SDK-disabled, limits and lifecycle paths.
+Inspect key/option declarations and actual readers; a declaration alone does not
+prove consumption. Key entries by owner/reader as well as setting name, since
+consumers can apply different defaults and diagnostics. A queried startup key
+is read even if absent, and an eagerly evaluated default expression can read a
+value that is ultimately ignored. Separate reading from effective consumption.
 
-Populate the value-case table for consumed settings now in existing report/
-evidence fields. When source is accessible, an instruction to enumerate settings
-or resolve their outcomes later is not a completed audit/repair handoff. Share
+Do not expand an application task into exhaustive upstream SDK certification.
+Mere transitive consumption does not require enumerating every unused SDK
+setting or input permutation. Ordinary delegated defaults can retain precise
+source/default ownership and scoped unverified effects without runtime claims.
+An SDK/library conformance task or repository-owned component has a different
+scope. This distinction cannot excuse ignored operator values, a false exact
+claim, or an unresolved critical application invariant. Environment support is
+optional and may belong to an SDK, individual component or autoconfigurator;
+establish support and the active owner before imposing its parsing contract.
+
+Populate the value-case table for required settings now in existing report/
+evidence fields. Accessible facts needed for a selected guarantee cannot be
+deferred as an instruction to resolve them later. Share
 parameterized cases only with an explicit setting-name → case/default/outcome
 map; a primitive-type label or “all settings” does not identify its members:
 
@@ -79,7 +81,7 @@ through secondary defaults, unit conversions and clamps to the terminal consumer
 report that terminal outcome. Compute each setting's chain from its own owner,
 rather than copying a different family's fallback or overflow result. Resolve
 symbolic constants to their actual values; a constant's name is not its serialized spelling. Include
-transitively consumed fallback settings in the inventory. Where precedence
+fallback settings needed to resolve the selected outcome. Where precedence
 exists, pair the higher-priority setting's absent, empty and invalid cases with
 a valid nondefault lower-priority value, as well as both absent; derive each
 result from this implementation rather than assuming universal inheritance.
@@ -245,11 +247,12 @@ where that source is supported; resolve their selected implementation separately
 | Enum | Sources MAY extend supported values. If an enum accepts a null/no-op choice, its name MUST be `none`. Standard environment enums SHOULD be case-insensitive; unknown values MUST generate a warning and be ignored. | Resolve supported values/extensions and actual case handling; carry supported, differently cased, unknown, empty/unset and applicable no-op branches. An unrelated Boolean test cannot establish enum behavior. |
 | Environment/code equivalence | Environment configuration MUST have a direct code equivalent. | Identify the corresponding public configuration path and conversion for each selected setting. Compare equivalent intended values and effective results; preserve native typed API capabilities without imposing serialized-environment syntax on them. |
 
-These branches describe the selected configuration owner's capability and
-acceptance, not mandatory application parser code. Resolve accessible source
-facts now. Where genuinely unavailable, retain the exact missing implementation
-and conditional resolution/test for the affected branch. An unverified group
-label or reference to a scenario that only checks another type is insufficient.
+For settings required by the selected behavior or an exact capability claim,
+resolve the relevant branches above; they are not mandatory application parser
+code or a requirement to certify every unused SDK input. Preserve source/default
+dispositions for ordinary delegated settings. Where necessary source is genuinely
+unavailable, retain the missing implementation and conditional check. A group
+label or another type's scenario cannot prove a selected branch.
 The common specification's SHOULD to show the original value in configuration
 errors supports diagnosis; retain any privacy constraint instead of exposing a
 forbidden value. Preserve adequate defaults and report unsupported capability.
@@ -295,11 +298,14 @@ proof columns. A shorter summary may aid reading, but cannot replace a clause or
 its conditions. Without an audit, build the same bindings in the normal direct
 instrumentation report; no fabricated audit or additional artifact type is needed.
 The source binding preserves the requirement, not an assertion that a mapped
-control exercises it. Match each distinct condition, input branch, field and
-operation to its own applicable assertion. A control for a related property is
-not coverage. For unexecuted clauses, retain concrete conditional acceptance
-or the exact missing capability-resolution step instead of a blanket future
-label attached to unrelated scenarios.
+control exercises it. For selected application/operator promises and actual
+capability claims, match each distinct condition, input branch, field and
+operation to an applicable assertion. A related property's control is not
+coverage. Other applicable upstream duties may retain precise owner/default,
+unsupported or unverified dispositions without exhaustive application conformance
+tests. Such a disposition cannot establish an unproven runtime guarantee or close
+a critical selected invariant. Retain concrete conditional checks for those
+invariants instead of a blanket future label attached to unrelated scenarios.
 
 To avoid duplicating or weakening source text, a matrix row may bind its
 normative clauses to a precisely bounded retained excerpt (file/hash plus lines
@@ -864,7 +870,8 @@ If the server wait exceeds the remaining export/caller budget, end within the
 earlier deadline instead of retrying early or requiring another attempt.
 Derive throttling input, expected wait and request count from the selected
 transport and actual remaining budget; retain measured waits and outcomes.
-OTLP/HTTP retries use 429, 502, 503 and 504; other 4xx/5xx must not be retried.
+OTLP/HTTP responses 429, 502, 503 and 504 SHOULD be retried; other 4xx/5xx
+MUST NOT be retried. Preserve the operator's selected retry policy.
 Check installed exporter behavior with a controlled receiver before claiming
 conformance; do not add an application retry loop around an SDK exporter.
 Record supported request/response byte bounds separately from Body/attribute
@@ -893,15 +900,19 @@ copying HTTP status codes. A common client response-receive default of 4 MiB is
 acceptable; the recommended request default is 64 MiB. Acceptance after an
 unrepresentable partial response fails remains unspecified for gRPC too.
 
-These are exporter/receiver duties. Resolve the selected transport, installed
-capability and effective bounds in bytes, or mark capability unverified. Missing
-public configuration alone does not prove a missing built-in bound. Do not add
+These are exporter/receiver duties. Resolve the selected transport and retain
+accurate ownership, installed defaults/capability or scoped unverified effects.
+Missing public configuration alone does not prove a missing built-in bound.
+An external receiver's complete conformance is not an ordinary application
+acceptance prerequisite. Require below/at/above-bound and decompression/failure
+checks when the component is owned/selected for conformance, a bound is changed,
+or a concrete guarantee is claimed. A synthetic receiver establishes the tested
+client interaction, not the real receiver's implementation. No unverified external
+capability closes a critical application delivery/safety invariant. Do not add
 an application parser, retry loop or forced dependency upgrade to imitate an
-SDK-owned limit. Audit records ownership/disposition and plans below/at/above-
-bound checks, including decompression where supported, oversized-response failure
-and unresolved acceptance. Runtime reporting retains observed unsupported
-capability or missing proof. If several destinations are configured, assess
-each queue/ack/retry boundary independently; one success does not prove another.
+SDK-owned limit. Keep oversized-failure acceptance uncertainty explicit. If
+several destinations are configured, assess each selected queue/ack/retry
+boundary independently; one success does not prove another.
 
 A maximum attempt count is a ceiling, not a requirement to reach that many
 attempts during every failure. An earlier deadline can end retries first.
@@ -1059,14 +1070,17 @@ The read-only `source-settings` helper can discover `OTEL_*` and `otel.*` name
 spellings in selected implementation files/directories, with file hashes and
 line locations. For a draft report, it surfaces names with no exact spelling or
 unverified separator-normalization hint in that report. Choose sources by the
-requested startup graph, including transitive configuration readers; do not use
-the report itself as the source inventory.
+selected behavior and claims. Include installed or proposed SDK/bridge/bootstrap
+sources needed to resolve them as well as application files; scanning only an
+uninstrumented application cannot inventory SDK configuration. Do not use the
+report itself as the source inventory.
 
 ```sh
 python3 -I "<directory-containing-loaded-SKILL.md>/../references/scripts/observe_report.py" source-settings --source <implementation-path> --report <saved-report>
 ```
 
-Repeat `--source` for other selected roots. Use the calling stage's existing
+Repeat `--source` for other selected roots. Retained `source_roots` show the
+requested scan scope even when no candidates are found. Use the calling stage's existing
 JSON or Markdown report. This is lexical discovery: declarations/comments are
 candidates, normalized spellings are not verified aliases, and a report mention
 can be a denial rather than an assertion. Resolve actual consumption, separate
@@ -1075,12 +1089,14 @@ nonmatching namespaces and skipped files need independent inspection. The helper
 writes no reports, resolves no dynamic names and evaluates no coverage or runtime.
 An equivalent complete source-derived inventory remains valid.
 
-Compare the source-derived configuration-name inventory to the saved per-setting
-cases, including separate flags and fallback keys. Resolve every consumed name
-to concrete input representations, effective values/errors/diagnostics, applicable
-source conditions/strengths and named future or executed assertions. An unresolved
+Compare required configuration names to the saved per-setting cases, including
+separate flags and fallback keys needed by selected promises or exact claims.
+Resolve their input representations, effective values/errors/diagnostics,
+source conditions/strengths and named future or executed assertions. Ordinary
+delegated settings can retain the scoped dispositions described above; lexical
+discovery alone neither selects them nor proves support. An unresolved necessary
 source-access boundary can retain conditional resolution; a future instruction
-to build the inventory cannot close accessible facts. Grouped tables remain valid
+cannot close accessible facts needed for an exact claim. Grouped tables remain valid
 when the name → input/outcome/assertion mapping is individually addressable.
 Keep configuration-source and execution-boundary variants separate: a helper
 resolving a value does not prove the normal launcher preserves that value.

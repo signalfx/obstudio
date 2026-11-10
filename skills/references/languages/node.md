@@ -710,6 +710,11 @@ against that path rather than assuming a signature from another release. Preserv
 operator settings and verify resource/configuration through actual startup,
 including values reintroduced by loaded profiles.
 
+Follow final options composition into the active provider. A branch selecting
+explicit processors does not prove that later object spreads or shared builders
+skip environment-derived limits. Separate focused configuration/structured-value
+checks from normal-launch application proof when they exercise different paths.
+
 For an exporter fault, keep the application's real SDK/bootstrap and native call
 sites while proving progress and continued operation of other configured signals.
 Use an owned destination or supported isolated application-test seam; never stop

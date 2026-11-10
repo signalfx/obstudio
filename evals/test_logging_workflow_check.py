@@ -431,6 +431,18 @@ def test_source_settings_preserves_names_and_multiple_source_readers(tmp_path, r
     assert {p: p.read_bytes() for p in (first, second)} == before
 
 
+def test_source_settings_empty_app_scan_retains_actual_scope(tmp_path, report_helper_and_sample):
+    helper, _ = report_helper_and_sample
+    app = tmp_path / "app.py"
+    app.write_text('print("uninstrumented application")\n')
+    result = helper.source_settings_inventory([app])
+    assert result["source_roots"] == [str(app)]
+    assert result["scanned_text_files"] == 1
+    assert result["candidates"] == result["matching_sources"] == []
+    assert result["complete_configuration_inventory"] is False
+    assert result["consumption_evaluated"] is False
+
+
 def test_source_settings_omission_hint_does_not_match_a_longer_key(tmp_path, report_helper_and_sample):
     helper, _ = report_helper_and_sample
     source, report = tmp_path / "config.py", tmp_path / "report.md"

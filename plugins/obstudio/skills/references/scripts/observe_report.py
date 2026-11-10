@@ -541,6 +541,7 @@ def source_settings_inventory(sources: list[Path], report_path: Path | None = No
         "complete_configuration_inventory": False,
         "report": report, "report_comparison_performed": report is not None,
         "report_match_mode": "exact_source_spelling_or_unverified_separator_normalization",
+        "source_roots": [str(source.absolute()) for source in sources],
         "scanned_text_files": scanned, "matching_sources": files, "skipped_paths": skipped,
         "candidates": candidates,
         "unmentioned_names": [c["name"] for c in candidates if c["report_spelling_matches"] == []],
