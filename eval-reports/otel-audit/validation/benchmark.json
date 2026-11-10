@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-audit",
-    "run_id": "20261110T214140554631Z",
+    "run_id": "20261110T214236309278Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-6-luna",
     "judge_model": "",
@@ -655,7 +655,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "70c6ffe9ce3ad75eaea8a0ceea7c732334350567e5d3893b3b98d8ce6724ffaa",
+    "digest": "255c67094bfbc54ce0d38b3fa872e621f13b40b7135078d0b6c0920131155430",
     "eval_kinds": [
       "rubric",
       "sanity"
@@ -831,7 +831,7 @@
       "evals/python/existing-otel-agent-demo/eval/inputs/python-preflight-requirements.txt": "9bc8378353b95a0405d8b052226aa3075aa7f7f32d30c29c235b0a343df6fa3f",
       "evals/python/existing-otel-agent-demo/eval/qual/audit.json": "fac868c9ea4a9ada1dabec2ff8461e77471af6d651d18b6b6d46cd9d14bc7509",
       "evals/python/existing-otel-agent-demo/probe.py": "8cc9dd2ba1124e3bf5a20ee65c500c688a0db7429eed9396013485d46d0f737a",
-      "evals/python/existing-otel-agent-demo/pyproject.toml": "a297512fc7f8e4d5a92b0dd5fb41d94e5d421c4c6f862078ee43f73a1be40dbf",
+      "evals/python/existing-otel-agent-demo/pyproject.toml": "6e229a97d1e9b387cd29377d72e406f85d4a5dcedfb90408499910e87b8da9b9",
       "evals/python/existing-otel-agent-demo/eval/inputs/route-recovery-capture.json": "1258c9c3dccc58afd416fa96e7bb0a5cc69b7d22832ab6e9c5651a0a0a275b93",
       "evals/python/existing-otel-agent-demo/eval/inputs/route_recovery_source.py": "07b8ba11dac16c041d57fb0018ac65fab90e6eadcca0675cdd3cae01d3635a77",
       "evals/python/existing-otel-agent-demo/eval/inputs/vendor-route-capture.json": "6505493b4367a977e8cc9808ad21027fc802a12fe6a2b64fa93d783cee1abfef",
@@ -873,7 +873,7 @@
       "evals/python/model-directed-agent/otel_setup.py": "d7d591e2ca3aeef688aa2df30e4c2d89286917102c22439864fbb5c6a9d53b12",
       "evals/python/model-directed-agent/probe.py": "f190d42c2b2308660ba60c1f6d12d74207ef62b33162bc526cadbc12295db929",
       "evals/python/model-directed-agent/recommendations.py": "c0704e3b6baba32477943c826d9e4a2fa9b94e9fcda3c20ad0f4b57179255a09",
-      "evals/python/model-directed-agent/requirements.txt": "d26cfb62079363b7028c8680a5501dfdbd7e7194bbc72d54406f84f0081933e4",
+      "evals/python/model-directed-agent/requirements.txt": "f170c49d65ebb97b85ff0d868d7c67342f6feab2634e22b00793a1ad851678cf",
       "evals/python/model-directed-agent/roles.py": "8d254346b01cbcf7bda6d38778732d44656ff585b5f0fbb56bdf3f65d818bbdc",
       "evals/python/model-directed-agent/templates/index.html": "499ff2bfcefb3e0263b6c2af41f7d81a1dc20c1417854350bcf44b9465e6ce81",
       "evals/python/model-directed-agent/eval/inputs/agent-resource-cases.json": "1dc1244eb619248ccfda204d8b4d03131aaccdeb7312b21e1fe4232025a9b7f2",
