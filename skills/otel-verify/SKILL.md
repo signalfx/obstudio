@@ -33,10 +33,15 @@ Apply its applicable acceptance obligations, including caller-to-worker context
 handoff and fresh per-trial evidence. Preserve this skill's read-only application
 boundary; missing wiring is a failed or unproven check, not authorization to
 repair instrumentation or turn fixture results into application proof.
-In the normal verification report, reconcile the shared LOG-SPEC-CLOSURE fields,
-including requirement strength and feature maturity; citations alone do not
-classify upstream requirements, recommendations, optional capabilities and local
-policy or establish executed coverage.
+In the normal verification report, reconcile the shared scoped LOG-SPEC-CLOSURE
+fields for selected gaps, operator policy and source-supported claims, including
+strength, maturity, owner and proof boundary. Precise normative/conformance claims
+retain exact bindings; unchanged delegated defaults may use compact versioned
+source/ownership facts without every sibling SDK clause. Apply this same scope at
+planning/readback while retaining the complete immutable bound control set.
+Citations alone do not establish runtime coverage. An exhaustive clause-to-skill
+inventory belongs to requested skill maintenance rather than every application
+verification report.
 Independently reconcile each selected GenAI orchestration role with the source
 control flow before accepting the audit or test expectations. A custom
 model-directed tool/result feedback loop is an agent invocation; an existing

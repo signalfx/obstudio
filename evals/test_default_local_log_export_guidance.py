@@ -124,7 +124,7 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
         "Configuration value types", "accepted representation", "declared type",
         "non-negative integer milliseconds", "normative references imported",
         "promised operation/outcome", "scalar level applies", "prose caveat",
-        "same configured process", "event ordering", "not a particular tool-call order",
+        "same process during active final logging/drain", "observable order", "not a particular tool-call order",
         "resolve and report their effective values or unlimited behavior",
         "future boundary test does not substitute for accessible configuration facts",
         "source binding preserves the requirement, not an assertion",

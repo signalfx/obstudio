@@ -77,8 +77,13 @@ optional and may belong to an SDK, individual component or autoconfigurator;
 establish support and the active owner before imposing its parsing contract.
 
 Populate the value-case table for required settings now in existing report/
-evidence fields. Accessible facts needed for a selected guarantee cannot be
-deferred as an instruction to resolve them later. Share
+evidence fields. Derive cases from the actual selected operator/environment
+reader or precise input-behavior claim. A fixed typed public option requires
+proof of its applied value, units, native API, startup consumption and operator
+preservation; it does not select malformed serialized inputs that cannot reach
+that path. Resolve whether a proposed value uses an option or an active reader;
+keep genuinely unresolved wiring explicit. Accessible facts needed for a selected
+guarantee cannot be deferred as an instruction to resolve them later. Share
 parameterized cases only with an explicit setting-name → case/default/outcome
 map; a primitive-type label or “all settings” does not identify its members:
 
@@ -95,14 +100,17 @@ through secondary defaults, unit conversions and clamps to the terminal consumer
 report that terminal outcome. Compute each setting's chain from its own owner,
 rather than copying a different family's fallback or overflow result. Resolve
 symbolic constants to their actual values; a constant's name is not its serialized spelling. Include
-fallback settings needed to resolve the selected outcome. Where precedence
-exists, pair the higher-priority setting's absent, empty and invalid cases with
-a valid nondefault lower-priority value, as well as both absent; derive each
-result from this implementation rather than assuming universal inheritance.
-Resolve negative, zero, fractional, malformed/overflow and enum/Boolean cases
-where applicable; naming the group is not their expected outcome. A Boolean
-control for one flag does not allocate another flag or numeric/enum branches.
-Future runtime status can be Not run while source behavior is already known.
+fallback settings needed to resolve the selected outcome. For actual selected
+input readers or precise precedence claims, pair the higher-priority setting's
+absent, empty and invalid cases with a valid nondefault lower-priority value,
+as well as both absent; derive each result from this implementation rather
+than assuming universal inheritance. Resolve negative, zero, fractional,
+malformed/overflow and enum/Boolean cases only where those inputs reach that
+reader or the corresponding behavior is claimed; fixed typed options do not
+select an upstream parser suite. Naming a required group is not its expected
+outcome. A Boolean control for one flag does not allocate another flag or
+numeric/enum branches. Future runtime status can be Not run while source
+behavior is already known.
 
 Read concrete repair proposals back against the retained public API and the
 effective startup configuration too. Check constructor arguments, option names
@@ -173,6 +181,11 @@ but has no effect on configured `OTEL_PROPAGATORS`. Inspect startup branches and
 plan that disabled-SDK/retained-propagation conjunction; disabled export alone
 does not prove it. Preserve the actual SDK limitation and owner when its startup
 also bypasses propagator configuration, rather than inventing app wiring proof.
+In application-owned initialization, keep selected propagation setup outside
+the branch that skips SDK signal providers/bridges. Test carrier extraction
+through that same disabled initialization path; checking provider registration
+alone cannot establish retained propagation. Preserve an existing configured
+propagator and its selected carrier format.
 For supported environment Boolean settings, only case-insensitive `true` means
 true; `1` and `yes` do not disable the SDK. Other values resolve false, with a
 warning recommended for invalid nonempty values. Let the actual config owner
@@ -189,6 +202,10 @@ replaces it. Resolve resource values with the installed SDK's supported detector
 application defaults underneath supplied values, and inspect the actual merge
 order. Verify the normal launcher as well as the helper with resource-only
 identity, explicit service-name override and absent-identity controls.
+Build each control's actual child environment explicitly, removing conflicting
+inherited identity keys rather than only updating resource attributes. Check key
+presence and active loader/profile inputs before launch, then assert the received
+SDK Resource; a helper result or a claimed environment variant is insufficient.
 Resource-only and absent-identity controls must also account for values reloaded
 by an active `.env` or launch profile; clearing the parent environment alone can
 leave a hidden service-name override. Use an isolated configuration/project copy
@@ -240,12 +257,16 @@ fixed-message or application-logger allowlist. A framework record observed in
 the normal pipeline cannot be excluded from its privacy assessment merely
 because the original call-site inventory listed only application messages.
 Keep separately routed SDK self-diagnostics distinct from those framework records.
-For each selected error-renderer path, require sentinel absence at every
-policy-covered native and SDK output, plus preservation of permitted diagnostic
-category. Name the actual hook/action at the policy-required boundary, including
-pre-capture when required, or the exact unresolved API boundary; a future
-instruction to assess renderers is insufficient. Bind that control to each
-logging/privacy finding it proves, not only to its route or trace finding.
+For a selected error path, save one source-bound trail in the existing finding
+or scenario: `producer/call site → native event → policy-boundary hook/action →
+later renderers → native and SDK outputs`. Name the event's relevant message,
+parameters or throwable and the supported hook's actual action at the
+policy-required boundary (before SDK/writer capture when required); denying a record alone cannot preserve its required category.
+Bind one output predicate requiring forbidden-sentinel absence AND permitted
+category at every policy-covered output, with unchanged response behavior.
+If a link is unresolved, name the exact producer/event/API edge, its owner and
+next source inspection or supported probe; keep that result unproven. Reference
+this trail from each logging/privacy finding it serves, not only a route finding.
 
 ### Configuration value types
 
@@ -270,12 +291,15 @@ where that source is supported; resolve their selected implementation separately
 | Enum | Sources MAY extend supported values. If an enum accepts a null/no-op choice, its name MUST be `none`. Standard environment enums SHOULD be case-insensitive; unknown values MUST generate a warning and be ignored. | Resolve supported values/extensions and actual case handling; carry supported, differently cased, unknown, empty/unset and applicable no-op branches. An unrelated Boolean test cannot establish enum behavior. |
 | Environment/code equivalence | Environment configuration MUST have a direct code equivalent. | Identify the corresponding public configuration path and conversion for each selected setting. Compare equivalent intended values and effective results; preserve native typed API capabilities without imposing serialized-environment syntax on them. |
 
-For settings required by the selected behavior or an exact capability claim,
-resolve the relevant branches above; they are not mandatory application parser
-code or a requirement to certify every unused SDK input. Preserve source/default
-dispositions for ordinary delegated settings. Where necessary source is genuinely
-unavailable, retain the missing implementation and conditional check. A group
-label or another type's scenario cannot prove a selected branch.
+Apply the branches above to actual selected operator/environment readers and
+precise input-behavior claims. For a fixed typed public option, prove its applied
+value, units, native API, startup consumption and operator preservation without
+selecting unreachable serialized input permutations. Preserve versioned
+source/default dispositions for ordinary delegated settings; neither path
+requires application parser code or certification of unused SDK inputs. Where
+necessary source is genuinely unavailable, retain the missing implementation
+and conditional check. A group label or another type's scenario cannot prove
+a selected branch.
 The common specification's SHOULD to show the original value in configuration
 errors supports diagnosis; retain any privacy constraint instead of exposing a
 forbidden value. Preserve adequate defaults and report unsupported capability.
@@ -296,23 +320,31 @@ of its referenced contract. Keep this traversal scoped to the selected path.
 Separate upstream requirements, optional/development capabilities and the
 repository's local destination/privacy policy. If current sources are unavailable,
 name the snapshot and leave unsupported conclusions unverified.
-Reconcile the retained primary-source inventory, including imported sources,
-against the matrix's actual section/range bindings. A parent topic or downloaded
-file alone does not cover unbound child clauses; retain their scoped dispositions.
+For selected gaps, operator policy and precise capability/conformance claims,
+reconcile the necessary primary and imported clauses against the matrix's actual
+bindings. A parent topic or downloaded file alone does not establish a claimed
+child clause. Unchanged delegated SDK/default facts may use compact versioned
+source and ownership dispositions without a ledger for every sibling clause.
+An exhaustive clause-to-skill inventory remains a skill-maintenance deliverable
+when requested.
 
-Keep a compact source-to-evidence matrix in the existing report/evidence fields;
-follow the canonical report schemas and do not invent JSON keys or new artifact
-types. Cover record/time/severity/structured values, trace context and propagation,
-resource/scope identity, bridge/provider initialization and duplicate prevention,
-filtering/opt-out, exception/privacy, limits, batching/delivery, diagnostics and
-flush/shutdown. Reconcile other applicable clauses found in the sources even
-when they have no LOG-* name here. For each row, record source/config/default
-evidence, covered/partial/missing/unverified/not-applicable, finding/scenario
-IDs where needed, and the actual proof boundary. An SDK-owned default can be
-covered without an application override; absence of an installed capability is
-not proof that an application has implemented it.
+Keep a compact source-to-evidence matrix for selected gaps, operator policy and
+source-supported capability claims in the existing report/evidence fields;
+follow the canonical schemas and do not invent JSON keys or artifact types.
+Assess the selected path's record/time/severity/structured values, context and
+propagation, resource/scope identity, initialization/duplicate prevention,
+filtering/opt-out, exception/privacy, limits, delivery, diagnostics and lifecycle.
+Reconcile any other clause necessary to those selected behaviors or claims.
+For each required row, record source/config/default evidence, disposition,
+finding/scenario IDs where needed and actual proof boundary. Unchanged delegated
+SDK defaults may use compact versioned source/ownership/limitation evidence;
+mentioning one SDK duty does not select a ledger of every sibling clause.
+A default does not prove runtime behavior, and an unsupported or unknown
+capability cannot close a critical selected invariant.
 
-Use source-clause bindings rather than topic summaries as the stable matrix key:
+For a precise normative/conformance claim, use an exact source-clause binding
+rather than a topic summary as its stable key. The following layout supports
+those bindings; compact delegated-default facts need no exhaustive clause rows:
 
 | Source and exact clause binding | Strength, conditions and applicability | Owner | Current capability/evidence | Finding/control and actual proof |
 |---|---|---|---|---|
@@ -320,9 +352,10 @@ Use source-clause bindings rather than topic summaries as the stable matrix key:
 
 A grouped excerpt can retain several clauses when their individual dispositions
 remain addressable. Keep that binding intact while updating implementation and
-proof columns. A shorter summary may aid reading, but cannot replace a clause or
-its conditions. Without an audit, build the same bindings in the normal direct
-instrumentation report; no fabricated audit or additional artifact type is needed.
+proof columns. A shorter summary may aid reading, but cannot replace a selected normative
+clause or its conditions. Without an audit, build the selected bindings in the
+normal direct instrumentation report, retaining compact versioned facts for
+unchanged delegated defaults; no fabricated audit or extra artifact is needed.
 The source binding preserves the requirement, not an assertion that a mapped
 control exercises it. For selected application/operator promises and actual
 capability claims, match each distinct condition, input branch, field and
@@ -782,23 +815,20 @@ without secrets, and configured unrelated signals remain usable. An HTTP 200
 with OTLP partial-success rejected records is not full acceptance. Report
 attempted, received, rejected and dropped evidence separately; never infer
 receipt from a successful enqueue or flush call alone.
-When a final-log receipt proves pipeline preservation, assert that receipt's
-expected body/severity, Resource and associated context as well as count/time.
-Context may legitimately be absent outside a span; assert that condition instead
-of creating a span. A different earlier record cannot supply these same-receipt
-assertions, and SDK source facts remain distinct from that runtime result.
-When the existing or selected stop policy handles repeated requests, exercise
-them on the same configured process while final logging/provider drain is still
-active. Retain observable request delivery and event ordering. Separate single
-stops, requests after exit or a test without the active pipeline cannot prove
-that lifecycle conjunction. Assess deliberate forced exit under its actual
-policy rather than describing it as a successful graceful drain.
-Name the first and repeated request kinds and effective handlers. When the
-selected policy retains forced termination for a repeated request, separate that
-outcome from graceful-drain assertions. When the selected policy requires an
-uninterrupted drain, existing force behavior needs repair. Forced exit cannot
-establish graceful drain or imply final-record receipt; retain any independently
-observed receipts accurately.
+For each selected stop control, save a compact plan:
+`request kind → recipient/process or process group → launcher forwarding →
+effective application handler/finalizer; permitted outcome; budget/source`.
+Name how that path and order will be observed through normal startup; stopping
+a launcher or cleaning up a child alone does not prove application drain.
+Reference the final record's own selector/predicate, body/severity/count/time,
+Resource and associated or legitimately absent context, and its receipt/exit
+order. Another earlier record cannot supply these checks.
+If repeated stops are selected, name the second request and deliver it to the
+same process during active final logging/drain. Assert the selected policy's
+outcome and budget: uninterrupted-drain policy requires non-interruption and
+once-only finalization; allowed forced termination is a separate control and
+cannot establish graceful drain or imply final-record receipt. Keep independently
+observed receipts accurate. Repeated/forced semantics remain N/A when unselected.
 Where implemented, [development SDK log metrics](https://opentelemetry.io/docs/specs/semconv/otel/sdk-metrics/) can supply
 creation, queue-pressure, processed and exported counts. Record each instrument's
 stage and retry/rejection semantics; created/processed is not receiver acceptance.
@@ -824,9 +854,10 @@ For HTTP full success, the server MUST respond with HTTP 200 and a conforming
 ExportLogsServiceResponse in the selected encoding, with `partial_success` unset.
 For a known N-record request, that full-success response acknowledges all N
 accepted and zero rejected; it does not establish backend persistence. A generic
-HTTP 200 with an invalid/unrelated body is not this protocol control. Preserve
-this positive control alongside partial/warning/failure cases in the source
-matrix and saved acceptance assertions.
+HTTP 200 with an invalid/unrelated body is not this protocol control. Where
+response classification is selected or claimed, retain this positive control
+alongside its partial/warning/failure controls in the source matrix and saved
+acceptance assertions.
 Inspect the actual status/body handling before describing the SDK's capability.
 A success result alone does not prove that the client decoded a conforming body
 or interpreted partial rejections. Retain source-known defaults/checks separately
@@ -926,11 +957,13 @@ OTLP/HTTP responses 429, 502, 503 and 504 SHOULD be retried; other 4xx/5xx
 MUST NOT be retried. Preserve the operator's selected retry policy.
 Check installed exporter behavior with a controlled receiver before claiming
 conformance; do not add an application retry loop around an SDK exporter.
-Record supported request/response byte bounds separately from Body/attribute
-limits. The [OTLP transport clauses](https://opentelemetry.io/docs/specs/otlp/)
-require a separate source-matrix disposition for these HTTP boundaries:
+For selected transport-bound obligations or precise conformance claims, record
+request/response byte bounds separately from Body/attribute limits. Retain the
+applicable [OTLP clauses](https://opentelemetry.io/docs/specs/otlp/) and ownership
+for these HTTP boundaries; unchanged delegated defaults can retain compact
+versioned source/ownership evidence:
 
-| Protocol surface / owner | Clauses to preserve in the saved matrix | Recommended default |
+| Protocol surface / owner | Upstream clauses to bind when selected or claimed | Recommended default |
 |---|---|---|
 | Receiver request parsing | MUST bound, including after decompression; exceeded bound requires HTTP 413 | 64 MiB |
 | Exporter request body | SHOULD bound, including before compression; above an active bound MUST NOT send and SHOULD record the discard | 64 MiB |
@@ -938,15 +971,17 @@ require a separate source-matrix disposition for these HTTP boundaries:
 | Receiver response body | MUST bound, including before compression; for an oversized partial response SHOULD reduce size without changing semantics when possible and practical; MAY trim optional diagnostic fields; if it still cannot fit MUST return HTTP 500, with acceptance unspecified | 4 MiB |
 | All four limit surfaces | Implementations SHOULD allow these limits to be configured | Recommended numbers are not mandatory application settings |
 
-Carry these clause groups into the canonical matrix with current capability,
-owner, disposition and exact source binding; they can share one transport row
-when each clause remains addressable. The SDK's OTLP exporter configuration
+For those selected obligations or precise conformance claims, carry the
+applicable clause groups with capability, owner, disposition and exact binding;
+they can share one transport row when each selected clause remains addressable.
+Other unchanged SDK/default duties need no per-service sibling-clause ledger.
+The SDK's OTLP exporter configuration
 documentation describes available settings; it is not a substitute source for
 the OTLP protocol's decompression, oversize, response-reduction and configurability
 clauses. An excerpt containing only configuration settings cannot bind those
 protocol requirements. Mark an unresolved clause unverified explicitly rather
 than replacing all missing dispositions with "newer transport clauses".
-For gRPC, assess its corresponding
+For selected gRPC bound obligations or conformance claims, assess corresponding
 message limits and non-retryable size-limit `RESOURCE_EXHAUSTED` outcomes rather than
 copying HTTP status codes. A common client response-receive default of 4 MiB is
 acceptable; the recommended request default is 64 MiB. Acceptance after an
@@ -1076,16 +1111,20 @@ distinguish focused SDK/bridge proof from full application/receiver proof.
 
 ## Acceptance handoff completeness
 
-Make the following obligations explicit in the saved acceptance scenarios for
-each selected rule. A general preservation promise or a rule ID alone does
-not specify a runnable check. In a plan-only task, label settings as proposed
-or retained defaults and runtime evidence as unverified; do not invent an
-installed capability. Keep the handoff compact by sharing one outage scenario
-across applicable rules that use the same owned path and proof boundary.
-Instrumentation and verification also retain concrete future assertions beside
-unexecuted selected controls. "Not tested" or "counts kept separate" alone does
-not carry the acceptance plan; keep the actual expected counts/conditions while
-leaving runtime proof absent and unsupported capability conditional.
+Use addressable assertions in existing scenario acceptance/evidence fields,
+not another report or new schema keys. Define compatible shared record-contract
+predicates once: record selector, expected body/severity/scope, occurrence versus
+observation time with source precision, and supplied/default Resource values.
+Then map each promised operation, including failure/finalization branches, as
+`operation/record selector → predicate label + parameters → own context/privacy
+assertions → proof boundary`. The referenced predicate must actually assert the
+promised fields for that record; a list of test names or another record's pass
+is insufficient. Context may be legitimately absent; do not invent a span.
+Share only compatible clauses, not proof credit across paths, and do not add
+SDK value-shape tests for unpromised native messages. Share an outage scenario
+where the owned path and boundary match. Keep proposed/default settings distinct
+from installed capability; unexecuted controls retain concrete expected counts
+and conditions with Not run/Not proven outcomes, not inherited success.
 When protocol response classification is selected or claimed, save each of
 these assertions explicitly in its own canonical report, including direct
 instrumentation without an audit. Do not assume an earlier audit holds the
@@ -1101,13 +1140,13 @@ ownership without selecting a protocol conformance suite merely by using OTLP:
 
 | Rule | Required acceptance detail |
 |---|---|
-| LOG-SPEC-CLOSURE | Applicable source clauses with requirement level, owner, source/config/default evidence, classification, selected finding/scenario mapping and explicit proof boundary. Reconcile every bound scenario assertion and negative control, using the audit proof_level and runtime proof_mode appropriate to that row. Combined claims need evidence from the same owned path; unrelated passing probes cannot be combined into end-to-end coverage. Unmapped clauses or missing evidence keep the relevant completeness claim partial. |
+| LOG-SPEC-CLOSURE | Source obligations and precise claims for the selected application scope, with strength, owner, evidence, disposition, necessary finding/scenario mapping and proof boundary. Unchanged delegated defaults may retain compact versioned source/ownership facts. Reconcile every bound scenario assertion and negative control using the appropriate audit proof_level and runtime proof_mode. Combined claims need evidence from the same owned path; unrelated passing probes cannot establish end-to-end coverage. Unmapped selected obligations or missing proof keep the relevant completeness claim partial. |
 | LOG-RECORD | Name the detected/proposed bridge and verified version or unverified capability; specify source occurrence value/precision, observation time separately, source level to numeric severity, actual SeverityText/casing independently of the numeric band name, and actual body/category. |
 | LOG-CONTEXT | Exact sampled/unsampled/outside IDs and SDK flags; real SDK-created sampled parent/child spans joined to their logs at the claimed boundary, with parentage/resource checks. Explicitly name one joint scenario traversing an owned async handoff and joining that worker/callback log to its received real span; separate known-ID async and synchronous join tests are insufficient. Separate unsampled non-export and outside-span controls, canonical OTLP fields from ordinary attributes, and non-OTLP formatter proof where selected. |
 | LOG-ASYNC-HANDOFF | Caller capture before scheduling; exact request pairing, permitted MDC handling where applicable, worker cleanup and bridge placement relative to queues. Link the joint real-span async scenario, supported propagation and expected-loss controls. |
 | LOG-EXCEPTION | Allowed exception fields and excluded sensitive fields, with bridge/event convention applicability and optional-field decisions. |
 | LOG-LIMITS | Name effective/proposed count/value settings and implemented depth support separately from Body policy. Reconcile the record-normalization and diagnostic implementation for supported shapes, not only public option declarations. Specify below/at/above-limit inputs, units, expected outcomes and supported drop accounting; generic limits plus numbers are insufficient. For an expensive construction path, name the supported native/direct-OTel enablement query, check current policy inside the owned worker, and prove construction/output counts across disabled/enabled/disabled states. Preserve cheap direct emits and original sinks when the OTel path is disabled. |
-| LOG-DELIVERY | Record observed attempt/retry/caller deadlines and missing bounds with units/source separately from proposed queue/batch/schedule/export/shutdown settings and the composed budget. Assert batch <= queue on a batch path; a selected simple processor needs synchronous-cost evidence instead. Include a stalled receiver/caller deadline and a final log immediately before shutdown, with healthy receipt and bounded fault behavior checked independently. For a conforming HTTP full-success response with partial_success unset, require all N acknowledged accepted and zero rejected, independently of persistence. For each valid partial response of N records with R rejected, require N-R acknowledged accepted and R rejected; warning-only R=0 acknowledges all N without retry. Reconcile per-batch accounting before multi-batch totals and preserve per-outcome attempted/received/acknowledged accepted/rejected/dropped/unresolved counts with durable raw-receipt links. Include the selected transport's request/response byte limits, parsing after decompression where applicable, and oversized-response failure acceptance uncertainty with the correct SDK/receiver owner. Do not give a mixed fault scenario an unqualified accepted visibility from another successful subtrial; use existing report fields/states and explain each outcome. Retain unknown acceptance after a client timeout until a receipt resolves it. Name observed completed failure responses and terminal retry decisions separately from unresolved acceptance/persistence counts; a null count alone is not a failed response-classification check. |
+| LOG-DELIVERY | Save two compact plans where selected. **Stop:** request/recipient/launcher→handler path, permitted outcome, budget/source, observable order and own final-record predicate; distinguish healthy drain, fault and policy-selected repeated/forced outcomes. **Retry:** batch/trial identity, actual response and wait representation, existing SDK retry policy, remaining export/caller budget, expected measured wait/no-early-retry condition, and terminal recovery versus persistent exhaustion or stall. Resolve these through supported existing settings, not an application retry loop. Bind each plan to its assertions and raw request/response/client outcome. Retain effective queue/batch/schedule/export limits and batch<=queue (or selected simple-processor cost). Apply the response/count table above per decoded batch before trial totals, keeping attempts, received copies, acknowledgements, rejections, drops and unknown persistence separate. Preserve selected compression/size ownership, unresolved acceptance after timeout/oversize, source/runtime boundaries and accurate per-outcome visibility; a completed failure is not pending merely because accepted count is unknown. |
 | LOG-DIAGNOSTICS | Name the supported separate routing or suppression mechanism. One exporter-fault scenario asserts bounded diagnostic volume and export attempts, application progress, original sink output, and continued operation of each other configured signal. Explicitly mark absent signals not configured; preserving configuration alone is not operation proof. |
 | LOG-VERIFY-FRESH | Unique report storage for each trial; planned manifest/lockfile dependency preparation; binding to source, command and dependency versions; actual success/failure/error/skip counts; preserved timeout console output, failed timeout verdict, owned-process cleanup and incremental structured partial results; explicit evidence scope. |
 
@@ -1128,8 +1167,10 @@ literal. These are lexical hints: a historical/external
 reference can be intentional, and a known ID can still identify the wrong owner.
 Resolve text mappings against the actual final findings and controls; the helper
 does not evaluate reference meaning or repair canonical bindings.
-Source-clause controls remain independently required; these hints do not enumerate
-them or expand scenario paragraphs into tests.
+Controls from selected source obligations and precise claims remain independently
+required; these hints neither enumerate them nor expand scenario paragraphs into
+tests. Unselected sibling SDK clauses do not become application controls merely
+because the source inventory contains them.
 
 Read this section immediately before generating/finalizing logging results.
 The read-only `source-settings` helper can discover `OTEL_*` and `otel.*` name
@@ -1155,17 +1196,20 @@ nonmatching namespaces and skipped files need independent inspection. The helper
 writes no reports, resolves no dynamic names and evaluates no coverage or runtime.
 An equivalent complete source-derived inventory remains valid.
 
-Compare required configuration names to the saved per-setting cases, including
-separate flags and fallback keys needed by selected promises or exact claims.
-Resolve their input representations, effective values/errors/diagnostics,
-source conditions/strengths and named future or executed assertions. Ordinary
-delegated settings can retain the scoped dispositions described above; lexical
-discovery alone neither selects them nor proves support. An unresolved necessary
-source-access boundary can retain conditional resolution; a future instruction
-cannot close accessible facts needed for an exact claim. Grouped tables remain valid
-when the name → input/outcome/assertion mapping is individually addressable.
-Keep configuration-source and execution-boundary variants separate: a helper
-resolving a value does not prove the normal launcher preserves that value.
+Compare required configuration names to saved cases for actual selected
+operator/environment readers and precise input-behavior claims, including their
+necessary flags and fallback keys. For fixed typed options, reconcile the applied
+value, units, native API, startup consumption and operator preservation instead
+of unrelated malformed SDK input permutations. Resolve effective values/errors/
+diagnostics and source strength at the claimed scope. Ordinary delegated defaults
+may retain compact versioned source/ownership dispositions; lexical discovery
+alone neither selects them nor proves support. Keep an unresolved necessary
+reader, wiring or source-access boundary explicit; a future instruction cannot
+close accessible facts needed for an exact claim. Named controls across related
+scenarios may jointly cover a selected profile when each setting, assertion and
+required execution boundary is addressable; no duplicate scenario is required.
+A helper-only or different-boundary pass cannot prove normal-launch consumption,
+operator preservation or a combined runtime claim.
 For an existing canonical audit, the read-only report helper can enumerate the
 promises directly, including every `expected_telemetry[].attributes` member:
 
@@ -1194,10 +1238,14 @@ output before deriving scenario/item verdicts. A default-Working builder plus
 exceptions is not evidence for assertions that never ran; assess actual claims,
 not helper syntax alone. Preserve directly proven item scope separately from
 incomplete related scenario coverage.
-Carry unchanged normative clauses by exact immutable audit evidence-row bindings
-or check every condition/strength against the retained source. Annotate current
-installed capability and executed receipts separately; do not replace qualified
-clauses with shorter topic labels or label an executed capability future-only.
+For selected normative obligations or precise conformance claims, carry unchanged
+clauses by exact immutable audit evidence-row bindings or check their conditions/
+strengths against retained source. Unchanged delegated defaults may retain compact
+versioned source/ownership/limitation facts without a sibling-clause ledger.
+Annotate current capability and executed receipts separately; do not weaken
+selected clauses, inherit old runtime success or label executed proof future-only.
+The exhaustive clause-to-skill inventory belongs to requested skill maintenance,
+rather than each normal application report.
 
 Before finalizing, compare the saved scenarios against these obligations and
 the selected source/policy. An omitted obligation leaves that handoff partial;

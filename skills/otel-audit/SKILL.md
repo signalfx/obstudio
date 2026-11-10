@@ -305,13 +305,16 @@ Apply its LOG-* rules to the source and effective SDK/bridge configuration,
 including defaults and explicit policies; put concrete gaps and their required
 proof in the normal findings and verification plan. Do not call a missing
 application override a defect when the SDK already supplies correct behavior.
-Before finalizing a logging audit, check the shared guide's LOG-SPEC-CLOSURE
-matrix in the canonical `evidence` rows. Each applicable clause needs its
-source/version, requirement strength, owner, disposition, source/config/default
-evidence, finding/scenario mapping when needed and proof boundary. A source
-list followed by LOG-* summaries without those decisions is incomplete. This
-matrix is the repository's audit evidence contract, not an additional OTel
-requirement. For bounded fixed messages without an existing Body policy or a
+Before finalizing a logging audit, check the shared guide's scoped
+LOG-SPEC-CLOSURE matrix in canonical `evidence`: selected gaps, operator policy
+and source-supported claims need source/version, strength, owner, disposition,
+evidence, necessary finding/scenario mapping and proof boundary. Precise
+normative/conformance claims retain exact bindings; unchanged delegated defaults
+may use compact versioned source/ownership facts without every sibling SDK clause.
+Apply this same scope at readback while retaining every bound promise/control.
+An exhaustive clause-to-skill inventory belongs to skill maintenance when
+requested. This evidence contract
+adds no OTel requirement. For bounded fixed messages without an existing Body policy or a
 source-backed size problem, record no new Body cap is needed; do not turn an
 arbitrary example threshold or the separate GenAI capture defaults into a
 mandatory application-log repair.
