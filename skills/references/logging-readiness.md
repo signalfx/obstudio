@@ -22,6 +22,56 @@ verification do not require a sibling instrumentation skill to be installed.
 
 ## Source and applicability
 
+Use three related worklists before finalizing the normal report. This is a local
+completeness method, not an additional OTel implementation requirement:
+
+1. **Contract:** extract each applicable primary-source clause and its distinct
+   conditions, input branches, strength and owner. A retained excerpt preserves
+   the text; it does not allocate that clause's controls.
+2. **Capability:** follow each selected mechanism through its delegates to the
+   concrete parser, normalizer, diagnostic or retry/deadline check. Keep an
+   uninspected delegate on this worklist. Resolve accessible static facts even
+   for a proposed SDK that is not installed in the application. Record the
+   exact checked access boundary when source genuinely cannot be obtained;
+   an unexecuted runtime probe is not that boundary.
+3. **Acceptance:** combine independently extracted source-clause controls,
+   operator policy and every promised telemetry item/field, then map each
+   condition to an assertion or precise conditional resolution step. The
+   `required-controls` helper inventories audit promises only; its output
+   excludes source-clause and acceptance controls. Add those independently.
+
+For every applicable configuration branch, retain its input condition, actual
+source-resolved outcome/fallback and warning, upstream disposition and concrete
+future assertion. A Boolean control does not allocate numeric or enum branches.
+Grouped rows remain valid when each branch is addressable. Future runtime status
+can be Not run while the corresponding source behavior is already known.
+
+Read concrete repair proposals back against the retained public API and the
+effective startup configuration too. Check constructor arguments, option names
+and units against the selected SDK's declaration and its own construction path;
+check launch settings against the actual runner's CLI/environment precedence.
+A remembered API shape or environment setting cannot override contrary source
+evidence. Keep an unresolved mechanism unverified with its future check instead
+of presenting a source-contradicted call or launch profile as an executable fix.
+Separate an API's documented contract from its implemented enforcement. Trace
+capability claims through the selected delegation path to the actual check,
+including precedence, forwarding and supported-value normalization;
+for timeout/cancellation claims, identify where the deadline is created,
+propagated and consumed relative to retries. If documentation and implementation
+conflict, retain that contradiction and its owner rather than treating the
+comment as implementation proof. A permitted focused public-boundary probe can
+resolve behavior at that scope; it does not establish application execution.
+
+Use the relevant source boundary rather than stopping at the options class:
+
+| Claimed capability | Source to reconcile |
+|---|---|
+| Supported setup/API | Actual public declaration, argument/result shape and construction path; a remembered symbol or unrelated example is insufficient. |
+| Activation and ownership | Entry point that registers/starts the provider or bridge on normal startup; constructing a configuration object alone may not activate it. |
+| Record limits | Record creation/update path and the final normalization helper, including supported value shapes, replacement/drop accounting and diagnostic calls. |
+| Transport limits/deadlines | Actual encoding/decompression, bounded-read and error branches; identify where the deadline is created, propagated and consumed relative to retries. |
+| Diagnostic cadence | All emission paths for one affected record, including warnings and per-value loops; value truncation alone cannot establish the diagnostic count. |
+
 Reconcile rules with the installed SDK/bridge's public APIs and current official
 documentation. Record package versions, source URLs/date, applicable stability
 of the language's Logs signal and individual features, and unsupported features.
@@ -135,10 +185,12 @@ conversion rather than copying environment syntax into a constructor or vice ver
 
 For supported standard configuration sources, retain the applicable
 [common type rules](https://opentelemetry.io/docs/specs/otel/configuration/common/)
-and resolve their selected implementation separately:
+and the [standard environment type rules](https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/#type-specific-guidance)
+where that source is supported; resolve their selected implementation separately:
 
 | Setting class | Upstream contract to preserve | Capability and conditional acceptance branches |
 |---|---|---|
+| Boolean, supported flat environment configuration | Only case-insensitive `true` MUST resolve true; other values, including empty/unset, MUST resolve false. Unrecognized nonempty values SHOULD produce a warning. Safe-false naming/defaults are recommended. A rename requires a major version; a default change also requires one except for the specified security allowance. | Resolve actual SDK-disabled/filter parser behavior for true casing, false casing, empty/unset and other nonempty values, including numeric-looking strings. Keep warnings and safe fallback distinct from enabling/disabling effects and original native sinks. Apply the active loader's own contract when flat settings are ignored. |
 | Duration and timeout | Values MUST represent non-negative integer milliseconds; negative values MUST generate a warning and be ignored, using a default when defined. Timeout zero SHOULD mean no limit, which MAY use a sufficiently large internal duration. | Identify the actual parser, accepted serialized representation, conversion and effective fallback. Distinguish ordinary duration zero from timeout-zero semantics. Resolve or plan positive, zero, negative, fractional, malformed and representability/overflow cases; an accepted fraction is not integer-millisecond conformance. |
 | Integer | Support SHOULD cover 0 through 2^31-1 and MAY extend it, subject to the setting's valid range. Unparseable or out-of-range numeric settings SHOULD be warned about and ignored; retain the post-stabilization compatibility qualification and its MUST treatment for new implementations. | Resolve actual accepted range, boundary, out-of-range, overflow, fractional and malformed behavior, including warning and fallback. A rejected value falling back to a default does not prove the proposed bound is effective. |
 | Enum | Sources MAY extend supported values. If an enum accepts a null/no-op choice, its name MUST be `none`. Standard environment enums SHOULD be case-insensitive; unknown values MUST generate a warning and be ignored. | Resolve supported values/extensions and actual case handling; carry supported, differently cased, unknown, empty/unset and applicable no-op branches. An unrelated Boolean test cannot establish enum behavior. |
@@ -221,32 +273,6 @@ configuration duties addressable, either in each affected row or an explicitly
 referenced shared row. Read the saved rows against retained source bindings,
 not only a page title or draft summary. This is a local completeness check,
 not an additional OTel implementation requirement.
-
-Read concrete repair proposals back against the retained public API and the
-effective startup configuration too. Check constructor arguments, option names
-and units against the selected SDK's declaration and its own construction path;
-check launch settings against the actual runner's CLI/environment precedence.
-A remembered API shape or environment setting cannot override contrary source
-evidence. Keep an unresolved mechanism unverified with its future check instead
-of presenting a source-contradicted call or launch profile as an executable fix.
-Separate an API's documented contract from its implemented enforcement. Trace
-capability claims through the selected delegation path to the actual check,
-including precedence, forwarding and supported-value normalization;
-for timeout/cancellation claims, identify where the deadline is created,
-propagated and consumed relative to retries. If documentation and implementation
-conflict, retain that contradiction and its owner rather than treating the
-comment as implementation proof. A permitted focused public-boundary probe can
-resolve behavior at that scope; it does not establish application execution.
-
-Use the relevant source boundary rather than stopping at the options class:
-
-| Claimed capability | Source to reconcile |
-|---|---|
-| Supported setup/API | Actual public declaration, argument/result shape and construction path; a remembered symbol or unrelated example is insufficient. |
-| Activation and ownership | Entry point that registers/starts the provider or bridge on normal startup; constructing a configuration object alone may not activate it. |
-| Record limits | Record creation/update path and the final normalization helper, including supported value shapes, replacement/drop accounting and diagnostic calls. |
-| Transport limits/deadlines | Actual encoding/decompression, bounded-read and error branches; identify where the deadline is created, propagated and consumed relative to retries. |
-| Diagnostic cadence | All emission paths for one affected record, including warnings and per-value loops; value truncation alone cannot establish the diagnostic count. |
 
 For an OTel requirement, bind the retained primary-source clauses, not only this
 local guide or an SDK option comment. Read each cited range back before using
@@ -826,6 +852,15 @@ does not explain the current failure or establish which wait it bounds.
 
 ### Resolve deadline mechanisms
 
+Classify a retry elapsed setting from the actual loop: a check after failure or
+before scheduling another attempt can be an eligibility threshold rather than a
+cancellation deadline. Follow the full selected wait, including jitter and server
+throttling, and the next attempt. A check of one wait component alone does not
+cap the other components or an in-flight request. State the condition under which
+the configured elapsed value can be exceeded; only a verified enclosing deadline
+supplies the corresponding whole-operation bound. Retain that SDK behavior and
+its owner without adding application retry logic or inventing a stricter guarantee.
+
 A concrete repair plan names the supported public mechanism selected for the
 actual project, with its scope, units and effective configuration. Resolve the
 installed/project-compatible SDK first instead of prescribing one constructor,
@@ -855,7 +890,12 @@ diagnostics MUST NOT occur more than once per affected record. Separately, the
 SHOULD report discarded attributes, with the same MUST ceiling of one message per
 LogRecord, not per dropped attribute. Count the installed SDK's actual diagnostic
 paths against individual records; passing truncation/count assertions does not
-prove this cadence. Preserve an observed upstream limitation as such without
+prove this cadence. Classify each message's cause before applying this ceiling:
+it counts diagnostics for changes **due to a limit**. Invalid-key validation,
+uniqueness enforcement or other independent SDK diagnostics are not automatically
+limit diagnostics, even when they also discard data. Aggregate all messages
+actually caused by limits for one record; independent once guards do not imply
+a shared per-record budget. Preserve the separate applicable diagnostic policies. Preserve an observed upstream limitation as such without
 replacing SDK diagnostic internals or claiming an application suppression fixes it.
 
 ## LOG-VERIFY-FRESH -- Bind each verdict to its own execution evidence

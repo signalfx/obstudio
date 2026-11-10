@@ -94,6 +94,9 @@ def test_control_inventory_does_not_mutate_or_claim_coverage(report_helper_and_s
     inventory = helper.audit_control_inventory(report)
     assert report == before
     assert inventory["audit_sha256"] == helper.audit_digest(helper.normalize_audit_report(report))
+    assert inventory["inventory_scope"] == "audit_expected_telemetry"
+    assert inventory["source_clause_controls_included"] is False
+    assert inventory["acceptance_controls_included"] is False
     assert inventory["coverage_evaluated"] is False
     assert inventory["runtime_evaluated"] is False
     assert inventory["promises"][0]["candidate_scenario_ids"] == ["http.checkout.success"]
@@ -108,6 +111,8 @@ def test_control_inventory_cli_reads_audit_without_writing_reports(tmp_path, rep
     success = subprocess.run(command + ["--ids", "OTEL-002"], capture_output=True, text=True)
     assert success.returncode == 0, success.stderr
     assert json.loads(success.stdout)["finding_ids"] == ["OTEL-002"]
+    assert json.loads(success.stdout)["source_clause_controls_included"] is False
+    assert json.loads(success.stdout)["acceptance_controls_included"] is False
     failure = subprocess.run(command + ["--ids", "OTEL-999"], capture_output=True, text=True)
     assert failure.returncode == 1
     assert not failure.stdout and "FAIL:" in failure.stderr

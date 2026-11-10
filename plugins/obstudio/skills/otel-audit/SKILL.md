@@ -299,6 +299,8 @@ Record the metric name and source file with line number.
 **Logs inventory** -- build a list of OTel log integrations:
 
 Read `../references/logging-readiness.md` for an application logging path.
+Start with its source-and-applicability worklists: source clauses, concrete
+capabilities and acceptance controls must be reconciled separately.
 Apply its LOG-* rules to the source and effective SDK/bridge configuration,
 including defaults and explicit policies; put concrete gaps and their required
 proof in the normal findings and verification plan. Do not call a missing

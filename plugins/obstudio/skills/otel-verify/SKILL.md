@@ -27,6 +27,8 @@ Contract plus Reader-First Report Order. When `.observe/otel-audit.json` exists,
 also read `./references/json-approval-handoff.md`; it owns canonical scope,
 schema, digest binding, status rollup, and the HTML refresh.
 When verifying application logs, also read `../references/logging-readiness.md`.
+Start with its source-and-applicability worklists: source clauses, concrete
+capabilities and acceptance controls must be reconciled separately.
 Apply its applicable acceptance obligations, including caller-to-worker context
 handoff and fresh per-trial evidence. Preserve this skill's read-only application
 boundary; missing wiring is a failed or unproven check, not authorization to

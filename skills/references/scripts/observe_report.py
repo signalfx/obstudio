@@ -1316,7 +1316,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     required_controls = subparsers.add_parser(
         "required-controls",
-        help="list promised telemetry and fields without evaluating coverage or runtime",
+        help="list audit telemetry promises only; excludes source-clause and acceptance controls",
     )
     required_controls.add_argument("audit_json", type=Path)
     required_controls.add_argument("--ids", help="comma-separated finding IDs; defaults to all")

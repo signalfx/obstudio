@@ -133,6 +133,11 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
         "evaluates neither coverage nor runtime",
         "API's documented contract from its implemented enforcement",
         "where the deadline is created, propagated and consumed relative to retries",
+        "Use three related worklists",
+        "inventories audit promises only",
+        "eligibility threshold rather than a cancellation deadline",
+        "Classify each message's cause",
+        "due to a limit",
     ):
         assert term in common_words
     assert "https://opentelemetry.io/docs/specs/otel/configuration/common/" in common

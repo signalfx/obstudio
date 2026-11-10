@@ -1566,6 +1566,8 @@ active file path and added or changed variable names without exposing secrets.
 #### Default Local Application Log Export
 
 Read `../references/logging-readiness.md` before changing a logging path.
+Start with its source-and-applicability worklists: source clauses, concrete
+capabilities and acceptance controls must be reconciled separately.
 Apply its LOG-* rules within selected scope using the existing provider and
 detected bridge, and include their applicable positive and fault scenarios in
 the verification handoff. Preserve supported SDK defaults and operator policy;
