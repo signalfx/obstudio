@@ -2500,6 +2500,7 @@ async function performCloudBridgeActionExclusive(
 		case 'open-splunk-platform-trial':
 			await openCloudExternalUrl('https://www.splunk.com/en_us/download/splunk-cloud.html');
 			return {};
+		case 'open-hec-endpoint-help':
 		case 'open-hec-token-help':
 			await openCloudExternalUrl('https://help.splunk.com/en/data-management/collect-http-event-data/use-hec-in-splunk-enterprise/set-up-and-use-http-event-collector-in-splunk-web');
 			return {};

@@ -45,6 +45,52 @@ const connected: SplunkLogsStatus = {
   lastExportSuccess: new Date().toISOString(),
 };
 
+it.each(["browser", "IDE"] as const)("opens HEC endpoint help with the keyboard and preserves connection drafts (%s)", async (host) => {
+  const { externalActions, posts } = backend(empty, host);
+  const user = userEvent.setup();
+  render(<LogsConnection />);
+  const endpoint = await screen.findByLabelText("HEC endpoint");
+  await user.type(endpoint, "https://logs.example/services/collector/event");
+  await user.type(screen.getByLabelText("HEC token"), "draft-token");
+  const help = screen.getByRole("link", { name: "Find your HEC endpoint" });
+  const tokenHelp = screen.getByRole("link", { name: "Find your HEC token" });
+  const docsURL = "https://help.splunk.com/en/data-management/collect-http-event-data/use-hec-in-splunk-enterprise/set-up-and-use-http-event-collector-in-splunk-web";
+  expect(help.getAttribute("href")).toBe(host === "IDE" ? "#" : docsURL);
+  expect(help.getAttribute("target")).toBe(host === "IDE" ? null : "_blank");
+  expect(help.getAttribute("rel")).toBe(host === "IDE" ? null : "noopener noreferrer");
+  expect(tokenHelp.getAttribute("href")).toBe(host === "IDE" ? "#" : docsURL);
+  expect(endpoint.getAttribute("aria-describedby")).toBe("cloud-logs-endpoint-help");
+  expect(screen.getByText("Enter the full HEC ingestion URL, including /services/collector/event.")).toBeTruthy();
+  if (host === "browser") {
+    for (const link of [help, tokenHelp]) link.addEventListener("click", (event) => event.preventDefault());
+  }
+  endpoint.focus();
+  await user.tab({ shift: true });
+  expect(document.activeElement).toBe(help);
+  await user.keyboard("{Enter}");
+  await user.click(tokenHelp);
+  expect(externalActions).toEqual(host === "IDE" ? ["open-hec-endpoint-help", "open-hec-token-help"] : []);
+  expect((endpoint as HTMLInputElement).value).toBe("https://logs.example/services/collector/event");
+  expect((screen.getByLabelText("HEC token") as HTMLInputElement).value).toBe("draft-token");
+  expect(posts).toHaveLength(0);
+});
+
+it("reports HEC endpoint help failures without submitting or discarding IDE drafts", async () => {
+  const { externalActions, posts } = backend(empty, "IDE", "VS Code could not open the external page.");
+  const user = userEvent.setup();
+  render(<LogsConnection />);
+  const endpoint = await screen.findByLabelText("HEC endpoint");
+  await user.type(endpoint, "https://logs.example/services/collector/event");
+  await user.type(screen.getByLabelText("HEC token"), "draft-token");
+  await user.click(screen.getByRole("link", { name: "Find your HEC endpoint" }));
+  expect((await screen.findByRole("alert")).textContent).toBe("VS Code could not open the external page.");
+  expect((endpoint as HTMLInputElement).value).toBe("https://logs.example/services/collector/event");
+  expect((screen.getByLabelText("HEC token") as HTMLInputElement).value).toBe("draft-token");
+  await user.click(screen.getByRole("link", { name: "Find your HEC token" }));
+  expect(externalActions).toEqual(["open-hec-endpoint-help", "open-hec-token-help"]);
+  expect(posts).toHaveLength(0);
+});
+
 it.each(["browser", "IDE"] as const)("saves an explicit TLS verification exception through the logs form (%s)", async (host) => {
   const { posts } = backend(empty, host);
   const user = userEvent.setup();
@@ -584,7 +630,7 @@ it("does not overwrite edits or their version when an older status poll complete
     expectedVersion: "v1",
   });
 });
-function backend(initial = empty, host: "browser" | "IDE" = "browser") {
+function backend(initial = empty, host: "browser" | "IDE" = "browser", endpointHelpError?: string) {
   let status = { ...initial };
   const posts: Record<string, unknown>[] = [];
   const externalActions: string[] = [];
@@ -640,10 +686,13 @@ function backend(initial = empty, host: "browser" | "IDE" = "browser") {
         request?: { kind: string; path: string; method: string; body?: string; action?: string };
       }) {
         if (message.type !== "obstudio.host.request") return;
-        if (message.request?.kind === "cloud" && message.request.action === "open-splunk-platform-trial") {
-          externalActions.push(message.request.action);
+        const action = message.request?.action;
+        if (message.request?.kind === "cloud" && (action === "open-splunk-platform-trial" || action === "open-hec-endpoint-help" || action === "open-hec-token-help")) {
+          const error = action === "open-hec-endpoint-help" ? endpointHelpError : undefined;
+          externalActions.push(action);
           window.dispatchEvent(new MessageEvent("message", { data: {
-            type: "obstudio.host.response", requestId: message.requestId, ok: true, result: {},
+            type: "obstudio.host.response", requestId: message.requestId, ok: !error,
+            ...(error ? { error } : { result: {} }),
           } }));
           return;
         }

@@ -2731,7 +2731,7 @@ test('IDE connection edits accept explicit reuse flags without accepting destina
  for (const key of ['reuseSavedToken', 'preserveEnabled']) {
   assert.equal(isObserverHostRequestEnvelope(request('connect', { ...payload, [key]: 'true' })), false);
  }
- for (const action of ['open-hec-token-help', 'open-splunk-platform-trial', 'open-observability-cloud', 'open-observability-metrics', 'open-observability-traces', 'open-splunk-search'] as const) {
+ for (const action of ['open-hec-endpoint-help', 'open-hec-token-help', 'open-splunk-platform-trial', 'open-observability-cloud', 'open-observability-metrics', 'open-observability-traces', 'open-splunk-search'] as const) {
   assert.equal(isObserverHostRequestEnvelope(request(action)), true);
   assert.equal(isObserverHostRequestEnvelope(request(action, { destination: 'https://example.test' })), false);
   assert.equal(cloudBridgeActionRequiresLifecycleSerialization(action), false);
