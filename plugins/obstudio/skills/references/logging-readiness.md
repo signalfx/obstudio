@@ -202,18 +202,24 @@ Reserve that audit level for normal application execution, including agent or
 preload startup, framework-resolved routes, automatic metrics or installed log export.
 Audit plans these checks; instrumentation and verification reconcile actual
 results. These are local report-contract checks, not new normative SDK requirements.
-Audit separates scenarios when their required proof boundaries differ. A shared
-scenario must retain each assertion's owner and disposition; split it when one
-classification would hide distinct outcomes.
-For example, a parser failure reached through the normal application entrypoint
-can use `full runtime`; a constructed shutdown Error emitted through an isolated
-bridge belongs in a separate `focused call-site` scenario. Do not append a focused
-control to a full-runtime scenario and expect later stages to reinterpret its level.
-`either` permits either adequate proof for the same contract, not a mixture of
-different controls with incompatible boundaries. A server-close test seam or an
-isolated structured-value probe likewise keeps its actual boundary. Referencing
-that focused scenario from an application scenario does not promote its error
-assertions to full-runtime proof.
+During audit planning, inventory the individual controls and group them by proof
+boundary before assigning stable scenario IDs. Do this before execution too;
+the planning error cannot be corrected merely by labelling all execution Not run.
+Use the following distinction when constructing the saved handoff:
+
+| Planned control | Audit proof boundary |
+|---|---|
+| Parser failure reached through the normal application entrypoint, agent/preload and installed bridge | `full runtime` |
+| Constructed shutdown Error, outside-context callback, exception/cancellation path or structured-value probe, all in an isolated bridge/SDK fixture | Separate `focused call-site` scenario |
+| Isolated exporter timing/response-size capability check | Separate focused scenario or conditional capability check in matrix evidence, with the SDK/receiver owner |
+| One identical contract that genuinely permits either application or focused proof | `either`, not a mixture of different controls |
+
+An agent-equipped environment does not promote every fixture to application
+proof. A server-close test seam also keeps its actual boundary. An application
+scenario may reference a focused prerequisite's separate ID; do not embed that
+fixture as an assertion under the application's full-runtime level. Read back
+each trigger and acceptance clause against its row's level, rather than checking
+only scenario names. Every grouped assertion keeps its own owner/disposition.
 SDK/exporter and receiver capability checks retain their actual owners. An
 application-wiring finding may reference those related acceptance checks when
 their capability, disposition and proof boundary stay explicit; attachment alone
@@ -744,10 +750,16 @@ Instrumentation and verification also retain concrete future assertions beside
 unexecuted selected controls. "Not tested" or "counts kept separate" alone does
 not carry the acceptance plan; keep the actual expected counts/conditions while
 leaving runtime proof absent and unsupported capability conditional.
-This applies to a direct instrumentation baseline without an audit too: save
-the full-success N accepted/0 rejected control, valid partial N-R accepted/R
-rejected and warning-only N/0 no-retry assertions in its own canonical report.
-Do not omit them on the assumption that an earlier audit holds the plan.
+This applies to a direct instrumentation baseline without an audit too. Save
+each of these assertions explicitly in its own canonical report; do not assume
+an earlier audit holds the plan or let the warning-only retry assertion stand
+in for the separate partial-rejection case:
+
+| Future valid response control | Count assertion for each known N-record batch | Retry assertion |
+|---|---|---|
+| Full success, conforming selected encoding and `partial_success` unset | N acknowledged accepted, 0 rejected; persistence separate | Successful response completes that export; do not count unrelated fault attempts as this control |
+| Populated partial success, 0 < R <= N rejected | N-R acknowledged accepted, R rejected | MUST NOT retry that request, including an inferred rejected subset |
+| Populated warning-only partial success, R=0 | N acknowledged accepted, 0 rejected | MUST NOT retry that request |
 
 | Rule | Required acceptance detail |
 |---|---|

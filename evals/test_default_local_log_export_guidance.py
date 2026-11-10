@@ -107,7 +107,7 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
     assert "Ending a span" in common and "business cancellation" in common
     assert "individual results" in common and "automated finalizer" in common
     assert "separate conditions, actions and requirement" in common
-    assert "constructed shutdown Error" in common and "server-close test seam" in common
+    assert "Constructed shutdown Error" in common and "server-close test seam" in common
     assert "not a mixture" in common and "conditional future checks" in common
     assert "attachment alone" in common and "shared scope row" in common
     assert "precisely bounded retained excerpt" in common and "specific evidence rows" in common
@@ -121,6 +121,14 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
     assert "Protocol surface / owner" in common
     assert "configuration settings cannot bind" in common
     assert "direct instrumentation baseline without an audit" in common
+    assert "During audit planning" in common and "before assigning stable scenario IDs" in common
+    assert "An agent-equipped environment" in common
+    assert "0 < R <= N" in common and "inferred rejected subset" in common
+    assert "separate partial-rejection case" in common
+    if skill == "otel-audit":
+        instructions = _read(side / ".agents" / "skills" / skill / "SKILL.md")
+        assert "before assigning scenario IDs" in instructions
+        assert "including planned controls" in instructions
     if skill == "otel-instrument":
         instructions = _read(side / ".agents" / "skills" / skill / "SKILL.md")
         assert "Captured framework/container records" in instructions
