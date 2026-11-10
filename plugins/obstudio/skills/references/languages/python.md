@@ -100,16 +100,17 @@ handler across later `basicConfig`, `dictConfig`, and `fileConfig` calls while
 preserving the application's console/file handlers. Pass
 `inject_trace_context=True` only when that API supports it, to add
 `otelTraceID`, `otelSpanID`, `otelTraceSampled`, and `otelServiceName` to the
-original stdlib `LogRecord` without changing its format. Keep
-`set_logging_format=False` to preserve the existing stdout/file format. When
-the resolved API lacks that capability, omit the unsupported
-`inject_trace_context` argument; prove that the OTLP handler derives
-correlation from current OTel context independently. If the retained
-stdout/file formatter itself must consume those fields, use
-`OTEL_PYTHON_LOG_CORRELATION=true` or `set_logging_format=True` and update an
-already-created formatter explicitly. That older option also asks
-`logging.basicConfig` to install the OTel format, which may be a no-op when
-handlers already exist and does not enable OTLP export. If the constrained SDK
+original stdlib `LogRecord` without changing its format. The example selects
+native-format preservation with `set_logging_format=False`; that explicit
+option overrides `OTEL_PYTHON_LOG_CORRELATION`; the formatting activation
+gates `OTEL_PYTHON_LOG_FORMAT` and `OTEL_PYTHON_LOG_LEVEL`. Independent bridge
+controls, such as handler level, retain their own readers and policy. Apply the common policy/precedence decision before
+claiming those operator controls remain effective. If the resolved API lacks injection,
+omit the unsupported `inject_trace_context` argument and prove canonical OTLP
+correlation independently. When
+the selected native formatter needs injected fields or operator formatting,
+resolve the supported activation and existing formatter path; `basicConfig`
+may leave existing handlers unchanged and does not enable OTLP export. If the constrained SDK
 instead owns the supported `LoggingHandler` path, retain and test that path;
 do not install a second handler or upgrade dependencies solely to copy the
 instrumentor example.
@@ -550,12 +551,12 @@ logging setup proceed before reattaching the OTel handler. Do not use
 `logging.basicConfig(force=True)`. Check the resolved instrumentor's API and
 handler ownership before copying the setup. When supported,
 `inject_trace_context=True` injects the OTel fields without changing the
-existing text format; `set_logging_format=False` preserves that format. If the
-constrained API lacks it, omit the unsupported injection argument and prove
-that the OTLP handler still derives correlation from current context; use
-`OTEL_PYTHON_LOG_CORRELATION=true`/`set_logging_format=True` only when the older
-stdout/file formatter must receive those fields, and update an already-created
-formatter explicitly because `basicConfig` may not replace it.
+existing text format. Treat this example's `set_logging_format=False` as an
+explicit native-format policy, not a guarantee that correlation/format/level
+environment controls remain effective. Resolve authority and precedence as
+above. If the injection API is unsupported, omit it and prove the OTLP
+handler's context mapping independently; inspect existing formatter setup
+when selected text-field or operator-formatting behavior requires it.
 Inspect filters, formatters, adapters,
 Flask/Django access logs, exception rendering, and structured logger wrappers.
 Apply the same project redaction policy to the final OTel record and prove

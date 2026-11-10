@@ -119,21 +119,32 @@ outcome. A Boolean control for one flag does not allocate another flag or
 numeric/enum branches. Future runtime status can be Not run while source
 behavior is already known.
 
-Read concrete repair proposals back against the retained public API and the
-effective startup configuration too. Check constructor arguments, option names
-and units against the selected SDK's declaration and its own construction path;
-check launch settings against the actual runner's CLI/environment precedence.
-A remembered API shape or environment setting cannot override contrary source
-evidence. Keep an unresolved mechanism unverified with its future check instead
-of presenting a source-contradicted call or launch profile as an executable fix.
-Separate an API's documented contract from its implemented enforcement. Trace
-capability claims through the selected delegation path to the actual check,
-including precedence, forwarding and supported-value normalization;
-for timeout/cancellation claims, identify where the deadline is created,
-propagated and consumed relative to retries. If documentation and implementation
-conflict, retain that contradiction and its owner rather than treating the
-comment as implementation proof. A permitted focused public-boundary probe can
-resolve behavior at that scope; it does not establish application execution.
+Read concrete repair proposals back against the public API and effective startup
+configuration. For a selected control, name its authority/owner and trace the
+winning explicit option, environment/loader value and native policy through any
+activation gate. Distinguish preserving a setting's bytes from preserving its
+effect. An intentional higher-precedence choice can be valid; state which
+settings become inactive and why that choice satisfies the authorized policy.
+When native-output policy and operator controls conflict, resolve the authority
+or retain the concrete conflict and conditional repair; do not claim both
+effective behaviors. Allocate assertions for the selected effects, while
+keeping inactive delegated facts source-only rather than testing unreachable
+parser permutations. Check argument names/units, construction and runner
+CLI/environment precedence against retained source; keep unresolved mechanisms unverified
+instead of prescribing a source-contradicted call or launch profile.
+Separate an API's documented contract from implemented enforcement. Trace each
+selected capability both into its helper/delegate and back through returned
+values, decisions or errors to the callers that update state, aggregate outcomes,
+retry or issue diagnostics. Resolve the terminal effect, not just the helper's
+local action. Bound an absence claim to its inspected component, conditions and
+paths: no warning in one helper does not establish a silent record pipeline.
+Distinguish a conditional diagnostic call from its configured level/routing and
+observed output; source capability is not runtime visibility. Preserve actual
+precedence, forwarding and normalization. For timeout/cancellation claims, locate
+deadline creation, propagation and consumption relative to retries. Retain any
+documentation/implementation conflict and owner rather than treating a comment
+as proof. A permitted public-boundary probe resolves only its tested scope,
+not application execution or unselected sibling conformance.
 
 Use the relevant source boundary rather than stopping at the options class:
 
@@ -403,9 +414,13 @@ Keep the direction of conditional requirements intact: an obligation when A
 is present does not imply the reverse obligation when B is present. Preserve
 the original conjunctions, exceptions and subject when condensing a clause.
 
-For an OTel requirement, bind the retained primary-source clauses, not only this
-local guide or an SDK option comment. Read each cited range back before using
-it: a nearby section or line range that omits a qualifier does not preserve it.
+For a selected OTel requirement, read the actual cited primary-source slice or
+heading and match its subject/operation, conditions, strength and action to the
+claim. A correct file/topic with an unrelated range does not support that claim;
+implementation or an option comment is capability evidence, not the normative
+source. Correct the binding or retain the unsupported claim as unverified, without
+inventing a stronger rule or importing unrelated sibling clauses. Apply the same
+claim-to-slice check to implementation evidence and its terminal caller effect.
 
 For audit, emit concrete application-owned gaps through the normal findings and
 acceptance flow. For instrumentation, implement the authorized ones and retain
@@ -869,15 +884,19 @@ Where implemented, [development SDK log metrics](https://opentelemetry.io/docs/s
 creation, queue-pressure, processed and exported counts. Record each instrument's
 stage and retry/rejection semantics; created/processed is not receiver acceptance.
 Do not add duplicate application metrics or assume unavailable instruments exist.
-Processor `OnEmit` runs synchronously on the emitting thread and SHOULD NOT
-block or throw exceptions. For processors registered directly with LoggerProvider,
-mutations MUST reach subsequent registered processors. Preserve these SDK-owned
-dispositions separately from asynchronous record safety and independent filtering.
-For a custom asynchronous processor, do not retain and mutate an unsafe shared
-ReadWriteLogRecord after `OnEmit`; use a supported snapshot/clone and verify
-concurrent isolation. Built-in SDK
-processors are not a reason to write a replacement. An optional event-to-span
-bridge must still forward the log record when that feature is selected.
+For a selected application-owned extension callback, bind a compact operation
+contract in existing evidence: applicable source clause and conditions/strength,
+actual owner, callback actions/assumptions, and assertion or exact limitation.
+A selected processor `OnEmit` runs synchronously on the emitting thread and SHOULD NOT block or throw;
+synchronous alone does not establish those recommendations. For directly
+registered processors, record mutations MUST reach subsequent processors.
+Keep SDK dispatch/visibility duties distinct from the app callback's behavior,
+and reconcile these selected conditions before calling its plan complete.
+Do not expand this into every unselected SDK operation. For selected asynchronous
+processing, retain a supported snapshot/clone rather than mutating an unsafe
+shared ReadWriteLogRecord after `OnEmit`, and verify concurrent isolation.
+Built-in processors need no replacement. A selected event-to-span bridge must
+still forward the log record; independent filtering retains its own conditions.
 
 Compose the complete export/retry deadline rather than assuming a per-request
 timeout bounds the entire operation. Test a receiver that stalls as well as one

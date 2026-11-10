@@ -298,13 +298,24 @@ Record the metric name and source file with line number.
 
 **Logs inventory** -- build a list of OTel log integrations:
 
-Read `../references/logging-readiness.md` for an application logging path.
-Start with its source-and-applicability worklists: source clauses, concrete
-capabilities and acceptance controls must be reconciled separately.
-Apply its LOG-* rules to the source and effective SDK/bridge configuration,
-including defaults and explicit policies; put concrete gaps and their required
-proof in the normal findings and verification plan. Do not call a missing
-application override a defect when the SDK already supplies correct behavior.
+Read `../references/logging-readiness.md` and the detected language's logging
+checks. Prioritize the producing dependency for each selected privacy-critical
+error trigger before broad SDK capability or clause-ledger work: resolve its
+actual version from project configuration, locate the matching repository,
+resolved dependency artifact or versioned primary source, and inspect the native
+producer/event and supported action through later renderers. If source is not
+attached or available, use permitted read-only public API/bytecode inspection of
+the matching artifact; do not infer a producer mechanism from SDK mapper evidence.
+Retain the artifact/path and inspected symbol, or the exact unavailable producer/
+event/API edge, owner and next source/probe observation that would decide it.
+A generic dependency name or an instruction to find a hook is not that receipt.
+Keep this in existing evidence/scenario fields. This prioritizes investigation;
+complete equivalent source evidence remains valid regardless of tool-call order.
+Then reconcile source clauses, actual capabilities and acceptance separately
+within the shared scope, preserving SDK defaults and operator policy. Emit only
+concrete app-owned gaps and required future proof; a missing override is not a
+defect when the SDK already supplies the behavior. Use permitted read-only dependency/source inspection without changing service
+code or manifests; this investigation does not require application startup.
 Before finalizing a logging audit, check the shared guide's scoped
 LOG-SPEC-CLOSURE matrix in canonical `evidence`: selected gaps, operator policy
 and source-supported claims need source/version, strength, owner, disposition,
@@ -1631,8 +1642,12 @@ JSON requirements:
   step; audit owns selection planning, while `$otel-instrument` invokes
   verification internally after implementation.
 - Every finding dependency must reference another finding ID and point from the
-  work toward its prerequisite. Every verification scenario reference must
-  exist in `verification.scenarios`.
+  work toward its prerequisite. Check each selectable finding's transitive
+  closure against its bound acceptance: every necessary repair must be included,
+  including context transfer required by a final-record join. Regroup contracts
+  or prerequisites when necessary without introducing cycles or dropping the
+  selected invariant. Every verification scenario reference must exist in
+  `verification.scenarios`.
 - Put bulky command output under `.observe/evidence/` and cite it from JSON.
 
 After writing `.observe/otel-audit.json`, run `finalize-audit`. This command

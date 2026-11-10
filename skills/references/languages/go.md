@@ -177,7 +177,10 @@ logs-only compatibility or configuration failure is a reported incomplete log
 path; it must not silently become the normal disabled-log configuration.
 
 Create a dedicated file for OTel setup that returns a shutdown function.
-Call it early in `main()`.
+Call it early in `main()`. Establish the selected propagator before provider
+construction and any SDK-disabled return. Apply the common disabled-SDK policy
+to the signal branches without bypassing that setup; this conditional example
+does not supply every application-owned activation reader.
 Resolve the approved local logs URL during preflight, then embed that exact
 host, port, base path, and `/v1/logs` leaf in the generated setup. Do not use
 `localhost`, loopback IP, or `/v1/logs` shape as a runtime proxy for approval:
@@ -232,6 +235,10 @@ func initOTel(
 	ctx context.Context,
 	existingLogHandler slog.Handler,
 ) (func(context.Context) error, error) {
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	))
 	res, err := resource.New(ctx,
 		resource.WithFromEnv(),
 		resource.WithTelemetrySDK(),
@@ -307,10 +314,6 @@ func initOTel(
 
 	otel.SetTracerProvider(tp)
 	otel.SetMeterProvider(mp)
-	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
-		propagation.TraceContext{},
-		propagation.Baggage{},
-	))
 	if lp != nil {
 		otellogglobal.SetLoggerProvider(lp)
 		slog.SetDefault(slog.New(fanoutHandler{
@@ -852,10 +855,14 @@ manually copied ID does not prove caller handoff.
 
 Exercise the actual goroutine path with real SDK spans, exact log/span joins and
 concurrent request isolation. Follow the common sampled, unsampled, outside-span
-and reuse controls. For cross-process failures, inspect the installed propagator's
-handling of the actual valid peer carrier before assigning a logger repair;
-retain dependency limitations without masking carrier fields or changing the
-project's runtime requirements.
+and reuse controls. For selected propagation, resolve the installed/project-compatible implementation
+and bind each configured component's actual carrier fields to its supported
+extracted-state assertions; a TraceContext-only pass
+does not prove a composite propagator. Do not automatically copy baggage
+or other propagated application fields into telemetry; preserve standard SDK
+trace-context correlation. Inspect the actual valid peer carrier before assigning a
+logger repair, retaining dependency limitations without masking fields or
+changing the project's runtime requirements.
 
 ### Native logging and configuration
 
