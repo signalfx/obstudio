@@ -144,6 +144,17 @@ IDs where needed, and the actual proof boundary. An SDK-owned default can be
 covered without an application override; absence of an installed capability is
 not proof that an application has implemented it.
 
+Decompose a source paragraph into its separate conditions, actions and requirement
+levels before condensing it into a matrix row. One row may retain several clauses,
+but give each its own strength and disposition; a later failure fallback does not
+cover an earlier recommendation or permission. For example, a receiver response
+row retains all of: MUST bound before compression; SHOULD reduce oversized partial
+responses without changing semantics when possible and practical; MAY trim optional
+diagnostics; MUST fail with HTTP 500 if the response still cannot fit, with acceptance
+unspecified. "May reduce diagnostics" alone loses the separate SHOULD. Compare the
+saved row with each source clause, not only its topic or citation. This is a local
+report-completeness check, not an additional OTel implementation requirement.
+
 For audit, emit concrete application-owned gaps through the normal findings and
 acceptance flow. For instrumentation, implement the authorized ones and retain
 unselected gaps. For verification, independently reconcile the matrix with real
@@ -170,6 +181,16 @@ preload startup, framework-resolved routes, automatic metrics or installed log e
 Audit plans these checks; instrumentation and verification reconcile actual
 results. These are local report-contract checks, not new normative SDK requirements.
 Audit separates scenarios when their owners or required proof boundaries differ.
+For example, a parser failure reached through the normal application entrypoint
+can use `full runtime`; a constructed shutdown Error emitted through an isolated
+bridge belongs in a separate `focused call-site` scenario. Do not append a focused
+control to a full-runtime scenario and expect later stages to reinterpret its level.
+`either` permits either adequate proof for the same contract, not a mixture of
+different controls with incompatible boundaries. A server-close test seam or an
+isolated structured-value probe likewise keeps its actual boundary. SDK/exporter
+and receiver-owned capability checks retain their owners; do not bundle them into
+an executable application finding merely because both concern delivery. Unverified
+upstream capability can keep conditional future checks in the matrix evidence.
 Later stages retain bound IDs and distinguish observations in existing evidence
 fields. Retain each required control's expected input/outcome, actual command,
 concrete evidence and verdict; one invocation can supply several controls.
@@ -646,7 +667,7 @@ each selected rule. A general preservation promise or a rule ID alone does
 not specify a runnable check. In a plan-only task, label settings as proposed
 or retained defaults and runtime evidence as unverified; do not invent an
 installed capability. Keep the handoff compact by sharing one outage scenario
-across the applicable rules.
+across applicable rules that use the same owned path and proof boundary.
 
 | Rule | Required acceptance detail |
 |---|---|

@@ -96,6 +96,9 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
     assert "MAY trim optional diagnostic fields" in common
     assert "Ending a span" in common and "business cancellation" in common
     assert "individual results" in common and "automated finalizer" in common
+    assert "separate conditions, actions and requirement" in common
+    assert "constructed shutdown Error" in common and "server-close test seam" in common
+    assert "not a mixture" in common and "conditional future checks" in common
 
 
 @pytest.mark.parametrize("language", ["java", "python", "go", "node"])
