@@ -116,6 +116,10 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
         "resolve and report their effective values or unlimited behavior",
         "future boundary test does not substitute for accessible configuration facts",
         "source binding preserves the requirement, not an assertion",
+        "Capability and conditional acceptance branches",
+        "positive, zero, negative, fractional, malformed",
+        "Start from the promises and clauses",
+        "final allocated IDs",
         "API's documented contract from its implemented enforcement",
         "where the deadline is created, propagated and consumed relative to retries",
     ):

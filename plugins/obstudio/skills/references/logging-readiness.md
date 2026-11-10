@@ -134,24 +134,24 @@ serialization. Native APIs can use language-specific typed values; inspect their
 conversion rather than copying environment syntax into a constructor or vice versa.
 
 For supported standard configuration sources, retain the applicable
-[common type rules](https://opentelemetry.io/docs/specs/otel/configuration/common/):
-duration and timeout values MUST represent non-negative integer milliseconds;
-negative values MUST generate a warning and be ignored, using a default when defined.
-Timeout zero SHOULD mean no limit, which MAY use a sufficiently large internal
-duration. Integer support SHOULD cover 0 through 2^31-1 and MAY extend it,
-subject to the setting's valid range. Unparseable or out-of-range numeric settings
-SHOULD be warned about and ignored; retain the post-stabilization compatibility
-qualification and its MUST treatment for new implementations. A rejected
-value falling back to a default does not prove the proposed bound is effective.
+[common type rules](https://opentelemetry.io/docs/specs/otel/configuration/common/)
+and resolve their selected implementation separately:
 
-Enum sources MAY extend supported values. If an enum accepts a null/no-op choice,
-its name MUST be `none`. Standard environment enums SHOULD be case-insensitive; unknown
-values MUST generate a warning and be ignored. The common specification's SHOULD
-to show the original value in configuration errors supports diagnosis; retain any
-privacy constraint instead of exposing a forbidden value. Environment configuration
-MUST have a direct code equivalent. These are configuration-implementation duties:
-verify the installed owner, preserve adequate defaults and report unsupported
-capability instead of adding an application parser or exposing secret values.
+| Setting class | Upstream contract to preserve | Capability and conditional acceptance branches |
+|---|---|---|
+| Duration and timeout | Values MUST represent non-negative integer milliseconds; negative values MUST generate a warning and be ignored, using a default when defined. Timeout zero SHOULD mean no limit, which MAY use a sufficiently large internal duration. | Identify the actual parser, accepted serialized representation, conversion and effective fallback. Distinguish ordinary duration zero from timeout-zero semantics. Resolve or plan positive, zero, negative, fractional, malformed and representability/overflow cases; an accepted fraction is not integer-millisecond conformance. |
+| Integer | Support SHOULD cover 0 through 2^31-1 and MAY extend it, subject to the setting's valid range. Unparseable or out-of-range numeric settings SHOULD be warned about and ignored; retain the post-stabilization compatibility qualification and its MUST treatment for new implementations. | Resolve actual accepted range, boundary, out-of-range, overflow, fractional and malformed behavior, including warning and fallback. A rejected value falling back to a default does not prove the proposed bound is effective. |
+| Enum | Sources MAY extend supported values. If an enum accepts a null/no-op choice, its name MUST be `none`. Standard environment enums SHOULD be case-insensitive; unknown values MUST generate a warning and be ignored. | Resolve supported values/extensions and actual case handling; carry supported, differently cased, unknown, empty/unset and applicable no-op branches. An unrelated Boolean test cannot establish enum behavior. |
+| Environment/code equivalence | Environment configuration MUST have a direct code equivalent. | Identify the corresponding public configuration path and conversion for each selected setting. Compare equivalent intended values and effective results; preserve native typed API capabilities without imposing serialized-environment syntax on them. |
+
+These branches describe the selected configuration owner's capability and
+acceptance, not mandatory application parser code. Resolve accessible source
+facts now. Where genuinely unavailable, retain the exact missing implementation
+and conditional resolution/test for the affected branch. An unverified group
+label or reference to a scenario that only checks another type is insufficient.
+The common specification's SHOULD to show the original value in configuration
+errors supports diagnosis; retain any privacy constraint instead of exposing a
+forbidden value. Preserve adequate defaults and report unsupported capability.
 
 ## LOG-SPEC-CLOSURE -- Reconcile sources, implementation and proof
 
@@ -230,7 +230,8 @@ A remembered API shape or environment setting cannot override contrary source
 evidence. Keep an unresolved mechanism unverified with its future check instead
 of presenting a source-contradicted call or launch profile as an executable fix.
 Separate an API's documented contract from its implemented enforcement. Trace
-capability claims through the selected delegation path to the actual check;
+capability claims through the selected delegation path to the actual check,
+including precedence, forwarding and supported-value normalization;
 for timeout/cancellation claims, identify where the deadline is created,
 propagated and consumed relative to retries. If documentation and implementation
 conflict, retain that contradiction and its owner rather than treating the
@@ -897,6 +898,14 @@ in for the separate partial-rejection case:
 ### Report readback
 
 Read this section immediately before generating/finalizing logging results.
+Build the required set independently from the final findings' promised
+operations/fields and applicable source/policy conditions. Compare it to the
+assertions actually saved in the scenarios, using owning operation, field,
+condition and proof scope as the match key. Start from the promises and clauses,
+not just existing scenarios; a scenario-to-owner list cannot expose an omitted
+promise. A parameterized table may carry the matches. Retain each unmatched
+member as unresolved with its concrete missing control/resolution, and reconcile
+all referenced finding/scenario IDs against the final allocated IDs.
 Use the required controls from the bound contract as the starting set, initialize
 unmatched results Not proven, and join each to its named assertion and actual
 output before deriving scenario/item verdicts. A default-Working builder plus
