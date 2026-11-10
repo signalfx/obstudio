@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-verify",
-    "run_id": "20261110T214238627915Z",
+    "run_id": "20261110T214259895086Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-6-luna",
     "judge_model": "",
@@ -336,7 +336,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "6bf5bf4e7f28c5c9d6f8b25682df8e4888d8607d5d1ff0bd8206c8a74a64a6e8",
+    "digest": "8eb61320142efed9b0b4f71fd2ad85896e38b930cd5c3d9f4caa5b08169a2c29",
     "eval_kinds": [
       "rubric"
     ],
@@ -474,7 +474,7 @@
       "evals/python/model-directed-agent/otel_setup.py": "d7d591e2ca3aeef688aa2df30e4c2d89286917102c22439864fbb5c6a9d53b12",
       "evals/python/model-directed-agent/probe.py": "f190d42c2b2308660ba60c1f6d12d74207ef62b33162bc526cadbc12295db929",
       "evals/python/model-directed-agent/recommendations.py": "c0704e3b6baba32477943c826d9e4a2fa9b94e9fcda3c20ad0f4b57179255a09",
-      "evals/python/model-directed-agent/requirements.txt": "f170c49d65ebb97b85ff0d868d7c67342f6feab2634e22b00793a1ad851678cf",
+      "evals/python/model-directed-agent/requirements.txt": "db09e53078192128053fbc35c0c970233d26af43535e63090738aa6d0f1d042b",
       "evals/python/model-directed-agent/roles.py": "8d254346b01cbcf7bda6d38778732d44656ff585b5f0fbb56bdf3f65d818bbdc",
       "evals/python/model-directed-agent/templates/index.html": "499ff2bfcefb3e0263b6c2af41f7d81a1dc20c1417854350bcf44b9465e6ce81",
       "evals/python/model-directed-agent/eval/qual/resource-table-verify.json": "1b655b83cefa0af719b163ecaef8032c496a49e525a1098ac719529404151737",
