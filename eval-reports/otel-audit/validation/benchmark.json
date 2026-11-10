@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-audit",
-    "run_id": "20261109T180310485767Z",
+    "run_id": "20261110T212743921863Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-6-luna",
     "judge_model": "",
@@ -18,8 +18,7 @@
     "rubric_enabled": false,
     "runtime_enabled": false,
     "workers": "1",
-    "validation_scope": "full",
-    "source_snapshot_refreshed_without_eval_execution": true
+    "validation_scope": "full"
   },
   "evals": [
     {
