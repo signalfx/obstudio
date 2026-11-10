@@ -58,15 +58,33 @@
   "icon": "assets/observer-icon.png",
   "contributes": {
     "chatSkills": [
-      { "path": "./dist/copilot-skills/connect-splunk-observability-cloud/SKILL.md" },
-      { "path": "./dist/copilot-skills/create-splunk-free-account/SKILL.md" },
-      { "path": "./dist/copilot-skills/otel-audit/SKILL.md" },
-      { "path": "./dist/copilot-skills/otel-instrument/SKILL.md" },
-      { "path": "./dist/copilot-skills/otel-verify/SKILL.md" },
-      { "path": "./dist/copilot-skills/splunk-configure/SKILL.md" },
-      { "path": "./dist/copilot-skills/splunk-dashboard/SKILL.md" },
-      { "path": "./dist/copilot-skills/splunk-dashboard-publish/SKILL.md" },
-      { "path": "./dist/copilot-skills/splunk-detector-publish/SKILL.md" }
+      {
+        "path": "./dist/copilot-skills/connect-splunk-observability-cloud/SKILL.md"
+      },
+      {
+        "path": "./dist/copilot-skills/create-splunk-free-account/SKILL.md"
+      },
+      {
+        "path": "./dist/copilot-skills/otel-audit/SKILL.md"
+      },
+      {
+        "path": "./dist/copilot-skills/otel-instrument/SKILL.md"
+      },
+      {
+        "path": "./dist/copilot-skills/otel-verify/SKILL.md"
+      },
+      {
+        "path": "./dist/copilot-skills/splunk-configure/SKILL.md"
+      },
+      {
+        "path": "./dist/copilot-skills/splunk-dashboard/SKILL.md"
+      },
+      {
+        "path": "./dist/copilot-skills/splunk-dashboard-publish/SKILL.md"
+      },
+      {
+        "path": "./dist/copilot-skills/splunk-detector-publish/SKILL.md"
+      }
     ],
     "commands": [
       {
@@ -193,9 +211,23 @@
     "test": "vscode-test"
   },
   "overrides": {
-    "serialize-javascript": "7.0.7",
+    "serialize-javascript": "7.1.4",
+    "@typescript-eslint/typescript-estree": {
+      "minimatch": "11.0.5"
+    },
+    "@vscode/test-cli": {
+      "minimatch": "11.0.5"
+    },
+    "glob": {
+      ".": "14.0.2",
+      "minimatch": "11.0.5"
+    },
     "mocha": {
+      "minimatch": "11.0.5",
       "diff": "8.0.3"
+    },
+    "test-exclude": {
+      "minimatch": "11.0.5"
     }
   },
   "devDependencies": {

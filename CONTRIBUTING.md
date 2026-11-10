@@ -11,7 +11,7 @@ This repository contains:
 
 | Tool | Version | Purpose |
 |------|---------|---------|
-| Go | 1.25+ | Splunk Observability Studio collector |
+| Go | 1.26+ | Splunk Observability Studio collector |
 | Node.js | 22+ | Telemetry Explorer client development/testing and VS Code-compatible editor extension |
 | npm | latest | Package management |
 | uv | latest | Python eval harness and Python fixture apps |
