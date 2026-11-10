@@ -16,7 +16,7 @@ conversation/tool-call ID. Only the model client is a remote operation.
 
 ## Local commands
 
-Use Go 1.25 or newer compatible with `go.mod`. Provision modules once with
+Use Go 1.26 or newer compatible with `go.mod`. Provision modules once with
 `go mod download`; subsequent commands can use
 `GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off` with the provisioned module cache.
 Versions in `go.mod` are this fixture's reproducible dependency selection, not

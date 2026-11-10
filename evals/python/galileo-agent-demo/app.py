@@ -12,6 +12,8 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from pydantic import BaseModel
 
+from galileo_compat import create_span_processor
+
 SERVICE_NAME = "galileo-agent-demo"
 WORKFLOW_NAME = "support_turn"
 MODEL_NAME = "gpt-4o-mini"
@@ -27,7 +29,7 @@ def configure_telemetry() -> TracerProvider:
             }
         )
     )
-    processor = GalileoSpanProcessor(
+    processor: GalileoSpanProcessor = create_span_processor(
         project=os.getenv("GALILEO_PROJECT", "galileo-agent-demo")
     )
     add_galileo_span_processor(provider, processor)
