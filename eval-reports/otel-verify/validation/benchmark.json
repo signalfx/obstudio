@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-verify",
-    "run_id": "20261109T170335531848Z",
+    "run_id": "20261110T214828070848Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-6-luna",
     "judge_model": "",
@@ -18,8 +18,7 @@
     "rubric_enabled": false,
     "runtime_enabled": false,
     "workers": "1",
-    "validation_scope": "full",
-    "source_snapshot_refreshed_without_eval_execution": true
+    "validation_scope": "full"
   },
   "evals": [
     {
@@ -337,7 +336,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "f2c557ab0253556bffaf741b3e17590e919cb91d802a1f2f36d78533a99d6b80",
+    "digest": "b88c3b6b7c16e17490d9516e34dbebd029c978dfc1635426b355d93cab0fc98f",
     "eval_kinds": [
       "rubric"
     ],
@@ -382,8 +381,8 @@
       "skills/references/tests/test_observe_report_flow.py": "a895ca4165a196ff8ab0ffb73a1c6dcf859d27cf59cd5f335ce4fe1c9ca7392e",
       "skills/references/tests/test_observe_report_html.py": "32183996d90eb073b9ece7bcd05613ea3552512af7f6f8acfc7171d45eaf2382",
       "skills/references/tests/test_observe_report_selection.py": "c2a441002d8392b9ea5cfdb52cee7e0b75000542334c2a3eb3bc8cff48a0d7c7",
-      "evals/go/native-genai-demo/README.md": "853f6a873bddbf273efd915b14c9e2ef4372c1c4a622f628cb525f70085d69e1",
-      "evals/go/native-genai-demo/eval/inputs/candidate-provenance.json": "6d1fb615c382fbf8ce9ba6683c39e5c4a7b916575570cce47d3274c3c51708e6",
+      "evals/go/native-genai-demo/README.md": "0c368f3c02fe251d816cbe166981b59b29769064ad67b12a09d89cee48af1048",
+      "evals/go/native-genai-demo/eval/inputs/candidate-provenance.json": "50cd7a5cd8b96642fb8925d176a1539d7531710cd8021692d75bdf5e57648865",
       "evals/go/native-genai-demo/eval/inputs/genai-profile-evidence.json": "aa816ae1e830e83a99289d326264d53e050cccd0c50648d49c3f2f8627ce7343",
       "evals/go/native-genai-demo/eval/inputs/native-candidate-capture.json": "cc8bcbf86b66fb304a09156d964b795fe71b004e389303066b2f8710fcefe606",
       "evals/go/native-genai-demo/eval/inputs/native-lookup-failure-capture.json": "8dd89e0ac1edb09284255d90f7aa009b0b173e40d703a6920080162eac6c02f1",
@@ -395,8 +394,8 @@
       "evals/go/native-genai-demo/eval/inputs/nativeprobe/main_test.go": "f3a4aebe0fa1fd2d31f8c57e586081f5c69a6f5f41bc9fa3e963134edb8af025",
       "evals/go/native-genai-demo/eval/inputs/schemacheck/main.go": "c0049f5ecbd169dfc0ac6a576b126054a49feabdd46c7f96c3eb1717beefc3c8",
       "evals/go/native-genai-demo/eval/qual/verify.json": "fe9bea7318bd34ae542d5b66a69afdae46d0e01ac8bfdf1676645ea6c770d2d9",
-      "evals/go/native-genai-demo/go.mod": "81fbdf643df4bcdee512f33b7fd9b3cddfda49488da4eca00f5d77d516633e09",
-      "evals/go/native-genai-demo/go.sum": "5ab9f296e66959a6a223bacf165f6540fa2b49f63dc8a7698a8cdbc93978c04d",
+      "evals/go/native-genai-demo/go.mod": "5799f426a1dad23378ee071445e85d7ec9422a96bb38ed38b490f6d94ac3a059",
+      "evals/go/native-genai-demo/go.sum": "f6fbf8e7bb1b83a747a7590926aa9ee22c16be6dad16f5e8d66adcb37f5046cc",
       "evals/go/native-genai-demo/main.go": "7ff08c72f55f98255c93762056f8816f2a4351975365e2c03dfc3b1f39bee09f",
       "evals/go/native-genai-demo/main_test.go": "a0f03b2b02fb3611808b500c198dd96d1fe9eaeda4372ceed389998b8449c23e",
       "evals/go/native-genai-demo/telemetry.go": "1a6a265bbf7e72ab6b1a4cbfe5c99bfac66af61dd4bd9e1eddb4dfe392e0a22d",
@@ -457,7 +456,7 @@
       "evals/python/existing-otel-agent-demo/eval/inputs/vendor-route-capture.json": "6505493b4367a977e8cc9808ad21027fc802a12fe6a2b64fa93d783cee1abfef",
       "evals/python/existing-otel-agent-demo/eval/qual/route-recovery-verify.json": "bff6e2d54a3f68ea0924c347760780ea9a7250d173a0034563acc4993390e224",
       "evals/python/existing-otel-agent-demo/probe.py": "8cc9dd2ba1124e3bf5a20ee65c500c688a0db7429eed9396013485d46d0f737a",
-      "evals/python/existing-otel-agent-demo/pyproject.toml": "dfc360d25da6e430e782c891bdbc92fb5d7b2ddf6a901629d09bc3a874635a25",
+      "evals/python/existing-otel-agent-demo/pyproject.toml": "6e229a97d1e9b387cd29377d72e406f85d4a5dcedfb90408499910e87b8da9b9",
       "evals/python/existing-otel-agent-demo/eval/inputs/content-counterexamples.json": "cb2a137c61432b814f6fca5d7094140c922989b75cdffaee67b131d87e18c76b",
       "evals/python/existing-otel-agent-demo/eval/inputs/genai-schema-evidence.json": "cb2d154a37cd662e4ddbcae6d30f7ce5588524d660d6ce19abdf42adc5032a5d",
       "evals/python/existing-otel-agent-demo/eval/inputs/python-preflight-requirements.txt": "9bc8378353b95a0405d8b052226aa3075aa7f7f32d30c29c235b0a343df6fa3f",
@@ -475,7 +474,7 @@
       "evals/python/model-directed-agent/otel_setup.py": "d7d591e2ca3aeef688aa2df30e4c2d89286917102c22439864fbb5c6a9d53b12",
       "evals/python/model-directed-agent/probe.py": "f190d42c2b2308660ba60c1f6d12d74207ef62b33162bc526cadbc12295db929",
       "evals/python/model-directed-agent/recommendations.py": "c0704e3b6baba32477943c826d9e4a2fa9b94e9fcda3c20ad0f4b57179255a09",
-      "evals/python/model-directed-agent/requirements.txt": "fa39473fff95e58feb9dce8bbd6b7129b203f9d1e0209cd62d4a05b9130ac5d4",
+      "evals/python/model-directed-agent/requirements.txt": "db09e53078192128053fbc35c0c970233d26af43535e63090738aa6d0f1d042b",
       "evals/python/model-directed-agent/roles.py": "8d254346b01cbcf7bda6d38778732d44656ff585b5f0fbb56bdf3f65d818bbdc",
       "evals/python/model-directed-agent/templates/index.html": "499ff2bfcefb3e0263b6c2af41f7d81a1dc20c1417854350bcf44b9465e6ce81",
       "evals/python/model-directed-agent/eval/qual/resource-table-verify.json": "1b655b83cefa0af719b163ecaef8032c496a49e525a1098ac719529404151737",
