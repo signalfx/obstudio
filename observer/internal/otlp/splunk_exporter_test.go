@@ -254,6 +254,43 @@ func TestSplunkMetricsExportControllerCountsAcceptedPoints(t *testing.T) {
 	}
 }
 
+func TestSplunkMetricsExportControllerAcceptsSplunkJSONOK(t *testing.T) {
+	for _, test := range []struct{ name, body, contentType string }{
+		{name: "JSON", body: `"OK"`, contentType: "application/json"},
+		{name: "charset", body: `"OK"`, contentType: "application/json; charset=UTF-8"},
+		{name: "whitespace", body: " \n\t\"OK\"\r\n", contentType: "application/json"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var requests atomic.Int32
+			remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requests.Add(1)
+				w.Header().Set("Content-Type", test.contentType)
+				_, _ = io.WriteString(w, test.body)
+			}))
+			defer remote.Close()
+			controller, err := NewSplunkMetricsExportController(SplunkMetricsExporterConfig{
+				Enabled: true, Endpoint: remote.URL + splunkMetricsOTLPPath, AccessToken: "test-token",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer controller.Shutdown(context.Background())
+			metrics := createTestMetric()
+			metrics.ResourceMetrics().At(0).ScopeMetrics().At(0).Metrics().At(0).Gauge().DataPoints().AppendEmpty().SetIntValue(2)
+			if err := controller.ExportMetrics(context.Background(), metrics); err != nil {
+				t.Fatalf("export metrics: %v", err)
+			}
+			status := controller.Status()
+			if status.ExportedDataPoints != 2 || status.ExportedBatches != 1 || status.FailedBatches != 0 || status.LastExport == nil || !status.LastExport.Success {
+				t.Fatalf("unexpected success status: %#v", status)
+			}
+			if requests.Load() != 1 {
+				t.Fatalf("requests = %d, want one successful send", requests.Load())
+			}
+		})
+	}
+}
+
 func TestSplunkMetricsExportControllerConcurrentAcceptedCounts(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
@@ -312,7 +349,8 @@ func TestSplunkMetricsExportControllerFailedResponseCounts(t *testing.T) {
 		body   string
 		length string
 	}{
-		{name: "unauthorized", status: 401},
+		{name: "unauthorized", status: 401, body: `"OK"`},
+		{name: "unexpected success status", status: 202, body: `"OK"`},
 		{name: "invalid JSON", status: 200, body: "{"},
 		{name: "oversized", status: 200, body: strings.Repeat(" ", 64*1024+1)},
 		{name: "truncated", status: 200, body: "{}", length: "100"},
@@ -328,7 +366,7 @@ func TestSplunkMetricsExportControllerFailedResponseCounts(t *testing.T) {
 			}))
 			defer server.Close()
 			controller, err := NewSplunkMetricsExportController(SplunkMetricsExporterConfig{
-				Enabled: true, Endpoint: server.URL, AccessToken: "test-token",
+				Enabled: true, Endpoint: server.URL + splunkMetricsOTLPPath, AccessToken: "test-token",
 			})
 			if err != nil {
 				t.Fatal(err)
@@ -612,11 +650,16 @@ func TestSplunkMetricsConnectionEditsKeepCountsAndRefreshDestinationHealth(t *te
 
 func TestCloudExportsRejectAmbiguousResponsesWithoutRetry(t *testing.T) {
 	for _, signal := range []string{"metrics", "traces"} {
-		for _, test := range []struct{ name, body, contentType, length string }{
+		for _, test := range []struct{ name, body, contentType, length, path string }{
 			{name: "oversized", body: strings.Repeat(" ", 64*1024+1), contentType: "application/json"},
 			{name: "truncated", body: "{}", contentType: "application/json", length: "100"},
 			{name: "unknown content type", body: `{"partialSuccess":{}}`, contentType: "application/octet-stream"},
 			{name: "invalid JSON", body: "{", contentType: "application/json"},
+			{name: "other JSON string", body: `"ERROR"`, contentType: "application/json"},
+			{name: "plain OK", body: "OK", contentType: "application/json"},
+			{name: "OK with wrong content type", body: `"OK"`, contentType: "application/x-protobuf"},
+			{name: "OK with trailing garbage", body: `"OK" {}`, contentType: "application/json"},
+			{name: "OK on unrelated endpoint", body: `"OK"`, contentType: "application/json", path: "/health"},
 		} {
 			t.Run(signal+"/"+test.name, func(t *testing.T) {
 				var requests atomic.Int32
@@ -629,18 +672,22 @@ func TestCloudExportsRejectAmbiguousResponsesWithoutRetry(t *testing.T) {
 					_, _ = io.WriteString(w, test.body)
 				}))
 				defer remote.Close()
+				path := test.path
+				if path == "" {
+					path = splunkMetricsOTLPPath
+				}
 				ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 				defer cancel()
 				var deliveryErr error
 				if signal == "metrics" {
-					exp, err := NewSplunkMetricsExporter(SplunkMetricsExporterConfig{Endpoint: remote.URL, AccessToken: "test", Enabled: true})
+					exp, err := NewSplunkMetricsExporter(SplunkMetricsExporterConfig{Endpoint: remote.URL + path, AccessToken: "test", Enabled: true})
 					if err != nil {
 						t.Fatal(err)
 					}
 					defer exp.Shutdown(context.Background())
 					deliveryErr = exp.ExportMetrics(ctx, createTestMetric())
 				} else {
-					exp, err := NewSplunkTracesExporter(SplunkTracesExporterConfig{Endpoint: remote.URL, AccessToken: "test", Enabled: true})
+					exp, err := NewSplunkTracesExporter(SplunkTracesExporterConfig{Endpoint: remote.URL + path, AccessToken: "test", Enabled: true})
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -652,5 +699,32 @@ func TestCloudExportsRejectAmbiguousResponsesWithoutRetry(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestSplunkTracesExporterRejectsSplunkMetricsJSONOK(t *testing.T) {
+	var requests atomic.Int32
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+		_, _ = io.WriteString(w, `"OK"`)
+	}))
+	defer remote.Close()
+	controller, err := NewSplunkTracesExportController(SplunkTracesExporterConfig{
+		Enabled: true, Endpoint: remote.URL + splunkMetricsOTLPPath, AccessToken: "test-token",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer controller.Shutdown(context.Background())
+	if err := controller.ExportTraces(context.Background(), createTestSpan()); !consumererror.IsPermanent(err) {
+		t.Fatalf("expected permanent error, got %v", err)
+	}
+	status := controller.Status()
+	if status.ExportedSpans != 0 || status.ExportedBatches != 0 || status.FailedBatches != 1 || status.LastExport == nil || status.LastExport.Success {
+		t.Fatalf("unexpected failed status: %#v", status)
+	}
+	if requests.Load() != 1 {
+		t.Fatalf("requests = %d, want no retry", requests.Load())
 	}
 }
