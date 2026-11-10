@@ -17,8 +17,9 @@ import (
 // The Collector logs partial rejection but returns nil. Keep the response's
 // rejected count per call so Studio reports only the items Cloud accepted.
 type splunkOTLPExportAttempt struct {
-	rejected atomic.Int64
-	decode   func([]byte, string) (int64, error)
+	rejected    atomic.Int64
+	allowJSONOK bool
+	decode      func([]byte, string) (int64, error)
 }
 
 type splunkOTLPExportAttemptKey struct{}
@@ -71,6 +72,14 @@ func (t splunkOTLPResponseTransport) RoundTrip(req *http.Request) (*http.Respons
 		if contentType != "application/json" && contentType != "application/x-protobuf" {
 			response.Body.Close()
 			return nil, consumererror.NewPermanent(fmt.Errorf("unrecognized OTLP export response content type"))
+		}
+		if attempt.allowJSONOK && req.URL.Path == splunkMetricsOTLPPath && response.StatusCode == http.StatusOK && contentType == "application/json" && bytes.Equal(bytes.TrimSpace(body), []byte(`"OK"`)) {
+			// Splunk metrics ingest acknowledges success with a JSON string.
+			// Normalize it for both our decoder and the upstream OTLP exporter.
+			body = []byte("{}")
+			response.Body = io.NopCloser(bytes.NewReader(body))
+			response.ContentLength = int64(len(body))
+			response.Header.Set("Content-Length", "2")
 		}
 		rejected, decodeErr := attempt.decode(body, contentType)
 		if decodeErr != nil {
