@@ -5108,348 +5108,22 @@
     "full_current_source_coverage_not_yet_claimed": true
   },
   "current_clause_verification": {
-    "report": {
-      "report": "clause-resource-context-final",
-      "pr": "PR352 bounded exact-clause verification",
-      "report_kind": "independent source/convention verification of the C1/C2/C3 delta against primary OTel guidance and the resolved public Python and JS instrumentation APIs",
-      "not_a": "combined PR review; three clean execution runs; runtime certification; any runtime claim",
-      "gating": "Precedes three clean runs and the combined review; neither is advanced or substituted by this report.",
-      "generated": "2026-11-09",
-      "identity": {
-        "prior_verified": "07a6809ad77e9d1d7243e11ec6f47be5593134775c75e802dfb6734e574ac1f3",
-        "prior_matches_my_reconstruction": true,
-        "current_declared": "60bb2505414661eebf5a45fc8846fe94a73229972b8c70ec72d9bb01d59c1565",
-        "current_recomputed_from_my_reconstruction": "60bb2505414661eebf5a45fc8846fe94a73229972b8c70ec72d9bb01d59c1565",
-        "bound": true,
-        "recipe": "sha256(json.dumps(files, sort_keys=True).encode('utf-8')) - prior recipe, unchanged",
-        "manifest_entries": 13
-      },
-      "reconstruction": {
-        "method": "Applied the supplied unified hunks to my byte-exact 07a6809a reconstruction with patch(1), then verified all 13 files against the packet's declared digest, line count and byte count.",
-        "all_13_sha256_match": true,
-        "all_13_line_counts_match": true,
-        "all_13_byte_counts_match": true,
-        "changed": [
-          "skills/references/logging-readiness.md",
-          "skills/references/languages/java.md",
-          "skills/references/languages/python.md",
-          "skills/references/languages/go.md",
-          "skills/references/languages/node.md"
-        ],
-        "changed_count": 5,
-        "declared_changed": 5,
-        "unchanged_count": 8,
-        "declared_unchanged": 8,
-        "counts_agree": true,
-        "hunks": {
-          "skills/references/logging-readiness.md": "4 hunks: resource-preservation block at :71-79, selected-context block at :233-238, delivery-evidence extension at :437-443, LOG-DELIVERY acceptance row at :557; 556->579 lines",
-          "skills/references/languages/java.md": "3 hunks: Docker identity prose at :427-431, removal of the baked ENV OTEL_SERVICE_NAME line, env table row at :670",
-          "skills/references/languages/python.md": "6 hunks: CLI default removals, wrapper prose at :244-250, OTELResourceDetector import at :356, _application_resource() at :436-441 and its use at :450, env table row at :794",
-          "skills/references/languages/go.md": "1 hunk: env table row at :771",
-          "skills/references/languages/node.md": "3 hunks: Express topology row at :20, env table row at :602, logging-readiness topology block at :669-674"
-        },
-        "limit": "None for reconstruction. All hunks applied cleanly and every one of the 13 digests, line counts and byte counts matches; the aggregate identity recomputed from my own reconstruction equals 60bb2505."
-      },
-      "carried_by_reference": {
-        "note": "The 183-row primary-source ledger and all previously settled checks are carried forward by hash. No replay is claimed and none was performed.",
-        "unchanged_paths_carried_by_hash": 8,
-        "ledger_rows": 183,
-        "ledger_rows_replayed": 0,
-        "settled_not_replayed": [
-          "F1-F5 resolutions",
-          "NC-1..NC-5",
-          "V2 operation.duration closure",
-          "D1 meaningful-empty-value closure",
-          "B1/B2/B3 verdicts",
-          "C1-C4 privacy/delivery closure from 07a6809a",
-          "D-1 withdrawn status suggestion"
-        ]
-      },
-      "verdict": {
-        "headline": "C1, C2 and C3 are all supported against primary guidance and the resolved public APIs. Two of the three changes remove invented requirements rather than adding any: the blanket SERVER-SpanId expectation and the '(must be set)' OTEL_SERVICE_NAME rows. All six negative checks pass. No verified defect in the inspected scope.",
-        "c1": "supported",
-        "c2": "supported",
-        "c3": "supported",
-        "negative_checks_passed": 6,
-        "negative_checks_total": 6,
-        "verified_defects": 0,
-        "invented_requirements_added": 0,
-        "invented_requirements_removed": 2,
-        "runtime_certified": false,
-        "combined_review_performed": false,
-        "repository_executed": false,
-        "subagents_used": false
-      },
-      "clauses": [
-        {
-          "id": "C1",
-          "area": "selected context: explicit caller capture vs unsupported SERVER-only expectation",
-          "verdict": "supported",
-          "anchors": [
-            "skills/references/logging-readiness.md:233-238",
-            "skills/references/languages/node.md:669-674",
-            "skills/references/languages/node.md:20"
-          ],
-          "quotes": [
-            "For each call, derive the expected SpanId from the bridge/API's selected context, including explicit caller-side capture when used. That span may be an INTERNAL framework/handler child. Verify its ancestry to the correct request separately; do not require the log to use a SERVER ancestor's SpanId or replace valid context merely to satisfy a test. A SERVER-only target needs evidence that this is the associated span on that path.",
-            "Inspect actual HTTP/Express topology: a supported framework layer may activate an INTERNAL handler span at the logging call. Match the bridge's selected context to that exact received span and check its ancestry to the correct request; the SERVER span may be an ancestor. Preserve verified propagation and permitted layer spans instead of forcing a SERVER-only log association."
-          ],
-          "strength": "upstream MUST on the SDK: trace context fields are populated from the resolved Context. No upstream source requires a SERVER SpanId on a log record.",
-          "owner": "SDK populates from resolved Context; the bridge/API selects it; the application may capture it explicitly",
-          "source": {
-            "id": "S2",
-            "title": "Logs SDK",
-            "url": "https://opentelemetry.io/docs/specs/otel/logs/sdk/",
-            "strength": "MUST (trace context fields populated from the resolved Context when emitted)",
-            "maturity": "Stable except where noted",
-            "owner": "SDK",
-            "retrieved": "2026-11-09"
-          },
-          "source2": {
-            "id": "S1",
-            "title": "Logs API",
-            "url": "https://opentelemetry.io/docs/specs/otel/logs/api/",
-            "strength": "implicit Context SHOULD be optional and if unspecified MUST use current Context; explicit Context SHOULD be required",
-            "maturity": "Stable except where noted",
-            "owner": "SDK / bridge",
-            "retrieved": "2026-11-09"
-          },
-          "basis": "Correct, and it removes an invented requirement rather than adding one. The Logs SDK requires trace context fields to be populated from the resolved Context - explicit or current - at emit, and the Logs API makes the implicit Context default to the current Context with explicit Context required where only explicit is supported. If a framework layer has activated an INTERNAL handler span at the log call, that span IS the resolved context, so recording its SpanId is exactly conformant. A blanket SERVER-only expectation could only be met by overriding the resolved context or manufacturing IDs, which the same guide already forbids at skills/references/logging-readiness.md:231-232. Keeping ancestry verification as a separate check preserves the real requirement (the log belongs to the right request) without dictating which span in that ancestry must be the association.",
-          "node_table": "The Express row was factually wrong before and is now correct. The official package README states the instrumentation 'relies on HTTP calls to also be instrumented' and that without both 'you will not see any spans', documents its layer types as router, middleware and request_handler, lists only http.route among collected attributes, and notes that it 'renames the root span from @opentelemetry/instrumentation-http'. So HTTP owns the SERVER span and Express contributes layer spans plus route enrichment; the old row's 'HTTP server spans with route, method, status code' attributed SERVER-span attributes to Express.",
-          "node_source": {
-            "id": "JS",
-            "title": "@opentelemetry/instrumentation-express README",
-            "url": "https://raw.githubusercontent.com/open-telemetry/opentelemetry-js-contrib/main/packages/instrumentation-express/README.md",
-            "strength": "official package documentation, main branch",
-            "maturity": "n/a",
-            "owner": "JS contrib instrumentation",
-            "retrieved": "2026-11-09"
-          },
-          "evidence_scope": "The supplied counterexample records log_span_kind INTERNAL on 'request handler - /logging-workflow/:slot' with a distinct server_span_id, which matches the request_handler layer naming. SpanKind itself is stated in that supplied observation, not in the README; I did not execute it."
-        },
-        {
-          "id": "C2",
-          "area": "operator resource-only service.name preservation",
-          "verdict": "supported",
-          "anchors": [
-            "skills/references/logging-readiness.md:71-79",
-            "skills/references/languages/java.md:427-431",
-            "skills/references/languages/python.md:244-250",
-            "skills/references/languages/python.md:356",
-            "skills/references/languages/python.md:436-441",
-            "skills/references/languages/java.md:670",
-            "skills/references/languages/python.md:794",
-            "skills/references/languages/go.md:771",
-            "skills/references/languages/node.md:602"
-          ],
-          "quotes": [
-            "An existing `service.name` in the effective resource configuration is valid operator identity even when `OTEL_SERVICE_NAME` is absent. Do not add a higher-precedence Make, shell, CLI, image or JVM fallback that replaces it. Resolve resource values with the installed SDK's supported detector/merge, apply new application defaults underneath supplied values, and inspect the actual merge order. Verify the normal launcher as well as the helper with resource-only identity, explicit service-name override and absent-identity controls. These preservation checks are local workflow; SDK configuration defines each setting's precedence, and an active file loader retains its own contract."
-          ],
-          "strength": "upstream MUST that OTEL_RESOURCE_ATTRIBUTES is merged as the SECONDARY resource with user-provided resource at higher priority; OTEL_SERVICE_NAME takes precedence over service.name within OTEL_RESOURCE_ATTRIBUTES; OTEL_SERVICE_NAME has no default and no requirement to be set",
-          "owner": "SDK merge and detectors; operator supplies identity; the skill decides only what application code adds",
-          "source": {
-            "id": "S19",
-            "title": "Resource SDK",
-            "url": "https://opentelemetry.io/docs/specs/otel/resource/sdk/",
-            "strength": "MUST (OTEL_RESOURCE_ATTRIBUTES merged as SECONDARY; user-provided resource has higher priority); MUST (SDK default resource associated with the provider); SHOULD (service detector fallback)",
-            "maturity": "Stable except where noted",
-            "owner": "SDK",
-            "retrieved": "2026-11-09"
-          },
-          "source2": {
-            "id": "S14",
-            "title": "Environment Variable Specification",
-            "url": "https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/",
-            "strength": "OTEL_SERVICE_NAME takes precedence over service.name in OTEL_RESOURCE_ATTRIBUTES; no default; not required to be set",
-            "maturity": "Stable except where noted",
-            "owner": "SDK / operator",
-            "retrieved": "2026-11-09"
-          },
-          "basis": "Sound, and it does not assert a universal env-over-code precedence. The specification in fact gives user-provided code HIGHER priority than OTEL_RESOURCE_ATTRIBUTES, and the clause is consistent with that rather than contrary to it: precisely because code wins, a hardcoded application default would clobber operator identity, so the clause places new application defaults underneath supplied values and defers precedence itself to SDK configuration, stating that an active file loader retains its own contract. The Java image rule is exactly sourced: baking OTEL_SERVICE_NAME into an image would override a runtime service.name supplied only through OTEL_RESOURCE_ATTRIBUTES, because OTEL_SERVICE_NAME takes precedence over that attribute; an explicitly selected override remains valid, so the variable is not forbidden. All four table rows replace an invented '(must be set)' with 'unset - optional override': no OpenTelemetry source requires OTEL_SERVICE_NAME to be set, it has no default in the environment specification, and the SDK supplies an unknown_service fallback when service.name is absent. That is removal of a mandatory-field claim, not creation of one.",
-          "python_api": "Verified against the resolved public API. In opentelemetry-python, Resource.create computes get_aggregated_resources(_build_resource_detectors(), _DEFAULT_RESOURCE).merge(Resource(attributes)), and merge documents that the updating resource overrides - so attributes passed to create() OUTRANK the detectors. That makes the previous recipe genuinely defective: Resource.create({'service.name': os.environ.get('OTEL_SERVICE_NAME', 'my-service')}) yields my-service whenever the operator supplies identity only through OTEL_RESOURCE_ATTRIBUTES, which matches the supplied observation. The adopted _application_resource() pre-resolves OTELResourceDetector().detect().attributes and splats it after the literal, so an operator-supplied service.name wins inside the passed dict and the application default applies only when none exists. OTELResourceDetector is a public name in opentelemetry.sdk.resources, contrast the underscore-private _HostResourceDetector; its detect() percent-decodes values with parse.unquote, which supports the encoded-name case, and applies OTEL_SERVICE_NAME last so it overrides service.name from OTEL_RESOURCE_ATTRIBUTES, matching the specification precedence. Absent any identity, Resource.create appends unknown_service:<executable>, which is the SDK fallback the clause relies on.",
-          "python_source": {
-            "id": "PY",
-            "title": "opentelemetry-python opentelemetry-sdk/src/opentelemetry/sdk/resources/__init__.py",
-            "url": "https://raw.githubusercontent.com/open-telemetry/opentelemetry-python/main/opentelemetry-sdk/src/opentelemetry/sdk/resources/__init__.py",
-            "strength": "public API / implementation behaviour, main branch",
-            "maturity": "n/a",
-            "owner": "Python SDK",
-            "retrieved": "2026-11-09"
-          },
-          "cli": "Removing the --service_name and --resource_attributes defaults cannot override anything, so the change is safe irrespective of the flag mechanism; the replacement guidance routes deployment identity through OTEL_RESOURCE_ATTRIBUTES instead. The specific claim that the old --resource_attributes flag discarded an operator service.version is a supplied observation about CLI flag-to-environment mapping that I did not verify in this pass.",
-          "skip_branch": "Checked directly in the reconstruction: the operator-owned skip branch at skills/references/languages/python.md:218-224 sets only shell state and OTEL_PYTHON_LOG_AUTO_INSTRUMENTATION, and the inline helper above it imports no OpenTelemetry SDK module. No new SDK dependency is introduced on a skip path."
-        },
-        {
-          "id": "C3",
-          "area": "legitimate unknown accepted counts after completed negative responses",
-          "verdict": "supported",
-          "anchors": [
-            "skills/references/logging-readiness.md:437-443",
-            "skills/references/logging-readiness.md:557"
-          ],
-          "quotes": [
-            "Unknown accepted counts can be valid after a completed negative response: the protocol does not always return per-record counts. They do not make a known failure response pending. Record the observed response and terminal retry decision separately, such as non-retryable HTTP 400 or a completed HTTP 503 whose server wait cannot fit the remaining export budget. Assess that evidence across the report and raw observations; do not invent zero acceptance or rejection counts merely to fill a field.",
-            "Name observed completed failure responses and terminal retry decisions separately from unresolved acceptance/persistence counts; a null count alone is not a failed response-classification check."
-          ],
-          "strength": "OTLP returns per-record rejected counts only inside a populated partial_success; a plain 4xx/5xx failure carries a Status message with no per-record accounting. HTTP 400 MUST NOT be retried. 429/502/503/504 SHOULD be retried, but each attempt and inter-retry wait MUST be bounded by the remaining exporter timeout, with an earlier caller deadline taking precedence.",
-          "owner": "OTLP client (SDK exporter) and server; the reviewer owns the evidence classification",
-          "source": {
-            "id": "S9",
-            "title": "OTLP Specification",
-            "url": "https://opentelemetry.io/docs/specs/otlp/",
-            "strength": "MUST NOT retry HTTP 400; 429/502/503/504 SHOULD be retried; partial_success carries rejected counts only",
-            "maturity": "Stable for logs (OTLP 1.11.1)",
-            "owner": "OTLP client / server",
-            "retrieved": "2026-11-09"
-          },
-          "source2": {
-            "id": "S16",
-            "title": "OpenTelemetry Protocol Exporter",
-            "url": "https://opentelemetry.io/docs/specs/otel/protocol/exporter/",
-            "strength": "MUST (each attempt and inter-retry wait bounded by the remaining exporter timeout; earlier caller deadline takes precedence)",
-            "maturity": "Stable",
-            "owner": "SDK exporter",
-            "retrieved": "2026-11-09"
-          },
-          "basis": "Correct on both halves. An unknown accepted count after a completed failure is a genuine protocol consequence rather than missing diligence, because only a partial-success response carries per-record counts; and the separate insistence that a known failure response is not pending repairs the conflation the earlier wording allowed. Both worked examples are precisely sourced: HTTP 400 is non-retryable by an explicit MUST NOT, and a completed 503 whose honoured server wait cannot fit the remaining export budget is a terminal decision under the exporter rule that waits are bounded by the remaining timeout. Forbidding invented zero counts is the right direction - fabricating a zero would assert an acceptance fact the protocol never supplied. The acceptance-row sentence keeps response classification and count resolution as separate obligations, which is what the Go raw-fault rows needed; it takes no position on the prior grader outcome.",
-          "prior_preserved": "The C4 protocol-unspecified case from the 07a6809a review is retained verbatim at skills/references/logging-readiness.md:412-415, so an oversized partial-success response failure still leaves acceptance unspecified rather than resolved."
-        }
-      ],
-      "negative_checks": [
-        {
-          "check": "no universal env-over-code precedence",
-          "result": "pass",
-          "detail": "The clause defers precedence to SDK configuration explicitly ('SDK configuration defines each setting's precedence, and an active file loader retains its own contract') and never claims the environment outranks code. It is consistent with the specification's own ordering, which gives user-provided code higher priority than OTEL_RESOURCE_ATTRIBUTES; the Python recipe compensates for that ordering by pre-resolving the detector rather than by asserting a different precedence."
-        },
-        {
-          "check": "no invented rejection or zero counts",
-          "result": "pass",
-          "detail": "The adopted wording forbids exactly this - 'do not invent zero acceptance or rejection counts merely to fill a field' - and legitimises an unknown count instead. The acceptance row adds that a null count alone is not a failed classification check."
-        },
-        {
-          "check": "no forced versions",
-          "result": "pass",
-          "detail": "No version is pinned anywhere in the delta. The Python change names a public SDK symbol rather than a release; the Node table row names package roles, not versions; the Java change removes an ENV line and adds no version requirement. The standing rule against pinning release recipes is untouched."
-        },
-        {
-          "check": "no mandatory optional fields",
-          "result": "pass",
-          "detail": "The delta moves in the opposite direction: all four OTEL_SERVICE_NAME rows change from '(must be set)' to 'unset - optional override', removing a requirement no OpenTelemetry source imposes. The Java prose keeps an explicitly selected override valid rather than forbidding the variable."
-        },
-        {
-          "check": "no new SDK dependency on CLI skip paths",
-          "result": "pass",
-          "detail": "Verified in the reconstruction. The skip branch at skills/references/languages/python.md:218-224 exports shell and OTEL_PYTHON_* values only, and the inline helper preceding it imports no OpenTelemetry SDK module, so the removed intermediate approach left no residue."
-        },
-        {
-          "check": "withdrawn status suggestion from 07a6809a preserved; no Blocked substituted for an executed failed probe",
-          "result": "pass",
-          "detail": "Checked across the reconstruction: the delta introduces no status token and no Blocked mapping. The escape wording at skills/references/logging-readiness.md:92-93 and skills/references/languages/java.md:807-808 is unchanged from 07a6809a, so the withdrawn suggestion stays withdrawn and an executed-and-failed probe is still not recorded as unattemptable."
-        }
-      ],
-      "verified_defects": [],
-      "supplied_not_executed": {
-        "note": "Runtime observations in the packet were supplied by the requester and are not results I executed, reproduced or confirmed.",
-        "items": [
-          "Python SDK programmatic old example yielding my-service against a resource-only operator - mechanism independently confirmed from public SDK source; the run itself not executed here",
-          "Old CLI overriding the operator name and discarding service.version through the resource_attributes flag - not verified here",
-          "Six new maintained SDK/CLI resource cases passing and 209 focused checks passing after repair - not verified here",
-          "An intermediate helper adding an SDK import on skip branches and failing 38 guard tests - the final state is verified free of such an import; the test outcome is not",
-          "Node SDK probe resolving a resource-only operator identity - not verified here",
-          "Four previous real Node log joins to an INTERNAL handler with their own request ancestry, with the hash-bound counterexample - not verified here",
-          "Go grader raw-fault rows using a null accepted count - not verified here, and this report takes no position on that grader or runtime outcome"
-        ]
-      },
-      "sources_relied_on": [
-        {
-          "id": "S19",
-          "title": "Resource SDK",
-          "url": "https://opentelemetry.io/docs/specs/otel/resource/sdk/",
-          "strength": "MUST (OTEL_RESOURCE_ATTRIBUTES merged as SECONDARY; user-provided resource has higher priority); MUST (SDK default resource associated with the provider); SHOULD (service detector fallback)",
-          "maturity": "Stable except where noted",
-          "owner": "SDK",
-          "retrieved": "2026-11-09"
-        },
-        {
-          "id": "S14",
-          "title": "Environment Variable Specification",
-          "url": "https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/",
-          "strength": "OTEL_SERVICE_NAME takes precedence over service.name in OTEL_RESOURCE_ATTRIBUTES; no default; not required to be set",
-          "maturity": "Stable except where noted",
-          "owner": "SDK / operator",
-          "retrieved": "2026-11-09"
-        },
-        {
-          "id": "S2",
-          "title": "Logs SDK",
-          "url": "https://opentelemetry.io/docs/specs/otel/logs/sdk/",
-          "strength": "MUST (trace context fields populated from the resolved Context when emitted)",
-          "maturity": "Stable except where noted",
-          "owner": "SDK",
-          "retrieved": "2026-11-09"
-        },
-        {
-          "id": "S1",
-          "title": "Logs API",
-          "url": "https://opentelemetry.io/docs/specs/otel/logs/api/",
-          "strength": "implicit Context SHOULD be optional and if unspecified MUST use current Context; explicit Context SHOULD be required",
-          "maturity": "Stable except where noted",
-          "owner": "SDK / bridge",
-          "retrieved": "2026-11-09"
-        },
-        {
-          "id": "S9",
-          "title": "OTLP Specification",
-          "url": "https://opentelemetry.io/docs/specs/otlp/",
-          "strength": "MUST NOT retry HTTP 400; 429/502/503/504 SHOULD be retried; partial_success carries rejected counts only",
-          "maturity": "Stable for logs (OTLP 1.11.1)",
-          "owner": "OTLP client / server",
-          "retrieved": "2026-11-09"
-        },
-        {
-          "id": "S16",
-          "title": "OpenTelemetry Protocol Exporter",
-          "url": "https://opentelemetry.io/docs/specs/otel/protocol/exporter/",
-          "strength": "MUST (each attempt and inter-retry wait bounded by the remaining exporter timeout; earlier caller deadline takes precedence)",
-          "maturity": "Stable",
-          "owner": "SDK exporter",
-          "retrieved": "2026-11-09"
-        },
-        {
-          "id": "PY",
-          "title": "opentelemetry-python opentelemetry-sdk/src/opentelemetry/sdk/resources/__init__.py",
-          "url": "https://raw.githubusercontent.com/open-telemetry/opentelemetry-python/main/opentelemetry-sdk/src/opentelemetry/sdk/resources/__init__.py",
-          "strength": "public API / implementation behaviour, main branch",
-          "maturity": "n/a",
-          "owner": "Python SDK",
-          "retrieved": "2026-11-09"
-        },
-        {
-          "id": "JS",
-          "title": "@opentelemetry/instrumentation-express README",
-          "url": "https://raw.githubusercontent.com/open-telemetry/opentelemetry-js-contrib/main/packages/instrumentation-express/README.md",
-          "strength": "official package documentation, main branch",
-          "maturity": "n/a",
-          "owner": "JS contrib instrumentation",
-          "retrieved": "2026-11-09"
-        }
-      ],
-      "limitations": [
-        "Bounded exact-clause verification of the C1/C2/C3 delta. No repository execution, probe, install, edit, push, comment, credential or settings change; no subagents; no runtime certification and no runtime claim.",
-        "This is not the combined PR review and does not stand in for the three clean execution runs that precede it.",
-        "Scope is the five changed files' adopted paragraphs and table rows. Other clauses in those files and the eight unchanged files are carried by hash and were not re-verified.",
-        "The Python SDK and Express instrumentation reads establish current main-branch behaviour and public API names on 2026-11-09. They are not evidence about any pinned or installed version, and the guide's own version-neutral capability discipline still applies.",
-        "The opentelemetry-instrument CLI flag-to-environment mapping was not read in this pass; the CLI change is a removal of defaults, which cannot override operator values regardless of that mapping.",
-        "SpanKind INTERNAL on the Express handler span comes from the supplied counterexample, not from the package documentation, which does not state SpanKind.",
-        "Upstream specification positions were established by direct reads earlier in this engagement and are cited rather than re-fetched.",
-        "No access or authentication failure occurred."
-      ]
-    },
-    "sha256": "0b0573f93728368a991efe67fad8fc5f3b5e8ff9e9a7e8d752065f567b1e8f0e",
-    "runtime_claim": false,
-    "whole_pr_review": false
+    "route": "Actual Claude Desktop",
+    "verified_identity": "2f982ede5554230de3cde271b7f883daec41f9448ca993f2b57420e204763fd8",
+    "current_instruction_identity": "950c7404dd4d7b1b7f3067f6312988e37251b030bb2166616e5a75c65a421516",
+    "status": "Historical Claude Desktop2f source-clause check only. Current generic guidance, inherited configuration rules and evidence corrections await final whole-PR combined review after three fresh complete passes; no current review credit.",
+    "source_review_sha256": "a7f47e0b884f91866a7da9b152d94f4f5bd381b4686502bc8b697cb6042c4895",
+    "actionable_defects": [],
+    "scope_limitations": [
+      "Only the changed file reconstructed; 12 entries declared unchanged, no fresh digest claimed.",
+      "Clause-level check against OTLP 1.11.1 and the supplied excerpts only.",
+      "Nothing executed, no in-place edit, no runtime/eval credit.",
+      "Three clean workflows and the combined whole-PR review pending."
+    ],
+    "execution_pass_credit": 0,
+    "whole_pr_review_credit": false
   },
-  "current_instruction_identity": "60bb2505414661eebf5a45fc8846fe94a73229972b8c70ec72d9bb01d59c1565",
+  "current_instruction_identity": "950c7404dd4d7b1b7f3067f6312988e37251b030bb2166616e5a75c65a421516",
   "primary_source_corroboration": {
     "route": "desktop-app",
     "raw_report_sha256": "d806652de5d630c945a8d7b62f6ab1e8ad4ef377026647696d75a4ff3bdea886",
@@ -8155,6 +7829,130 @@
         "proposed_tests_treated_as_passing": false
       }
     },
-    "scope": "Source-verification provenance only; no superseded eval tasks or execution results."
+    "scope": "Source-verification provenance only; no superseded eval tasks or execution results.",
+    "context": "Previously source-verified primary-source corrections retained as corroboration. Its recorded line anchors refer to that frozen review snapshot, not current line numbers; current-source follow-up is separately identified."
+  },
+  "common_limit_diagnostic_correction": {
+    "baseline_commit": "3513628",
+    "baseline_reference": "skills/references/logging-readiness.md LOG-DIAGNOSTICS explicitly covered discarded-attribute diagnostics; general source reconciliation was already required.",
+    "primary_url": "https://opentelemetry.io/docs/specs/otel/common/#attribute-limits",
+    "primary_markdown_sha256": "2b06f7a551ba035fe53a5b5c7a8702324d7e0f45918349c38a6dbbd63dea78db",
+    "primary_markdown_line": 321,
+    "requirement": "Common diagnostic MAY cover truncation/discard/replacement; if emitted MUST NOT exceed once per record. Logs SDK discard diagnostics separately SHOULD emit with the same ceiling. SDK owned.",
+    "installed_sdk_observation": {
+      "sdk_version": "1.45.2",
+      "input_emit_calls": 1,
+      "captured_sdk_records": 1,
+      "input_attributes": 6,
+      "count_limit": 2,
+      "value_length_limit": 3,
+      "retained_attributes": 2,
+      "dropped_attributes": 4,
+      "sdk_logging_messages": 10,
+      "sdk_warnings": 1,
+      "boundary": "Isolated public SDK/in-memory capability; no application or complete-workflow credit."
+    },
+    "correction": "Added missing diagnostic cases/strengths; require per-record measurement and explicit upstream limitation instead of blanket default coverage or SDK-internal/application suppression.",
+    "current_instruction_identity": "0496680094e18a70def21512de372aa15b40679571c4c8526a9a42c8b4feaece",
+    "claude_verification": "Pending final combined review after3fresh clean passes."
+  },
+  "common_configuration_correction": {
+    "scope": "Source/proposal evidence and instruction correction, not a new application/runtime pass. Supplemental obligations overlap the historical inventory; no additive total is claimed.",
+    "cause": "The referring SDK environment source was read without closing its imported common configuration type contract. General unit/API advice did not validate actual value encoding or fallback.",
+    "source_urls": [
+      "https://opentelemetry.io/docs/specs/otel/configuration/common/",
+      "https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/"
+    ],
+    "source_snapshots": [
+      {
+        "url": "https://opentelemetry.io/docs/specs/otel/configuration/common/index.md",
+        "sha256": "b56b651005d85d61ca1eaba76821be12be14e552fb019eb5e44f9efe2aea61a6",
+        "bytes": 3882
+      },
+      {
+        "url": "https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/index.md",
+        "sha256": "6187d05e7c3edaf05f4aa2e1d817d5c135d159fad0f3c9aeb93b807193897e5a",
+        "bytes": 26561
+      }
+    ],
+    "observed_proposal": {
+      "setting": "OTEL_BLRP_EXPORT_TIMEOUT",
+      "proposed_value": "2000ms",
+      "claimed_scope": "two-second batch export deadline",
+      "selected_source": "go.opentelemetry.io/otel/sdk/log v0.22.0; task-resolved evidence only, not a guide version pin",
+      "parser": "strconv.Atoi(v), then time.Millisecond conversion on successful parse",
+      "fallback": "30-second default when unset/invalid; no option override proposed",
+      "parser_sha256": "93c251bb2e00dafaacc1e45c0ec871a24864c4bb4c725ef4edd6c1b1087519ab",
+      "batch_sha256": "66d7eff43c9833693b87e24dc1ad55a9ae19b5a752d12d6ae0e2ca5ab72e17e9",
+      "proof_boundary": "Retained selected SDK source and saved audit proposal; no application or exporter runtime executed for this observation."
+    },
+    "reviewed_obligations": [
+      {
+        "id": "CFG-SOURCE-SUPPORT",
+        "clause": "Configuration source support MAY be offered; implementation SHOULD follow the applicable common guidance.",
+        "owner": "SDK configuration owner"
+      },
+      {
+        "id": "CFG-CODE-EQUIVALENCE",
+        "clause": "Environment configuration MUST have a direct code equivalent.",
+        "owner": "SDK/autoconfiguration owner"
+      },
+      {
+        "id": "CFG-NUMERIC-FAILURE",
+        "clause": "Unparseable/out-of-range numeric settings SHOULD warn and be ignored, preserving the stabilization/new-implementation qualification.",
+        "owner": "SDK configuration owner"
+      },
+      {
+        "id": "CFG-INTEGER",
+        "clause": "Integer support SHOULD cover the specified nonnegative signed32bit range (0..2^31-1) and MAY extend it; setting-specific valid ranges still apply.",
+        "owner": "SDK configuration owner"
+      },
+      {
+        "id": "CFG-DURATION",
+        "clause": "Standard duration representation MUST be nonnegative integer milliseconds; negative input MUST warn and be ignored using a defined default.",
+        "owner": "SDK configuration owner"
+      },
+      {
+        "id": "CFG-TIMEOUT",
+        "clause": "Standard timeout representation MUST be nonnegative integer milliseconds; negative input MUST warn and be ignored using a defined default.",
+        "owner": "SDK configuration owner"
+      },
+      {
+        "id": "CFG-TIMEOUT-ZERO",
+        "clause": "Zero SHOULD mean no limit; implementation MAY use a sufficiently large internal duration.",
+        "owner": "SDK configuration owner"
+      },
+      {
+        "id": "CFG-ENUM",
+        "clause": "Enums MAY extend values; supported null/no-op enum MUST use none.",
+        "owner": "SDK configuration owner"
+      },
+      {
+        "id": "CFG-ENV-ENUM",
+        "clause": "Environment enums SHOULD be case-insensitive; unknown values MUST warn and be ignored.",
+        "owner": "SDK/autoconfiguration owner"
+      },
+      {
+        "id": "CFG-ERROR-CONTEXT",
+        "clause": "Error reporting SHOULD include original value context; privacy restrictions remain explicit local constraints.",
+        "owner": "SDK diagnostics/configuration owner"
+      }
+    ],
+    "instruction_fix": "Follow applicable normative imports, check type/encoding/range/fallback against the actual owner, and retain supported/default/unverified capability separately from application wiring.",
+    "current_instruction_identity": "59302b22ecb21f784265f2726e4d521483d9503b69e1dc8f420a9009db8b2497",
+    "runtime_pass_credit": 0
+  },
+  "configuration_facts_correction": {
+    "scope": "Source/configuration/readback evidence, no new runtime claim",
+    "observed": "Generated Node instrumentation report deferred effective log-limit defaults although the selected installed provider and SDK configuration sources exposed them.",
+    "owner": "SDK owns the limit implementation; skill resolves accessible configuration facts and reports runtime boundaries separately. No app override or fixed limit is required.",
+    "correction": "Shared generic LOG-LIMITS guidance resolves available effective values/unlimited behavior, precedence and source evidence now; genuinely unavailable facts retain the exact missing source and future check. All twelve consumer/language rubrics exercise this distinction.",
+    "clean_workflow_credit": 0
+  },
+  "fixture_policy_correction": {
+    "observed": "Python grader previously required non-interrupting repeated catchable stops without that explicit operator contract in the visible README.",
+    "correction": "The real fixture README now states the graceful-stop policy, same-process active-finalization acceptance and force-termination exclusion. Grading names it as local policy; skill guidance stays generic and policy-aware. Staging regression proves actor visibility while eval definitions remain hidden.",
+    "normative_otel_requirement": false,
+    "clean_workflow_credit": 0
   }
 }

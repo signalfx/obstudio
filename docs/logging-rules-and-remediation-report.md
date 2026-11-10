@@ -1,30 +1,16 @@
 # OpenTelemetry logging rules and remediation
 
-Nine shared rules now guide `otel-audit`, `otel-instrument` and `otel-verify`
-for Java, Python, Go and Node.js. They distinguish missing application wiring
-from SDK defaults, unsupported capabilities, optional features and local policy.
+Nine shared rules guide `otel-audit`, `otel-instrument` and `otel-verify` for
+Java, Python, Go and Node.js. They resolve the application's actual logger,
+collection owner, installed SDK, configuration and lifecycle instead of imposing
+a framework, constructor, timeout, limit value or eval-fixture recipe.
 
-The current instruction identity is
-`60bb2505414661eebf5a45fc8846fe94a73229972b8c70ec72d9bb01d59c1565`.
-Claude Desktop verified the exact thirteen-file snapshot against primary
-sources: no verified defect in the inspected clauses and all six negative
-source checks passed. This is source verification, not runtime certification.
-The complete three-run execution gate is running with **0/3** clean passes;
-the final whole-PR combined review follows that gate.
+Current instruction identity: `950c7404dd4d7b1b7f3067f6312988e37251b030bb2166616e5a75c65a421516`. Source commit: `e72f203b`.
+The three-fresh-workflow gate is **0/3**, with all four languages running in
+parallel. The final whole-PR combined Codex and Claude Desktop review has not
+started; it follows three consecutive clean passes on unchanged source.
 
-## Gaps and corrections
-
-The [source evidence](logging-skill-analysis-evidence.json) binds the initial
-instruction gaps to baseline `4e1e51f3` and preserves the 183-clause primary-source
-inventory, ownership decisions and current clause verification. The branch also
-includes upstream `e2c31a57`.
-
-Trace correlation and preserving original sinks were already required. The
-weakness was incomplete reconciliation of source clauses, installed capability,
-selected code path and actual proof. Injected IDs could pass while a real tracer
-or span exporter was broken; a broad checklist could also miss configuration
-precedence or impose an unsupported requirement. The fixes make those decisions
-and their evidence explicit.
+## Rules added and gaps fixed
 
 | Rule | Gap fixed | Required behavior and proof |
 |---|---|---|
@@ -32,30 +18,88 @@ and their evidence explicit.
 | `LOG-CONTEXT` | Nonempty IDs mistaken for correlation; valid INTERNAL spans rejected by SERVER-only expectations. | Join canonical IDs to the exact associated real SDK span and verify its request ancestry, flags and Resource. Respect explicit caller-side capture. |
 | `LOG-ASYNC-HANDOFF` | Context lost or leaked across workers, callbacks or logging queues. | Capture before dispatch when needed, reuse verified propagation, restore state, and test concurrent request pairing through the owned async path. |
 | `LOG-EXCEPTION` | Framework/formatter content escaped selected privacy checks. | Check all captured renderers and sinks at the policy-required boundary. Preserve permitted diagnostics while removing forbidden content; a decision-only filter is not redaction. |
-| `LOG-LIMITS` | Span limits substituted for log limits; arbitrary Body caps; expensive disabled-log construction. | Check actual supported log limits and selected Body policy separately. Test boundary values and native enablement without suppressing an enabled original sink. |
+| `LOG-LIMITS` | Span limits substituted for log limits; arbitrary Body caps; expensive disabled-log construction. | Resolve accessible effective log-limit values, precedence and source evidence separately from future runtime boundaries and selected Body policy. Test boundary values and native enablement without suppressing an enabled original sink. |
 | `LOG-DELIVERY` | Enqueue/flush, wire receipt or partial success mistaken for acceptance; retry and shutdown budgets confused. | Bound the whole selected operation. Separate emissions, attempts, copies, acknowledgements and persistence; retain legitimate unknowns and record known failure/retry outcomes. Never retry populated partial success. |
 | `LOG-DIAGNOSTICS` | Export errors could recurse into the same bridge or leave cross-signal outage claims unproven. | Use an independent diagnostic route; prove bounded failures, application/native-sink progress and applicable configured-signal isolation. |
 | `LOG-VERIFY-FRESH` | Stale receipts, skipped tests or zero exits mistaken for current proof. | Bind source, dependencies, commands and actual counts. Retain exact evidence for the current run and verify the generated service independently. |
 | `LOG-SPEC-CLOSURE` | A thematic checklist omitted clauses or assigned SDK duties to the application. | Reconcile source, strength, maturity, applicability, owner, disposition and proof boundary in canonical reports. Local workflow/privacy policy stays distinct from OTel requirements. |
 
-The existing four language guides are shared by all three skills; prior
-instrumentation-reference paths remain compatibility forwarders. Isolated-skill
-checks prove the references are reachable without another skill installed.
-Java capability guidance uses the resolved dependency's documentation/source and
-actual appender tests. A different release or upstream main cannot prove support;
-fixed dependency versions in fixtures are reproducibility evidence only.
+## Why guidance was missed and how the change prevents it
 
-Resource preservation also covers normal launchers. Python CLI defaults no
-longer replace service/resource settings; programmatic defaults sit underneath
-SDK-decoded operator values. Java's image example no longer bakes in a service-name
-fallback. All four guides recognize resource-only `service.name` as valid without
-requiring `OTEL_SERVICE_NAME`. The actual Node SDK path already preserved that
-identity, so its code recipe was retained.
+Trace correlation and preserving original sinks were already required. The
+missing safeguard was complete reconciliation between source guidance, installed
+capability, the selected application path and actual evidence. Nonempty or
+injected IDs could look correct while tracer startup or span export was broken.
+Theme summaries could omit conditional clauses or assign an SDK duty to the
+application. Aggregate passing tests could hide an untested control.
+
+A reproduced plan defect supplied a unit-suffixed value to an installed
+integer-only environment parser, which would fall back to a different timeout.
+The retained source/proposal evidence and reviewed inherited obligations are in
+[source evidence](logging-skill-analysis-evidence.json); this is a plan/source
+observation, not a claim that the baseline app already ran that configuration.
+
+The skills now bind applicable clauses to primary sources, requirement strength,
+feature maturity, owner and disposition. A precisely retained source excerpt or
+specific immutable audit evidence row can preserve those clauses without lossy
+re-summarization. Installed capability and runtime outcomes are refreshed
+separately. A supported SDK default is valid coverage; an optional feature or
+upstream limitation is not automatically missing application wiring.
+
+Concrete repair plans must match the detected public API, option units and
+effective configuration precedence. Source review now follows applicable normative
+imports, including the [common configuration type contract](https://opentelemetry.io/docs/specs/otel/configuration/common/)
+referenced by SDK environment settings. It checks accepted value representation,
+ranges, fallback, zero-timeout and enum behavior; a unit label alone does not
+establish that a proposed serialized value is accepted. Language checks describe context propagation,
+record conversion, native capture and lifecycle pitfalls. They do not prescribe
+specific framework hooks, SDK constructors, fixture budgets or payload counts.
+Existing setup examples remain conditional on the detected stack. Concrete
+regression inputs and expectations live in eval fixtures and rubrics. Available
+configuration facts are resolved now; an unexecuted boundary test does not justify
+deferring installed defaults that can already be inspected.
+
+Correlation proof joins canonical log TraceId/SpanId/flags to exact real SDK
+spans, with ancestry and Resource checks. An owned async handoff and its received
+worker/callback log must occur in the same scenario. Concurrent, unsampled,
+outside-context, reuse and supported failure/cancellation controls retain their
+actual scope. A focused SDK test cannot establish normal application startup.
+
+Reports reconcile each required control with its configuration, named assertion,
+output and verdict. Grouped or parameterized presentation is allowed when every
+member remains addressable. Early planning is recommended; a later complete,
+independently contract-derived reconciliation is valid. Tool-call order alone
+does not establish a correctness defect. Directly proven item claims can coexist with incomplete related
+scenario coverage; a broader lifecycle claim still needs its own drain proof.
+Every promised operation maps to an addressable control, and one scalar proof
+level covers every assertion in its scenario. Repeated-stop proof retains
+same-process delivery while final logging/drain is active and the actual chosen
+shutdown policy. The Python fixture explicitly documents its non-interrupting
+repeated-stop guarantee as local operator policy, with deliberate forced exit
+outside that guarantee; it is not an OTel signal-handler requirement.
+Verdicts follow evidence rather than report-helper syntax or aggregate counts.
+
+Delivery reporting derives counts from each decoded request and response before
+summing trials. It separates emissions, attempts, received copies, acknowledged
+acceptance, rejection, local drops and persistence. Full success acknowledges
+N/0; valid partial success acknowledges (N-R)/R; populated partial success,
+including warning-only R=0, is not retried. Client terminal results remain
+separate from server response intent and lifecycle wait duration. These
+[OTLP semantics](https://opentelemetry.io/docs/specs/otlp/) do not promise durable
+or exactly-once application delivery.
+
+Privacy and destination choices remain explicit local policy. Supported native
+hooks must preserve permitted diagnostics, original sinks and application
+behavior at the selected capture boundary. Optional fields, SDK defaults and
+Development capabilities are not universal application requirements. Common
+attribute-limit diagnostic permissions and ceilings remain distinct from the
+Logs SDK's discard recommendation. The [source evidence](logging-skill-analysis-evidence.json)
+retains scoped observations and the 183-clause primary-source inventory.
 
 ## Replacement evals and current results
 
-The PR contains twelve current logging eval definitions and thirty-six variants.
-Every actor task is exactly one of:
+The PR replaces its earlier logging evals with twelve definitions and thirty-six
+variants. Every actor receives only one bare task:
 
 ```text
 $otel-audit ./service
@@ -63,78 +107,82 @@ $otel-instrument ./service
 $otel-verify ./service
 ```
 
-Superseded coached/plan-only evals, synthetic overlays and old execution summaries
-are excluded from this PR. Current maintained native tests remain active proof
-for the new rules. Fixtures and rubrics hold the expectations; the actor receives
-no extra repair prompt.
+Both actor and grader use **gpt-6.1-sol / high**. There are no synthetic candidate
+overlays or extra repair prompts. Superseded tasks and execution summaries are
+excluded from the PR's current results.
 
-Each complete pass uses fresh service workspaces and the normal audit → instrument
-→ verify handoff. It requires **168 semantic criteria, 88 native cases, 214 focused
-checks, plugin parity and eight independent actual-app checks**. Two concurrent
-requests share a trace but have distinct ancestry; every sync/async log must join
-its own real SDK span, with native counts and source identity preserved.
-Passes run sequentially. A failed obligation or changed frozen input resets the
-streak. A standalone verify on an uninstrumented fixture proves prerequisite
-handling only and earns no positive logging-runtime coverage.
+Each complete round starts four fresh, uninstrumented service workspaces.
+Languages run in parallel; audit → instrument → verify stays sequential within
+each language. Native SDK tests, focused checks and plugin parity overlap those
+workflows. A failed obligation closes the round early and stops only verified
+owned peer processes, preserving partial evidence without pass credit. Required standalone Make rubric runs also run in parallel. Three
+complete rounds remain consecutive; a source change or a real failed obligation
+resets the streak. Dependency/build caching does not reuse an instrumented app,
+telemetry receipt or passing verdict.
 
-| Language | Native cases per pass | Three complete final-source passes |
+A round requires **168 semantic criteria, 89 native cases, 215 focused checks,
+plugin parity and eight independent actual-app checks**. The unchanged host
+checker captures exact synchronous/asynchronous log/span joins and matching
+native output while the producer is alive, then proves bounded owned cleanup.
+This live capture does not establish final-record SDK drain, post-exit retention
+or production backend persistence; those claims require separate evidence.
+
+| Language | Native cases per round | Three complete final-source passes |
 |---|---:|---|
 | Java | 25 | Pending |
 | Python | 23 | Pending |
-| Go, race enabled | 20 | Pending |
+| Go, race enabled | 21 | Pending |
 | Node.js | 20 | Pending |
 
-The [current results](logging-remediation-results.json) contain only the current
-replacement eval contract and its source-bound outcomes. No superseded scores or
-old clean streaks are counted. Both actor and grader use **gpt-6.1-sol / high**;
-GitHub live-model evals remain disabled, so local PR-branch execution is reported
-as local execution.
+Current deterministic checks: **215 focused**, **188 interactive**, **49 policy
+unit + 8 contract**, and **228 pytest-plugin tests passed**. Skill validation:
+audit **755 passed / 5 skipped**, instrumentation **786 / 5**, verification
+**721 / 5**. Validation checks schema/fixtures and does not replace rubric or
+runtime proof. The current native run passed all **89 cases**, including **80 sampled SDK
+log/span joins**, four unsampled and four outside-context controls, with zero
+skips. Rubric outcomes and full harness freshness remain pending. These native
+checks alone do not complete a fresh workflow round.
 
-| Command | Result |
-|---|---|
-| From `evals/`: `UV_NO_CONFIG=1 uv run pytest -q test_default_local_log_export_guidance.py test_incident_readiness_skill_guidance.py test_logging_contract_runner.py test_logging_receiver.py test_logging_workflow_check.py` | 214 passed |
-| `UV_NO_CONFIG=1 make eval-validation SKILL=skills/otel-audit` | 754 passed, 5 scoped skips |
-| `UV_NO_CONFIG=1 make eval-validation SKILL=skills/otel-instrument` | 785 passed, 5 scoped skips |
-| `UV_NO_CONFIG=1 make eval-validation SKILL=skills/otel-verify` | 720 passed, 5 scoped skips |
-| `PATH="$PWD/evals/.venv/bin:$PATH" make agent-policy-check` | 49 unit + 8 contracts and policy passed |
-| `PATH="$PWD/evals/.venv/bin:$PATH" make test-interactive-otel-scripts` | 188 passed |
-| `UV_NO_CONFIG=1 make test-pytest-plugin` | 228 passed |
+Validation commands, run from the repository root with the managed eval Python:
 
-The five validation skips are scoped optional/receiver-dependent checks. Formal
-native trials supply the receiver and require zero skips. The full eval-harness
-freshness gate must pass after the current representative reports are generated.
-
-Current representative commands use the project virtual environment/toolchain
-on `PATH` and the supported outer model timeout:
-
-```sh
-PYTEST_ADDOPTS=--agent-timeout=3600 UV_NO_CONFIG=1 make eval-rubric SKILL=skills/otel-audit CASE=go/chi-basic EVAL_PATTERN=go/chi-basic/eval/qual/logging-audit-contract.json PROMPT=logging-trial-1 MODEL=gpt-6.1-sol
-PYTEST_ADDOPTS=--agent-timeout=3600 UV_NO_CONFIG=1 make eval-rubric SKILL=skills/otel-instrument CASE=go/chi-basic EVAL_PATTERN=go/chi-basic/eval/qual/logging-instrument-contract.json PROMPT=logging-trial-1 MODEL=gpt-6.1-sol
-PYTEST_ADDOPTS=--agent-timeout=3600 UV_NO_CONFIG=1 make eval-rubric SKILL=skills/otel-verify CASE=go/chi-basic EVAL_PATTERN=go/chi-basic/eval/qual/logging-verify-contract.json PROMPT=logging-trial-1 MODEL=gpt-6.1-sol
+```bash
+make agent-policy-check
+make test-interactive-otel-scripts
+make test-pytest-plugin
+make eval-validation SKILL=skills/otel-audit MODEL=gpt-6.1-sol
+make eval-validation SKILL=skills/otel-instrument MODEL=gpt-6.1-sol
+make eval-validation SKILL=skills/otel-verify MODEL=gpt-6.1-sol
 ```
 
-A positive language/trial workflow uses:
+Each role's representative command is the corresponding concrete expansion of:
 
-```sh
-cd evals
-UV_NO_CONFIG=1 uv run python run_logging_workflow.py --language python --trial 1 --studio-binary /path/to/obstudio --codex-home ../.workspace/codex-evals/codex-home --output ../.workspace/logging-workflow/python-trial-1
+```bash
+make eval-rubric SKILL=skills/otel-<role> CASE=node/express-basic \
+  EVAL_PATTERN=node/**/eval/qual/logging-<role>-contract.json \
+  PROMPT=logging-trial-1 EVAL_WORKERS=1 EVAL_PROGRESS=0 MODEL=gpt-6.1-sol
 ```
 
-The gate repeats it for all four languages and trials 1–3. Actual session metadata,
-rubric decisions and runtime receipts determine success; pytest exit status alone
-does not establish semantic quality. The outer model timeout does not alter app,
-export or probe deadlines.
+Runs set `PYTEST_ADDOPTS=--agent-timeout=3600`, use independent owned ports and
+public dependency/toolchain configuration. Repository Make commands use their
+existing lockfile; fresh service fixtures may create their own lockfile.
+[Current results](logging-remediation-results.json) hold source identity,
+validation run IDs and the pending gate/review status. Standalone verification
+of an uninstrumented fixture earns prerequisite-handling proof only.
 
-## Review and limits
+## Expected PR behavior and remaining work
 
-The final combined Codex protocol/Toolkit/baseline and independent Claude Desktop
-standard/Toolkit review is pending three complete current-source clean passes.
-[PR 352](https://github.com/signalfx/obstudio/pull/352) remains a draft; final-head
-Copilot and Required CI outcomes will be recorded after publication.
+All three skills consume the same shared language references. Previous reference
+paths remain compatibility forwarders, and isolated-skill tests prove discovery
+without requiring another skill to be installed. The generic refactor reviews
+all thirteen canonical skill paths changed in this PR.
 
-These tests cover controlled native SDK/bridge behavior and basic Spring, Flask,
-chi and Express startup. REST does not expose every TraceFlags bit; native wire
-tests cover flags separately. They do not certify production Collector/cloud
-delivery, arbitrary payload sanitization, distributed queues or every optional
-Development feature. OTel does not prescribe every business event an application
-should log; that selection remains tied to incident needs and privacy policy.
+The expected result is a source-backed audit, minimal supported repairs within
+the selected scope, and honest verification that separates Working, Not working,
+Not proven and unsupported capability. The controlled fixtures cover basic real
+services and native SDK/bridge contracts; they do not certify every framework,
+distributed queue, optional feature or production Collector/cloud deployment.
+
+Three consecutive fresh all-language passes, current full-harness report
+validation, final combined review, and exact-head PR checks remain required.
+Prior Claude Desktop clause verification is historical source evidence, not a
+review of this generic rewrite or runtime certification. No merge is authorized.
