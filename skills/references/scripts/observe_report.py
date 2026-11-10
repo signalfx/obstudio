@@ -10,6 +10,7 @@ import http.server
 import importlib.util
 import json
 import os
+import re
 import secrets
 import stat
 import subprocess
@@ -462,6 +463,92 @@ def cmd_required_inputs(args: argparse.Namespace) -> int:
     report = load_canonical_audit_for_selection(args.audit_json)
     selection = normalize_selection(load_json(args.selection_json), report)
     print(json.dumps(required_input_status(required_input_groups(report), selection), indent=2))
+    return 0
+
+
+
+SOURCE_SETTING_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9_])(?:OTEL_[A-Z][A-Z0-9_]*|otel\.[a-z0-9_]+(?:[.-][a-z0-9_]+)*)(?![A-Za-z0-9_])"
+)
+
+
+def source_settings_inventory(sources: list[Path], report_path: Path | None = None) -> dict[str, Any]:
+    """Find source spellings without inferring consumption or semantic coverage."""
+    report = None
+    report_names: set[str] = set()
+    if report_path is not None:
+        raw_report = report_path.read_bytes()
+        try:
+            report_text = raw_report.decode("utf-8")
+        except UnicodeError:
+            fail(f"report must be UTF-8 text: {report_path}")
+        report = {"path": str(report_path.resolve()), "sha256": hashlib.sha256(raw_report).hexdigest()}
+        report_names = set(SOURCE_SETTING_PATTERN.findall(report_text))
+    paths = []
+    for source in sources:
+        if not source.exists() and not source.is_symlink():
+            fail(f"source path does not exist: {source}")
+        if source.is_symlink() or source.is_file():
+            paths.append(source)
+        elif source.is_dir():
+            paths.extend(sorted(source.rglob("*")))
+        else:
+            fail(f"source must be a file or directory: {source}")
+    seen = set()
+    files, skipped, names = [], [], {}
+    scanned = 0
+    for path in paths:
+        if path.is_symlink():
+            skipped.append({"path": str(path), "reason": "symlink_not_followed"})
+            continue
+        if not path.is_file():
+            continue
+        resolved = path.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        if report is not None and str(resolved) == report["path"]:
+            skipped.append({"path": str(path), "reason": "report_input_excluded"})
+            continue
+        raw = path.read_bytes()
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeError:
+            skipped.append({"path": str(path), "reason": "non_utf8_not_scanned"})
+            continue
+        scanned += 1
+        matches: dict[str, list[int]] = {}
+        for line_number, line in enumerate(text.splitlines(), 1):
+            for name in set(SOURCE_SETTING_PATTERN.findall(line)):
+                matches.setdefault(name, []).append(line_number)
+        if not matches:
+            continue
+        source_id = len(files)
+        files.append({"id": source_id, "path": str(resolved), "sha256": hashlib.sha256(raw).hexdigest()})
+        for name, lines in matches.items():
+            names.setdefault(name, []).append({"source_id": source_id, "lines": lines})
+    candidates = []
+    for name, locations in sorted(names.items()):
+        hint = re.sub(r"[.-]", "_", name).upper()
+        spellings = sorted({name, hint} & report_names) if report is not None else None
+        candidates.append({"name": name, "normalization_hint": hint, "source_locations": locations,
+                           "report_spelling_matches": spellings})
+    return {
+        "inventory_scope": "lexical_source_setting_candidates",
+        "consumption_evaluated": False, "owners_resolved": False,
+        "normalization_mapping_verified": False, "dynamic_names_resolved": False,
+        "coverage_evaluated": False, "runtime_evaluated": False,
+        "complete_configuration_inventory": False,
+        "report": report, "report_comparison_performed": report is not None,
+        "report_match_mode": "exact_source_spelling_or_unverified_separator_normalization",
+        "scanned_text_files": scanned, "matching_sources": files, "skipped_paths": skipped,
+        "candidates": candidates,
+        "unmentioned_names": [c["name"] for c in candidates if c["report_spelling_matches"] == []],
+    }
+
+
+def cmd_source_settings(args: argparse.Namespace) -> int:
+    print(json.dumps(source_settings_inventory(args.source, args.report), indent=2))
     return 0
 
 
@@ -1321,6 +1408,14 @@ def build_parser() -> argparse.ArgumentParser:
     required_controls.add_argument("audit_json", type=Path)
     required_controls.add_argument("--ids", help="comma-separated finding IDs; defaults to all")
     required_controls.set_defaults(func=cmd_required_controls)
+
+    source_settings = subparsers.add_parser(
+        "source-settings", help="find lexical configuration names in selected sources; no consumption or coverage verdict",
+    )
+    source_settings.add_argument("--source", type=Path, action="append", required=True,
+                                 help="implementation file or directory; repeat for selected source roots")
+    source_settings.add_argument("--report", type=Path, help="optional existing UTF-8 report for spelling omission hints")
+    source_settings.set_defaults(func=cmd_source_settings)
 
     select = subparsers.add_parser("select", help="validate IDs and write a bound selection")
     select.add_argument("audit_json", type=Path)

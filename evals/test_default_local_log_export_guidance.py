@@ -64,6 +64,12 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
     )
     assert help_result.returncode == 0, help_result.stderr
     assert "--ids" in help_result.stdout
+    source_help = subprocess.run(
+        [sys.executable, "-I", str(staged / "scripts/observe_report.py"), "source-settings", "--help"],
+        capture_output=True, text=True,
+    )
+    assert source_help.returncode == 0, source_help.stderr
+    assert "--source" in source_help.stdout and "--report" in source_help.stdout
     targets = re.findall(r"\]\((languages/[^)]+)#logging-readiness-checks\)", common)
     expected = {f"languages/{lang}.md" for lang in ("java", "python", "go", "node")}
     assert set(targets) == expected

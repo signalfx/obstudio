@@ -47,9 +47,12 @@ construction path: inspect key/option declarations, readers and referenced
 constants, then follow their actual consumption. A declaration or documentation
 mention alone does not prove the selected path reads it. Classify each candidate
 as consumed, conditionally read or outside the selected path, with its source
-binding. Key the inventory by owner/reader as well as setting name: two
-consumers can apply different defaults or invalid-value diagnostics to the same
-setting. Resolve referenced conversion/helper bodies; a parser name or link is
+binding. Follow the whole requested startup path, including shared resource/
+propagator setup and other selected signal providers, without widening an isolated
+logging repair. A key queried to decide a startup branch is read even when its
+value is absent; absence alone is not an out-of-path disposition. Key the
+inventory by owner/reader as well as setting name: two consumers can apply
+different defaults or invalid-value diagnostics to the same setting. Resolve referenced conversion/helper bodies; a parser name or link is
 a pending capability, not its resolved behavior. Reconcile this inventory against
 the saved case table before finalizing; do not derive both from an already
 incomplete report. A generic SDK-disabled table does not allocate a bridge's
@@ -71,8 +74,11 @@ Keep each setting's valid range, default and conversion distinct even when it
 shares a primitive parser with another setting. Trace the complete resolution:
 raw input or omission → reader → conversion → precedence/fallback → validation
 or default factory → consuming operation. An intermediate null, sentinel or
-conversion error is not the effective value. Resolve symbolic constants to
-their actual values; a constant's name is not its serialized spelling. Include
+conversion error is not the effective value. Retain the intermediate values
+through secondary defaults, unit conversions and clamps to the terminal consumer;
+report that terminal outcome. Compute each setting's chain from its own owner,
+rather than copying a different family's fallback or overflow result. Resolve
+symbolic constants to their actual values; a constant's name is not its serialized spelling. Include
 transitively consumed fallback settings in the inventory. Where precedence
 exists, pair the higher-priority setting's absent, empty and invalid cases with
 a valid nondefault lower-priority value, as well as both absent; derive each
@@ -1049,6 +1055,26 @@ Source-clause controls remain independently required; these hints do not enumera
 them or expand scenario paragraphs into tests.
 
 Read this section immediately before generating/finalizing logging results.
+The read-only `source-settings` helper can discover `OTEL_*` and `otel.*` name
+spellings in selected implementation files/directories, with file hashes and
+line locations. For a draft report, it surfaces names with no exact spelling or
+unverified separator-normalization hint in that report. Choose sources by the
+requested startup graph, including transitive configuration readers; do not use
+the report itself as the source inventory.
+
+```sh
+python3 -I "<directory-containing-loaded-SKILL.md>/../references/scripts/observe_report.py" source-settings --source <implementation-path> --report <saved-report>
+```
+
+Repeat `--source` for other selected roots. Use the calling stage's existing
+JSON or Markdown report. This is lexical discovery: declarations/comments are
+candidates, normalized spellings are not verified aliases, and a report mention
+can be a denial rather than an assertion. Resolve actual consumption, separate
+readers and effective behavior yourself. Computed names, native public options,
+nonmatching namespaces and skipped files need independent inspection. The helper
+writes no reports, resolves no dynamic names and evaluates no coverage or runtime.
+An equivalent complete source-derived inventory remains valid.
+
 Compare the source-derived configuration-name inventory to the saved per-setting
 cases, including separate flags and fallback keys. Resolve every consumed name
 to concrete input representations, effective values/errors/diagnostics, applicable

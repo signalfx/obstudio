@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import json
 import io
 import os
@@ -413,3 +414,102 @@ def test_failed_real_startup_retains_output_command_source_and_outcome(tmp_path)
     assert receipt["status"] == "failed" and "exited during startup: 3" in receipt["error"]
     assert receipt["command"] == command and receipt["source_before"] == receipt["source_after"]
     assert (proof.parent / "native-output.log").read_text() == "real startup failed\n"
+
+
+def test_source_settings_preserves_names_and_multiple_source_readers(tmp_path, report_helper_and_sample):
+    helper, _ = report_helper_and_sample
+    first, second = tmp_path / "first.py", tmp_path / "second.go"
+    first.write_text('name = "OTEL_TEST_SHARED"\n')
+    second.write_text('// OTEL_TEST_SHARED documents a candidate, not a consumption fact.\n')
+    before = {p: p.read_bytes() for p in (first, second)}
+    result = helper.source_settings_inventory([first, second])
+    assert [c["name"] for c in result["candidates"]] == ["OTEL_TEST_SHARED"]
+    assert len(result["candidates"][0]["source_locations"]) == 2
+    assert result["candidates"][0]["report_spelling_matches"] is None
+    assert result["report_comparison_performed"] is False
+    assert result["owners_resolved"] is result["consumption_evaluated"] is False
+    assert {p: p.read_bytes() for p in (first, second)} == before
+
+
+def test_source_settings_omission_hint_does_not_match_a_longer_key(tmp_path, report_helper_and_sample):
+    helper, _ = report_helper_and_sample
+    source, report = tmp_path / "config.py", tmp_path / "report.md"
+    source.write_text('"OTEL_TEST_TIMEOUT"\n"OTEL_TEST_TIMEOUT_EXTRA"\n')
+    report.write_text('OTEL_TEST_TIMEOUT_EXTRA is not asserted.\n')
+    result = helper.source_settings_inventory([source], report)
+    assert result["unmentioned_names"] == ["OTEL_TEST_TIMEOUT"]
+    assert result["candidates"][1]["report_spelling_matches"] == ["OTEL_TEST_TIMEOUT_EXTRA"]
+    assert result["coverage_evaluated"] is result["runtime_evaluated"] is False
+
+
+def test_source_settings_normalization_is_a_hint_not_a_verified_alias(tmp_path, report_helper_and_sample):
+    helper, _ = report_helper_and_sample
+    source, report = tmp_path / "config.java", tmp_path / "report.json"
+    source.write_text('"otel.test.default-enabled"; "OTEL_TEST_DEFAULT_ENABLED";\n')
+    report.write_text('{"note":"OTEL_TEST_DEFAULT_ENABLED is not tested"}')
+    result = helper.source_settings_inventory([source], report)
+    assert len(result["candidates"]) == 2
+    assert {c["normalization_hint"] for c in result["candidates"]} == {"OTEL_TEST_DEFAULT_ENABLED"}
+    assert result["normalization_mapping_verified"] is False
+    assert result["complete_configuration_inventory"] is False
+    assert result["dynamic_names_resolved"] is False
+
+
+def test_source_settings_records_binary_skips_and_rejects_invalid_inputs(tmp_path, report_helper_and_sample):
+    helper, _ = report_helper_and_sample
+    binary = tmp_path / "sdk.bin"
+    binary.write_bytes(b"\xffOTEL_TEST_BINARY")
+    result = helper.source_settings_inventory([binary])
+    assert result["scanned_text_files"] == 0 and result["candidates"] == []
+    assert result["skipped_paths"][0]["reason"] == "non_utf8_not_scanned"
+    assert result["complete_configuration_inventory"] is False
+    with pytest.raises(helper.ReportError, match="source path does not exist"):
+        helper.source_settings_inventory([tmp_path / "missing"])
+    with pytest.raises(helper.ReportError, match="report must be UTF-8"):
+        helper.source_settings_inventory([binary], binary)
+
+
+def test_source_settings_does_not_follow_directory_or_file_symlinks(tmp_path, report_helper_and_sample):
+    helper, _ = report_helper_and_sample
+    source, outside = tmp_path / "selected", tmp_path / "outside"
+    source.mkdir()
+    outside.mkdir()
+    (source / "config.js").write_text('"OTEL_TEST_SELECTED";\n')
+    (outside / "config.js").write_text('"OTEL_TEST_UNSELECTED";\n')
+    try:
+        (source / "linked-dir").symlink_to(outside, target_is_directory=True)
+        (source / "linked-file.js").symlink_to(outside / "config.js")
+    except OSError:
+        pytest.skip("Host cannot create test symlinks")
+    result = helper.source_settings_inventory([source])
+    assert [c["name"] for c in result["candidates"]] == ["OTEL_TEST_SELECTED"]
+    assert len([p for p in result["skipped_paths"] if p["reason"] == "symlink_not_followed"]) == 2
+
+
+def test_source_settings_deduplicates_paths_keeps_lines_and_excludes_report(tmp_path, report_helper_and_sample):
+    helper, _ = report_helper_and_sample
+    source, report = tmp_path / "config.py", tmp_path / "report.md"
+    source.write_text('"OTEL_TEST_SOURCE"\n# not a value\n"OTEL_TEST_SOURCE"\n')
+    report.write_text('"OTEL_TEST_REPORT_ONLY"\n')
+    result = helper.source_settings_inventory([tmp_path, source], report)
+    assert result["scanned_text_files"] == 1 and len(result["matching_sources"]) == 1
+    assert result["matching_sources"][0]["sha256"] == hashlib.sha256(source.read_bytes()).hexdigest()
+    assert result["candidates"][0]["source_locations"] == [{"source_id": 0, "lines": [1, 3]}]
+    assert result["unmentioned_names"] == ["OTEL_TEST_SOURCE"]
+    assert result["skipped_paths"][0]["reason"] == "report_input_excluded"
+
+
+def test_source_settings_cli_omits_unrelated_content_and_writes_no_input(tmp_path, report_helper_and_sample):
+    helper, _ = report_helper_and_sample
+    source, report = tmp_path / "config.py", tmp_path / "report.md"
+    source.write_text('key = "OTEL_TEST_SECRET"; value = "sensitive-fixture-value"\n')
+    report.write_text('No accepted configuration assertions.\n')
+    before = {p: p.read_bytes() for p in tmp_path.iterdir()}
+    command = [sys.executable, "-I", str(Path(helper.__file__)), "source-settings", "--source", str(source), "--report", str(report)]
+    success = subprocess.run(command, capture_output=True, text=True)
+    assert success.returncode == 0, success.stderr
+    assert json.loads(success.stdout)["unmentioned_names"] == ["OTEL_TEST_SECRET"]
+    assert "sensitive-fixture-value" not in success.stdout
+    failure = subprocess.run(command + ["--source", str(tmp_path / "missing")], capture_output=True, text=True)
+    assert failure.returncode == 1 and "FAIL:" in failure.stderr and not failure.stdout
+    assert {p: p.read_bytes() for p in tmp_path.iterdir()} == before
