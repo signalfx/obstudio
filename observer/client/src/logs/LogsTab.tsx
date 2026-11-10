@@ -142,11 +142,16 @@ function displaySeverity(record: LogRecord): string {
 
 /** Returns the canonical display label for a severity bucket. */
 
-function logKey(r: LogRecord): string {
+/** Whether the Logs tab classes this record as an error (including fatal). */
+export function isErrorLog(record: LogRecord): boolean {
+  return severityBucket(record) === "error";
+}
+
+export function logKey(r: LogRecord): string {
   return r.id || `${r.timeUnixNano}|${r.resource?.serviceName ?? ""}|${r.severityText ?? ""}|${r.severityNumber ?? ""}|${r.body}`;
 }
 
-function displayMessage(record: LogRecord): string {
+export function displayMessage(record: LogRecord): string {
   const body = record.body?.trim();
   if (body) return record.body;
   const eventName = record.attributes?.["event.name"];
