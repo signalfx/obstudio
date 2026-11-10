@@ -102,6 +102,59 @@ def test_control_inventory_does_not_mutate_or_claim_coverage(report_helper_and_s
     assert inventory["promises"][0]["candidate_scenario_ids"] == ["http.checkout.success"]
 
 
+def test_control_inventory_surfaces_missing_acceptance_literals(report_helper_and_sample):
+    helper, sample = report_helper_and_sample
+    report = sample()
+    report["findings"][0]["expected_telemetry"][0]["attributes"] = ["service.name", "service.version"]
+    scenario = report["verification"]["scenarios"][0]
+    scenario["acceptance_criteria"] = "Assert service.name equals the supplied identity."
+    inventory = helper.audit_control_inventory(report, ["OTEL-001"])
+    checks = {row["attribute"]: row for row in inventory["acceptance_literal_checks"]}
+    assert checks["service.name"]["matching_scenario_ids"] == [scenario["id"]]
+    assert checks["service.version"]["matching_scenario_ids"] == []
+    assert [row["attribute"] for row in inventory["unmatched_attribute_literals"]] == ["service.version"]
+    assert inventory["coverage_evaluated"] is False
+
+
+def test_control_inventory_does_not_borrow_unbound_acceptance(report_helper_and_sample):
+    helper, sample = report_helper_and_sample
+    report = sample()
+    report["findings"][0]["expected_telemetry"][0]["attributes"] = ["service.version"]
+    report["verification"]["scenarios"][0]["acceptance_criteria"] = "Assert request completion."
+    unrelated = copy.deepcopy(report["verification"]["scenarios"][0])
+    unrelated.update(id="other.operation", acceptance_criteria="Assert service.version equals the supplied version.")
+    report["verification"]["scenarios"].append(unrelated)
+    inventory = helper.audit_control_inventory(report, ["OTEL-001"])
+    assert inventory["acceptance_literal_checks"][0]["matching_scenario_ids"] == []
+    assert inventory["unmatched_attribute_literals"][0]["attribute"] == "service.version"
+
+
+def test_control_inventory_literal_hit_is_not_semantic_acceptance(report_helper_and_sample):
+    helper, sample = report_helper_and_sample
+    report = sample()
+    report["findings"][0]["expected_telemetry"][0]["attributes"] = ["service.version"]
+    scenario = report["verification"]["scenarios"][0]
+    scenario["acceptance_criteria"] = "This scenario does not assert service.version."
+    inventory = helper.audit_control_inventory(report, ["OTEL-001"])
+    assert inventory["acceptance_literal_checks"][0]["matching_scenario_ids"] == [scenario["id"]]
+    assert inventory["acceptance_literal_check_mode"] == "case_sensitive_substring_only"
+    assert inventory["acceptance_controls_included"] is False
+    assert inventory["coverage_evaluated"] is False
+    assert inventory["runtime_evaluated"] is False
+
+
+def test_control_inventory_literals_preserve_case_and_ignore_trigger_mentions(report_helper_and_sample):
+    helper, sample = report_helper_and_sample
+    report = sample()
+    report["findings"][0]["expected_telemetry"][0]["attributes"] = ["Case.Field"]
+    scenario = report["verification"]["scenarios"][0]
+    scenario["trigger"] = "Send Case.Field in the input."
+    scenario["acceptance_criteria"] = "Assert case.field is present."
+    inventory = helper.audit_control_inventory(report, ["OTEL-001"])
+    assert inventory["acceptance_literal_checks"][0]["matching_scenario_ids"] == []
+    assert inventory["unmatched_attribute_literals"][0]["attribute"] == "Case.Field"
+
+
 def test_control_inventory_cli_reads_audit_without_writing_reports(tmp_path, report_helper_and_sample):
     helper, sample = report_helper_and_sample
     audit = tmp_path / "otel-audit.json"

@@ -1095,6 +1095,20 @@ def audit_control_inventory(
                 "attributes": list(item["attributes"]),
                 "candidate_scenario_ids": list(finding["verification_scenarios"]),
             })
+    scenarios = {item["id"]: item for item in report["verification"]["scenarios"]}
+    literal_checks = []
+    for item in promises:
+        for attribute in item["attributes"]:
+            literal_checks.append({
+                "finding_id": item["finding_id"],
+                "telemetry_index": item["telemetry_index"],
+                "attribute": attribute,
+                "candidate_scenario_ids": list(item["candidate_scenario_ids"]),
+                "matching_scenario_ids": [
+                    scenario_id for scenario_id in item["candidate_scenario_ids"]
+                    if attribute in scenarios[scenario_id]["acceptance_criteria"]
+                ],
+            })
     return {
         "audit_sha256": audit_digest(report),
         "finding_ids": [finding["id"] for finding in findings],
@@ -1103,6 +1117,11 @@ def audit_control_inventory(
         "inventory_scope": "audit_expected_telemetry",
         "source_clause_controls_included": False,
         "acceptance_controls_included": False,
+        "acceptance_literal_check_mode": "case_sensitive_substring_only",
+        "acceptance_literal_checks": literal_checks,
+        "unmatched_attribute_literals": [
+            item for item in literal_checks if not item["matching_scenario_ids"]
+        ],
         "coverage_evaluated": False,
         "runtime_evaluated": False,
         "promises": promises,

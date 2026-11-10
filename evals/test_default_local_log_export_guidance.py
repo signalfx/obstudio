@@ -138,6 +138,13 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
         "eligibility threshold rather than a cancellation deadline",
         "Classify each message's cause",
         "due to a limit",
+        "Inventory each setting actually consumed",
+        "Use a value-case table",
+        "unmatched_attribute_literals",
+        "neither is a semantic coverage verdict",
+        "Configuration validation warnings",
+        "MUST synchronize calls",
+        "disabled-SDK/retained-propagation conjunction",
     ):
         assert term in common_words
     assert "https://opentelemetry.io/docs/specs/otel/configuration/common/" in common

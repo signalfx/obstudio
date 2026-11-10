@@ -29,7 +29,8 @@ completeness method, not an additional OTel implementation requirement:
    conditions, input branches, strength and owner. A retained excerpt preserves
    the text; it does not allocate that clause's controls.
 2. **Capability:** follow each selected mechanism through its delegates to the
-   concrete parser, normalizer, diagnostic or retry/deadline check. Keep an
+   concrete parser, default factory, normalizer, diagnostic or retry/deadline
+   check. Keep an
    uninspected delegate on this worklist. Resolve accessible static facts even
    for a proposed SDK that is not installed in the application. Record the
    exact checked access boundary when source genuinely cannot be obtained;
@@ -40,11 +41,25 @@ completeness method, not an additional OTel implementation requirement:
    `required-controls` helper inventories audit promises only; its output
    excludes source-clause and acceptance controls. Add those independently.
 
-For every applicable configuration branch, retain its input condition, actual
-source-resolved outcome/fallback and warning, upstream disposition and concrete
-future assertion. A Boolean control does not allocate numeric or enum branches.
-Grouped rows remain valid when each branch is addressable. Future runtime status
-can be Not run while the corresponding source behavior is already known.
+Inventory each setting actually consumed by the selected provider, bridge,
+distribution/agent and launcher. A generic SDK-disabled table does not allocate
+a bridge's separate enablement flag. Distinguish standard SDK configuration
+contracts from documented extensions and private flags; do not impose a standard
+default on an extension without establishing that contract's applicability.
+
+Use a value-case table for the selected settings in existing report/evidence
+fields. Reuse a parameterized table when every setting/case remains addressable:
+
+| Consumed setting and owner | Input case | Actual source outcome | Upstream disposition | Acceptance |
+|---|---|---|---|---|
+| Selected name and configuration source | Concrete intended input/representation | Effective value, fallback/error and diagnostic; cite parser, conversion and validation/delegate | Applicable source strength, supported/default/partial/unsupported/unverified and reason | Exact field/operation assertion or checked missing capability step |
+
+Keep each setting's valid range, default and conversion distinct even when it
+shares a primitive parser with another setting. Resolve negative, zero,
+fractional, malformed/overflow and enum/Boolean cases where applicable; naming
+the group is not their expected outcome. A Boolean control for one flag does
+not allocate another flag or numeric/enum branches. Future runtime status can
+be Not run while the corresponding source behavior is already known.
 
 Read concrete repair proposals back against the retained public API and the
 effective startup configuration too. Check constructor arguments, option names
@@ -110,6 +125,11 @@ Do not infer loader support from a variable's presence. Otherwise follow the
 installed distribution's environment, programmatic and agent precedence; empty
 environment values are unset. Check effective `OTEL_SDK_DISABLED`, native/SDK
 filters and resource merge results before diagnosing a missing pipeline.
+For supported standard `OTEL_SDK_DISABLED`, the no-op setting covers SDK signals
+but has no effect on configured `OTEL_PROPAGATORS`. Inspect startup branches and
+plan that disabled-SDK/retained-propagation conjunction; disabled export alone
+does not prove it. Preserve the actual SDK limitation and owner when its startup
+also bypasses propagator configuration, rather than inventing app wiring proof.
 For supported environment Boolean settings, only case-insensitive `true` means
 true; `1` and `yes` do not disable the SDK. Other values resolve false, with a
 warning recommended for invalid nonempty values. Let the actual config owner
@@ -670,6 +690,15 @@ does not consume those environment variables. A bounded queue may drop logs
 when full. Do not promise durable or exactly-once delivery from an in-memory
 batch processor; the one-record acceptance check is a healthy-path duplicate
 check, not an OTLP network delivery guarantee.
+The built-in simple and batching processors [MUST synchronize calls to the
+exporter's `Export`](https://opentelemetry.io/docs/specs/otel/logs/sdk/#built-in-processors)
+so those calls are not invoked concurrently. Assess that processor/exporter
+invocation boundary using the selected SDK's asynchronous completion contract;
+concurrent transport requests/retries inside the exporter are a separate concern.
+Supported built-in synchronization is coverage, not an app mutex requirement.
+For an owned custom processor, include concurrent emit/flush/export acceptance;
+retain a genuine SDK limitation with its owner rather than replacing the SDK.
+
 An SDK stdout/console exporter may legitimately use a simple processor; batch
 and queue settings then do not apply. Assess synchronous cost instead, preserve
 the operator-owned branch, and do not confuse that exporter with a native
@@ -683,6 +712,11 @@ without secrets, and configured unrelated signals remain usable. An HTTP 200
 with OTLP partial-success rejected records is not full acceptance. Report
 attempted, received, rejected and dropped evidence separately; never infer
 receipt from a successful enqueue or flush call alone.
+When a final-log receipt proves pipeline preservation, assert that receipt's
+expected body/severity, Resource and associated context as well as count/time.
+Context may legitimately be absent outside a span; assert that condition instead
+of creating a span. A different earlier record cannot supply these same-receipt
+assertions, and SDK source facts remain distinct from that runtime result.
 When the existing or selected stop policy handles repeated requests, exercise
 them on the same configured process while final logging/provider drain is still
 active. Retain observable request delivery and event ordering. Separate single
@@ -893,7 +927,10 @@ paths against individual records; passing truncation/count assertions does not
 prove this cadence. Classify each message's cause before applying this ceiling:
 it counts diagnostics for changes **due to a limit**. Invalid-key validation,
 uniqueness enforcement or other independent SDK diagnostics are not automatically
-limit diagnostics, even when they also discard data. Aggregate all messages
+limit diagnostics, even when they also discard data. Configuration validation
+warnings about a limit option are also distinct from a diagnostic for record data
+actually changed by a limit. Do not classify solely from a message containing
+the word "limit". Aggregate all messages
 actually caused by limits for one record; independent once guards do not imply
 a shared per-record budget. Preserve the separate applicable diagnostic policies. Preserve an observed upstream limitation as such without
 replacing SDK diagnostic internals or claiming an application suppression fixes it.
@@ -965,6 +1002,17 @@ in for the separate partial-rejection case:
 | LOG-VERIFY-FRESH | Unique report storage for each trial; planned manifest/lockfile dependency preparation; binding to source, command and dependency versions; actual success/failure/error/skip counts; preserved timeout console output, failed timeout verdict, owned-process cleanup and incremental structured partial results; explicit evidence scope. |
 
 ### Report readback
+
+The `required-controls` inventory also returns `unmatched_attribute_literals` and
+case-sensitive substring matches against each finding's bound scenario acceptance
+text. Review these omission hints before finalizing. A miss can have a legitimate
+semantic alias/conditional explanation, and a hit can occur in a denial or other
+non-assertion: neither is a semantic coverage verdict. Resolve each promise to its
+actual assertion or missing proof; do not add field names merely to satisfy text
+matching. A conditionally supplied Resource field needs its supplied-value
+preservation assertion or justified applicability, without inventing metadata.
+Source-clause controls remain independently required; these hints do not enumerate
+them or expand scenario paragraphs into tests.
 
 Read this section immediately before generating/finalizing logging results.
 For an existing canonical audit, the read-only report helper can enumerate the
