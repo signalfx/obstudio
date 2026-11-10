@@ -1305,6 +1305,13 @@ Keep the receipt in canonical evidence and the applicable finding's
 without named symbols/example/version is incomplete; correct that report
 before downstream handoff. Existing producers remain preserved.
 
+For application logging, apply the shared
+[Report readback](../references/logging-readiness.md#report-readback) to the
+saved handoff before finalization. Match promised signal fields/operations and
+source-clause conditions to actual acceptance assertions, including applicable
+future repetition storage and outcome-accounting controls. Keep source-resolved
+facts separate from documented contracts and unexecuted behavior.
+
 Write two audit artifacts inside the scanned service root (create the
 `.observe/` directory if it does not exist):
 

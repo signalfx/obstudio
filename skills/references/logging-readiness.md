@@ -193,6 +193,12 @@ remain addressable. Keep that binding intact while updating implementation and
 proof columns. A shorter summary may aid reading, but cannot replace a clause or
 its conditions. Without an audit, build the same bindings in the normal direct
 instrumentation report; no fabricated audit or additional artifact type is needed.
+The source binding preserves the requirement, not an assertion that a mapped
+control exercises it. Match each distinct condition, input branch, field and
+operation to its own applicable assertion. A control for a related property is
+not coverage. For unexecuted clauses, retain concrete conditional acceptance
+or the exact missing capability-resolution step instead of a blanket future
+label attached to unrelated scenarios.
 
 To avoid duplicating or weakening source text, a matrix row may bind its
 normative clauses to a precisely bounded retained excerpt (file/hash plus lines
@@ -223,6 +229,13 @@ check launch settings against the actual runner's CLI/environment precedence.
 A remembered API shape or environment setting cannot override contrary source
 evidence. Keep an unresolved mechanism unverified with its future check instead
 of presenting a source-contradicted call or launch profile as an executable fix.
+Separate an API's documented contract from its implemented enforcement. Trace
+capability claims through the selected delegation path to the actual check;
+for timeout/cancellation claims, identify where the deadline is created,
+propagated and consumed relative to retries. If documentation and implementation
+conflict, retain that contradiction and its owner rather than treating the
+comment as implementation proof. A permitted focused public-boundary probe can
+resolve behavior at that scope; it does not establish application execution.
 
 For audit, emit concrete application-owned gaps through the normal findings and
 acceptance flow. For instrumentation, implement the authorized ones and retain

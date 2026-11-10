@@ -54,6 +54,8 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
     side = tmp_path / "with_skill"
     prepare_side_workspace(ROOT, case, "with_skill", side)
     staged = side / ".agents" / "skills" / "references"
+    entrypoint = _read(side / ".agents" / "skills" / skill / "SKILL.md")
+    assert "../references/logging-readiness.md#report-readback" in entrypoint
     common = _read(staged / "logging-readiness.md")
     consumers = json.loads(_read(staged / "consumers.json"))
     targets = re.findall(r"\]\((languages/[^)]+)#logging-readiness-checks\)", common)
@@ -113,6 +115,9 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
         "same configured process", "event ordering", "not a particular tool-call order",
         "resolve and report their effective values or unlimited behavior",
         "future boundary test does not substitute for accessible configuration facts",
+        "source binding preserves the requirement, not an assertion",
+        "API's documented contract from its implemented enforcement",
+        "where the deadline is created, propagated and consumed relative to retries",
     ):
         assert term in common_words
     assert "https://opentelemetry.io/docs/specs/otel/configuration/common/" in common
