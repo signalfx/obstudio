@@ -18,7 +18,8 @@
     "rubric_enabled": false,
     "runtime_enabled": false,
     "workers": "1",
-    "validation_scope": "full"
+    "validation_scope": "full",
+    "source_snapshot_refreshed_without_eval_execution": true
   },
   "evals": [
     {
@@ -336,7 +337,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "bf2aa9fe3700348cc1e742ab8f9208f7097478937de9fcd61ef9eb41f09ed575",
+    "digest": "e8175181047b0162b93d5b1796b3f876f09b041718b2ba4a8002a93360bcc72d",
     "eval_kinds": [
       "rubric"
     ],
@@ -381,8 +382,8 @@
       "skills/references/tests/test_observe_report_flow.py": "a895ca4165a196ff8ab0ffb73a1c6dcf859d27cf59cd5f335ce4fe1c9ca7392e",
       "skills/references/tests/test_observe_report_html.py": "32183996d90eb073b9ece7bcd05613ea3552512af7f6f8acfc7171d45eaf2382",
       "skills/references/tests/test_observe_report_selection.py": "c2a441002d8392b9ea5cfdb52cee7e0b75000542334c2a3eb3bc8cff48a0d7c7",
-      "evals/go/native-genai-demo/README.md": "853f6a873bddbf273efd915b14c9e2ef4372c1c4a622f628cb525f70085d69e1",
-      "evals/go/native-genai-demo/eval/inputs/candidate-provenance.json": "6d1fb615c382fbf8ce9ba6683c39e5c4a7b916575570cce47d3274c3c51708e6",
+      "evals/go/native-genai-demo/README.md": "0c368f3c02fe251d816cbe166981b59b29769064ad67b12a09d89cee48af1048",
+      "evals/go/native-genai-demo/eval/inputs/candidate-provenance.json": "50cd7a5cd8b96642fb8925d176a1539d7531710cd8021692d75bdf5e57648865",
       "evals/go/native-genai-demo/eval/inputs/genai-profile-evidence.json": "aa816ae1e830e83a99289d326264d53e050cccd0c50648d49c3f2f8627ce7343",
       "evals/go/native-genai-demo/eval/inputs/native-candidate-capture.json": "cc8bcbf86b66fb304a09156d964b795fe71b004e389303066b2f8710fcefe606",
       "evals/go/native-genai-demo/eval/inputs/native-lookup-failure-capture.json": "8dd89e0ac1edb09284255d90f7aa009b0b173e40d703a6920080162eac6c02f1",
@@ -394,8 +395,8 @@
       "evals/go/native-genai-demo/eval/inputs/nativeprobe/main_test.go": "f3a4aebe0fa1fd2d31f8c57e586081f5c69a6f5f41bc9fa3e963134edb8af025",
       "evals/go/native-genai-demo/eval/inputs/schemacheck/main.go": "c0049f5ecbd169dfc0ac6a576b126054a49feabdd46c7f96c3eb1717beefc3c8",
       "evals/go/native-genai-demo/eval/qual/verify.json": "fe9bea7318bd34ae542d5b66a69afdae46d0e01ac8bfdf1676645ea6c770d2d9",
-      "evals/go/native-genai-demo/go.mod": "81fbdf643df4bcdee512f33b7fd9b3cddfda49488da4eca00f5d77d516633e09",
-      "evals/go/native-genai-demo/go.sum": "5ab9f296e66959a6a223bacf165f6540fa2b49f63dc8a7698a8cdbc93978c04d",
+      "evals/go/native-genai-demo/go.mod": "5799f426a1dad23378ee071445e85d7ec9422a96bb38ed38b490f6d94ac3a059",
+      "evals/go/native-genai-demo/go.sum": "f6fbf8e7bb1b83a747a7590926aa9ee22c16be6dad16f5e8d66adcb37f5046cc",
       "evals/go/native-genai-demo/main.go": "7ff08c72f55f98255c93762056f8816f2a4351975365e2c03dfc3b1f39bee09f",
       "evals/go/native-genai-demo/main_test.go": "a0f03b2b02fb3611808b500c198dd96d1fe9eaeda4372ceed389998b8449c23e",
       "evals/go/native-genai-demo/telemetry.go": "1a6a265bbf7e72ab6b1a4cbfe5c99bfac66af61dd4bd9e1eddb4dfe392e0a22d",
