@@ -798,7 +798,10 @@ Test Logback/Log4j's supported severity and timestamp mapping through the
 selected agent/appender, preserving original appenders and permitted structured
 fields. Check SDK-created parent/child spans and exact log-to-span joins using
 the common acceptance contract; stdout MDC strings alone do not prove OTLP
-correlation.
+correlation. A probe that constructs synthetic `LoggingEvent` objects and invokes
+an appender is focused SDK/bridge proof (such as `unit+otlp`), even when a Java
+agent is attached. Agent startup alone does not make that probe `app_test` or
+`full_runtime`; those require the actual application path at the claimed boundary.
 
 Select only approved structured fields with the installed appender's supported
 capture options. Inspect the resolved agent/bridge's public documentation and
@@ -823,6 +826,14 @@ does not recurse, temporary state is restored in `finally`, unrelated diagnostic
 remain, and the original failed probe is safe in both native and OTLP output.
 If the installed stack cannot meet that boundary, leave it uncovered rather
 than forcing an upgrade or claiming an unsupported hook works.
+For a captured Spring MVC argument/error diagnostic, also inspect the resolved
+framework's documented [exception handling](https://docs.spring.io/spring-framework/reference/web/webmvc/mvc-controller/ann-exceptionhandler.html)
+through existing handlers or narrowly scoped `@ExceptionHandler`/`@ControllerAdvice`.
+This is an application-framework hook lead, not a guaranteed installed redactor.
+Retain a permitted category and the selected status, headers and response contract;
+avoid blanket exception interception and verify that later resolvers do not log
+the raw value/stack again. Replay the original malformed request and inspect all
+captured framework records in native and OTLP output, not just fixed app messages.
 
 Capture the caller's OTel `Context` before submitting executor work and use its
 supported wrapping/scope mechanism unless agent/framework propagation is

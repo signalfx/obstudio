@@ -69,6 +69,8 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
         if target == "languages/java.md":
             assert "whitespace" in readiness and "resource-only" in readiness
             assert "substring" in readiness and "normal launcher" in readiness
+            assert "synthetic `LoggingEvent`" in readiness and "unit+otlp" in readiness
+            assert "@ControllerAdvice" in readiness and "malformed request" in readiness
         if target == "languages/node.md":
             assert "per-batch" in readiness and "acknowledged" in readiness
             assert "mixed" in readiness and "otlp_accepted" in readiness
@@ -78,6 +80,8 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
             assert "process-local transport fault seam" in readiness
             assert "error-handling middleware" in readiness and "headersSent" in readiness
             assert "limit-resolution code" in readiness and "exported files" in readiness
+            assert "Replay the same existing failing" in readiness
+            assert '"Partial success not tested"' in readiness
         if target == "languages/python.md":
             assert "SystemExit" in readiness and "repeated" in readiness
             assert "signal handler" in readiness and "drain" in readiness
@@ -102,6 +106,13 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
     assert "separate conditions, actions and requirement" in common
     assert "constructed shutdown Error" in common and "server-close test seam" in common
     assert "not a mixture" in common and "conditional future checks" in common
+    assert "attachment alone" in common and "shared scope row" in common
+    assert "precisely bounded retained excerpt" in common and "specific evidence rows" in common
+    assert "HTTP full success" in common and "zero rejected" in common
+    assert "Before execution, expand" in common and "effective launch/exporter" in common
+    assert "server response intent" in common and "client timeout/failure" in common
+    assert "measured export duration" in common and "shutdown wall time" in common
+    assert "not_explorer_visible" in common and "framework records" in common
 
 
 @pytest.mark.parametrize("language", ["java", "python", "go", "node"])

@@ -117,7 +117,12 @@ justify replacing the exported category with a generic redaction label.
 An input or attribute that source evidence shows cannot reach the selected
 logging path may be not applicable; do not add a capture path just to test it.
 A control already required by the bound scenario must still be executed or
-retained as not proven, not silently removed from the contract.
+retained as not proven, not silently removed from the contract. Inspect all
+framework records captured by the selected application bridge, not only a
+fixed-message or application-logger allowlist. A framework record observed in
+the normal pipeline cannot be excluded from its privacy assessment merely
+because the original call-site inventory listed only application messages.
+Keep separately routed SDK self-diagnostics distinct from those framework records.
 
 ## LOG-SPEC-CLOSURE -- Reconcile sources, implementation and proof
 
@@ -144,6 +149,16 @@ IDs where needed, and the actual proof boundary. An SDK-owned default can be
 covered without an application override; absence of an installed capability is
 not proof that an application has implemented it.
 
+To avoid duplicating or weakening source text, a matrix row may bind its
+normative clauses to a precisely bounded retained excerpt (file/hash plus lines
+or an addressable snippet), with its own explicit owner and disposition. A
+precise reference preserves the excerpt's conditions and strengths; a generic
+page citation or "see audit" does not map the clauses. Instrumentation/verification
+may reuse those exact normative bindings from the immutable audit by identifying
+the specific evidence rows, while reconciling capability and observed results
+against current dependencies and commands. Never inherit old runtime success or
+an installed capability merely by referencing the audit.
+
 Decompose a source paragraph into its separate conditions, actions and requirement
 levels before condensing it into a matrix row. One row may retain several clauses,
 but give each its own strength and disposition; a later failure fallback does not
@@ -154,6 +169,13 @@ diagnostics; MUST fail with HTTP 500 if the response still cannot fit, with acce
 unspecified. "May reduce diagnostics" alone loses the separate SHOULD. Compare the
 saved row with each source clause, not only its topic or citation. This is a local
 report-completeness check, not an additional OTel implementation requirement.
+Retain the qualifying condition with its action: "SHOULD reduce oversized partial
+responses" alone omits "when possible and practical". Preserve cross-cutting
+clauses too, such as the SHOULD to make transport limits configurable. Record
+that once in an explicitly referenced shared scope row or in each affected row;
+a generic SDK-configuration topic does not establish that transport disposition.
+Read the actual saved canonical rows back against these predicates, not only
+the downloaded source or a draft summary.
 
 For audit, emit concrete application-owned gaps through the normal findings and
 acceptance flow. For instrumentation, implement the authorized ones and retain
@@ -180,20 +202,36 @@ Reserve that audit level for normal application execution, including agent or
 preload startup, framework-resolved routes, automatic metrics or installed log export.
 Audit plans these checks; instrumentation and verification reconcile actual
 results. These are local report-contract checks, not new normative SDK requirements.
-Audit separates scenarios when their owners or required proof boundaries differ.
+Audit separates scenarios when their required proof boundaries differ. A shared
+scenario must retain each assertion's owner and disposition; split it when one
+classification would hide distinct outcomes.
 For example, a parser failure reached through the normal application entrypoint
 can use `full runtime`; a constructed shutdown Error emitted through an isolated
 bridge belongs in a separate `focused call-site` scenario. Do not append a focused
 control to a full-runtime scenario and expect later stages to reinterpret its level.
 `either` permits either adequate proof for the same contract, not a mixture of
 different controls with incompatible boundaries. A server-close test seam or an
-isolated structured-value probe likewise keeps its actual boundary. SDK/exporter
-and receiver-owned capability checks retain their owners; do not bundle them into
-an executable application finding merely because both concern delivery. Unverified
-upstream capability can keep conditional future checks in the matrix evidence.
-Later stages retain bound IDs and distinguish observations in existing evidence
-fields. Retain each required control's expected input/outcome, actual command,
-concrete evidence and verdict; one invocation can supply several controls.
+isolated structured-value probe likewise keeps its actual boundary. Referencing
+that focused scenario from an application scenario does not promote its error
+assertions to full-runtime proof.
+SDK/exporter and receiver capability checks retain their actual owners. An
+application-wiring finding may reference those related acceptance checks when
+their capability, disposition and proof boundary stay explicit; attachment alone
+does not assign the SDK duty to the application. Assess the actual required fix:
+do not require an application parser/retry substitute or mark unknown SDK support
+working merely because application wiring succeeds. Unverified upstream capability
+can keep conditional future checks in the matrix evidence.
+Before execution, expand each bound scenario into its individual controls in
+existing evidence fields or a Markdown checklist: scenario ID and control text,
+expected input/outcome, effective launch/exporter configuration, planned command,
+proof boundary and initial Not run verdict. Fill each result from its own command
+and concrete evidence; one invocation can supply several controls. Preserve the
+bound audit IDs and schema. Report generators may use that ledger, but must not
+replace it with unconditional success or aggregate test counts. An omitted required
+control keeps the relevant closure partial. A SIGINT trial with logs disabled,
+for example, cannot prove final-log drain with the normal exporter enabled.
+Later stages retain those bound IDs and distinguish observations in existing
+fields; do not promote a focused error seam to full runtime in a parent row.
 Derive working status from those individual results, not a total test count or
 an automated finalizer that marks every selected scenario working together.
 
@@ -498,7 +536,15 @@ that fails immediately. Use the existing SDK processor/caller deadline or a
 supported public option to satisfy the selected overall budget; preserve a
 verified adequate default. A client timeout does not prove zero receiver
 acceptance: a receiver can accept after the caller stops waiting. Keep delivery
-unknown until receipt evidence resolves it. When an OTLP response has populated
+unknown until receipt evidence resolves it.
+For HTTP full success, the server MUST respond with HTTP 200 and a conforming
+ExportLogsServiceResponse in the selected encoding, with `partial_success` unset.
+For a known N-record request, that full-success response acknowledges all N
+accepted and zero rejected; it does not establish backend persistence. A generic
+HTTP 200 with an invalid/unrelated body is not this protocol control. Preserve
+this positive control alongside partial/warning/failure cases in the source
+matrix and saved acceptance assertions.
+When an OTLP response has populated
 `partial_success`, the client MUST NOT retry that request, including an inferred
 rejected subset; this also covers warning-only responses with zero rejections.
 Keep request-attempt counts, received/accepted/rejected record counts and local
@@ -520,7 +566,10 @@ make a known failure response pending. Record the observed response and terminal
 retry decision separately, such as non-retryable HTTP 400 or a completed HTTP 503
 whose server wait cannot fit the remaining export budget. Assess that evidence
 across the report and raw observations; do not invent zero acceptance or rejection
-counts merely to fill a field.
+counts merely to fill a field. A receiver recording that it wrote HTTP 503 does
+not prove the client observed a completed 503 response. Match each batch to the
+SDK's actual terminal result and timing: a client deadline may have expired first.
+Retain server response intent and client timeout/failure as separate observations.
 
 For the local evidence report, reconcile per-batch request and response counts
 before summing a multi-batch trial. Save per-outcome attempted, received,
@@ -533,6 +582,11 @@ explain each outcome using an existing visibility state; do not invent a mixed
 visibility enum or new JSON keys. The [shared report contract](scripts/observe_report_core.py)
 defines `proof_mode`, `visibility` and the existing evidence fields. Receipt alone,
 completed failure, a stall and protocol acknowledgement retain distinct meanings.
+For subtrials all confined to an owned receiver fixture without Explorer proof,
+`not_explorer_visible` can be the accurate shared visibility while per-outcome
+acknowledgements remain in evidence. If a shared row cannot support one stronger
+visibility claim, keep that claim `not_proven` with the corresponding status and
+explain the individual outcomes; do not change bound audit IDs or invent an enum.
 
 The standard OTLP exporter timeout covers a whole batch export, including all
 attempts and retry waits; it must not restart for each attempt, and an earlier
@@ -594,6 +648,12 @@ Receiver request counts prove received requests, not every client connection
 or interrupted attempt. Resolve whether the SDK option covers one attempt or
 the whole export, including retry waits and jitter; do not infer its scope
 from its name or add a separate full timeout for each retry without evidence.
+
+Keep configured/effective timeout values separate from measured export duration.
+A shutdown wall time proves the lifecycle boundary, not each batch's client
+execution budget. Measure a supported export/caller boundary, retain its timing
+source and scope, or keep that runtime-duration claim unproven; source inspection
+and focused timing probes retain their own evidence level.
 
 Record the observed per-attempt timeout, retry/backoff duration and enclosing
 caller/processor deadline with units and source evidence, including an absent
@@ -668,6 +728,10 @@ not specify a runnable check. In a plan-only task, label settings as proposed
 or retained defaults and runtime evidence as unverified; do not invent an
 installed capability. Keep the handoff compact by sharing one outage scenario
 across applicable rules that use the same owned path and proof boundary.
+Instrumentation and verification also retain concrete future assertions beside
+unexecuted selected controls. "Not tested" or "counts kept separate" alone does
+not carry the acceptance plan; keep the actual expected counts/conditions while
+leaving runtime proof absent and unsupported capability conditional.
 
 | Rule | Required acceptance detail |
 |---|---|
@@ -677,7 +741,7 @@ across applicable rules that use the same owned path and proof boundary.
 | LOG-ASYNC-HANDOFF | Caller capture before scheduling; exact request pairing, permitted MDC handling where applicable, worker cleanup and bridge placement relative to queues. Link the joint real-span async scenario, supported propagation and expected-loss controls. |
 | LOG-EXCEPTION | Allowed exception fields and excluded sensitive fields, with bridge/event convention applicability and optional-field decisions. |
 | LOG-LIMITS | Name the effective/proposed log attribute count/value settings or public API fields, separately from Body policy. Specify below/at/above-limit inputs, units, expected outcomes and supported drop accounting; generic limits plus numbers are insufficient. For an expensive construction path, name the supported native/direct-OTel enablement query, check current policy inside the owned worker, and prove construction/output counts across disabled/enabled/disabled states. Preserve cheap direct emits and original sinks when the OTel path is disabled. |
-| LOG-DELIVERY | Record observed attempt/retry/caller deadlines and missing bounds with units/source separately from proposed queue/batch/schedule/export/shutdown settings and the composed budget. Assert batch <= queue on a batch path; a selected simple processor needs synchronous-cost evidence instead. Include a stalled receiver/caller deadline and a final log immediately before shutdown, with healthy receipt and bounded fault behavior checked independently. For each valid partial response of N records with R rejected, require N-R acknowledged accepted and R rejected; warning-only R=0 acknowledges all N without retry. Reconcile per-batch accounting before multi-batch totals and preserve per-outcome attempted/received/acknowledged accepted/rejected/dropped/unresolved counts with durable raw-receipt links. Include the selected transport's request/response byte limits, parsing after decompression where applicable, and oversized-response failure acceptance uncertainty with the correct SDK/receiver owner. Do not give a mixed fault scenario an unqualified accepted visibility from another successful subtrial; use existing report fields/states and explain each outcome. Retain unknown acceptance after a client timeout until a receipt resolves it. Name observed completed failure responses and terminal retry decisions separately from unresolved acceptance/persistence counts; a null count alone is not a failed response-classification check. |
+| LOG-DELIVERY | Record observed attempt/retry/caller deadlines and missing bounds with units/source separately from proposed queue/batch/schedule/export/shutdown settings and the composed budget. Assert batch <= queue on a batch path; a selected simple processor needs synchronous-cost evidence instead. Include a stalled receiver/caller deadline and a final log immediately before shutdown, with healthy receipt and bounded fault behavior checked independently. For a conforming HTTP full-success response with partial_success unset, require all N acknowledged accepted and zero rejected, independently of persistence. For each valid partial response of N records with R rejected, require N-R acknowledged accepted and R rejected; warning-only R=0 acknowledges all N without retry. Reconcile per-batch accounting before multi-batch totals and preserve per-outcome attempted/received/acknowledged accepted/rejected/dropped/unresolved counts with durable raw-receipt links. Include the selected transport's request/response byte limits, parsing after decompression where applicable, and oversized-response failure acceptance uncertainty with the correct SDK/receiver owner. Do not give a mixed fault scenario an unqualified accepted visibility from another successful subtrial; use existing report fields/states and explain each outcome. Retain unknown acceptance after a client timeout until a receipt resolves it. Name observed completed failure responses and terminal retry decisions separately from unresolved acceptance/persistence counts; a null count alone is not a failed response-classification check. |
 | LOG-DIAGNOSTICS | Name the supported separate routing or suppression mechanism. One exporter-fault scenario asserts bounded diagnostic volume and export attempts, application progress, original sink output, and continued operation of each other configured signal. Explicitly mark absent signals not configured; preserving configuration alone is not operation proof. |
 | LOG-VERIFY-FRESH | Unique report storage for each trial; planned manifest/lockfile dependency preparation; binding to source, command and dependency versions; actual success/failure/error/skip counts; preserved timeout console output, failed timeout verdict, owned-process cleanup and incremental structured partial results; explicit evidence scope. |
 

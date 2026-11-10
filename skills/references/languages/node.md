@@ -730,6 +730,12 @@ delegation and downstream default error rendering so the original error is not
 logged again. Do not suppress the diagnostic, change unrelated responses or
 declare the native boundary covered merely because OTLP was sanitized. If that
 boundary cannot safely be repaired in scope, retain the exact unresolved result.
+Also reconcile framework errors observed during tests with `OTEL_LOGS_EXPORTER=none`
+or a different launch profile. Native console output can still expose the path
+that the normal enabled bridge will capture. Replay the same existing failing
+request under the normal log-enabled bootstrap and inspect the policy-selected
+native and OTLP boundaries; successful-request log probes do not cover that error
+renderer. Do not add a new business failure merely to exercise logging.
 
 For an exporter outage, start the actual application with its normal bootstrap,
 fault only the log destination, and prove HTTP/native progress plus real receipt
@@ -771,6 +777,10 @@ fault test containing a completed negative response or stall cannot take an
 unqualified `otlp_accepted` visibility from another subtrial. Split its canonical
 observations or explain each outcome using the report's supported visibility;
 retain unresolved acceptance counts where the protocol/evidence leaves them open.
+If a partial/warning probe is unexecuted, retain its concrete future N-R/R and
+warning-only N/0 no-retry assertions in the canonical remaining-gap/acceptance
+evidence, together with the source/API-resolution step and future command.
+"Partial success not tested" or "counts are separate" omits those assertions.
 These are local report checks derived from the common OTLP delivery contract.
 
 ### Log limits and export budgets
