@@ -21,7 +21,18 @@
         <java.version>21</java.version>
         <jackson-bom.version>2.21.5</jackson-bom.version>
         <spring-kafka.version>3.3.16</spring-kafka.version>
+        <lz4.version>1.12.1</lz4.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>at.yawk.lz4</groupId>
+                <artifactId>lz4-java</artifactId>
+                <version>${lz4.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>
