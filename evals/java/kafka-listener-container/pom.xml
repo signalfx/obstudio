@@ -19,6 +19,7 @@
 
     <properties>
         <java.version>21</java.version>
+        <log4j2.version>2.25.5</log4j2.version>
         <jackson-bom.version>2.21.8</jackson-bom.version>
         <spring-kafka.version>3.3.16</spring-kafka.version>
         <lz4.version>1.12.1</lz4.version>
