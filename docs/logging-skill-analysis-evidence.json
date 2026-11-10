@@ -5110,7 +5110,7 @@
   "current_clause_verification": {
     "route": "Actual Claude Desktop",
     "verified_identity": "2f982ede5554230de3cde271b7f883daec41f9448ca993f2b57420e204763fd8",
-    "current_instruction_identity": "950c7404dd4d7b1b7f3067f6312988e37251b030bb2166616e5a75c65a421516",
+    "current_instruction_identity": "ba023a794b55c3e9ad0ee179f8ecf4d62596ab98f5fcb25947160fee1033527e",
     "status": "Historical Claude Desktop2f source-clause check only. Current generic guidance, inherited configuration rules and evidence corrections await final whole-PR combined review after three fresh complete passes; no current review credit.",
     "source_review_sha256": "a7f47e0b884f91866a7da9b152d94f4f5bd381b4686502bc8b697cb6042c4895",
     "actionable_defects": [],
@@ -5123,7 +5123,7 @@
     "execution_pass_credit": 0,
     "whole_pr_review_credit": false
   },
-  "current_instruction_identity": "950c7404dd4d7b1b7f3067f6312988e37251b030bb2166616e5a75c65a421516",
+  "current_instruction_identity": "ba023a794b55c3e9ad0ee179f8ecf4d62596ab98f5fcb25947160fee1033527e",
   "primary_source_corroboration": {
     "route": "desktop-app",
     "raw_report_sha256": "d806652de5d630c945a8d7b62f6ab1e8ad4ef377026647696d75a4ff3bdea886",
@@ -7954,5 +7954,101 @@
     "correction": "The real fixture README now states the graceful-stop policy, same-process active-finalization acceptance and force-termination exclusion. Grading names it as local policy; skill guidance stays generic and policy-aware. Staging regression proves actor visibility while eval definitions remain hidden.",
     "normative_otel_requirement": false,
     "clean_workflow_credit": 0
+  },
+  "source_enforcement_correction": {
+    "scope": "Actual selected-SDK source and isolated public-exporter capability proof; not app or fresh-workflow proof",
+    "official_source": [
+      {
+        "file": "config.go",
+        "url": "https://raw.githubusercontent.com/open-telemetry/opentelemetry-go/58db4c898f5b5594f8ba78f156475bf48486e2f2/exporters/otlp/otlplog/otlploghttp/config.go",
+        "sha256": "24acedb76db556b277598ff92ad47dcc712dbf36130aec8b32532f2376b2fd8b",
+        "matches_selected_module_and_retained_source": true
+      },
+      {
+        "file": "client.go",
+        "url": "https://raw.githubusercontent.com/open-telemetry/opentelemetry-go/58db4c898f5b5594f8ba78f156475bf48486e2f2/exporters/otlp/otlplog/otlploghttp/client.go",
+        "sha256": "94e63ed7c06987c3bfbcd55865d711d00002687a6c043944068cd33c80e4696c",
+        "matches_selected_module_and_retained_source": true
+      },
+      {
+        "file": "exporter.go",
+        "url": "https://raw.githubusercontent.com/open-telemetry/opentelemetry-go/58db4c898f5b5594f8ba78f156475bf48486e2f2/exporters/otlp/otlplog/otlploghttp/exporter.go",
+        "sha256": "2c2e5cbe4af41849f02c66354b622165719b086b8e806c65c5f329bdd6544406",
+        "matches_selected_module_and_retained_source": true
+      }
+    ],
+    "selected_sdk_version": "v0.22.0",
+    "revision": "58db4c898f5b5594f8ba78f156475bf48486e2f2",
+    "observed": "Public option comment describes whole-export retry precedence, but its value reaches http.Client.Timeout; Export forwards caller context into a separate retry loop. Source/proposal contradicted by selected implementation.",
+    "source_locations": {
+      "public_comment": "config.go:300-317",
+      "http_client_timeout": "client.go:69-73",
+      "separate_retry_loop": "client.go:185-195",
+      "context_forwarding": "exporter.go:38-62"
+    },
+    "runtime_results": [
+      {
+        "caller_deadline_enabled": false,
+        "client_result": "max retry time elapsed: retry-able request failure: body: (empty)",
+        "configured_caller_deadline_ms": 60,
+        "configured_request_timeout_ms": 20,
+        "configured_retry_elapsed_ms": 180,
+        "context_error": "<nil>",
+        "measured_export_ms": 208,
+        "received_attempts_ms": [
+          1,
+          43,
+          70,
+          90,
+          130,
+          171,
+          208
+        ]
+      },
+      {
+        "caller_deadline_enabled": true,
+        "client_result": "context deadline exceeded: retry-able request failure: Post \"http://127.0.0.1:50513\": context deadline exceeded",
+        "configured_caller_deadline_ms": 60,
+        "configured_request_timeout_ms": 20,
+        "configured_retry_elapsed_ms": 180,
+        "context_error": "context deadline exceeded",
+        "measured_export_ms": 61,
+        "received_attempts_ms": [
+          0,
+          21,
+          39,
+          61
+        ]
+      }
+    ],
+    "reproducer": {
+      "language": "go",
+      "go_mod": "module example.com/isolated-timeout-proof\n\ngo 1.25.0\n\nrequire (\n\tgo.opentelemetry.io/otel v1.46.0\n\tgo.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.22.0\n\tgo.opentelemetry.io/otel/log v0.22.0\n\tgo.opentelemetry.io/otel/sdk/log v0.22.0\n\tgo.opentelemetry.io/proto/otlp v1.11.0\n\tgoogle.golang.org/protobuf v1.36.12\n)\n\nrequire (\n\tgithub.com/cenkalti/backoff/v5 v5.0.3 // indirect\n\tgithub.com/cespare/xxhash/v2 v2.3.0 // indirect\n\tgithub.com/go-logr/logr v1.4.4 // indirect\n\tgithub.com/go-logr/stdr v1.2.2 // indirect\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0 // indirect\n\tgo.opentelemetry.io/auto/sdk v1.2.1 // indirect\n\tgo.opentelemetry.io/otel/metric v1.46.0 // indirect\n\tgo.opentelemetry.io/otel/sdk v1.46.0 // indirect\n\tgo.opentelemetry.io/otel/trace v1.46.0 // indirect\n\tgolang.org/x/net v0.58.0 // indirect\n\tgolang.org/x/sys v0.47.0 // indirect\n\tgolang.org/x/text v0.41.0 // indirect\n\tgoogle.golang.org/genproto/googleapis/api v0.0.0-20260819154853-08b0e4226688 // indirect\n\tgoogle.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688 // indirect\n\tgoogle.golang.org/grpc v1.83.1 // indirect\n)\n",
+      "main_go": "package main\n\nimport (\n\t\"context\"\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"net/http\"\n\t\"net/http/httptest\"\n\t\"os\"\n\t\"sync\"\n\t\"time\"\n\n\t\"go.opentelemetry.io/otel/attribute\"\n\t\"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp\"\n\t\"go.opentelemetry.io/otel/log\"\n\tsdklog \"go.opentelemetry.io/otel/sdk/log\"\n)\n\ntype capture struct{ records []sdklog.Record }\n\nfunc (c *capture) Export(_ context.Context, records []sdklog.Record) error {\n\tfor _, record := range records {\n\t\tc.records = append(c.records, record.Clone())\n\t}\n\treturn nil\n}\nfunc (*capture) ForceFlush(context.Context) error { return nil }\nfunc (*capture) Shutdown(context.Context) error   { return nil }\n\nfunc main() {\n\tc := &capture{}\n\tp := sdklog.NewLoggerProvider(sdklog.WithProcessor(sdklog.NewSimpleProcessor(c)))\n\tr := log.Record{}\n\tr.SetBody(attribute.StringValue(\"isolated deadline capability\"))\n\tp.Logger(\"isolated-timeout-proof\").Emit(context.Background(), r)\n\tif len(c.records) != 1 {\n\t\tpanic(\"SDK record capture failed\")\n\t}\n\tvar rows []map[string]any\n\tfor _, callerBound := range []bool{false, true} {\n\t\tvar mu sync.Mutex\n\t\tvar times []int64\n\t\tstart := time.Now()\n\t\tserver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {\n\t\t\tmu.Lock()\n\t\t\ttimes = append(times, time.Since(start).Milliseconds())\n\t\t\tmu.Unlock()\n\t\t\tw.WriteHeader(http.StatusServiceUnavailable)\n\t\t}))\n\t\texporter, err := otlploghttp.New(context.Background(),\n\t\t\totlploghttp.WithEndpointURL(server.URL),\n\t\t\totlploghttp.WithTimeout(20*time.Millisecond),\n\t\t\totlploghttp.WithRetry(otlploghttp.RetryConfig{\n\t\t\t\tEnabled: true, InitialInterval: 30 * time.Millisecond,\n\t\t\t\tMaxInterval: 30 * time.Millisecond, MaxElapsedTime: 180 * time.Millisecond,\n\t\t\t}))\n\t\tif err != nil {\n\t\t\tpanic(err)\n\t\t}\n\t\tctx := context.Background()\n\t\tcancel := func() {}\n\t\tif callerBound {\n\t\t\tctx, cancel = context.WithTimeout(ctx, 60*time.Millisecond)\n\t\t}\n\t\tstart = time.Now()\n\t\terr = exporter.Export(ctx, c.records)\n\t\telapsed := time.Since(start)\n\t\tcancel()\n\t\tmu.Lock()\n\t\tattempts := append([]int64(nil), times...)\n\t\tmu.Unlock()\n\t\t_ = exporter.Shutdown(context.Background())\n\t\tserver.Close()\n\t\trows = append(rows, map[string]any{\n\t\t\t\"caller_deadline_enabled\": callerBound, \"configured_request_timeout_ms\": 20,\n\t\t\t\"configured_retry_elapsed_ms\": 180, \"configured_caller_deadline_ms\": 60,\n\t\t\t\"measured_export_ms\": elapsed.Milliseconds(), \"received_attempts_ms\": attempts,\n\t\t\t\"client_result\": fmt.Sprint(err), \"context_error\": fmt.Sprint(ctx.Err()),\n\t\t})\n\t\tif err == nil || len(attempts) < 2 || (!callerBound && elapsed < 60*time.Millisecond) || (callerBound && (elapsed < 40*time.Millisecond || elapsed > 500*time.Millisecond)) {\n\t\t\tpanic(fmt.Sprintf(\"capability assertion failed: %+v\", rows[len(rows)-1]))\n\t\t}\n\t}\n\t_ = p.Shutdown(context.Background())\n\tif err := json.NewEncoder(os.Stdout).Encode(rows); err != nil {\n\t\tpanic(err)\n\t}\n}\n",
+      "source_sha256": "a50874dc6be0b9d3bc64ce84af7a37b01f0a88276276cd4ab71b7ba2e3aa749a",
+      "go_sum_sha256": "a55e1fd2c9098db445a5997a1fbb1a72c7737163d09f353835af1dd583d17435",
+      "command": "go run -mod=mod .",
+      "toolchain": "Go1.25.0",
+      "boundary": "Isolated publicSDK direct export to an owned local503 receiver; no app startup, bridge, trace join or backend persistence claim."
+    },
+    "standard_contract": "https://opentelemetry.io/docs/specs/otel/protocol/exporter/",
+    "correction": "Generic skills distinguish the normative/documented contract from actual source enforcement, follow delegation through deadline/retry owners and preserve contradictions. Referenced clauses must map to controls for those exact conditions/fields/operations. Audit now routes final Report readback explicitly.",
+    "clean_workflow_credit": 0
+  },
+  "configuration_branch_correction": {
+    "scope": "Generic instruction/acceptance allocation; no app or SDK conformance result implied",
+    "cause": "Normative type text and broad scenario mappings did not make each parsing/range/zero/equivalence branch addressable; a scenario-to-owner list omitted promised operations/fields.",
+    "correction": "Refactor type guidance into contract/capability/conditional-acceptance rows; preserve all strengths/compatibility and nativeAPI distinctions. Independently compare finalized finding promises and source/policy clauses to actual scenario assertions; retain unmatched controls and reconcile finalIDs. Inspect actual precedence/forwarding/normalization before declaring available facts unknown.",
+    "evals": "All12bare-task consumer/language rubrics cover fractional serialized values and accessible enforcement/precedence facts; no SDK version or framework is prescribed.",
+    "fresh_workflow_credit": 0
+  },
+  "capability_inventory_correction": {
+    "scope": "Generic source/acceptance completeness; no SDK or fresh-workflow result implied",
+    "cause": "Earlier condensed guidance named limit topics but did not preserve all conditional outcomes, and audit promises could omit fields from acceptance assertions. Accessible public option declarations did not establish actual record normalization.",
+    "correction": "Follow activation, forwarding, actual per-record normalization and diagnostic emission; preserve string/bytes units, recursive shapes, top-level count, empty-value depth outcome, conditional precedence and diagnostic cadence. Use a read-only inventory of every promised item/field as input to independent acceptance reconciliation.",
+    "helper": "skills/references/scripts/observe_report.py required-controls <audit-json> [--ids <finding-ids>]",
+    "proof_boundary": "The helper reports coverage_evaluated=false and runtime_evaluated=false; candidate scenario mappings are not acceptance proof. It does not approve scope, resolve dependencies or modify reports/application files.",
+    "regression_tests": "Eight new inventory tests plus isolated-bundle CLI discovery; 223 focused tests passed. All twelve logging rubrics semantically updated.",
+    "fresh_workflow_credit": 0
   }
 }

@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-instrument |
-| Run ID | 20261109T180402192105Z |
+| Run ID | 20261110T171212321608Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -20,6 +20,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | go/chi-basic/qual/benchmark-instrument | go/chi-basic | 1 | evals/go/chi-basic/eval/qual/benchmark-instrument.json | 0 | 3 | 0 |
 | go/chi-basic/qual/instrument | go/chi-basic | 2 | evals/go/chi-basic/eval/qual/instrument.json | 0 | 8 | 0 |
 | go/chi-basic/qual/instrument-decision-gated | go/chi-basic | 1 | evals/go/chi-basic/eval/qual/instrument-decision-gated.json | 0 | 4 | 0 |
+| go/chi-basic/qual/logging-instrument-contract | go/chi-basic | 3 | evals/go/chi-basic/eval/qual/logging-instrument-contract.json | 0 | 14 | 0 |
 | go/chi-basic/runtime/instrument | go/chi-basic | 1 | evals/go/chi-basic/eval/runtime/instrument.json | 0 | 0 | 1 |
 | go/chi-partial/qual/instrument | go/chi-partial | 2 | evals/go/chi-partial/eval/qual/instrument.json | 0 | 6 | 0 |
 | go/chi-partial/runtime/instrument | go/chi-partial | 1 | evals/go/chi-partial/eval/runtime/instrument.json | 0 | 0 | 1 |
@@ -35,8 +36,10 @@ This report validates eval JSON, eval directory availability, and skill source a
 | java/kafka-streams/qual/instrument | java/kafka-streams | 2 | evals/java/kafka-streams/eval/qual/instrument.json | 0 | 6 | 0 |
 | java/springboot-basic/qual/instrument | java/springboot-basic | 2 | evals/java/springboot-basic/eval/qual/instrument.json | 0 | 12 | 0 |
 | java/springboot-basic/qual/logging-compatible-plan | java/springboot-basic | 1 | evals/java/springboot-basic/eval/qual/logging-compatible-plan.json | 0 | 6 | 0 |
+| java/springboot-basic/qual/logging-instrument-contract | java/springboot-basic | 3 | evals/java/springboot-basic/eval/qual/logging-instrument-contract.json | 0 | 14 | 0 |
 | node/express-basic/qual/dependency-log-compatibility | node/express-basic | 1 | evals/node/express-basic/eval/qual/dependency-log-compatibility.json | 0 | 6 | 0 |
 | node/express-basic/qual/instrument | node/express-basic | 2 | evals/node/express-basic/eval/qual/instrument.json | 0 | 10 | 0 |
+| node/express-basic/qual/logging-instrument-contract | node/express-basic | 3 | evals/node/express-basic/eval/qual/logging-instrument-contract.json | 0 | 14 | 0 |
 | node/express-basic/runtime/instrument | node/express-basic | 1 | evals/node/express-basic/eval/runtime/instrument.json | 0 | 0 | 2 |
 | python/agent-connection-demo/qual/instrument | python/agent-connection-demo | 1 | evals/python/agent-connection-demo/eval/qual/instrument.json | 0 | 5 | 0 |
 | python/ai-assistant-demo/qual/ao-name-inputs-instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/ao-name-inputs-instrument.json | 0 | 6 | 0 |
@@ -67,6 +70,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | python/flask-basic/qual/dotenv-profiles | python/flask-basic | 4 | evals/python/flask-basic/eval/qual/dotenv-profiles.json | 0 | 7 | 0 |
 | python/flask-basic/qual/instrument | python/flask-basic | 3 | evals/python/flask-basic/eval/qual/instrument.json | 0 | 12 | 0 |
 | python/flask-basic/qual/local-log-launcher-policy | python/flask-basic | 1 | evals/python/flask-basic/eval/qual/local-log-launcher-policy.json | 0 | 6 | 0 |
+| python/flask-basic/qual/logging-instrument-contract | python/flask-basic | 3 | evals/python/flask-basic/eval/qual/logging-instrument-contract.json | 0 | 14 | 0 |
 | python/flask-basic/runtime/instrument | python/flask-basic | 1 | evals/python/flask-basic/eval/runtime/instrument.json | 0 | 0 | 2 |
 | python/galileo-agent-demo/qual/instrument | python/galileo-agent-demo | 3 | evals/python/galileo-agent-demo/eval/qual/instrument.json | 0 | 7 | 0 |
 | python/mcp-ai-tool-demo/qual/instrument | python/mcp-ai-tool-demo | 1 | evals/python/mcp-ai-tool-demo/eval/qual/instrument.json | 0 | 7 | 0 |

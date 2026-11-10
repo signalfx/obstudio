@@ -1,8 +1,8 @@
 {
   "scope": "Current replacement logging evals only. Superseded task definitions and execution results are excluded from this PR.",
-  "instruction_identity": "950c7404dd4d7b1b7f3067f6312988e37251b030bb2166616e5a75c65a421516",
-  "source_commit": "e72f203bea70a68d2718ca7e79947fb69feee1e9",
-  "execution_freeze": "54a616200ae9f5c4927049608f17848573acf92bf908b11cbfc797a085c5a759",
+  "instruction_identity": "ba023a794b55c3e9ad0ee179f8ecf4d62596ab98f5fcb25947160fee1033527e",
+  "source_commit": "fb8c6bb8e9192fffbf537563a328a67050f551f4",
+  "execution_freeze": "51776c9219fc711958f14162295466b74284a07d38285db890263977c48bdb11",
   "models": {
     "actor": "gpt-6.1-sol",
     "grader": "gpt-6.1-sol",
@@ -34,7 +34,7 @@
     "criteria_per_case": 14,
     "total_criteria": 168,
     "native_test_cases": 89,
-    "focused_guidance_runner_receiver_workflow_regressions": 215,
+    "focused_guidance_runner_receiver_workflow_regressions": 223,
     "positive_runtime": "Independent unchanged host checker on actual generated service after instrument and verify",
     "model": "gpt-6.1-sol",
     "reasoning_effort": "high"
@@ -42,42 +42,45 @@
   "three_consecutive_clean_passes": {
     "required": 3,
     "clean_streak": 0,
-    "status": "950/e72f203: four fresh language workflows and three required Make rubric runs execute in parallel on unchanged source. Failed cohorts stop unfinished peers. Three complete consecutive rounds remain pending.",
+    "status": "Current source: four fresh language workflows running in parallel; no complete workflow credit yet.",
     "combined_review": "Not started; requires three complete unchanged-source clean passes"
   },
   "validation": {
-    "focused": 215,
+    "focused": 223,
     "interactive": 188,
     "policy": "49units+8contracts+policy passed",
-    "exact_logs": "config-facts-*",
+    "pytest_plugin": 228,
     "otel-audit": {
-      "passed": 755,
+      "passed": 763,
       "skipped": 5,
-      "run_id": "20261110T072227716110Z",
-      "profile_model": "gpt-6.1-sol",
-      "model_calls": 0
+      "run_id": "20261110T171212321623Z",
+      "model_calls": 0,
+      "report_configuration_model": "gpt-6-luna",
+      "report_model_is_execution_evidence": false
     },
     "otel-instrument": {
-      "passed": 786,
+      "passed": 794,
       "skipped": 5,
-      "run_id": "20261110T072227716100Z",
-      "profile_model": "gpt-6.1-sol",
-      "model_calls": 0
+      "run_id": "20261110T171212321608Z",
+      "model_calls": 0,
+      "report_configuration_model": "gpt-6-luna",
+      "report_model_is_execution_evidence": false
     },
     "otel-verify": {
-      "passed": 721,
+      "passed": 729,
       "skipped": 5,
-      "run_id": "20261110T072227716094Z",
-      "profile_model": "gpt-6.1-sol",
-      "model_calls": 0
+      "run_id": "20261110T171212321612Z",
+      "model_calls": 0,
+      "report_configuration_model": "gpt-6-luna",
+      "report_model_is_execution_evidence": false
     },
-    "pytest_plugin": 228,
-    "execution": "Deterministic validation invokes no actor or grader; explicit Sol profile metadata is recorded."
+    "execution": "Deterministic checks make no model calls. Report default model metadata is not an actor/grader session; actual model-backed runs must prove Sol/high from their sessions.",
+    "exact_logs": "capability-inventory-*"
   },
   "clause_verification": {
     "route": "Actual Claude Desktop",
     "verified_identity": "2f982ede5554230de3cde271b7f883daec41f9448ca993f2b57420e204763fd8",
-    "current_instruction_identity": "950c7404dd4d7b1b7f3067f6312988e37251b030bb2166616e5a75c65a421516",
+    "current_instruction_identity": "ba023a794b55c3e9ad0ee179f8ecf4d62596ab98f5fcb25947160fee1033527e",
     "status": "Historical Claude Desktop2f source-clause check only. Current generic guidance, inherited configuration rules and evidence corrections await final whole-PR combined review after three fresh complete passes; no current review credit.",
     "source_review_sha256": "a7f47e0b884f91866a7da9b152d94f4f5bd381b4686502bc8b697cb6042c4895",
     "actionable_defects": [],
@@ -101,7 +104,7 @@
   "go_runtime_scope": "The live interop fixture explicitly uses Go1.25. Existing Go1.24 applications retain their floor; rejection of a valid peer carrier remains an unresolved propagator dependency conformance gap, not optional covered behavior or a logger repair.",
   "merge_base": "9e8c526fb61a47b5dbe477746f5ee13b4247c91d",
   "generic_skill_refactor": {
-    "canonical_pr_paths_reviewed": 13,
+    "canonical_pr_paths_reviewed": 15,
     "behavior": "Detected-stack capability/ownership checks replace framework/API/fixture prescriptions; concrete regressions remain in evals.",
     "installed_owned_files_verified": 70
   },
@@ -115,17 +118,18 @@
       "focused checks/parity",
       "plugin tests"
     ],
-    "early_failure": "Stop verified owned peer process trees; retain partial evidence; no credit for interrupted runs",
-    "runner_isolation_tests": 2
+    "early_failure": "Retain every current-stage peer result, stop before launching a later stage; failed cohort earns zero credit. Verified owned descendant cleanup remains for infrastructure abort/timeouts.",
+    "runner_isolation_tests": 4
   },
   "native_current_round": {
+    "status": "passed",
     "round": 1,
-    "execution_freeze": "54a616200ae9f5c4927049608f17848573acf92bf908b11cbfc797a085c5a759",
-    "native_cases": 89,
-    "sampled_sdk_log_span_joins": 80,
-    "unsampled_controls": 4,
-    "outside_controls": 4,
-    "wire_sha256": "8dfe802fa42ffb21df8a4ad0cc6d0bd33d750e2367286ed3ec4b5dea6e655b1e",
+    "execution_freeze": "51776c9219fc711958f14162295466b74284a07d38285db890263977c48bdb11",
+    "executed_tests": 89,
+    "passed_tests": 89,
+    "failed_tests": 0,
+    "skipped_tests": 0,
+    "profile": "Task-owned launchd ProcessType=Interactive; existing timing budgets unchanged",
     "outcomes": [
       {
         "language": "python",
@@ -156,6 +160,8 @@
         "skipped_tests": 0
       }
     ],
+    "sampled_sdk_log_span_joins": 80,
+    "wire_sha256": "4fafac8b27059c2d32d0bffb5a81437acbab6b1b3f634042682888f6a1c3307a",
     "workflow_pass_credit": 0
   },
   "eval_policy": "Repeated-stop non-interruption is the Python fixture documented operator contract, not an OTel signal-handler requirement. Bare task prompts and no eval overlay are preserved."

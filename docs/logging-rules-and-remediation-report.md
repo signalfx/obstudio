@@ -5,7 +5,7 @@ Java, Python, Go and Node.js. They resolve the application's actual logger,
 collection owner, installed SDK, configuration and lifecycle instead of imposing
 a framework, constructor, timeout, limit value or eval-fixture recipe.
 
-Current instruction identity: `950c7404dd4d7b1b7f3067f6312988e37251b030bb2166616e5a75c65a421516`. Source commit: `e72f203b`.
+Current instruction identity: `ba023a794b55c3e9ad0ee179f8ecf4d62596ab98f5fcb25947160fee1033527e`. Source commit: `fb8c6bb8`.
 The three-fresh-workflow gate is **0/3**, with all four languages running in
 parallel. The final whole-PR combined Codex and Claude Desktop review has not
 started; it follows three consecutive clean passes on unchanged source.
@@ -39,6 +39,15 @@ The retained source/proposal evidence and reviewed inherited obligations are in
 [source evidence](logging-skill-analysis-evidence.json); this is a plan/source
 observation, not a claim that the baseline app already ran that configuration.
 
+A separate selected-SDK probe also exposed a documentation/implementation
+contradiction: an option described as a whole-export timeout only configured
+individual HTTP requests. An isolated export with a 20 ms option ran 208 ms over
+seven received attempts; a 60 ms caller deadline ended a second export in 61 ms.
+The [retained source and reproducer](logging-skill-analysis-evidence.json) bind
+that observation to its exact SDK revision. It is a capability finding, not
+application or fresh-workflow proof. Guidance now follows actual enforcement
+through delegated components and keeps contrary comments/source explicit.
+
 The skills now bind applicable clauses to primary sources, requirement strength,
 feature maturity, owner and disposition. A precisely retained source excerpt or
 specific immutable audit evidence row can preserve those clauses without lossy
@@ -71,13 +80,23 @@ member remains addressable. Early planning is recommended; a later complete,
 independently contract-derived reconciliation is valid. Tool-call order alone
 does not establish a correctness defect. Directly proven item claims can coexist with incomplete related
 scenario coverage; a broader lifecycle claim still needs its own drain proof.
-Every promised operation maps to an addressable control, and one scalar proof
+A retained source binding preserves normative text; its mapped control must
+actually exercise the corresponding condition, input branch, field or operation.
+Unexecuted clauses retain concrete conditional acceptance or the exact missing
+capability-resolution step. Every promised operation maps to an addressable control, and one scalar proof
 level covers every assertion in its scenario. Repeated-stop proof retains
 same-process delivery while final logging/drain is active and the actual chosen
 shutdown policy. The Python fixture explicitly documents its non-interrupting
 repeated-stop guarantee as local operator policy, with deliberate forced exit
 outside that guarantee; it is not an OTel signal-handler requirement.
 Verdicts follow evidence rather than report-helper syntax or aggregate counts.
+
+The existing report helper now provides a read-only `required-controls` inventory
+of every finding's promised telemetry item and attribute. It preserves owner and
+item identity, rejects invalid ID selections, and reports no coverage or runtime
+verdict. This inventory helps expose omitted fields before an agent compares
+promises with named assertions. The source table follows actual activation,
+normalization and diagnostic code; public options alone are insufficient.
 
 Delivery reporting derives counts from each decoded request and response before
 summing trials. It separates emissions, attempts, received copies, acknowledged
@@ -114,13 +133,15 @@ excluded from the PR's current results.
 Each complete round starts four fresh, uninstrumented service workspaces.
 Languages run in parallel; audit → instrument → verify stays sequential within
 each language. Native SDK tests, focused checks and plugin parity overlap those
-workflows. A failed obligation closes the round early and stops only verified
-owned peer processes, preserving partial evidence without pass credit. Required standalone Make rubric runs also run in parallel. Three
+workflows. A failed obligation prevents the round from earning credit. Other languages
+finish their current stage so independent feedback can be fixed together, then
+stop before the next stage. Emergency cleanup targets verified owned process
+trees. Four local orchestration tests prove boundary stopping and isolation. Required standalone Make rubric runs also run in parallel. Three
 complete rounds remain consecutive; a source change or a real failed obligation
 resets the streak. Dependency/build caching does not reuse an instrumented app,
 telemetry receipt or passing verdict.
 
-A round requires **168 semantic criteria, 89 native cases, 215 focused checks,
+A round requires **168 semantic criteria, 89 native cases, 223 focused checks,
 plugin parity and eight independent actual-app checks**. The unchanged host
 checker captures exact synchronous/asynchronous log/span joins and matching
 native output while the producer is alive, then proves bounded owned cleanup.
@@ -134,14 +155,16 @@ or production backend persistence; those claims require separate evidence.
 | Go, race enabled | 21 | Pending |
 | Node.js | 20 | Pending |
 
-Current deterministic checks: **215 focused**, **188 interactive**, **49 policy
+Current deterministic checks: **223 focused**, **188 interactive**, **49 policy
 unit + 8 contract**, and **228 pytest-plugin tests passed**. Skill validation:
-audit **755 passed / 5 skipped**, instrumentation **786 / 5**, verification
-**721 / 5**. Validation checks schema/fixtures and does not replace rubric or
-runtime proof. The current native run passed all **89 cases**, including **80 sampled SDK
-log/span joins**, four unsampled and four outside-context controls, with zero
-skips. Rubric outcomes and full harness freshness remain pending. These native
-checks alone do not complete a fresh workflow round.
+audit **763 passed / 5 skipped**, instrumentation **794 / 5**, verification
+**729 / 5**. Validation checks schema/fixtures and does not replace rubric or
+runtime proof. The current native round passed **89/89**, including 80 sampled
+SDK log/span joins, four unsampled controls and four outside-context controls.
+These are native SDK/bridge results; the three complete fresh application
+workflows remain pending. Timing assertions are unchanged and the task jobs run
+at ordinary application priority. Rubric outcomes and full harness freshness
+remain pending.
 
 Validation commands, run from the repository root with the managed eval Python:
 
@@ -157,8 +180,8 @@ make eval-validation SKILL=skills/otel-verify MODEL=gpt-6.1-sol
 Each role's representative command is the corresponding concrete expansion of:
 
 ```bash
-make eval-rubric SKILL=skills/otel-<role> CASE=node/express-basic \
-  EVAL_PATTERN=node/**/eval/qual/logging-<role>-contract.json \
+make eval-rubric SKILL=skills/otel-<role> CASE=go/chi-basic \
+  EVAL_PATTERN=go/**/eval/qual/logging-<role>-contract.json \
   PROMPT=logging-trial-1 EVAL_WORKERS=1 EVAL_PROGRESS=0 MODEL=gpt-6.1-sol
 ```
 
@@ -174,7 +197,7 @@ of an uninstrumented fixture earns prerequisite-handling proof only.
 All three skills consume the same shared language references. Previous reference
 paths remain compatibility forwarders, and isolated-skill tests prove discovery
 without requiring another skill to be installed. The generic refactor reviews
-all thirteen canonical skill paths changed in this PR.
+all fifteen canonical skill paths changed in this PR.
 
 The expected result is a source-backed audit, minimal supported repairs within
 the selected scope, and honest verification that separates Working, Not working,
