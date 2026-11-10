@@ -618,6 +618,25 @@ class StageObstudioPluginTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "defaultPrompt must contain at most 3 entries"):
                 STAGE.verify_staged_plugin(output)
 
+    def test_real_codex_manifest_has_required_fields(self):
+        manifest_path = STAGE.PLUGIN_ROOT / ".codex-plugin" / "plugin.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        STAGE.verify_codex_required_fields(manifest, manifest_path)
+
+    def test_verify_rejects_codex_manifest_missing_required_field(self):
+        manifest_path = STAGE.PLUGIN_ROOT / ".codex-plugin" / "plugin.json"
+        real = json.loads(manifest_path.read_text(encoding="utf-8"))
+        for dotted in STAGE.CODEX_REQUIRED_MANIFEST_FIELDS:
+            with self.subTest(field=dotted):
+                manifest = json.loads(json.dumps(real))
+                parent = manifest
+                *parents, leaf = dotted.split(".")
+                for key in parents:
+                    parent = parent[key]
+                del parent[leaf]
+                with self.assertRaisesRegex(RuntimeError, "missing required fields: " + dotted.replace(".", r"\.")):
+                    STAGE.verify_codex_required_fields(manifest, manifest_path)
+
     def test_verify_rejects_unknown_manifest_skill_references(self):
         with tempfile.TemporaryDirectory() as tempdir:
             output = Path(tempdir) / "obstudio"
