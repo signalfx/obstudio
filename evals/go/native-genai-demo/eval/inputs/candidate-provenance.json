@@ -7,8 +7,8 @@
     "main.go": "7ff08c72f55f98255c93762056f8816f2a4351975365e2c03dfc3b1f39bee09f",
     "main_test.go": "a0f03b2b02fb3611808b500c198dd96d1fe9eaeda4372ceed389998b8449c23e",
     "telemetry.go": "1a6a265bbf7e72ab6b1a4cbfe5c99bfac66af61dd4bd9e1eddb4dfe392e0a22d",
-    "go.mod": "81fbdf643df4bcdee512f33b7fd9b3cddfda49488da4eca00f5d77d516633e09",
-    "go.sum": "5ab9f296e66959a6a223bacf165f6540fa2b49f63dc8a7698a8cdbc93978c04d",
+    "go.mod": "5799f426a1dad23378ee071445e85d7ec9422a96bb38ed38b490f6d94ac3a059",
+    "go.sum": "f6fbf8e7bb1b83a747a7590926aa9ee22c16be6dad16f5e8d66adcb37f5046cc",
     "eval/inputs/nativeprobe/main.go": "2a2dcfeffb8bb6a370f8dc342e18d3432514cf849b423107b728940173be64ca",
     "eval/inputs/nativeprobe/main_test.go": "f3a4aebe0fa1fd2d31f8c57e586081f5c69a6f5f41bc9fa3e963134edb8af025",
     "eval/inputs/nativecandidate/telemetry.go": "bae9ae52fd8f05fc4ba3dba125ce93c507cd3b434abbf9f47bfc4f6c2e0bd671",
@@ -76,5 +76,13 @@
     ],
     "bounds": "At most one POST per resource;409 has at most2validated exact scoped relookups, no secondPOST; entire resolution10seconds with2secondHTTP requests.",
     "failure_behavior": "Invalid/unresolved/auth-failed relookup returns no bound headers; sanitized diagnostics, four business outcomes and independent native metric export continue."
+  },
+  "dependency_manifest_update": {
+    "module": "golang.org/x/net v0.62.0",
+    "recorded_capture_module_hashes": {
+      "go.mod": "81fbdf643df4bcdee512f33b7fd9b3cddfda49488da4eca00f5d77d516633e09",
+      "go.sum": "5ab9f296e66959a6a223bacf165f6540fa2b49f63dc8a7698a8cdbc93978c04d"
+    },
+    "scope": "The files map reflects current fixture files. Captures, capture timestamps, toolchain and module evidence retain their original dependency snapshot; no new runtime evaluation is claimed."
   }
 }
