@@ -907,6 +907,14 @@ policy, leave headroom and test stalling as well as immediate failure. Record
 observed attempt/retry/caller deadlines before the proposal; preserve an
 adequate existing bound. Shutdown waits and receiver acceptance need separate
 proof, and these controlled fixture values are not production defaults.
+If the bound plan selects both direct `Export` and `BatchProcessor` timing,
+measure each boundary separately with its named controls. Direct-export timing
+or whole-process shutdown cannot prove a batch processor's export deadline.
+Distinguish recovery (503 followed by 200) from a persistently failing receiver's
+terminal exhaustion. When explicitly selected, caller-triggered `cancel()` before
+the deadline is separate from `DeadlineExceeded`; retain either omitted control
+not proven rather than treating one as the other. Do not add unselected policy
+overrides or an application retry implementation for these capability tests.
 
 For selected final-record drain proof, exercise the normal launcher's configured
 logging path through shutdown. At the owned receiver, decode its actual OTLP payload

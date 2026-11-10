@@ -1841,6 +1841,12 @@ permission to run a project-configured syntax, compile, typecheck, import, or
 focused test command. Do not require full app startup, Docker, credentials,
 live providers, or an OTLP collector for this gate.
 
+For logging, reopen `../references/logging-readiness.md` before authoring probes.
+Build its individual required-control inventory from both the bound trigger and
+acceptance text first; keep named assertions and initial Not run states. Use its
+proof-mode table for the actual SDK/application path. A passing suite cannot
+promote controls omitted from that suite, or give all item results one proof mode.
+
 At minimum:
 
 1. Probe the selected project runtime and record the version actually used.
@@ -2026,6 +2032,11 @@ This step is REQUIRED whenever `.vscode/launch.json` exists.
 - Include selected `Audit Gap Closure` counts by `Working`, `Not working`, `Not
   proven`, and `Not configured`. Do not report unselected findings as
   implemented work.
+- Before serializing logging verdicts, reopen the common logging reference's
+  acceptance readback checks. Reconcile each scenario/item with its complete
+  control inventory, actual mode/visibility, current capability, existing local
+  evidence and operation-specific trace IDs. Generate direct-assertion flags
+  from those results; a schema pass or overall Partial result is insufficient.
 - For incident-readiness work, summarize each in-scope workflow, dependency,
   input-complexity, freshness, backpressure, synthetic/canary, auth/edge,
   capacity, health/readiness, and release/config surface as MTTD-improving,

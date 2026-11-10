@@ -902,6 +902,12 @@ OTel handler using supported filtering/separate handlers or suppression. Keep
 those diagnostics observable on a separate sink, not recursively forwarded
 through application `logger.error`. Verify bounded attempts, application
 progress and original-handler output under a real exporter fault.
+Assess SDK discard/truncation diagnostics separately from successful value-limit
+behavior. In an isolated probe, capture the installed SDK's actual warning/log
+mechanism and relate messages to individual discarded-attribute records, not
+attributes or total suite output. The common at-most-once-per-record requirement
+can remain an upstream conformance limitation even when truncation works. Record
+that evidence and owner; do not suppress/replace SDK internals to claim coverage.
 
 ### Log limits and export budgets
 
@@ -937,6 +943,11 @@ application's reviewed processors. This is an SDK-input limit probe, not full
 application proof. For a real logger test, count bridge-added attributes and
 other processing separately rather than assuming every call has 20 attributes
 or must report 12 drops. Preserve the independent authorized 128/64 policy.
+If the bound contract selects both direct SDK and stdlib-bridge limits, exercise
+both. `logger.emit(LogRecord(...))` on an SDK logger does not execute the stdlib
+logger/handler bridge; emit through that actual supported path and account for
+its approved added attributes and drops separately. A passing typed-SDK limit
+test cannot close an omitted bridge-limit control.
 
 For a selected batching repair, verify `BatchLogRecordProcessor` options
 `max_queue_size`, `max_export_batch_size`, `schedule_delay_millis` and
@@ -952,6 +963,13 @@ its deadline; resolve the installed behavior, test a stalled receiver and
 separately bound flush/shutdown. Record observed attempt/retry/caller budgets
 before the proposal. Preserve an adequate existing bound; fixture values are
 not production defaults.
+
+For exporter acceptance probes, derive N from each decoded OTLP request; keep the
+SDK input-list count separate. Check full-success N/0 and partial (N-R)/R before
+writing results. A shared constant from a two-record case is invalid for a
+one-record size-boundary case. Bind report trace IDs to the specific operation's receipt and verify the
+saved local evidence path, rather than projecting one trial's first IDs or
+guessed result filename across every scenario.
 
 ### Lifecycle and final-record proof
 

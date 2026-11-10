@@ -291,6 +291,13 @@ Inspect the repo before running anything:
 
 Create these working inventories before choosing commands:
 
+For logging, reopen `../references/logging-readiness.md` now. Expand each bound
+trigger and acceptance list into individual controls before writing probes, with
+named assertions, actual configuration, proof boundary and initial Not run state.
+Prior Working rows and aggregate suite counts do not supply missing controls.
+Use the common proof-mode table for both scenario and item results; a test's
+location in the app repository does not make an isolated SDK probe `app_test`.
+
 ```markdown
 ## Signal Inventory
 
@@ -831,6 +838,13 @@ Rules:
   seam instead of faking away the behavior in a misleading test.
 
 ### 8. Produce Verification Artifacts
+
+For logging, perform the common reference's acceptance readback before producing
+the saved rows: complete controls, correct per-item mode/visibility, current
+capability, resolvable executed-evidence links and trace IDs from that operation.
+Keep missing assertions not proven, even when unrelated checks or schema
+validation pass. Reconcile newly executed results instead of copying stale audit
+capability or prior instrumentation verdicts into the verification matrix.
 
 In canonical flow, write `.observe/otel-verify.json` using
 `./references/json-approval-handoff.md`. Preserve exact selected finding,

@@ -85,12 +85,15 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
             assert "limit-resolution code" in readiness and "exported files" in readiness
             assert "Replay the same existing failing" in readiness
             assert '"Partial success not tested"' in readiness
+            assert "clearImmediate" in readiness and "observable drain-entry boundary" in readiness
         if target == "languages/python.md":
             assert "SystemExit" in readiness and "repeated" in readiness
             assert "signal handler" in readiness and "drain" in readiness
+            assert "at-most-once-per-record" in readiness and "two-record case" in readiness
         if target == "languages/go.md":
             assert "decode its actual OTLP payload" in readiness
             assert "final record" in readiness
+            assert "503 followed by 200" in readiness and "caller-triggered `cancel()`" in readiness
         for relative in re.findall(r"`((?:\.\.?/)[^`\s]+\.md)`", text):
             assert (guide.parent / relative).is_file(), (skill, target, relative)
         assert skill in consumers[target]
@@ -112,7 +115,7 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
     assert "attachment alone" in common and "shared scope row" in common
     assert "precisely bounded retained excerpt" in common and "specific evidence rows" in common
     assert "HTTP full success" in common and "zero rejected" in common
-    assert "Before execution, expand" in common and "effective launch/exporter" in common
+    assert "Before authoring probes/tests" in common and "effective launch/exporter" in common
     assert "server response intent" in common and "client timeout/failure" in common
     assert "measured export duration" in common and "shutdown wall time" in common
     assert "not_explorer_visible" in common and "framework records" in common
@@ -125,6 +128,11 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
     assert "An agent-equipped environment" in common
     assert "0 < R <= N" in common and "inferred rejected subset" in common
     assert "separate partial-rejection case" in common
+    assert "blanket Working/default-true" in common
+    assert "instrumentation item result" in common and "in memory" in common
+    assert "one-record" in common and "shared fixture constant" in common
+    assert "local execution-evidence" in common and "operation/receipt" in common
+    assert "MAY emit a diagnostic" in common and "truncation, discard or replacement" in common
     if skill == "otel-audit":
         instructions = _read(side / ".agents" / "skills" / skill / "SKILL.md")
         assert "before assigning scenario IDs" in instructions
@@ -134,6 +142,13 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
         assert "Captured framework/container records" in instructions
         assert "supported" in instructions and "logging-only sanitizer" in instructions
         assert "another audit merely" in instructions
+        assert "Before serializing logging verdicts" in instructions
+        assert "before authoring probes" in instructions
+
+    if skill == "otel-verify":
+        instructions = _read(side / ".agents" / "skills" / skill / "SKILL.md")
+        assert "before writing probes" in instructions
+        assert "Reconcile newly executed results" in instructions
 
 
 @pytest.mark.parametrize("language", ["java", "python", "go", "node"])

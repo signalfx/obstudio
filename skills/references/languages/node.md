@@ -693,6 +693,13 @@ SDK flags under concurrency, caller detach and callback reuse. Test error/cancel
 cleanup on an existing owned path; do not add business cancellation just for a
 logging probe or confuse ending a span with canceling a callback. Keep a focused
 context-manager control focused; do not add a wrapper to a verified path.
+When the selected focused contract names cancellation, schedule work and actually
+cancel it through the detected supported scheduling/AbortSignal API, observing
+the callback/output and cleanup. [clearImmediate](https://nodejs.org/api/timers.html#clearimmediateimmediate) can cancel an owned pending
+Immediate; use only the applicable installed mechanism. A synchronous throw or
+`span.end()` alone is not that control. If the app owns no cancellation path,
+keep this a focused fixture and the application path not applicable/unproven;
+do not add business cancellation to make the test possible.
 Check where a transport creates the SDK record relative to any async queue.
 Use the common real-span join, unsampled and outside-span acceptance contract.
 
@@ -755,7 +762,13 @@ alone does not establish that all process-local test paths are unavailable.
 Exercise repeated stop requests during the active application drain under its
 chosen shutdown policy. Separate deliberate forced exit from graceful drain and
 assess the final-record receipt at its own boundary; a single-signal run does not
-test the repeated-stop policy.
+test the repeated-stop policy. Back-to-back signal sends do not establish that
+both reached the application during active drain. Synchronize on an observable drain-entry boundary,
+hold that drain using an owned receiver/test seam, deliver the next request and
+prove the application observed it before releasing the drain. A process-local
+test observer may record signal delivery without changing production shutdown
+policy. Keep final receipt, repeated-request handling and shutdown-call evidence
+on that same run; a separate error seam does not supply its event order.
 
 ### Severity text mapping
 

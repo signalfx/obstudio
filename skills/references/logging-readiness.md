@@ -190,11 +190,22 @@ guideline coverage. Any omitted applicable row leaves that claim incomplete.
 Before finalizing, perform a per-scenario check of every required assertion and
 control named by its trigger and acceptance criteria, including negative controls.
 Keep missing checks not proven rather than completing a row from related passes.
-Choose each executed row's supported `proof_mode` at its own boundary: a focused
-SDK/bridge probe with a loopback receiver supplies focused proof (for example
-`unit+otlp`), even when a separate test starts the app. Preserve `app_test` for
-actual application-test proof. Use `full_runtime` only when the claimed event
-traverses the normal application entrypoint and call site to the observed boundary.
+Choose each executed scenario and instrumentation item result's `proof_mode`
+from the actual path, not its test filename, package, suite command or audit level:
+
+| Actual evidence path | Runtime proof mode |
+|---|---|
+| Isolated SDK/bridge records inspected in memory | `unit` |
+| Isolated real SDK/bridge/exporter with decoded loopback OTLP receipts | `unit+otlp` |
+| Actual application-owned setup, helper or lifecycle exercised by an application test | `app_test` |
+| Claimed event traverses normal application startup/entrypoint and call site to the observed boundary | `full_runtime` |
+| Source review, contract-only assessment or an unexecuted plan | Applicable `static`, `contract_only` or `not_run`; no runtime credit |
+
+A test stored in an application package can still be a pure SDK fixture.
+Conversely, a focused test of an actual app helper can legitimately be `app_test`.
+Do not map every `focused call-site` audit row to `app_test`, or label every
+item `full_runtime` because another scenario starts the app. Retain the scope
+of each claimed property and do not imply receiver receipt from in-memory proof.
 Audit uses a different field: choose `proof_level` `focused call-site` for a
 focused capability test, or `either` when its contract allows both focused and
 application proof; do not label an isolated SDK/bridge fixture `full runtime`.
@@ -227,17 +238,31 @@ does not assign the SDK duty to the application. Assess the actual required fix:
 do not require an application parser/retry substitute or mark unknown SDK support
 working merely because application wiring succeeds. Unverified upstream capability
 can keep conditional future checks in the matrix evidence.
-Before execution, expand each bound scenario into its individual controls in
-existing evidence fields or a Markdown checklist: scenario ID and control text,
-expected input/outcome, effective launch/exporter configuration, planned command,
-proof boundary and initial Not run verdict. Fill each result from its own command
-and concrete evidence; one invocation can supply several controls. Preserve the
-bound audit IDs and schema. Report generators may use that ledger, but must not
-replace it with unconditional success or aggregate test counts. An omitted required
-control keeps the relevant closure partial. A SIGINT trial with logs disabled,
-for example, cannot prove final-log drain with the normal exporter enabled.
+Before authoring probes/tests, expand each bound scenario's trigger AND acceptance
+criteria into individual controls in existing evidence fields or a Markdown
+checklist. Include list members, input variants, requested operations and event
+orders: scenario ID/control text, expected input/outcome, effective launch/exporter
+configuration, named test/subtest or assertion, planned command, proof boundary
+and initial Not run verdict. Do not generate this inventory retroactively from
+the tests that happened to pass. Copying a whole acceptance paragraph into one
+cell is still a scenario inventory, not this control ledger. Give distinct input
+variants, operations and event orders separate entries. Preserve a required
+conjunction on one owned path as joint assertions; do not split it into unrelated
+passing probes. One invocation can supply several controls, but
+link each result to its own assertion and concrete output/receipt. A suite's zero
+exit proves only the assertions present in that suite, not every bound control.
+Preserve the bound audit IDs and schema. Derive scenario and item verdicts from
+their complete required-control sets; initialize unmatched controls Not run/Not
+proven. A report builder must not use a blanket Working/default-true assignment
+plus a short exception list. A SIGINT trial with logs disabled, for example,
+cannot prove final-log drain with the normal exporter enabled. An overall Partial
+result does not make an incompletely tested individual Working row accurate.
 Later stages retain those bound IDs and distinguish observations in existing
 fields; do not promote a focused error seam to full runtime in a parent row.
+If a frozen row's controls have different observed boundaries, name those
+boundaries in its existing evidence/observations. Do not give the whole row the
+strongest mode from one control. Keep incomplete required-scope closure not
+proven without rebinding the audit to accept different proof.
 Derive working status from those individual results, not a total test count or
 an automated finalizer that marks every selected scenario working together.
 
@@ -604,6 +629,15 @@ For subtrials all confined to an owned receiver fixture without Explorer proof,
 acknowledgements remain in evidence. If a shared row cannot support one stronger
 visibility claim, keep that claim `not_proven` with the corresponding status and
 explain the individual outcomes; do not change bound audit IDs or invent an enum.
+Read N from each actual decoded request, not a shared fixture constant. Check
+acknowledged accepted/rejected arithmetic against that N before serializing the
+report: full success N/0, valid partial (N-R)/R, with 0 <= R <= N. A one-record
+success cannot report two accepted records because a different subtrial sent two.
+Construct the batch/attempt observations before trial totals. Reconcile them
+against raw client and receiver events again during report readback; a combined
+"503/timeout" label does not preserve different known terminal results. If a
+client result cannot be matched to a batch, retain that uncertainty for that
+batch rather than assigning the server's response intent to it.
 
 The standard OTLP exporter timeout covers a whole batch export, including all
 attempts and retry waits; it must not restart for each attempt, and an earlier
@@ -703,9 +737,15 @@ work under an exporter fault. Existing safe routing is coverage, not a reason
 to add another error handler.
 Name the actual routing/suppression mechanism in the repair and handoff, not
 only a desired zero-recursion outcome.
-When testing SDK attribute-discard diagnostics, count at most one diagnostic
-per discarded-attribute record, not one per dropped attribute; inspect installed
-support without replacing SDK diagnostic internals.
+Under the [common attribute-limit rules](https://opentelemetry.io/docs/specs/otel/common/#attribute-limits),
+an SDK MAY emit a diagnostic for truncation, discard or replacement. Such
+diagnostics MUST NOT occur more than once per affected record. Separately, the
+[Logs SDK limits](https://opentelemetry.io/docs/specs/otel/logs/sdk/#logrecord-limits)
+SHOULD report discarded attributes, with the same MUST ceiling of one message per
+LogRecord, not per dropped attribute. Count the installed SDK's actual diagnostic
+paths against individual records; passing truncation/count assertions does not
+prove this cadence. Preserve an observed upstream limitation as such without
+replacing SDK diagnostic internals or claiming an application suppression fixes it.
 
 ## LOG-VERIFY-FRESH -- Bind each verdict to its own execution evidence
 
@@ -788,6 +828,16 @@ state; do not force an unselected development feature into application code.
 Readback must check the conjunction: the owned async log itself joins its
 received real SDK span in one scenario. Finding "async" and "real span" in
 different scenarios is not that proof.
+Before publishing the saved reports, resolve every local execution-evidence
+reference and read the actual artifact. Planned future paths are not executed
+evidence. Associate `trace_ids` with that scenario's own operation/receipt, or
+leave the field empty when no such trace is proven; never copy the first IDs
+from an unrelated runtime trial into every row. Refresh current capability and
+proof dispositions after installation/probes while leaving the audit immutable.
+A copied "not installed/executed" baseline row does not describe a newly tested
+exporter, and passing value truncation does not prove discard-diagnostic cadence.
+Finally compare status, proof mode, visibility, direct assertions and linked
+controls for each scenario/item; schema validity alone does not reconcile them.
 Plan-only restrictions prohibit executing setup, not specifying it: retain the
 future dependency-preparation and unique-storage steps explicitly in the saved
 handoff. Do not replace a named setting/public option or bridge with outcome
