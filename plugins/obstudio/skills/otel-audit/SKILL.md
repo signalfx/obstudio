@@ -1310,12 +1310,21 @@ Keep the receipt in canonical evidence and the applicable finding's
 without named symbols/example/version is incomplete; correct that report
 before downstream handoff. Existing producers remain preserved.
 
-For application logging, apply the shared
-[Report readback](../references/logging-readiness.md#report-readback) to the
-saved handoff before finalization. Match promised signal fields/operations and
-source-clause conditions to actual acceptance assertions, including applicable
-future repetition storage and outcome-accounting controls. Keep source-resolved
-facts separate from documented contracts and unexecuted behavior.
+For application logging, read the complete shared
+[Report readback](../references/logging-readiness.md#report-readback) immediately
+before finalizing the saved handoff. Start from selected source-owned operations
+and promised outcomes, including selected errors/finalization, and compare them
+to saved acceptance: operation/selector or equivalent complete parameterization → shared
+predicate and parameters, including own context/privacy → asserting scenario and
+proof boundary. A truly shared global scan suffices when its covered outputs and
+lifecycle phases, and witnesses that every selected operation occurs, are explicit.
+Do not require duplicated tests or literal operation-name matches. Plan those
+witnesses during audit; later stages retain actual evidence. Resolve each missing
+binding or retain its concrete missing control. For source uncertainty, name the
+exact producer/API edge, owner and discriminating next source/probe observation;
+a broad allocation summary cannot establish coverage.
+Keep applicable storage/accounting controls and distinguish source facts, future
+checks and executed results. Use existing evidence/scenario fields, not new keys.
 
 Write two audit artifacts inside the scanned service root (create the
 `.observe/` directory if it does not exist):

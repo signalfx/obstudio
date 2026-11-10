@@ -30,18 +30,22 @@ assess selected application behavior, supplied operator policy, app-owned or
 changed configuration, a source-backed risk, or an actual capability claim.
 An unchanged delegated default needs accurate versioned source/default evidence;
 it does not select every parser input, record shape or upstream conformance test.
-Other SDK/receiver duties may retain compact owner/default/unsupported/unverified
-dispositions without reproducing every imported clause. These dispositions never
-close a critical selected invariant or an unproven runtime claim.
+Unselected SDK/receiver duties need no per-application clause ledger. Compact
+owner/default/unsupported/unverified facts may explain relevant delegated behavior
+without enumerating sibling duties. Such facts never close a critical selected
+invariant or an unproven runtime claim.
 
 An exhaustive OTel clause inventory and source-to-skill coverage review belongs
 to skill maintenance when requested; it is not an additional deliverable for
 every normal application audit, instrumentation or verification report.
 
 1. **Contract:** extract each applicable primary-source clause and its distinct
-   conditions, strength, maturity and actual owner. Keep SDK, receiver and library
-   duties distinct from application wiring. Retain precise supported/default,
-   unsupported or unverified dispositions for delegated clauses.
+   conditions, strength, maturity and actual owner. Distinguish the specification's
+   status from the installed or proposed component/API's stated stability; a stable
+   data model does not establish language SDK or bridge maturity. Use the relevant
+   source statement, or retain unknown/not-inspected without inventing a beta label
+   or upgrade requirement. Keep SDK, receiver and library duties distinct from
+   application wiring and retain precise delegated capability dispositions.
 2. **Capability:** resolve mechanisms necessary to selected application/operator
    invariants and every actual capability claim. Follow relevant parser, default,
    normalization, diagnostic and retry/deadline delegates to their consuming
@@ -100,11 +104,14 @@ through secondary defaults, unit conversions and clamps to the terminal consumer
 report that terminal outcome. Compute each setting's chain from its own owner,
 rather than copying a different family's fallback or overflow result. Resolve
 symbolic constants to their actual values; a constant's name is not its serialized spelling. Include
-fallback settings needed to resolve the selected outcome. For actual selected
-input readers or precise precedence claims, pair the higher-priority setting's
-absent, empty and invalid cases with a valid nondefault lower-priority value,
-as well as both absent; derive each result from this implementation rather
-than assuming universal inheritance. Resolve negative, zero, fractional,
+fallback settings needed to resolve the selected outcome. For a required application
+reader or explicit selected fallback promise, save `input state → expected final value/tuple
+and winning source → named assertion`. Give each claimed higher-priority absent,
+empty and invalid state with a valid nondefault lower-priority value, and both
+absent, an addressable case; one generic-only example cannot represent them all.
+A shared parameterized assertion is sufficient when its named cases and expected
+results are explicit. Derive application fallbacks and delegated SDK defaults
+from their actual owners rather than assuming universal inheritance. A delegated source-only fact remains source evidence, not an invented runtime test requirement. Resolve negative, zero, fractional,
 malformed/overflow and enum/Boolean cases only where those inputs reach that
 reader or the corresponding behavior is claimed; fixed typed options do not
 select an upstream parser suite. Naming a required group is not its expected
@@ -257,16 +264,21 @@ fixed-message or application-logger allowlist. A framework record observed in
 the normal pipeline cannot be excluded from its privacy assessment merely
 because the original call-site inventory listed only application messages.
 Keep separately routed SDK self-diagnostics distinct from those framework records.
-For a selected error path, save one source-bound trail in the existing finding
-or scenario: `producer/call site → native event → policy-boundary hook/action →
-later renderers → native and SDK outputs`. Name the event's relevant message,
-parameters or throwable and the supported hook's actual action at the
-policy-required boundary (before SDK/writer capture when required); denying a record alone cannot preserve its required category.
-Bind one output predicate requiring forbidden-sentinel absence AND permitted
-category at every policy-covered output, with unchanged response behavior.
-If a link is unresolved, name the exact producer/event/API edge, its owner and
-next source inspection or supported probe; keep that result unproven. Reference
-this trail from each logging/privacy finding it serves, not only a route finding.
+Start each selected error-path investigation at its source trigger and inspect
+the resolved dependency's logging call before choosing a repair. In the existing
+finding/scenario, retain `trigger → resolved producer/symbol and version → native
+event/message parameters or throwable → supported policy-boundary action → later
+renderers → policy-covered outputs`. Resolve whether the action transforms,
+replaces or only denies a record; denial alone cannot preserve a required
+category. Apply the action before SDK/writer capture when the selected policy
+requires it. Bind forbidden-sentinel absence AND permitted category at every
+covered output, preserving application responses and original sinks.
+For an unresolved link, name its exact producer/event/API edge and owner, then
+the next source symbol or supported probe AND the observation that would decide
+support or coverage. A framework name or instruction to find a hook is not that
+resolution. Audit records source facts and concrete future controls; runtime
+success requires later execution. Reference the trail from each selected logging/
+privacy operation it serves, directly or through complete shared parameterization.
 
 ### Configuration value types
 
@@ -626,10 +638,21 @@ provider and do not justify new production instrumentation or unowned work.
 Label the joint scenario explicitly in the handoff. A known-ID async test plus
 a separate synchronous real-span test cannot replace it.
 
-Keep the valid unsampled case separate: logs can retain SDK-generated context
-even when sampling intentionally prevents the span from being exported. Missing
-that span is then expected, not proof of broken correlation. Outside-span logs
-may legitimately have no context. Ordinary attributes or strings named
+Keep valid unsampled context separate from missing context: sampling may
+intentionally prevent its span from being exported. For an exact context claim,
+compare canonical TraceId/SpanId/TraceFlags with independently observed SDK
+context selected by the logging/bridge API for that record, including explicit
+context or caller-side capture, through supported APIs or a test seam. A later
+queue/export worker's ambient context is not a substitute for that selected context. A matching
+trace, nonempty SpanId or agreement between two logs is not that expected value.
+Do not require an exported unsampled span, force sampling, manufacture IDs or
+add production identifier fields for a test. During audit, choose a feasible
+focused, application-test or normal-runtime observation before binding the
+control. If exact state is observable only at a focused boundary, plan separate
+focused exact-value and normal-runtime behavior controls without promoting one
+to the other. A required combined application join still needs its own same-path
+proof. Once acceptance is bound, missing proof cannot be closed by a later
+boundary downgrade. Outside-span logs may legitimately have no context. Ordinary attributes or strings named
 `trace_id`/`span_id` are not the OTLP record's canonical context fields. If the
 selected collection path is a non-OTLP JSON/text sink, check its supported
 context injection and customary top-level `trace_id`, `span_id`, `trace_flags`
@@ -649,14 +672,22 @@ A standalone bridge after a logging queue can observe the queue worker's
 context instead of the caller's. Preserve a supported context-capturing queue
 path, or keep the existing bridge on the caller side beside the original
 asynchronous sink and use the SDK batch processor. Never duplicate bridges.
-Test caller-created sampled/unsampled context, exact record-to-request pairing
-under concurrency, caller detach and worker reuse. Exercise error/cancellation
-cleanup where the owned path supports those outcomes; otherwise classify that
-application path not applicable and keep any supported SDK-scope control focused.
-Do not add business cancellation behavior solely for a logging check. Ending a span
-or detaching context is not cancellation of scheduled work.
-Include a missing-propagation control where feasible; its expected context loss
-is evidence of an unsafe path, not an acceptable production configuration.
+Test sampled/unsampled context, exact request pairing under concurrency, and
+caller detach/restore across the selected handoff.
+For a promised reuse control, observe the same execution unit handling distinct
+work-item contexts and then context-free work, checking each record against that
+item's actual SDK context; fresh concurrent work sharing one context is not reuse
+or cross-request isolation proof. If source owns only fresh work items, audit may
+scope application reuse as not applicable and separately select a focused helper/
+bridge capability probe; do not add production worker behavior merely for proof.
+Any focused reuse already promised remains required at its bound boundary.
+A selected missing-propagation control must actually omit capture/transfer on
+that handoff path while retaining the other relevant inputs, not merely emit an
+outside-context record directly. Its expected loss demonstrates the unsafe path,
+not acceptable production configuration. Exercise error/cancellation cleanup only
+where owned behavior supports it, or keep a separately selected SDK probe focused.
+Do not add business cancellation behavior; ending a span or detaching context is
+not cancellation of scheduled work. Keep the bound audit unchanged downstream.
 Link the combined real-span async scenario required by LOG-CONTEXT; independent
 handoff and join scenarios alone leave that combined obligation unproven.
 
@@ -808,13 +839,15 @@ the operator-owned branch, and do not confuse that exporter with a native
 console sink. Its [unspecified format](https://opentelemetry.io/docs/specs/otel/logs/sdk_exporters/stdout/)
 is not a production format contract.
 
-Exercise a failing/unavailable receiver, bounded shutdown after final logs,
-and overload when the application has a source-backed overload risk. Confirm
-the application and original sink continue, diagnostics identify loss/failure
-without secrets, and configured unrelated signals remain usable. An HTTP 200
-with OTLP partial-success rejected records is not full acceptance. Report
-attempted, received, rejected and dropped evidence separately; never infer
-receipt from a successful enqueue or flush call alone.
+Exercise the selected receiver-fault/operation combinations, bounded shutdown
+after final logs, and overload when the application has a source-backed risk.
+For each exercised fault/operation, assert its application outcome, own native
+records, bounded secret-free diagnostics and configured unrelated-signal
+progress against that trial's raw outputs. One operation under a stall cannot
+supply another selected operation or a selected refusal case. An HTTP 200 with
+OTLP partial-success rejected records is not full acceptance. Report attempted,
+received, rejected and dropped evidence separately; never infer receipt from a
+successful enqueue or flush call alone.
 For each selected stop control, save a compact plan:
 `request kind → recipient/process or process group → launcher forwarding →
 effective application handler/finalizer; permitted outcome; budget/source`.
@@ -822,7 +855,10 @@ Name how that path and order will be observed through normal startup; stopping
 a launcher or cleaning up a child alone does not prove application drain.
 Reference the final record's own selector/predicate, body/severity/count/time,
 Resource and associated or legitimately absent context, and its receipt/exit
-order. Another earlier record cannot supply these checks.
+order. Reuse a shared predicate or global scan when its saved input includes
+this exact final record and phase, with that operation's expected context and
+time interval; retain that witness. A predicate run only on another trial or
+earlier record cannot supply these checks.
 If repeated stops are selected, name the second request and deliver it to the
 same process during active final logging/drain. Assert the selected policy's
 outcome and budget: uninterrupted-drain policy requires non-interruption and
@@ -932,11 +968,17 @@ Read N from each actual decoded request, not a shared fixture constant. Check
 acknowledged accepted/rejected arithmetic against that N before serializing the
 report: full success N/0, valid partial (N-R)/R, with 0 <= R <= N.
 Never reuse another trial's input count.
-Construct the batch/attempt observations before trial totals. Reconcile them
-against raw client and receiver events again during report readback; a combined
-"503/timeout" label does not preserve different known terminal results. If a
-client result cannot be matched to a batch, retain that uncertainty for that
-batch rather than assigning the server's response intent to it.
+Construct the batch/attempt observations before trial totals. During report
+readback, join each actual decoded request to its client/receiver observations
+and derive totals and visibility from those rows. Different decoded record sets do not establish retry lineage; bind batch
+and attempt identities from actual client/request observations. A generic SDK error or another export's
+deadline test cannot identify a batch's terminal result: retain an unmatched
+result as unknown, with its evidence, rather than assigning server response
+intent or inferring acknowledgement. Keep known completed responses distinct
+from stalls; a combined "503/timeout" label loses that distinction. A row with
+unknown acceptance or no observed acknowledgement cannot claim log
+`otlp_accepted`; retain a known completed client error as completed even when
+its accepted record count remains unknown.
 
 The standard OTLP exporter timeout covers a whole batch export, including all
 attempts and retry waits; it must not restart for each attempt, and an earlier
@@ -957,11 +999,14 @@ OTLP/HTTP responses 429, 502, 503 and 504 SHOULD be retried; other 4xx/5xx
 MUST NOT be retried. Preserve the operator's selected retry policy.
 Check installed exporter behavior with a controlled receiver before claiming
 conformance; do not add an application retry loop around an SDK exporter.
-For selected transport-bound obligations or precise conformance claims, record
-request/response byte bounds separately from Body/attribute limits. Retain the
-applicable [OTLP clauses](https://opentelemetry.io/docs/specs/otlp/) and ownership
-for these HTTP boundaries; unchanged delegated defaults can retain compact
-versioned source/ownership evidence:
+First identify the app-owned/changed bound, supplied operator policy,
+source-backed size/decompression risk, or precise related capability/conformance
+claim that selects a transport-bound obligation. Ordinary delegated HTTP export,
+endpoint/timeout setup, or a status/body-handling limitation alone does not select
+every sibling request/response-size or decompression duty. For selected duties,
+record only the necessary byte-bound clauses and owners separately from Body/
+attribute limits. Retain applicable [OTLP clauses](https://opentelemetry.io/docs/specs/otlp/);
+unchanged delegated defaults can use compact versioned ownership evidence:
 
 | Protocol surface / owner | Upstream clauses to bind when selected or claimed | Recommended default |
 |---|---|---|
@@ -1146,7 +1191,7 @@ ownership without selecting a protocol conformance suite merely by using OTLP:
 | LOG-ASYNC-HANDOFF | Caller capture before scheduling; exact request pairing, permitted MDC handling where applicable, worker cleanup and bridge placement relative to queues. Link the joint real-span async scenario, supported propagation and expected-loss controls. |
 | LOG-EXCEPTION | Allowed exception fields and excluded sensitive fields, with bridge/event convention applicability and optional-field decisions. |
 | LOG-LIMITS | Name effective/proposed count/value settings and implemented depth support separately from Body policy. Reconcile the record-normalization and diagnostic implementation for supported shapes, not only public option declarations. Specify below/at/above-limit inputs, units, expected outcomes and supported drop accounting; generic limits plus numbers are insufficient. For an expensive construction path, name the supported native/direct-OTel enablement query, check current policy inside the owned worker, and prove construction/output counts across disabled/enabled/disabled states. Preserve cheap direct emits and original sinks when the OTel path is disabled. |
-| LOG-DELIVERY | Save two compact plans where selected. **Stop:** request/recipient/launcher→handler path, permitted outcome, budget/source, observable order and own final-record predicate; distinguish healthy drain, fault and policy-selected repeated/forced outcomes. **Retry:** batch/trial identity, actual response and wait representation, existing SDK retry policy, remaining export/caller budget, expected measured wait/no-early-retry condition, and terminal recovery versus persistent exhaustion or stall. Resolve these through supported existing settings, not an application retry loop. Bind each plan to its assertions and raw request/response/client outcome. Retain effective queue/batch/schedule/export limits and batch<=queue (or selected simple-processor cost). Apply the response/count table above per decoded batch before trial totals, keeping attempts, received copies, acknowledgements, rejections, drops and unknown persistence separate. Preserve selected compression/size ownership, unresolved acceptance after timeout/oversize, source/runtime boundaries and accurate per-outcome visibility; a completed failure is not pending merely because accepted count is unknown. |
+| LOG-DELIVERY | Save two compact plans where selected. **Stop:** request/recipient/launcher→handler path, permitted outcome, budget/source, observable order and own final-record predicate; distinguish healthy drain, fault and policy-selected repeated/forced outcomes. **Retry:** for a selected bounded-retry/recovery claim, name a source-supported retryable response or connection event, batch/trial identity, existing SDK policy and wait source (backoff/jitter, or a separately supplied server-wait value), remaining export/caller budget, expected measured wait/range and terminal result. Retain applicable no-early-retry conditions under that policy. State whether recovery means the failed batch later succeeds or only newly emitted batches are healthy; the latter cannot prove recovery of the failed batch. Separately identify persistent failure ending by the actual deadline/eligibility rule or a stall. A generic immediate-failure label does not specify a retry stimulus. Server throttling and full protocol certification remain unselected unless separately promised. Resolve these through supported existing settings, not an application retry loop. Bind each plan to its assertions and raw request/response/client outcome. Retain effective queue/batch/schedule/export limits and batch<=queue (or selected simple-processor cost). Apply the response/count table above per decoded batch before trial totals, keeping attempts, received copies, acknowledgements, rejections, drops and unknown persistence separate. Preserve selected compression/size ownership, unresolved acceptance after timeout/oversize, source/runtime boundaries and accurate per-outcome visibility; a completed failure is not pending merely because accepted count is unknown. |
 | LOG-DIAGNOSTICS | Name the supported separate routing or suppression mechanism. One exporter-fault scenario asserts bounded diagnostic volume and export attempts, application progress, original sink output, and continued operation of each other configured signal. Explicitly mark absent signals not configured; preserving configuration alone is not operation proof. |
 | LOG-VERIFY-FRESH | Unique report storage for each trial; planned manifest/lockfile dependency preparation; binding to source, command and dependency versions; actual success/failure/error/skip counts; preserved timeout console output, failed timeout verdict, owned-process cleanup and incremental structured partial results; explicit evidence scope. |
 

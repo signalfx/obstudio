@@ -2039,10 +2039,15 @@ This step is REQUIRED whenever `.vscode/launch.json` exists.
   implemented work.
 - Before serializing logging verdicts, read the common reference's
   [Report readback](../references/logging-readiness.md#report-readback) section.
-  Reconcile each scenario/item with its complete
-  control inventory, actual mode/visibility, current capability, existing local
-  evidence and operation-specific trace IDs. Generate direct-assertion flags
-  from those results; a schema pass or overall Partial result is insufficient.
+  Match each bound control and case/input to its expected value/oracle and required
+  boundary, then to the actual assertion, raw outcome and operation receipt in
+  existing evidence fields. Derive scenario/item status, direct-assertion flags,
+  mode, visibility and remaining work from those matches, not from scenario-ID
+  coverage or all recorded suites passing. A valid related launch may witness an
+  input such as an absent setting without a specially named case; retain its
+  actual settings and assertions. Separate source capability and direct item
+  proof from unmatched ancillary controls; do not borrow another path's stronger
+  result or trace IDs. Schema validity cannot establish the missing matches.
 - For incident-readiness work, summarize each in-scope workflow, dependency,
   input-complexity, freshness, backpressure, synthetic/canary, auth/edge,
   capacity, health/readiness, and release/config surface as MTTD-improving,

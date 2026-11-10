@@ -801,14 +801,14 @@ Verify the installed native logger and bridge's severity, occurrence-time,
 structured-value and context mapping. Preserve supported source precision and
 permitted fields; inspect conversion before claiming a value is supported.
 
-Trace captured framework and container diagnostics back to their actual producer
-and handlers. Select a supported hook at the policy-required capture boundary.
-Check whether it only accepts/denies records or can safely transform them;
-preserve permitted category, effective level, original sinks and application
-behavior. Account for message parameters and exception rendering. Prefer a
-sufficient logging-only repair; do not require a framework-specific handler or
-investigation of unrelated alternatives. Replay the exposed input at every
-selected output boundary and keep an unsupported capability explicit.
+Use the common source-first privacy procedure for selected Java diagnostics.
+Resolve the actual native event and logging route, including any container or
+JDK adapter; an application handler/appender need not see every container event.
+Inspect message parameters, throwable or exception proxy, and effective handlers
+before choosing an action. Check whether its filter only accepts/denies or
+supports a safe transformation; avoid mutation after asynchronous handoff.
+Prefer a sufficient logging-only repair without requiring a particular framework
+handler, replacing operator sinks or investigating unrelated routes.
 
 ### Configuration and lifecycle
 

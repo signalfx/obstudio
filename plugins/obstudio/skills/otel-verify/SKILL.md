@@ -848,11 +848,15 @@ Rules:
 
 For logging, read the common reference's
 [Report readback](../references/logging-readiness.md#report-readback) before producing
-the saved rows: complete controls, correct per-item mode/visibility, current
-capability, resolvable executed-evidence links and trace IDs from that operation.
-Keep missing assertions not proven, even when unrelated checks or schema
-validation pass. Reconcile newly executed results instead of copying stale audit
-capability or prior instrumentation verdicts into the verification matrix.
+the saved rows. For every bound control/case, match the actual input and expected
+value/oracle at its required boundary to a named assertion and raw outcome/receipt.
+Derive each status, proof mode, visibility and direct-item result from those
+matches, retaining missing controls rather than inferring them from suite or
+scenario-ID coverage. A valid related launch can prove an absent-setting input
+without a literal case name when its settings and assertions are retained.
+Keep current capability, direct item proof and ancillary gaps distinct; resolve
+executed evidence links and use that operation's own trace IDs. Do not inherit
+stale audit/instrumentation success or a stronger boundary from another check.
 
 In canonical flow, write `.observe/otel-verify.json` using
 `./references/json-approval-handoff.md`. Preserve exact selected finding,

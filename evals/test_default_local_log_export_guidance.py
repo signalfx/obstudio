@@ -176,7 +176,8 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
     if skill == "otel-verify":
         instructions = _read(side / ".agents" / "skills" / skill / "SKILL.md")
         assert "assess completeness rather than chronology alone" in instructions
-        assert "Reconcile newly executed results" in instructions
+        assert "named assertion and raw outcome/receipt" in instructions
+        assert "stale audit/instrumentation success" in instructions
         assert "logging-readiness.md#report-readback" in instructions
 
 
