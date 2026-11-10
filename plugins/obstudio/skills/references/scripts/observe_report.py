@@ -465,6 +465,15 @@ def cmd_required_inputs(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_required_controls(args: argparse.Namespace) -> int:
+    requested_ids = None
+    if args.ids is not None:
+        requested_ids = [item.strip() for item in args.ids.split(",") if item.strip()]
+    inventory = audit_control_inventory(load_json(args.audit_json), requested_ids)
+    print(json.dumps(inventory, indent=2))
+    return 0
+
+
 def cmd_adopt_selection(args: argparse.Namespace) -> int:
     report = load_canonical_audit_for_selection(args.audit_json)
     if not args.output.parent.is_dir():
@@ -1304,6 +1313,14 @@ def build_parser() -> argparse.ArgumentParser:
     validate = subparsers.add_parser("validate", help="validate canonical OTel audit JSON")
     validate.add_argument("audit_json", type=Path)
     validate.set_defaults(func=cmd_validate)
+
+    required_controls = subparsers.add_parser(
+        "required-controls",
+        help="list promised telemetry and fields without evaluating coverage or runtime",
+    )
+    required_controls.add_argument("audit_json", type=Path)
+    required_controls.add_argument("--ids", help="comma-separated finding IDs; defaults to all")
+    required_controls.set_defaults(func=cmd_required_controls)
 
     select = subparsers.add_parser("select", help="validate IDs and write a bound selection")
     select.add_argument("audit_json", type=Path)

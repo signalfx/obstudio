@@ -238,6 +238,20 @@ conflict, retain that contradiction and its owner rather than treating the
 comment as implementation proof. A permitted focused public-boundary probe can
 resolve behavior at that scope; it does not establish application execution.
 
+Use the relevant source boundary rather than stopping at the options class:
+
+| Claimed capability | Source to reconcile |
+|---|---|
+| Supported setup/API | Actual public declaration, argument/result shape and construction path; a remembered symbol or unrelated example is insufficient. |
+| Activation and ownership | Entry point that registers/starts the provider or bridge on normal startup; constructing a configuration object alone may not activate it. |
+| Record limits | Record creation/update path and the final normalization helper, including supported value shapes, replacement/drop accounting and diagnostic calls. |
+| Transport limits/deadlines | Actual encoding/decompression, bounded-read and error branches; identify where the deadline is created, propagated and consumed relative to retries. |
+| Diagnostic cadence | All emission paths for one affected record, including warnings and per-value loops; value truncation alone cannot establish the diagnostic count. |
+
+For an OTel requirement, bind the retained primary-source clauses, not only this
+local guide or an SDK option comment. Read each cited range back before using
+it: a nearby section or line range that omits a qualifier does not preserve it.
+
 For audit, emit concrete application-owned gaps through the normal findings and
 acceptance flow. For instrumentation, implement the authorized ones and retain
 unselected gaps. For verification, independently reconcile the matrix with real
@@ -543,9 +557,10 @@ metadata merely because it is not an exception attribute.
 
 Inspect effective log attribute count/value limits and existing operator
 values; SDK defaults may already suffice. `OTEL_LOGRECORD_ATTRIBUTE_COUNT_LIMIT`
-and `OTEL_LOGRECORD_ATTRIBUTE_VALUE_LENGTH_LIMIT` are signal-specific settings,
-subject to installed SDK support and generic fallback. Span limits do not
-configure log limits. When the selected implementation and configuration are
+and `OTEL_LOGRECORD_ATTRIBUTE_VALUE_LENGTH_LIMIT` are signal-specific settings.
+Resolve the selected SDK's actual inputs, fallbacks and defaults; apply the
+conditional model/general precedence below when both families are implemented.
+Span limits do not configure log limits. When the selected implementation and configuration are
 available, resolve and report their effective values or unlimited behavior,
 precedence and source evidence now. A future boundary test does not substitute
 for accessible configuration facts; keep those facts separate from unexecuted
@@ -595,11 +610,25 @@ most that length. Use explicit ASCII-character inputs for an unambiguous
 string-length boundary, then check the installed SDK's Unicode behavior before
 claiming broader character handling. Body overflow follows the separately
 selected application policy, such as valid UTF-8 truncation or dropping, with
-its own expected outcome and loss accounting. Common attribute rules also
-cover byte-array units and recursive array/map value/depth handling where
-implemented; inspect that capability instead of assuming every SDK/version
-enforces the same arbitrary nested payload policy. These limits still do not
-cap Body. Do not reimplement SDK internals to satisfy an unsupported feature.
+its own expected outcome and loss accounting. These common attribute requirements
+are conditional on the selected SDK implementing the corresponding limit.
+SDKs SHOULD apply default truncation according to the upstream configurable
+parameters. Preserve the following distinct clauses from the
+[common attribute rules](https://opentelemetry.io/docs/specs/otel/common/#attribute-limits):
+
+| Implemented attribute-limit surface | Required behavior and capability evidence |
+|---|---|
+| Value length | Strings longer than the limit MUST be truncated counting each character as one; byte arrays MUST be truncated counting each byte as one. Apply the limit separately and recursively to string arrays, AnyValue arrays and map values. Other value types MUST NOT be truncated. Follow the actual normalizer and distinguish supported, unsupported and unresolved shapes, including actual Unicode handling. |
+| Count | Count top-level attributes only, not nested map entries. Above the limit the added attribute MUST be discarded; otherwise it MUST NOT be discarded. Resolve actual drop accounting and preservation of identity/context. |
+| Depth | Count the top-level value at depth 1 and increment when descending into arrays/maps. Arrays/maps beyond the limit MUST become an empty value; otherwise values MUST NOT change because of depth. Resolve implemented/unsupported depth handling and corresponding boundary outcomes; absence of a public option alone is not enforcement proof. |
+| Configuration | Implemented limits MUST be programmatically configurable; option names SHOULD match the specification. If both model-specific and general limits are implemented, resolution MUST try model-specific, then general, then the model-specific default and finally the general default. Inspect that exact selected-component chain instead of assuming every SDK has general fallback. |
+| Diagnostics | A limit diagnostic MAY be emitted for truncation/discard/replacement, but MUST NOT occur more than once per affected record. Resolve the actual per-record behavior across all emission paths; the Logs SDK discard-diagnostic SHOULD remains a separate clause. |
+
+These attribute limits do not cap Body. Resource's SHOULD exemption and the
+separate metric attribute rules retain their own scope. Do not add application
+normalizers, provider replacements or forced SDK upgrades to imitate an
+unsupported upstream feature; retain its exact capability disposition and
+conditional test. An options builder proves configuration, not normalization.
 If already selected, the development external-content `_ref` convention needs
 a registry-defined base attribute and a string reference (preferably an absolute
 URI); it does not authorize new storage or moving forbidden content elsewhere.
@@ -890,7 +919,7 @@ in for the separate partial-rejection case:
 | LOG-CONTEXT | Exact sampled/unsampled/outside IDs and SDK flags; real SDK-created sampled parent/child spans joined to their logs at the claimed boundary, with parentage/resource checks. Explicitly name one joint scenario traversing an owned async handoff and joining that worker/callback log to its received real span; separate known-ID async and synchronous join tests are insufficient. Separate unsampled non-export and outside-span controls, canonical OTLP fields from ordinary attributes, and non-OTLP formatter proof where selected. |
 | LOG-ASYNC-HANDOFF | Caller capture before scheduling; exact request pairing, permitted MDC handling where applicable, worker cleanup and bridge placement relative to queues. Link the joint real-span async scenario, supported propagation and expected-loss controls. |
 | LOG-EXCEPTION | Allowed exception fields and excluded sensitive fields, with bridge/event convention applicability and optional-field decisions. |
-| LOG-LIMITS | Name the effective/proposed log attribute count/value settings or public API fields, separately from Body policy. Specify below/at/above-limit inputs, units, expected outcomes and supported drop accounting; generic limits plus numbers are insufficient. For an expensive construction path, name the supported native/direct-OTel enablement query, check current policy inside the owned worker, and prove construction/output counts across disabled/enabled/disabled states. Preserve cheap direct emits and original sinks when the OTel path is disabled. |
+| LOG-LIMITS | Name effective/proposed count/value settings and implemented depth support separately from Body policy. Reconcile the record-normalization and diagnostic implementation for supported shapes, not only public option declarations. Specify below/at/above-limit inputs, units, expected outcomes and supported drop accounting; generic limits plus numbers are insufficient. For an expensive construction path, name the supported native/direct-OTel enablement query, check current policy inside the owned worker, and prove construction/output counts across disabled/enabled/disabled states. Preserve cheap direct emits and original sinks when the OTel path is disabled. |
 | LOG-DELIVERY | Record observed attempt/retry/caller deadlines and missing bounds with units/source separately from proposed queue/batch/schedule/export/shutdown settings and the composed budget. Assert batch <= queue on a batch path; a selected simple processor needs synchronous-cost evidence instead. Include a stalled receiver/caller deadline and a final log immediately before shutdown, with healthy receipt and bounded fault behavior checked independently. For a conforming HTTP full-success response with partial_success unset, require all N acknowledged accepted and zero rejected, independently of persistence. For each valid partial response of N records with R rejected, require N-R acknowledged accepted and R rejected; warning-only R=0 acknowledges all N without retry. Reconcile per-batch accounting before multi-batch totals and preserve per-outcome attempted/received/acknowledged accepted/rejected/dropped/unresolved counts with durable raw-receipt links. Include the selected transport's request/response byte limits, parsing after decompression where applicable, and oversized-response failure acceptance uncertainty with the correct SDK/receiver owner. Do not give a mixed fault scenario an unqualified accepted visibility from another successful subtrial; use existing report fields/states and explain each outcome. Retain unknown acceptance after a client timeout until a receipt resolves it. Name observed completed failure responses and terminal retry decisions separately from unresolved acceptance/persistence counts; a null count alone is not a failed response-classification check. |
 | LOG-DIAGNOSTICS | Name the supported separate routing or suppression mechanism. One exporter-fault scenario asserts bounded diagnostic volume and export attempts, application progress, original sink output, and continued operation of each other configured signal. Explicitly mark absent signals not configured; preserving configuration alone is not operation proof. |
 | LOG-VERIFY-FRESH | Unique report storage for each trial; planned manifest/lockfile dependency preparation; binding to source, command and dependency versions; actual success/failure/error/skip counts; preserved timeout console output, failed timeout verdict, owned-process cleanup and incremental structured partial results; explicit evidence scope. |
@@ -898,6 +927,20 @@ in for the separate partial-rejection case:
 ### Report readback
 
 Read this section immediately before generating/finalizing logging results.
+For an existing canonical audit, the read-only report helper can enumerate the
+promises directly, including every `expected_telemetry[].attributes` member:
+
+```sh
+python3 -I "<directory-containing-loaded-SKILL.md>/../references/scripts/observe_report.py" required-controls .observe/otel-audit.json
+```
+
+Use `--ids` only to restrict that inventory to an already chosen scope; it does
+not approve a selection or add dependencies. Its candidate scenario IDs do not
+assert that those scenarios test each field. Match the inventory's owning item,
+field and operation to real acceptance assertions yourself. The command writes
+no report and evaluates neither coverage nor runtime. An equivalent complete
+reconciliation is valid. With no audit, derive the same set from the direct
+instrumentation scope/report; never manufacture an audit to use this command.
 Build the required set independently from the final findings' promised
 operations/fields and applicable source/policy conditions. Compare it to the
 assertions actually saved in the scenarios, using owning operation, field,

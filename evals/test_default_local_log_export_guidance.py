@@ -58,6 +58,12 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
     assert "../references/logging-readiness.md#report-readback" in entrypoint
     common = _read(staged / "logging-readiness.md")
     consumers = json.loads(_read(staged / "consumers.json"))
+    help_result = subprocess.run(
+        [sys.executable, "-I", str(staged / "scripts/observe_report.py"), "required-controls", "--help"],
+        capture_output=True, text=True,
+    )
+    assert help_result.returncode == 0, help_result.stderr
+    assert "--ids" in help_result.stdout
     targets = re.findall(r"\]\((languages/[^)]+)#logging-readiness-checks\)", common)
     expected = {f"languages/{lang}.md" for lang in ("java", "python", "go", "node")}
     assert set(targets) == expected
@@ -120,6 +126,11 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
         "positive, zero, negative, fractional, malformed",
         "Start from the promises and clauses",
         "final allocated IDs",
+        "Record creation/update path and the final normalization helper",
+        "Count the top-level value at depth 1",
+        "byte arrays MUST be truncated counting each byte as one",
+        "required-controls .observe/otel-audit.json",
+        "evaluates neither coverage nor runtime",
         "API's documented contract from its implemented enforcement",
         "where the deadline is created, propagated and consumed relative to retries",
     ):

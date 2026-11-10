@@ -1065,6 +1065,47 @@ def normalize_audit_report(data: dict[str, Any]) -> dict[str, Any]:
     return report
 
 
+def audit_control_inventory(
+    data: dict[str, Any], requested_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    """Enumerate declared promises without judging their acceptance or execution."""
+    report = normalize_audit_report(data)
+    known_ids = {finding["id"] for finding in report["findings"]}
+    if requested_ids is None:
+        selected_ids = known_ids
+    else:
+        requested_ids = string_list(requested_ids, "required-controls.ids")
+        if not requested_ids:
+            fail("required-controls --ids must contain at least one finding ID")
+        if len(requested_ids) != len(set(requested_ids)):
+            fail("required-controls --ids must not contain duplicate finding IDs")
+        selected_ids = set(requested_ids)
+        unknown_ids = selected_ids - known_ids
+        if unknown_ids:
+            fail("unknown finding IDs: " + ", ".join(sorted(unknown_ids)))
+    findings = [finding for finding in report["findings"] if finding["id"] in selected_ids]
+    promises = []
+    for finding in findings:
+        for index, item in enumerate(finding["expected_telemetry"]):
+            promises.append({
+                "finding_id": finding["id"],
+                "telemetry_index": index,
+                "type": item["type"],
+                "name": item["name"],
+                "attributes": list(item["attributes"]),
+                "candidate_scenario_ids": list(finding["verification_scenarios"]),
+            })
+    return {
+        "audit_sha256": audit_digest(report),
+        "finding_ids": [finding["id"] for finding in findings],
+        "promise_count": len(promises),
+        "attribute_count": sum(len(item["attributes"]) for item in promises),
+        "coverage_evaluated": False,
+        "runtime_evaluated": False,
+        "promises": promises,
+    }
+
+
 def audit_digest(report: dict[str, Any]) -> str:
     payload = json.dumps(
         report,

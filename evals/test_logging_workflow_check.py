@@ -15,6 +15,106 @@ from logging_workflow_check import configured_service_name, drain_output, local_
 from run_logging_workflow import bind_model_metadata
 
 
+@pytest.fixture(scope="module")
+def report_helper_and_sample():
+    import importlib.util
+
+    source = Path(__file__).resolve().parents[1] / "skills/references/tests/observe_report_fixtures.py"
+    spec = importlib.util.spec_from_file_location("logging_inventory_report_fixtures", source)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.MODULE, module.sample_report
+
+
+def test_control_inventory_keeps_each_promised_item_and_field(report_helper_and_sample):
+    helper, sample = report_helper_and_sample
+    report = sample()
+    report["findings"][0]["expected_telemetry"] = [
+        {"type": "resource", "name": "Service identity", "attributes": ["service.name", "service.version"],
+         "product_view": "Consistent filtering"},
+        {"type": "log", "name": "request completed", "attributes": ["TraceId", "SpanId"],
+         "product_view": "Exact operation correlation"},
+    ]
+    inventory = helper.audit_control_inventory(report)
+    assert inventory["promise_count"] == 3
+    assert inventory["attribute_count"] == 5
+    assert [(row["finding_id"], row["telemetry_index"], row["name"], row["attributes"])
+            for row in inventory["promises"][:2]] == [
+        ("OTEL-001", 0, "Service identity", ["service.name", "service.version"]),
+        ("OTEL-001", 1, "request completed", ["TraceId", "SpanId"]),
+    ]
+
+
+def test_control_inventory_does_not_merge_same_names_across_owners(report_helper_and_sample):
+    helper, sample = report_helper_and_sample
+    report = sample()
+    for finding in report["findings"]:
+        finding["expected_telemetry"][0].update(name="shared operation", attributes=["shared.field"])
+    inventory = helper.audit_control_inventory(report)
+    assert [(row["finding_id"], row["name"], row["attributes"])
+            for row in inventory["promises"]] == [
+        ("OTEL-001", "shared operation", ["shared.field"]),
+        ("OTEL-002", "shared operation", ["shared.field"]),
+    ]
+
+
+def test_control_inventory_filters_in_canonical_order_without_approving_dependencies(report_helper_and_sample):
+    helper, sample = report_helper_and_sample
+    assert helper.audit_control_inventory(sample(), ["OTEL-002", "OTEL-001"])["finding_ids"] == ["OTEL-001", "OTEL-002"]
+    assert helper.audit_control_inventory(sample(), ["OTEL-002"])["finding_ids"] == ["OTEL-002"]
+
+
+def test_control_inventory_rejects_unknown_ids(report_helper_and_sample):
+    helper, sample = report_helper_and_sample
+    with pytest.raises(helper.ReportError, match="unknown finding IDs"):
+        helper.audit_control_inventory(sample(), ["OTEL-999"])
+
+
+def test_control_inventory_rejects_duplicate_and_empty_explicit_ids(report_helper_and_sample):
+    helper, sample = report_helper_and_sample
+    for ids in ([], ["OTEL-001", "OTEL-001"]):
+        with pytest.raises(helper.ReportError):
+            helper.audit_control_inventory(sample(), ids)
+
+
+def test_control_inventory_keeps_promises_without_attributes(report_helper_and_sample):
+    helper, sample = report_helper_and_sample
+    report = sample()
+    report["findings"][0]["expected_telemetry"][0]["attributes"] = []
+    inventory = helper.audit_control_inventory(report)
+    assert inventory["promise_count"] == 2
+    assert inventory["promises"][0]["attributes"] == []
+
+
+def test_control_inventory_does_not_mutate_or_claim_coverage(report_helper_and_sample):
+    helper, sample = report_helper_and_sample
+    report = sample()
+    before = copy.deepcopy(report)
+    inventory = helper.audit_control_inventory(report)
+    assert report == before
+    assert inventory["audit_sha256"] == helper.audit_digest(helper.normalize_audit_report(report))
+    assert inventory["coverage_evaluated"] is False
+    assert inventory["runtime_evaluated"] is False
+    assert inventory["promises"][0]["candidate_scenario_ids"] == ["http.checkout.success"]
+
+
+def test_control_inventory_cli_reads_audit_without_writing_reports(tmp_path, report_helper_and_sample):
+    helper, sample = report_helper_and_sample
+    audit = tmp_path / "otel-audit.json"
+    audit.write_text(json.dumps(sample()))
+    original = audit.read_bytes()
+    command = [sys.executable, "-I", str(Path(helper.__file__)), "required-controls", str(audit)]
+    success = subprocess.run(command + ["--ids", "OTEL-002"], capture_output=True, text=True)
+    assert success.returncode == 0, success.stderr
+    assert json.loads(success.stdout)["finding_ids"] == ["OTEL-002"]
+    failure = subprocess.run(command + ["--ids", "OTEL-999"], capture_output=True, text=True)
+    assert failure.returncode == 1
+    assert not failure.stdout and "FAIL:" in failure.stderr
+    assert audit.read_bytes() == original
+    assert list(tmp_path.iterdir()) == [audit]
+
+
 @pytest.mark.parametrize("configuration,expected", [
     ({"OTEL_SERVICE_NAME": "explicit-operator"}, "explicit-operator"),
     ({"OTEL_RESOURCE_ATTRIBUTES": "service.name=resource%20operator"}, "resource operator"),
