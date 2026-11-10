@@ -28,27 +28,40 @@ completeness method, not an additional OTel implementation requirement:
 1. **Contract:** extract each applicable primary-source clause and its distinct
    conditions, input branches, strength and owner. A retained excerpt preserves
    the text; it does not allocate that clause's controls.
-2. **Capability:** follow each selected mechanism through its delegates to the
-   concrete parser, default factory, normalizer, diagnostic or retry/deadline
-   check. Keep an
-   uninspected delegate on this worklist. Resolve accessible static facts even
-   for a proposed SDK that is not installed in the application. Record the
-   exact checked access boundary when source genuinely cannot be obtained;
-   an unexecuted runtime probe is not that boundary.
+2. **Capability:** allocate each selected mechanism an owner, concrete consuming
+   function/check, source-resolved behavior and separate runtime evidence/status
+   in the existing evidence fields. Follow parser, default, normalization,
+   diagnostic and retry/deadline delegates until that behavior is established;
+   a pointer to an uninspected helper remains unresolved. “Not run” describes
+   execution, not source capability. Resolve accessible facts even for a proposed
+   SDK not installed in the application. When source genuinely cannot be obtained,
+   retain the exact checked access boundary and conditional resolution step.
 3. **Acceptance:** combine independently extracted source-clause controls,
    operator policy and every promised telemetry item/field, then map each
    condition to an assertion or precise conditional resolution step. The
    `required-controls` helper inventories audit promises only; its output
    excludes source-clause and acceptance controls. Add those independently.
 
-Inventory each setting actually consumed by the selected provider, bridge,
-distribution/agent and launcher. A generic SDK-disabled table does not allocate
-a bridge's separate enablement flag. Distinguish standard SDK configuration
+Derive a named configuration inventory independently from the selected
+construction path: inspect key/option declarations, readers and referenced
+constants, then follow their actual consumption. A declaration or documentation
+mention alone does not prove the selected path reads it. Classify each candidate
+as consumed, conditionally read or outside the selected path, with its source
+binding. Key the inventory by owner/reader as well as setting name: two
+consumers can apply different defaults or invalid-value diagnostics to the same
+setting. Resolve referenced conversion/helper bodies; a parser name or link is
+a pending capability, not its resolved behavior. Reconcile this inventory against
+the saved case table before finalizing; do not derive both from an already
+incomplete report. A generic SDK-disabled table does not allocate a bridge's
+separate enablement flag. Distinguish standard SDK configuration
 contracts from documented extensions and private flags; do not impose a standard
 default on an extension without establishing that contract's applicability.
 
-Use a value-case table for the selected settings in existing report/evidence
-fields. Reuse a parameterized table when every setting/case remains addressable:
+Populate the value-case table for consumed settings now in existing report/
+evidence fields. When source is accessible, an instruction to enumerate settings
+or resolve their outcomes later is not a completed audit/repair handoff. Share
+parameterized cases only with an explicit setting-name → case/default/outcome
+map; a primitive-type label or “all settings” does not identify its members:
 
 | Consumed setting and owner | Input case | Actual source outcome | Upstream disposition | Acceptance |
 |---|---|---|---|---|
@@ -1036,6 +1049,15 @@ Source-clause controls remain independently required; these hints do not enumera
 them or expand scenario paragraphs into tests.
 
 Read this section immediately before generating/finalizing logging results.
+Compare the source-derived configuration-name inventory to the saved per-setting
+cases, including separate flags and fallback keys. Resolve every consumed name
+to concrete input representations, effective values/errors/diagnostics, applicable
+source conditions/strengths and named future or executed assertions. An unresolved
+source-access boundary can retain conditional resolution; a future instruction
+to build the inventory cannot close accessible facts. Grouped tables remain valid
+when the name → input/outcome/assertion mapping is individually addressable.
+Keep configuration-source and execution-boundary variants separate: a helper
+resolving a value does not prove the normal launcher preserves that value.
 For an existing canonical audit, the read-only report helper can enumerate the
 promises directly, including every `expected_telemetry[].attributes` member:
 
