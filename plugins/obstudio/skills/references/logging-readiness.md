@@ -24,7 +24,19 @@ verification do not require a sibling instrumentation skill to be installed.
 
 Use three related worklists before finalizing the normal report. This is a local
 completeness method, not an additional OTel implementation requirement. Keep the
-work proportional to the selected application path and claims:
+work proportional to the selected application path and claims. In the worklists
+and source-clause obligations below, applicability means a clause needed to
+assess selected application behavior, supplied operator policy, app-owned or
+changed configuration, a source-backed risk, or an actual capability claim.
+An unchanged delegated default needs accurate versioned source/default evidence;
+it does not select every parser input, record shape or upstream conformance test.
+Other SDK/receiver duties may retain compact owner/default/unsupported/unverified
+dispositions without reproducing every imported clause. These dispositions never
+close a critical selected invariant or an unproven runtime claim.
+
+An exhaustive OTel clause inventory and source-to-skill coverage review belongs
+to skill maintenance when requested; it is not an additional deliverable for
+every normal application audit, instrumentation or verification report.
 
 1. **Contract:** extract each applicable primary-source clause and its distinct
    conditions, strength, maturity and actual owner. Keep SDK, receiver and library
@@ -228,6 +240,12 @@ fixed-message or application-logger allowlist. A framework record observed in
 the normal pipeline cannot be excluded from its privacy assessment merely
 because the original call-site inventory listed only application messages.
 Keep separately routed SDK self-diagnostics distinct from those framework records.
+For each selected error-renderer path, require sentinel absence at every
+policy-covered native and SDK output, plus preservation of permitted diagnostic
+category. Name the actual hook/action at the policy-required boundary, including
+pre-capture when required, or the exact unresolved API boundary; a future
+instruction to assess renderers is insufficient. Bind that control to each
+logging/privacy finding it proves, not only to its route or trace finding.
 
 ### Configuration value types
 
@@ -775,6 +793,12 @@ active. Retain observable request delivery and event ordering. Separate single
 stops, requests after exit or a test without the active pipeline cannot prove
 that lifecycle conjunction. Assess deliberate forced exit under its actual
 policy rather than describing it as a successful graceful drain.
+Name the first and repeated request kinds and effective handlers. When the
+selected policy retains forced termination for a repeated request, separate that
+outcome from graceful-drain assertions. When the selected policy requires an
+uninterrupted drain, existing force behavior needs repair. Forced exit cannot
+establish graceful drain or imply final-record receipt; retain any independently
+observed receipts accurately.
 Where implemented, [development SDK log metrics](https://opentelemetry.io/docs/specs/semconv/otel/sdk-metrics/) can supply
 creation, queue-pressure, processed and exported counts. Record each instrument's
 stage and retry/rejection semantics; created/processed is not receiver acceptance.
@@ -1062,10 +1086,12 @@ Instrumentation and verification also retain concrete future assertions beside
 unexecuted selected controls. "Not tested" or "counts kept separate" alone does
 not carry the acceptance plan; keep the actual expected counts/conditions while
 leaving runtime proof absent and unsupported capability conditional.
-This applies to a direct instrumentation baseline without an audit too. Save
-each of these assertions explicitly in its own canonical report; do not assume
-an earlier audit holds the plan or let the warning-only retry assertion stand
-in for the separate partial-rejection case:
+When protocol response classification is selected or claimed, save each of
+these assertions explicitly in its own canonical report, including direct
+instrumentation without an audit. Do not assume an earlier audit holds the
+plan or let the warning-only retry assertion stand in for the separate
+partial-rejection case. Otherwise retain accurate delegated capability and
+ownership without selecting a protocol conformance suite merely by using OTLP:
 
 | Future valid response control | Count assertion for each known N-record batch | Retry assertion |
 |---|---|---|
