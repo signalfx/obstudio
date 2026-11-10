@@ -191,10 +191,9 @@ function defaultLocalLogConfiguration() {
       throw new Error('logs endpoint differs from preflight-approved receiver');
     }
 
-    // The OTLP exporter can read both environment header sources even when
-    // given an explicit URL. Keep credentials out of the local log path.
-    if (process.env.OTEL_EXPORTER_OTLP_HEADERS?.trim() ||
-        process.env.OTEL_EXPORTER_OTLP_LOGS_HEADERS?.trim()) {
+    // Reject generic credentials while preserving signal-specific local log
+    // headers for official SDK parsing without an empty headers override.
+    if (process.env.OTEL_EXPORTER_OTLP_HEADERS?.trim()) {
       throw new Error('OTLP headers conflict with local logs');
     }
 
@@ -392,10 +391,10 @@ the optional log-enabled `new NodeSDK(...)` outside its pre-start `try`/`catch`.
 Do not set log exporter, endpoint, or protocol environment variables during
 optional log construction: if a later constructor throws, those writes would
 survive the skip path and could re-enable NodeSDK's default OTLP logs.
-The original console/file sink stays active. Both generic and signal-specific
-OTLP log headers must have no non-empty value on this local path; move generic
-OTLP headers to trace/metric signal variables and remove signal-specific log
-headers. For a different logs protocol, select the official exporter matching
+The original console/file sink stays active. Nonempty generic OTLP headers
+conflict with this local path; move generic OTLP headers to trace/metric signal
+variables and remove the generic setting. Preserve operator-owned signal-specific local log
+headers for official SDK parsing. For a different logs protocol, select the official exporter matching
 that protocol during instrumentation preflight.
 
 With `OTEL_LOGS_EXPORTER=none`, both the added processor and bridge are omitted.
@@ -598,7 +597,7 @@ not fixed-port equality checks.
 | `OTEL_LOGS_EXPORTER` | `otlp` only when the logs endpoint is absent or preflight-classified local | `none` disables the added local log pipeline; another explicit value remains operator-owned |
 | `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | resolved local receiver; fallback `http://127.0.0.1:4318/v1/logs` | Signal-specific local application-log destination |
 | `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` | `http/protobuf` for the shown local baseline | Select a matching official exporter for another explicit protocol |
-| `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset or empty | Non-empty log headers disable this added local log pipeline so the exporter cannot inherit credentials |
+| `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset | Preserve supplied signal-specific local log headers for official SDK parsing after generic headers are removed |
 | `OTEL_SERVICE_NAME` | unset | Optional service-name override; preserve identity supplied through resource attributes or the active resource configuration |
 | `OTEL_METRIC_EXPORT_INTERVAL` | `60000` | Metric export interval (ms) |
 | `OTEL_METRIC_EXPORT_TIMEOUT` | `30000` | Metric export timeout (ms) |
@@ -634,10 +633,10 @@ access token, generic cloud header, cloud exporter, or forwarding flag into log
 configuration. Classify an explicit signal-specific endpoint during
 instrumentation preflight; if approved, preserve it as operator configuration
 and let it win at runtime. Report a source-proven non-local value as the
-cloud-boundary conflict before applying this pattern. Reject non-empty generic
-and signal-specific log headers on the added local branch; the exporter may read
-either source from the environment. Move cloud credentials to trace/metric
-signal variables and remove the log header setting. Splunk Observability Studio cloud
+cloud-boundary conflict before applying this pattern. Reject nonempty generic
+OTLP headers on the added local branch. Move cloud credentials to trace/metric
+signal variables and remove the generic setting; preserve operator-owned
+signal-specific local log headers for official SDK parsing. Splunk Observability Studio cloud
 forwarding remains traces and metrics only.
 
 Verify one sanitized record at each required severity both outside and inside

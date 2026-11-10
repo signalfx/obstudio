@@ -824,6 +824,9 @@ string returned by the actual getter. Follow the selected transport implementati
 through validation and final unit/range clamps. A helper that can configure a
 deadline establishes no bound unless the active sender/retry path calls it;
 identify the actual enclosing budget and its cancellation behavior.
+Follow the exact overload selected by the caller. A typed option and a primitive
+overload with the same name can validate differently; another overload's check
+does not establish where or when the selected path rejects an input.
 
 Verify effective identity and configuration through the real launcher, including
 loaded profiles and operator overrides. For selected delivery checks, distinguish

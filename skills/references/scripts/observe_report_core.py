@@ -1096,6 +1096,25 @@ def audit_control_inventory(
                 "candidate_scenario_ids": list(finding["verification_scenarios"]),
             })
     scenarios = {item["id"]: item for item in report["verification"]["scenarios"]}
+    unknown_literals = []
+
+    def inspect_finding_literals(value: Any, path: str) -> None:
+        if isinstance(value, str):
+            for literal in sorted(set(re.findall(r"\bOTEL-\d+(?:/\d+)*\b", value))):
+                first, *suffixes = literal.split("/")
+                for finding_id in [first, *("OTEL-" + suffix for suffix in suffixes)]:
+                    if finding_id not in known_ids:
+                        unknown_literals.append({"finding_id": finding_id, "source_literal": literal,
+                                                 "report_path": path})
+        elif isinstance(value, dict):
+            for key, child in value.items():
+                token = str(key).replace("~", "~0").replace("/", "~1")
+                inspect_finding_literals(child, path + "/" + token)
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                inspect_finding_literals(child, path + "/" + str(index))
+
+    inspect_finding_literals(report, "")
     literal_checks = []
     for item in promises:
         for attribute in item["attributes"]:
@@ -1122,6 +1141,10 @@ def audit_control_inventory(
         "unmatched_attribute_literals": [
             item for item in literal_checks if not item["matching_scenario_ids"]
         ],
+        "finding_id_literal_check_mode": "OTEL_numeric_tokens_and_slash_shorthand_only",
+        "finding_id_literal_scope": "entire_canonical_report",
+        "unknown_finding_id_literals": unknown_literals,
+        "finding_references_evaluated": False,
         "coverage_evaluated": False,
         "runtime_evaluated": False,
         "promises": promises,

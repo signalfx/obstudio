@@ -174,9 +174,8 @@ def local_endpoint(raw, protocol, *, signal=False):
 
 
 try:
-    if any(os.environ.get(name, "").strip() for name in (
-            "OTEL_EXPORTER_OTLP_HEADERS", "OTEL_EXPORTER_OTLP_LOGS_HEADERS")):
-        raise ValueError("local log headers")
+    if os.environ.get("OTEL_EXPORTER_OTLP_HEADERS", "").strip():
+        raise ValueError("generic local log headers")
     generic_protocol = os.environ.get("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf").strip().lower()
     logs_protocol = os.environ.get("OTEL_EXPORTER_OTLP_LOGS_PROTOCOL", generic_protocol).strip().lower()
     if logs_protocol not in ("http/protobuf", "grpc"):
@@ -406,13 +405,11 @@ def _local_log_exporter():
             "select the official exporter matching the configured logs protocol"
         )
 
-    # Exporters may read both header variables when constructor headers are
-    # omitted. Reject either source before constructing this local exporter.
-    if any(os.environ.get(name, "").strip() for name in (
-        "OTEL_EXPORTER_OTLP_HEADERS", "OTEL_EXPORTER_OTLP_LOGS_HEADERS"
-    )):
+    # Reject generic credentials; preserve signal-specific local log headers
+    # for the official exporter to parse without an empty headers override.
+    if os.environ.get("OTEL_EXPORTER_OTLP_HEADERS", "").strip():
         return _skip_local_logs(
-            "keep local logs headers empty; scope cloud credentials to traces/metrics"
+            "move generic OTLP headers to trace/metric signal variables"
         )
     endpoint = os.environ.get("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", "").strip()
     if endpoint and not _local_http_endpoint(endpoint):
@@ -900,6 +897,10 @@ Distinguish an eagerly evaluated default argument from the value ultimately
 selected by a configuration lookup. Trace sentinels and helper results through
 outer constructor defaults; an intermediate `None` need not mean unlimited.
 Keep source-known behavior separate from unexecuted runtime checks.
+For representability claims, follow Python's integer parsing into the actual
+container, scheduler or native extension constructor. Accepting an integer does
+not establish that the terminal consumer can use it; retain that boundary and
+avoid allocating an unsafe size merely to probe the limit.
 
 For limits, replay the original payload and test its boundaries. Derive expected
 retained values and drops from actual input, accounting for bridge-added fields

@@ -144,6 +144,46 @@ def test_control_inventory_literal_hit_is_not_semantic_acceptance(report_helper_
     assert inventory["runtime_evaluated"] is False
 
 
+def test_control_inventory_surfaces_stale_text_ids_without_selecting_other_findings(report_helper_and_sample):
+    helper, sample = report_helper_and_sample
+    report = sample()
+    index = len(report["evidence"])
+    report["evidence"].append({"check": "Text mapping", "finding": "OTEL-001, OTEL-002, OTEL-999 and OTEL-999",
+                               "source": "existing source"})
+    before = copy.deepcopy(report)
+    inventory = helper.audit_control_inventory(report, ["OTEL-001"])
+    assert inventory["finding_ids"] == ["OTEL-001"]
+    assert inventory["unknown_finding_id_literals"] == [
+        {"finding_id": "OTEL-999", "source_literal": "OTEL-999", "report_path": f"/evidence/{index}/finding"}]
+    assert inventory["finding_id_literal_scope"] == "entire_canonical_report"
+    assert inventory["finding_references_evaluated"] is False
+    assert inventory["coverage_evaluated"] is False
+    assert report == before
+
+
+def test_control_inventory_literal_ids_do_not_match_a_known_numeric_prefix(report_helper_and_sample):
+    helper, sample = report_helper_and_sample
+    report = sample()
+    report["evidence"].append({"check": "Numeric token hints", "finding": "OTEL-0010 XOTEL-999 otel-998 OTEL-997_suffix",
+                               "source": "existing source"})
+    inventory = helper.audit_control_inventory(report)
+    assert [r["finding_id"] for r in inventory["unknown_finding_id_literals"]] == ["OTEL-0010"]
+    assert inventory["finding_id_literal_check_mode"] == "OTEL_numeric_tokens_and_slash_shorthand_only"
+    assert inventory["finding_references_evaluated"] is False
+
+
+def test_control_inventory_retains_slash_shorthand_for_stale_id_hint(report_helper_and_sample):
+    helper, sample = report_helper_and_sample
+    report = sample()
+    index = len(report["evidence"])
+    report["evidence"].append({"check": "Renumbered text mapping", "finding": "Mapping: OTEL-001/004 -> owned.operation",
+                               "source": "existing source"})
+    inventory = helper.audit_control_inventory(report)
+    assert inventory["unknown_finding_id_literals"] == [
+        {"finding_id": "OTEL-004", "source_literal": "OTEL-001/004", "report_path": f"/evidence/{index}/finding"}]
+    assert inventory["finding_references_evaluated"] is False
+
+
 def test_control_inventory_literals_preserve_case_and_ignore_trigger_mentions(report_helper_and_sample):
     helper, sample = report_helper_and_sample
     report = sample()

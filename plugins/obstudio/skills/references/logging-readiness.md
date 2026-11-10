@@ -46,6 +46,8 @@ Derive a named configuration inventory independently from application-owned or
 new overrides, supplied selected settings, and dependencies necessary to the
 claimed logging behavior. Include relevant Resource, propagation/sampling,
 bridge/provider activation, filtering/SDK-disabled, limits and lifecycle paths.
+For a promised optional mode, identify its actual named activation setting or
+source-proven default; an instruction to enable the mode is not its wiring.
 Inspect key/option declarations and actual readers; a declaration alone does not
 prove consumption. Key entries by owner/reader as well as setting name, since
 consumers can apply different defaults and diagnostics. A queried startup key
@@ -191,6 +193,9 @@ Let the installed exporter parse OTLP header environment values using its
 supported `key=value,key2=value2` encoding. W3C Baggage-style semicolon metadata
 is not supported here. Do not introduce a custom parser, print header values
 or silently rewrite operator credentials to make a local recipe work.
+Preserve selected signal-specific local log headers through that SDK path.
+An inherited generic cloud credential conflict does not make an intentional
+signal-specific local header a conflict, or authorize an empty header override.
 
 Follow an existing file/stdout forwarding route through its parser, Collector
 processors and destination before adding an SDK bridge. It can be operator-owned
@@ -273,6 +278,9 @@ of its referenced contract. Keep this traversal scoped to the selected path.
 Separate upstream requirements, optional/development capabilities and the
 repository's local destination/privacy policy. If current sources are unavailable,
 name the snapshot and leave unsupported conclusions unverified.
+Reconcile the retained primary-source inventory, including imported sources,
+against the matrix's actual section/range bindings. A parent topic or downloaded
+file alone does not cover unbound child clauses; retain their scoped dispositions.
 
 Keep a compact source-to-evidence matrix in the existing report/evidence fields;
 follow the canonical report schemas and do not invent JSON keys or new artifact
@@ -328,6 +336,9 @@ configuration duties addressable, either in each affected row or an explicitly
 referenced shared row. Read the saved rows against retained source bindings,
 not only a page title or draft summary. This is a local completeness check,
 not an additional OTel implementation requirement.
+Keep the direction of conditional requirements intact: an obligation when A
+is present does not imply the reverse obligation when B is present. Preserve
+the original conjunctions, exceptions and subject when condensing a clause.
 
 For an OTel requirement, bind the retained primary-source clauses, not only this
 local guide or an SDK option comment. Read each cited range back before using
@@ -502,6 +513,12 @@ top-level TraceId, SpanId and TraceFlags, including a valid unsampled context
 and concurrent/asynchronous work. Restore/detach context after a request;
 outside-span logs must not inherit the preceding request's IDs. An unsampled
 span can still supply valid correlation even when no span is exported.
+When a record includes SpanId, the data model says TraceId SHOULD be present
+too; it does not imply the inverse recommendation for every TraceId.
+If preservation of other carrier/context fields is promised, bind each to its
+own assertion at the real context or carrier surface. A general propagation
+scenario or canonical log-ID assertion cannot prove every promised field, and
+does not authorize inventing additional top-level log fields.
 
 For a cross-process join, also check the installed propagator against the actual
 peer carrier. A locally correct logger cannot repair a rejected incoming
@@ -762,9 +779,13 @@ Where implemented, [development SDK log metrics](https://opentelemetry.io/docs/s
 creation, queue-pressure, processed and exported counts. Record each instrument's
 stage and retry/rejection semantics; created/processed is not receiver acceptance.
 Do not add duplicate application metrics or assume unavailable instruments exist.
+Processor `OnEmit` runs synchronously on the emitting thread and SHOULD NOT
+block or throw exceptions. For processors registered directly with LoggerProvider,
+mutations MUST reach subsequent registered processors. Preserve these SDK-owned
+dispositions separately from asynchronous record safety and independent filtering.
 For a custom asynchronous processor, do not retain and mutate an unsafe shared
-ReadWriteLogRecord after `OnEmit`; use a supported snapshot/clone, keep `OnEmit`
-nonblocking and nonthrowing, and verify concurrent isolation. Built-in SDK
+ReadWriteLogRecord after `OnEmit`; use a supported snapshot/clone and verify
+concurrent isolation. Built-in SDK
 processors are not a reason to write a replacement. An optional event-to-span
 bridge must still forward the log record when that feature is selected.
 
@@ -782,11 +803,18 @@ accepted and zero rejected; it does not establish backend persistence. A generic
 HTTP 200 with an invalid/unrelated body is not this protocol control. Preserve
 this positive control alongside partial/warning/failure cases in the source
 matrix and saved acceptance assertions.
+Inspect the actual status/body handling before describing the SDK's capability.
+A success result alone does not prove that the client decoded a conforming body
+or interpreted partial rejections. Retain source-known defaults/checks separately
+from an unresolved adapter link and unexecuted runtime enforcement.
 When an OTLP response has populated
 `partial_success`, the client MUST NOT retry that request, including an inferred
 rejected subset; this also covers warning-only responses with zero rejections.
 Keep request-attempt counts, received/accepted/rejected record counts and local
 drops distinct; receiver rejection is not evidence of a local queue drop.
+Account for every received batch/attempt rather than only the last captured
+request. Retain each trial's client terminal outcome, including partial and
+warning-only responses, beside its complete request/response evidence.
 For protocol response-classification proof, keep the exporter's retry mechanism
 capable of another attempt and include a retryable-response positive control
 under that same retry policy. Disabling retries, allowing only one attempt or
@@ -1012,6 +1040,11 @@ source wiring from unavailable execution evidence and SDK-owned defaults.
 Promote only concrete app-owned gaps into selectable findings and map their
 acceptance scenarios. Instrument only authorized gaps using the existing
 bridge and provider; retain supported operator settings and scope exclusions.
+During instrumentation, an executable selected control left Not proven is
+remaining work: use the smallest supported test or repair and rerun it while
+within the authorized scope. Retain an actual blocker or unsupported boundary
+when execution cannot be completed. A live snapshot and cleanup are not a
+substitute for a selected final-record drain test.
 
 Use the detected language guide for bridge mapping, propagation, log limits,
 deadline APIs and diagnostic routing. Test normal operation, explicit opt-out and a fault case;
@@ -1062,6 +1095,13 @@ non-assertion: neither is a semantic coverage verdict. Resolve each promise to i
 actual assertion or missing proof; do not add field names merely to satisfy text
 matching. A conditionally supplied Resource field needs its supplied-value
 preservation assertion or justified applicability, without inventing metadata.
+The helper also returns `unknown_finding_id_literals` with report locations for
+unallocated numeric `OTEL-*` tokens and slash shorthand across the entire
+canonical report, even when inventorying a selection. It retains the original
+literal. These are lexical hints: a historical/external
+reference can be intentional, and a known ID can still identify the wrong owner.
+Resolve text mappings against the actual final findings and controls; the helper
+does not evaluate reference meaning or repair canonical bindings.
 Source-clause controls remain independently required; these hints do not enumerate
 them or expand scenario paragraphs into tests.
 
