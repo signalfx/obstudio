@@ -826,6 +826,18 @@ does not recurse, temporary state is restored in `finally`, unrelated diagnostic
 remain, and the original failed probe is safe in both native and OTLP output.
 If the installed stack cannot meet that boundary, leave it uncovered rather
 than forcing an upgrade or claiming an unsupported hook works.
+Trace the native producer too. A Tomcat container diagnostic can originate in
+JULI/`java.util.logging` before reaching an SLF4J/Logback bridge; an MVC handler
+does not necessarily intercept that logging path. Inspect the resolved container,
+JDK `LogRecord`/`Filter`/`Handler` APIs and actual bridge before selecting a hook.
+Where supported, sanitize or safely copy the record before affected handlers or
+bridge capture, accounting for message parameters and thrown-exception rendering.
+Do not mutate a record after handing it to asynchronous code, assume a handler
+applies its filter without checking, replace operator handlers/filters wholesale,
+or toggle global logger levels per request. Preserve level, logger/category,
+occurrence time, caller context and original sinks; replay the same container
+failure without changing its HTTP response contract. These are capability leads
+for the detected native path, not a mandate to add a new logging backend.
 For a captured Spring MVC argument/error diagnostic, also inspect the resolved
 framework's documented [exception handling](https://docs.spring.io/spring-framework/reference/web/webmvc/mvc-controller/ann-exceptionhandler.html)
 through existing handlers or narrowly scoped `@ExceptionHandler`/`@ControllerAdvice`.

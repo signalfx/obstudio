@@ -570,6 +570,17 @@ counts merely to fill a field. A receiver recording that it wrote HTTP 503 does
 not prove the client observed a completed 503 response. Match each batch to the
 SDK's actual terminal result and timing: a client deadline may have expired first.
 Retain server response intent and client timeout/failure as separate observations.
+Use one ledger row per batch/attempt in the existing Markdown evidence section;
+join retries by the decoded batch fingerprint before calculating record totals:
+
+| Batch/attempt and raw evidence | Decoded N | Server status/intent | Client terminal result and measured scope | Received / acknowledged accepted / rejected / unresolved |
+|---|---|---|---|---|
+| Actual batch identity, attempt number and receipt/client evidence links | Actual decoded count | Observed server behavior | Completed response, timeout or other observed result; export/caller timing | Evidence-derived counts, preserving unknowns |
+
+This is an evidence layout, not example execution or new JSON fields. Never
+combine a timed-out batch with a different completed-503 batch under one
+completed-response count. A server response log supplies the server column;
+match client evidence before filling the terminal-result column.
 
 For the local evidence report, reconcile per-batch request and response counts
 before summing a multi-batch trial. Save per-outcome attempted, received,
@@ -611,22 +622,23 @@ Record supported request/response byte bounds separately from Body/attribute
 limits. The [OTLP transport clauses](https://opentelemetry.io/docs/specs/otlp/)
 require a separate source-matrix disposition for these HTTP boundaries:
 
-- Receiver request parsing MUST be bounded, including after decompression;
-  64 MiB is the recommended default. An exceeded bound requires HTTP 413.
-- Exporter request bodies SHOULD be bounded, including before compression; 64 MiB is the
-  recommended default. Above an active bound, the client MUST NOT send and
-  SHOULD record the discard.
-- Exporter response parsing MUST be bounded, including after decompression;
-  4 MiB is the recommended default. An exceeded bound is a non-retryable error;
-  the client SHOULD record the discard.
-- Receiver response bodies MUST be bounded, including before compression;
-  4 MiB is the recommended default. For an oversized partial response, the server
-  SHOULD reduce response size without changing semantics when possible and practical.
-  It MAY trim optional diagnostic fields. If the response still cannot fit,
-  HTTP 500 is required and acceptance is unspecified.
+| Protocol surface / owner | Clauses to preserve in the saved matrix | Recommended default |
+|---|---|---|
+| Receiver request parsing | MUST bound, including after decompression; exceeded bound requires HTTP 413 | 64 MiB |
+| Exporter request body | SHOULD bound, including before compression; above an active bound MUST NOT send and SHOULD record the discard | 64 MiB |
+| Exporter response parsing | MUST bound, including after decompression; exceeded bound is non-retryable and client SHOULD record the discard | 4 MiB |
+| Receiver response body | MUST bound, including before compression; for an oversized partial response SHOULD reduce size without changing semantics when possible and practical; MAY trim optional diagnostic fields; if it still cannot fit MUST return HTTP 500, with acceptance unspecified | 4 MiB |
+| All four limit surfaces | Implementations SHOULD allow these limits to be configured | Recommended numbers are not mandatory application settings |
 
-Implementations SHOULD allow these limits to be configured; recommended numbers
-are not mandatory application settings. For gRPC, assess its corresponding
+Carry these clause groups into the canonical matrix with current capability,
+owner, disposition and exact source binding; they can share one transport row
+when each clause remains addressable. The SDK's OTLP exporter configuration
+documentation describes available settings; it is not a substitute source for
+the OTLP protocol's decompression, oversize, response-reduction and configurability
+clauses. An excerpt containing only configuration settings cannot bind those
+protocol requirements. Mark an unresolved clause unverified explicitly rather
+than replacing all missing dispositions with "newer transport clauses".
+For gRPC, assess its corresponding
 message limits and non-retryable size-limit `RESOURCE_EXHAUSTED` outcomes rather than
 copying HTTP status codes. A common client response-receive default of 4 MiB is
 acceptable; the recommended request default is 64 MiB. Acceptance after an
@@ -732,6 +744,10 @@ Instrumentation and verification also retain concrete future assertions beside
 unexecuted selected controls. "Not tested" or "counts kept separate" alone does
 not carry the acceptance plan; keep the actual expected counts/conditions while
 leaving runtime proof absent and unsupported capability conditional.
+This applies to a direct instrumentation baseline without an audit too: save
+the full-success N accepted/0 rejected control, valid partial N-R accepted/R
+rejected and warning-only N/0 no-retry assertions in its own canonical report.
+Do not omit them on the assumption that an earlier audit holds the plan.
 
 | Rule | Required acceptance detail |
 |---|---|

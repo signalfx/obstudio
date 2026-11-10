@@ -237,6 +237,19 @@ Markdown reports.
   span work only; it is not a log-export opt-out. Only the explicit exporter,
   endpoint, and supported-stack conditions above may suppress the default local
   log pipeline.
+- Repair a policy violation exposed by that added/selected log pipeline within
+  the current logging baseline. Captured framework/container records belong to
+  that assessment even when their producer is a dependency. A supported
+  logging-only sanitizer is not a new custom business signal and does not need
+  another audit merely because the violation was discovered during verification.
+  Keep an existing bound audit and its IDs immutable; do not widen an explicit
+  user exclusion. Inspect the actual producer/bridge hook, preserve response
+  behavior, permitted diagnostics and original sinks, then replay the failing
+  probe. Retain a genuine unsupported boundary with the inspected evidence;
+  do not defer an uninvestigated captured path as future custom instrumentation.
+  For a direct baseline without an audit, also carry the common logging
+  reference's concrete future acceptance assertions for unexecuted controls in
+  the canonical report; there is no earlier audit from which to inherit them.
 - In the normal generated launch profile, explicitly set
   `OTEL_LOGS_EXPORTER=otlp` with the resolved local Studio logs endpoint and
   matching protocol, alongside trace and metric export. Do not generate `none`

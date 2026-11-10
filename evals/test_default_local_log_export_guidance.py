@@ -71,6 +71,9 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
             assert "substring" in readiness and "normal launcher" in readiness
             assert "synthetic `LoggingEvent`" in readiness and "unit+otlp" in readiness
             assert "@ControllerAdvice" in readiness and "malformed request" in readiness
+            assert "JULI/`java.util.logging`" in readiness
+            assert "actual bridge" in readiness and "message parameters" in readiness
+            assert "after handing it to asynchronous code" in readiness
         if target == "languages/node.md":
             assert "per-batch" in readiness and "acknowledged" in readiness
             assert "mixed" in readiness and "otlp_accepted" in readiness
@@ -113,6 +116,16 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
     assert "server response intent" in common and "client timeout/failure" in common
     assert "measured export duration" in common and "shutdown wall time" in common
     assert "not_explorer_visible" in common and "framework records" in common
+    assert "Batch/attempt and raw evidence" in common
+    assert "timed-out batch" in common and "completed-503 batch" in common
+    assert "Protocol surface / owner" in common
+    assert "configuration settings cannot bind" in common
+    assert "direct instrumentation baseline without an audit" in common
+    if skill == "otel-instrument":
+        instructions = _read(side / ".agents" / "skills" / skill / "SKILL.md")
+        assert "Captured framework/container records" in instructions
+        assert "supported" in instructions and "logging-only sanitizer" in instructions
+        assert "another audit merely" in instructions
 
 
 @pytest.mark.parametrize("language", ["java", "python", "go", "node"])
