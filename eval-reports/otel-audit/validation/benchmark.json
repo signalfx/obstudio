@@ -18,7 +18,8 @@
     "rubric_enabled": false,
     "runtime_enabled": false,
     "workers": "1",
-    "validation_scope": "full"
+    "validation_scope": "full",
+    "source_snapshot_refreshed_without_eval_execution": true
   },
   "evals": [
     {
@@ -655,7 +656,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "5d83ebb3977cc6285cc3586a96060f47553d1bbc53797aa67413bca36d0518d8",
+    "digest": "2d0436a43657bb12c9ef406f21d2ae563533f4ea2ed1cb05ecedc965b4b8b802",
     "eval_kinds": [
       "rubric",
       "sanity"
@@ -664,7 +665,7 @@
     "files": {
       "evals/codex-evals.validation.toml": "503794fa37e80a742e98969f1d4bbdd17d1f9cfe7d6607c4012498c43905b53e",
       "evals/go/chi-basic/eval/qual/audit.json": "e255cfa18954eeec98430cbba25f03b51be5622750a91bf50f5673023845a8aa",
-      "evals/go/chi-basic/go.mod": "585e9c5a128baf66cc508e074aa3e019875979a6fad497fa892aa967c20ba62c",
+      "evals/go/chi-basic/go.mod": "2963ccc3e88e192ae7404763290907e6a14941d7f2c8bb0b1e65c247f11d57fb",
       "evals/go/chi-basic/main.go": "98fc93b9ffcd0a996424992672480e110976bbe4d721a8e3a5fefe96fb57512d",
       "skills/otel-audit/SKILL.md": "fef834d77d8d6d0230228a4d8f52f277850cb8e6e9b56fd0b46c156ee3c9fa40",
       "skills/otel-audit/scripts/observe_report.py": "b9f2ff513850d2b6405f47000cd0b6fe8697fd35d47a15e9adaee5fa10094f4d",
@@ -691,8 +692,8 @@
       "skills/references/tests/test_observe_report_html.py": "32183996d90eb073b9ece7bcd05613ea3552512af7f6f8acfc7171d45eaf2382",
       "skills/references/tests/test_observe_report_selection.py": "c2a441002d8392b9ea5cfdb52cee7e0b75000542334c2a3eb3bc8cff48a0d7c7",
       "evals/go/chi-partial/eval/qual/audit.json": "f3ee529239047e5771c74fdf99feba0b1b3cdcc8a4a815bc8123dfd60b9476d9",
-      "evals/go/chi-partial/go.mod": "e2a557e6e1bcdf4a7ec5a3939a2d13980ad04e5c74ec81a650fb7fb99f1d2b8d",
-      "evals/go/chi-partial/go.sum": "5edf352b70793696c8c4fbcf38fcd6bb88cd5c4562cb50e435375e258818b6d1",
+      "evals/go/chi-partial/go.mod": "88196bdad75b926a21a684d7e3d7339088a812983a9822ff7ed5cdc0a69a993b",
+      "evals/go/chi-partial/go.sum": "353e81f7d1cac8526ca48fe39183c4c85430b749291dc4c72effd63e592ef92b",
       "evals/go/chi-partial/main.go": "e395c48e36e43de4537eb493003c9d682557d496304a2d680006a96bea35a7d3",
       "evals/go/kvstore/.vscode/launch.json": "91385f78513beaadd967bbfddfe03e992f8d2fa54a7f86e6a17ef3562a1691c8",
       "evals/go/kvstore/Makefile": "557b16aa60d316634e43c3650f02c06305ddcc006e07ded16bee7452cabe9fa7",
