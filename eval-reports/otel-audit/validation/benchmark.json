@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-audit",
-    "run_id": "20261109T180310485767Z",
+    "run_id": "20261110T212743921863Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-6-luna",
     "judge_model": "",
@@ -655,7 +655,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "5d83ebb3977cc6285cc3586a96060f47553d1bbc53797aa67413bca36d0518d8",
+    "digest": "6cabbb216274a3289c671a37a82ba5dbb178c35a1385c85e1b8d13ff4f4fedb9",
     "eval_kinds": [
       "rubric",
       "sanity"
@@ -730,7 +730,7 @@
       "evals/java/kafka-batch-consumer/src/test/java/com/example/kafkabatch/PaymentBatchProcessorTest.java": "2ceba5e06fa063cae5390477493d2f8849a5286bda84064e756c11dbac2a093b",
       "evals/java/kafka-listener-container/README.md": "d0d9b5825c1dfd25f95912eb002ad3f080aaea8ee02195b72ce6cc6284c28eab",
       "evals/java/kafka-listener-container/eval/qual/audit.json": "a22d9fac08b575e620a5b9fd27e8b6637d6649bacc16c28ae49232eba219c494",
-      "evals/java/kafka-listener-container/pom.xml": "51167a36784e3ca7629459dc642a923cc3a29591f807b5eeec9d7d328c2772c1",
+      "evals/java/kafka-listener-container/pom.xml": "0ba9a5b53406f2d7889aa4a2aa43579fd85e075c08c16f523a69a83c1d592f93",
       "evals/java/kafka-listener-container/src/main/java/com/example/kafkalistener/AlertEvent.java": "37190f8fe3cd24aa9b720089bf970f91e8773fce94b739321a9f34286e1d13ac",
       "evals/java/kafka-listener-container/src/main/java/com/example/kafkalistener/AlertListener.java": "1f98d4b261b2f2c661681ef341ea8bfbcdd708bcc98770f7b86a5d1774def2ce",
       "evals/java/kafka-listener-container/src/main/java/com/example/kafkalistener/AlertService.java": "dcf2de9c5c4489f7c22f5687c215db59f801a1f6014b9f66c57f2f4df7bc0713",
@@ -764,7 +764,7 @@
       "evals/java/kafka-streams/src/main/resources/simplelogger.properties": "3294bddc68c65069b77ec48d1c84ecb1d26a59e697413f86ec1da386155ec66d",
       "evals/java/kafka-streams/src/test/java/com/example/streaming/OrderStreamTopologyTest.java": "ac6d6948bd24050982b1a6eaca082f70469c468e5ffdad1f9eec4efd438e8ef1",
       "evals/java/springboot-basic/eval/qual/audit.json": "b09739f420ec7ee1b82f069339caba33bf9a21e1809dde14235213d385651962",
-      "evals/java/springboot-basic/pom.xml": "2b6e5f88faf91bf8891d728bd51bc6737ca8919bd657caaaa416ff3c6550f625",
+      "evals/java/springboot-basic/pom.xml": "f914b878fd62a1e29e8b26300086c07b21536f67b450e60a22a338eedf83ac24",
       "evals/java/springboot-basic/src/main/java/com/example/tasks/Task.java": "97437951adcb1592b1f4e48af10f799501858ed40949575f8278d9a644f80cfc",
       "evals/java/springboot-basic/src/main/java/com/example/tasks/TaskController.java": "a32f9883586bd13b5ecf6f015f587b25ac696a55423398a01e3fe1619f9020fa",
       "evals/java/springboot-basic/src/main/java/com/example/tasks/TasksApplication.java": "2aeefcee33840914b4118f0b6615205c37ae50ecf5cb774c32a6f5d9431f62c5",
