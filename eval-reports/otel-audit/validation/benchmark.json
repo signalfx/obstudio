@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-audit",
-    "run_id": "20261110T162244413781Z",
+    "run_id": "20261109T180310485767Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-6-luna",
     "judge_model": "",
@@ -18,7 +18,8 @@
     "rubric_enabled": false,
     "runtime_enabled": false,
     "workers": "1",
-    "validation_scope": "full"
+    "validation_scope": "full",
+    "source_snapshot_refreshed_without_eval_execution": true
   },
   "evals": [
     {
@@ -655,7 +656,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "f290b1f5d6c89abb5120be63ba5464b77a0c402fa2741667dffd8d70244dfc57",
+    "digest": "7b2a76745b1a4ce602ee6a115e947a8296e4f3ed318330885814e99dfee0e2ad",
     "eval_kinds": [
       "rubric",
       "sanity"
@@ -738,7 +739,6 @@
       "evals/java/kafka-listener-container/src/main/java/com/example/kafkalistener/KafkaListenerContainerApplication.java": "e5de3bb3ec9f3a2196d24d5ebe8ce9f15a493c30b57ea6b7806f25fd6f2ffe8a",
       "evals/java/kafka-listener-container/src/main/resources/application.properties": "3e6995431d262c164004bafbbad6ebcf443158624b4bbd1233cf4476445b3497",
       "evals/java/kafka-listener-container/src/test/java/com/example/kafkalistener/AlertListenerTest.java": "652e4bc7d413fc8d321de1b8d3c3b0314de55866e31a2e8bbab7f56919a519e4",
-      "evals/java/kafka-listener-container/src/test/java/com/example/kafkalistener/Lz4CompatibilityTest.java": "9cdb02ae059f77d160732fd5162ca89c87bdfba4ba351ee6fe8ac8e23a9ad951",
       "evals/java/kafka-producer-consumer/README.md": "2ca6c5f9c1149043af7cc9c2519d5c86e5f9e4f4ed58f13f7d947f2da068f277",
       "evals/java/kafka-producer-consumer/eval/qual/audit.json": "2bcad85b89aadcff688785e793da454a0753abe65132a16ea04267285ccb273d",
       "evals/java/kafka-producer-consumer/pom.xml": "5e5a1dbd22186402f65f930e918f98c08fbe21e40fd704c3692505c7490762f4",
