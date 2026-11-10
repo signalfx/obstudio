@@ -87,6 +87,11 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
     assert "mixed fault scenario" in common and "otlp_accepted" in common
     assert "per-scenario" in common and "unit+otlp" in common
     assert "trigger and acceptance criteria" in common
+    assert "proof_level" in common and "focused call-site" in common
+    assert "64 MiB" in common and "4 MiB" in common
+    assert "after decompression" in common and "HTTP 413" in common
+    assert "when possible and practical" in common
+    assert "MAY trim optional diagnostic fields" in common
 
 
 @pytest.mark.parametrize("language", ["java", "python", "go", "node"])
