@@ -839,7 +839,8 @@ Rules:
 
 ### 8. Produce Verification Artifacts
 
-For logging, perform the common reference's acceptance readback before producing
+For logging, read the common reference's
+[Report readback](../references/logging-readiness.md#report-readback) before producing
 the saved rows: complete controls, correct per-item mode/visibility, current
 capability, resolvable executed-evidence links and trace IDs from that operation.
 Keep missing assertions not proven, even when unrelated checks or schema

@@ -774,146 +774,58 @@ Use the `-javaagent` JVM flag in the `bootRun` task or application config.
 
 ## Logging Readiness Checks
 
-Apply the [common logging rules](../logging-readiness.md) and this guide's
-**Application Log Source of Truth**, **Agent-Owned Application Logs** and
-**Application Log Runtime Proof** sections. Audit and verification remain
-read-only. Verify the installed SDK/agent/appender capabilities; the options
-below are leads for the existing owner, not permission to create another SDK.
+Apply the [common logging rules](../logging-readiness.md) to the detected Java
+logging path. Resolve whether an agent, application SDK or external collector
+owns collection before choosing a repair. Reuse that owner, resource and original
+sinks. Setup recipes elsewhere in this guide are conditional examples, not a
+requirement to introduce their libraries or configuration.
 
-### Resource identity through the normal launcher
+### Context and asynchronous work
 
-Check resource-only identity with `OTEL_SERVICE_NAME` absent through the normal
-launcher, including whitespace around entries when the resolved Java SDK accepts
-it. A shell substring test for `,service.name=` misses `, service.name=`; an
-appended fallback can then win as a later duplicate. Preserve the supplied
-resource configuration and let the existing SDK/agent parse and merge it.
-Omit new launcher resource defaults unless the existing configuration owner
-already supplies a verified lower-priority default; do not introduce a resource
-parser in shell. Also retain explicit service-name
-override and absent-identity controls, checking emitted resources for all signals.
+Inspect propagation through the application's actual executors, callbacks and
+logging queues. Reuse verified automatic propagation; otherwise capture the
+caller's context before dispatch using the installed integration's supported
+mechanism. Keep approved thread-local logging fields separate from OTel context
+and restore the worker's prior state after success, failure and cancellation.
+Do not mutate a record after handing it to asynchronous code.
 
-### Context, mapping and diagnostics
+Exercise the owned handoff with real SDK spans and join the worker's log to its
+exact received span, as required by the common context contract. Test concurrency
+and reuse when those paths exist; retain the actual identities and event order
+needed to establish isolation. Separate focused bridge/SDK tests from application
+startup and runtime proof.
 
-Test Logback/Log4j's supported severity and timestamp mapping through the
-selected agent/appender, preserving original appenders and permitted structured
-fields. Check SDK-created parent/child spans and exact log-to-span joins using
-the common acceptance contract; stdout MDC strings alone do not prove OTLP
-correlation. A probe that constructs synthetic `LoggingEvent` objects and invokes
-an appender is focused SDK/bridge proof (such as `unit+otlp`), even when a Java
-agent is attached. Agent startup alone does not make that probe `app_test` or
-`full_runtime`; those require the actual application path at the claimed boundary.
+### Record mapping and native integration
 
-Select only approved structured fields with the installed appender's supported
-capture options. Inspect the resolved agent/bridge's public documentation and
-value conversion, then exercise selected values through the actual appender.
-Use source matching that resolved dependency when documentation is insufficient;
-another release or the upstream main branch cannot establish installed behavior.
-If a selected required value, including an empty collection, is omitted, record
-the observed limitation; a direct typed-SDK pass does not close it. Resolve an
-authorized supported mapping or report it unverified/uncovered, preserving the
-sink and provider. Recheck capabilities after a dependency change rather than
-assuming either preservation or omission from a previous release.
+Verify the installed native logger and bridge's severity, occurrence-time,
+structured-value and context mapping. Preserve supported source precision and
+permitted fields; inspect conversion before claiming a value is supported.
 
-For selected framework-log privacy failures, inspect a public native hook in
-the resolved dependency, such as a supported [Logback filter](https://logback.qos.ch/manual/filters.html).
-Establish whether it rewrites content or only decides accept/deny; a decision-only
-filter cannot redact. Where the diagnostic category is permitted, suppressing
-its record alone does not preserve it. A supported bounded replacement must
-retain that category, effective level and original sinks, and remove forbidden
-values at the selected policy boundary. Check the actual logging call style,
-including fluent calls if used. Prove enablement queries emit nothing, replacement
-does not recurse, temporary state is restored in `finally`, unrelated diagnostics
-remain, and the original failed probe is safe in both native and OTLP output.
-If the installed stack cannot meet that boundary, leave it uncovered rather
-than forcing an upgrade or claiming an unsupported hook works.
-Trace the native producer too. A Tomcat container diagnostic can originate in
-JULI/`java.util.logging` before reaching an SLF4J/Logback bridge; an MVC handler
-does not necessarily intercept that logging path. Inspect the resolved container,
-JDK `LogRecord`/`Filter`/`Handler` APIs and actual bridge before selecting a hook.
-Where supported, sanitize or safely copy the record before affected handlers or
-bridge capture, accounting for message parameters and thrown-exception rendering.
-Do not mutate a record after handing it to asynchronous code, assume a handler
-applies its filter without checking, replace operator handlers/filters wholesale,
-or toggle global logger levels per request. Preserve level, logger/category,
-occurrence time, caller context and original sinks; replay the same container
-failure without changing its HTTP response contract. These are capability leads
-for the detected native path, not a mandate to add a new logging backend.
-For a captured Spring MVC argument/error diagnostic, also inspect the resolved
-framework's documented [exception handling](https://docs.spring.io/spring-framework/reference/web/webmvc/mvc-controller/ann-exceptionhandler.html)
-through existing handlers or narrowly scoped `@ExceptionHandler`/`@ControllerAdvice`.
-This is an application-framework hook lead, not a guaranteed installed redactor.
-Retain a permitted category and the selected status, headers and response contract;
-avoid blanket exception interception and verify that later resolvers do not log
-the raw value/stack again. Replay the original malformed request and inspect all
-captured framework records in native and OTLP output, not just fixed app messages.
+Trace captured framework and container diagnostics back to their actual producer
+and handlers. Select a supported hook at the policy-required capture boundary.
+Check whether it only accepts/denies records or can safely transform them;
+preserve permitted category, effective level, original sinks and application
+behavior. Account for message parameters and exception rendering. Prefer a
+sufficient logging-only repair; do not require a framework-specific handler or
+investigation of unrelated alternatives. Replay the exposed input at every
+selected output boundary and keep an unsupported capability explicit.
 
-Capture the caller's OTel `Context` before submitting executor work and use its
-supported wrapping/scope mechanism unless agent/framework propagation is
-already verified. Context propagation alone does not carry arbitrary MDC.
-Capture only approved MDC fields, save the worker's previous map and restore it
-in `finally`, including error/cancellation paths. Test exact request pairing,
-caller detach and worker reuse. A standalone appender after `AsyncAppender`
-can see the logging worker's context; retain supported agent queue capture or
-keep the one OTel bridge on the caller side beside the original async sink.
-Do not add a duplicate bridge or wrapper to an already working path.
+### Configuration and lifecycle
 
-Include one joint receiver test through that executor path: use the existing
-SDK tracer's real parent/child context, capture before submission, emit via the
-worker's application logger and join its canonical IDs/flags to the received
-span, with parentage/resource checks. Separate supplied-context executor tests
-and synchronous real-span tests cannot establish that joint coverage.
+Inspect the installed owner's public configuration and effective defaults for
+record limits, batching and deadlines. Verify proposed signatures, option units
+and precedence against that implementation rather than copying another SDK's
+API. Apply changes only to the existing owner and preserve adequate defaults.
+Use the detected native enablement query only when avoiding expensive work;
+keep independent original sinks enabled according to their own policy.
 
-Keep SDK/exporter JUL diagnostics on a separate handler or supported suppression
-path that does not route back into the SLF4J/OTel appender. Check the installed
-SDK's actual diagnostic level; a failure may be logged below WARNING. Prove
-bounded attempts, observable diagnostics, original appender output and
-application progress during an exporter fault.
-
-### Log limits and export budgets
-
-For expensive payload construction, use the detected native logger's query,
-such as Logback `isInfoEnabled()`, at the worker's log call. Do not cache its
-answer or substitute an OTel-only predicate that hides original appenders.
-Cheap calls need no extra guard. Verify the actual Log4j/SLF4J API before
-using a different logger's query.
-
-For an existing application-owned SDK provider, verify
-`SdkLoggerProviderBuilder.setLogLimits` with
-`LogLimitsBuilder.setMaxNumberOfAttributes(count)` and
-`setMaxAttributeValueLength(length)`. A Node-style `logRecordLimits` options
-object is not this Java builder API. For an agent-owned provider, inspect
-supported autoconfiguration/defaults instead of constructing an application
-provider merely to call these builders. Preserve the resource and processors.
-Body/privacy policy remains separate from attribute limits.
-
-For a selected batching repair, verify the existing log processor's
-`setMaxQueueSize`, `setMaxExportBatchSize`, `setScheduleDelay` and
-`setExporterTimeout`, with batch size within queue capacity. Adequate defaults
-remain coverage. These log settings do not come from span-only BSP options.
-
-For the controlled 1000ms wire-fault policy, a proposal to verify is
-`OtlpHttpLogRecordExporterBuilder.setTimeout(Duration.ofMillis(800))` plus
-`setRetryPolicy` with `RetryPolicyBuilder.setMaxAttempts(2)`, initial/max
-base backoff 100ms and multiplier 1. The checked HTTP sender applies the timeout
-to the whole call and bounds retry waits by its remaining budget; it is not an
-independent 800ms allowance for each attempt. Check transport/version and actual
-jitter (the tested base 100ms yielded 80-120ms), leaving headroom for
-encoding/draining and completion within the selected policy.
-
-For a controlled repeated-503 probe with a 150ms response delay, a 200ms whole
-call can expire before two requests are received: the first response plus
-backoff already exceeds it. The 800ms proposal leaves room to assert two
-received requests under that controlled failure, while a separate stalled
-receiver exercises an earlier 200ms deadline. Preserve an adequate existing
-bound; maxAttempts=2 is a ceiling, not a demand for two requests after every
-timeout. Do not infer total attempted calls or zero acceptance from receipt
-counts alone. Test both stalling and delayed HTTP 503 through the installed
-exporter and measure the complete result rather than only requested settings.
-`BatchLogRecordProcessorBuilder.setExporterTimeout` bounds waiting on the
-exporter result; `CompletableResultCode.join` alone does not cancel background
-delivery. Compare observed attempt/retry/caller budgets with the proposed
-whole bound. Preserve an adequate existing bound and the agent's lifecycle
-owner; these fixture values are not production defaults.
+Verify effective identity and configuration through the real launcher, including
+loaded profiles and operator overrides. For selected delivery checks, distinguish
+export completion, waiting on a result, cancellation and receiver acknowledgement.
+A wait ending does not establish that background export stopped. Exercise the
+existing lifecycle owner's final-record drain and configured fault bounds without
+adding another provider or shutdown owner. Keep SDK diagnostics on a supported
+separate path that cannot recursively enter the application bridge.
 
 ---
 

@@ -666,171 +666,62 @@ Auto-instrumented: `pg`, `mysql2`, `mongodb`, `redis`, `ioredis` -- all included
 
 ## Logging Readiness Checks
 
-Inspect actual HTTP/Express topology: a supported framework layer may activate
-an INTERNAL handler span at the logging call. Match the bridge's selected
-context to that exact received span and check its ancestry to the correct
-request; the SERVER span may be an ancestor. Preserve verified propagation and
-permitted layer spans instead of forcing a SERVER-only log association.
+Apply the [common logging rules](../logging-readiness.md) to the detected Node.js
+logger, bridge, SDK and startup path. Preserve the existing provider, resource,
+transports and collection owner. Setup recipes elsewhere in this guide are
+conditional examples, not requirements to use their framework or constructor.
 
-Apply the [common logging rules](../logging-readiness.md), this guide's SDK
-loading order/detected bridge ownership and local application-log boundary.
-Audit and verification remain read-only. Preserve the existing NodeSDK or
-LoggerProvider, resource, original transports and one bridge per record.
+### Context and asynchronous work
 
-### Context, mapping and diagnostics
+Inspect propagation through the application's actual promises, callbacks,
+event listeners and logging queues. Registration during a request does not by
+itself prove later callback context. Reuse verified propagation; use a supported
+binding mechanism only where the detected path needs it. Derive expected log
+context from the active SDK/bridge context and verify its ancestry to the right
+request instead of requiring a particular framework span kind.
 
-Initialize the detected Console/Pino/Winston instrumentation before logger
-imports where required. Verify its supported level/body mapping and actual
-structured fields. Avoid JavaScript `Number` round trips for 64-bit nanosecond
-timestamps; use the installed SDK's supported timestamp representation and
-assert the source's actual precision after export.
+Exercise the owned handoff with real SDK spans and exact worker/callback log
+joins. For selected restoration checks, let an error escape the context boundary
+and inspect state after the caller handles it. Check each reused callback's
+actual log context rather than only call count. Where cancellation exists or is
+selected as a focused capability test, cancel real scheduled work and inspect
+both suppressed output and the next callback's own context. Do not add business
+cancellation merely to test logging.
 
-An EventEmitter listener registered inside a request can later be invoked
-outside its context. With the existing functioning context manager, verify
-`context.bind(context.active(), callback)` or the framework's supported
-binding. Registration alone is not proof. Check exact request-to-log IDs and
-SDK flags under concurrency, caller detach and callback reuse. Test error/cancel
-cleanup on an existing owned path; do not add business cancellation just for a
-logging probe or confuse ending a span with canceling a callback. Keep a focused
-context-manager control focused; do not add a wrapper to a verified path.
-When the selected focused contract names cancellation, schedule work and actually
-cancel it through the detected supported scheduling/AbortSignal API, observing
-the callback/output and cleanup. [clearImmediate](https://nodejs.org/api/timers.html#clearimmediateimmediate) can cancel an owned pending
-Immediate; use only the applicable installed mechanism. A synchronous throw or
-`span.end()` alone is not that control. If the app owns no cancellation path,
-keep this a focused fixture and the application path not applicable/unproven;
-do not add business cancellation to make the test possible.
-Check where a transport creates the SDK record relative to any async queue.
-Use the common real-span join, unsampled and outside-span acceptance contract.
+### Record mapping and privacy
 
-Name one joint test carrying real SDK parent/child context through the owned
-callback/async boundary and emitting through its application logger. Join that
-callback log's canonical IDs/flags to the received real span, with
-parentage/resource checks. Injected-ID callback checks plus an independent
-synchronous span/log test do not establish this combined coverage.
+Verify the installed bridge's actual severity text/casing, structured-value
+conversion and timestamp representation. JavaScript number precision must not
+silently corrupt high-resolution time or identifiers; preserve the supported
+source representation and test the actual export path.
 
-Keep SDK diagnostics on a separate supported `diag` logger/suppression path,
-for example an existing diagnostic console sink that does not feed the chosen
-OTel application bridge. Do not route exporter errors back through the same
-Winston/Pino/Console export path. Prove bounded attempts, observable diagnostics,
-application progress and original transport output during an exporter fault.
+Trace framework/native diagnostics through their producer and final renderer.
+Choose a supported hook at the policy-required boundary, preserving permitted
+category, effective level, native output and application responses. Account for
+subsequent renderers and already-committed responses. Replay exposed inputs under
+the normal enabled bootstrap; a different launch profile or an OTLP-only sanitizer
+does not prove an earlier native capture boundary.
 
-### Normal-launcher resource and diagnostic controls
+### Configuration, faults and lifecycle
 
-For resource-only and absent-identity tests, use the actual application startup
-command and account for an active `.env`/profile reintroducing `OTEL_SERVICE_NAME`.
-A helper test or an inherited unset alone cannot prove absence; use an isolated
-copy for the control and retain operator-owned configuration.
+Resolve the installed SDK's public constructors, option shapes, units, effective
+defaults and forwarding into the active provider. Verify concrete repair proposals
+against that path rather than assuming a signature from another release. Preserve
+operator settings and verify resource/configuration through actual startup,
+including values reintroduced by loaded profiles.
 
-For a captured framework/parser failure, preserve the permitted diagnostic category
-in the exported record as well as the permitted native output. Replacing every
-unknown body with a generic redaction label loses that category even when native
-stderr still contains it. Use a supported hook at the selected privacy boundary,
-then rerun the original failing request and inspect both outputs; unsupported
-boundaries remain unresolved rather than being hidden by blanket replacement.
-When policy requires sanitization before native/bridge capture, an SDK `onEmit`
-processor is too late for the original console arguments and native sink. For
-Express, inspect its documented [error-handling middleware](https://expressjs.com/en/guide/error-handling/)
-after the routes: retain a bounded permitted category before logging, and preserve
-the selected status, headers and response contract. Account for `headersSent`
-delegation and downstream default error rendering so the original error is not
-logged again. Do not suppress the diagnostic, change unrelated responses or
-declare the native boundary covered merely because OTLP was sanitized. If that
-boundary cannot safely be repaired in scope, retain the exact unresolved result.
-Also reconcile framework errors observed during tests with `OTEL_LOGS_EXPORTER=none`
-or a different launch profile. Native console output can still expose the path
-that the normal enabled bridge will capture. Replay the same existing failing
-request under the normal log-enabled bootstrap and inspect the policy-selected
-native and OTLP boundaries; successful-request log probes do not cover that error
-renderer. Do not add a new business failure merely to exercise logging.
+For an exporter fault, keep the application's real SDK/bootstrap and native call
+sites while proving progress and continued operation of other configured signals.
+Use an owned destination or supported isolated application-test seam; never stop
+a shared receiver or weaken production destination checks to enable a test.
+Retain the actual boundary and unresolved capability when no safe seam exists.
 
-For an exporter outage, start the actual application with its normal bootstrap,
-fault only the log destination, and prove HTTP/native progress plus real receipt
-of its other configured signals at healthy destinations. A separate log-only SDK
-provider and counting diagnostic logger cannot establish that application path.
-If an approved-destination guard prevents redirecting the live log endpoint,
-use an isolated application test with a process-local transport fault seam on
-the log route. Keep the real SDK/bootstrap, application call sites and healthy
-trace/metric exporters; retain actual failing log requests/responses and other
-signal receipts. Use the installed test framework's supported mocks/seams and
-restore them, as supported by [Node test mocking](https://nodejs.org/api/test.html#mocking).
-Report the actual `app_test` boundary rather than unmodified `full_runtime`.
-Do not stop a shared receiver, weaken production destination checks or replace
-the application's SDK with a standalone fixture. If no safe seam is available,
-name that limitation and the concrete future test; lack of an isolated namespace
-alone does not establish that all process-local test paths are unavailable.
-Exercise repeated stop requests during the active application drain under its
-chosen shutdown policy. Separate deliberate forced exit from graceful drain and
-assess the final-record receipt at its own boundary; a single-signal run does not
-test the repeated-stop policy. Back-to-back signal sends do not establish that
-both reached the application during active drain. Synchronize on an observable drain-entry boundary,
-hold that drain using an owned receiver/test seam, deliver the next request and
-prove the application observed it before releasing the drain. A process-local
-test observer may record signal delivery without changing production shutdown
-policy. Keep final receipt, repeated-request handling and shutdown-call evidence
-on that same run; a separate error seam does not supply its event order.
-
-### Severity text mapping
-
-Derive `SeverityText` and its exact casing from the selected bridge's resolved
-mapping, independently of the numeric severity band. `WARN=13` does not imply
-that the text must be `WARN`; a bridge may preserve a source label such as
-`warn`. Keep audit expectations conditional on the verified bridge capability
-rather than rewriting source severity text to fit an assumed uppercase label.
-
-### Fault receipt accounting
-
-When testing the selected OTLP exporter, decode each transmitted batch and its
-response and save per-batch N/R accounting before reporting trial totals. For a
-valid partial success, acknowledged accepted is N-R; warning-only R=0 accepts
-all N without retry. Put the actual per-outcome numbers and durable raw-receipt
-links in the canonical report, not only a general pass or an external ledger.
-Keep received copies and persistence separate. A mixed
-fault test containing a completed negative response or stall cannot take an
-unqualified `otlp_accepted` visibility from another subtrial. Split its canonical
-observations or explain each outcome using the report's supported visibility;
-retain unresolved acceptance counts where the protocol/evidence leaves them open.
-If a partial/warning probe is unexecuted, retain its concrete future N-R/R and
-warning-only N/0 no-retry assertions in the canonical remaining-gap/acceptance
-evidence, together with the source/API-resolution step and future command.
-"Partial success not tested" or "counts are separate" omits those assertions.
-These are local report checks derived from the common OTLP delivery contract.
-
-### Log limits and export budgets
-
-For expensive construction with Winston, check `logger.isLevelEnabled('info')`
-inside the actual callback before computing the payload. Do not cache the
-answer or gate original transports on OTel-only state. For another detected
-logger, verify its supported native query; Console has no equivalent method.
-Preserve cheap direct calls and existing application policy.
-
-Verify the existing `LoggerProvider` option
-`logRecordLimits: {attributeCountLimit: count, attributeValueLengthLimit: length}`
-or supported effective defaults. Java's `LogLimitsBuilder` is not a Node SDK
-option. Preserve existing resource/scope and processors, and keep Body/privacy
-policy separate; do not create a second provider merely to copy these fields.
-Follow the active `NodeSDK` construction into its installed `LoggerProvider`
-configuration and limit-resolution code. Record the effective count and value
-length defaults, including an unbounded value if that is the resolved default,
-plus any actual operator/configuration support. A `LoggerProvider` option is
-not proof that `NodeSDK` forwards it, and a failed guessed source-file path is
-not an unsupported capability: locate the installed module's exported files.
-Source-proven defaults can be covered without adding an arbitrary override;
-keep unexecuted boundary tests separate from unresolved configuration evidence.
-
-For a selected batching repair, verify the installed `BatchLogRecordProcessor`
-API and `maxQueueSize`, `maxExportBatchSize`, `scheduledDelayMillis` and
-`exportTimeoutMillis` options, keeping batch <= queue. Resolve the supported
-constructor shape rather than assuming every release takes the same arguments.
-Adequate defaults remain coverage.
-
-For the OTLP/protobuf exporter, `new OTLPLogExporter({timeoutMillis: 800})`
-is a public timeout in milliseconds to verify for a selected 1000ms whole
-budget with headroom. Resolve the installed retry behavior and test a stalled
-receiver; also bound the provider's separate flush/shutdown lifecycle. Record
-observed attempt/retry/caller budgets before the proposed mechanism, preserve
-an adequate existing bound and do not treat these fixture values as production
-defaults. A caller that stops waiting does not prove zero receiver acceptance.
+Verify the existing repeated-stop policy while drain is active, with observable
+event ordering where required. Keep final-record receipt, stop handling and
+shutdown evidence on the same configured path. Route SDK diagnostics independently
+so they cannot recursively enter the application's log bridge. Apply the common
+per-batch acknowledgement, deadline and evidence rules without inferring them
+from a passing suite or configuration alone.
 
 ---
 

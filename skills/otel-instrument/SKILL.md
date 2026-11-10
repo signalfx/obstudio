@@ -2032,8 +2032,9 @@ This step is REQUIRED whenever `.vscode/launch.json` exists.
 - Include selected `Audit Gap Closure` counts by `Working`, `Not working`, `Not
   proven`, and `Not configured`. Do not report unselected findings as
   implemented work.
-- Before serializing logging verdicts, reopen the common logging reference's
-  acceptance readback checks. Reconcile each scenario/item with its complete
+- Before serializing logging verdicts, read the common reference's
+  [Report readback](../references/logging-readiness.md#report-readback) section.
+  Reconcile each scenario/item with its complete
   control inventory, actual mode/visibility, current capability, existing local
   evidence and operation-specific trace IDs. Generate direct-assertion flags
   from those results; a schema pass or overall Partial result is insufficient.

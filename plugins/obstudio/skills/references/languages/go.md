@@ -673,7 +673,7 @@ go func(ctx context.Context) {
 Before adding a custom counter or histogram for an outcome that happens
 inside a request `otelhttp.NewHandler` already wraps, check whether it
 belongs as an attribute on `http.server.request.duration` instead, using
-`otelhttp.LabelerFromContext` for permitted request-metric attributes.
+the detected HTTP integration's supported request-metric attribute mechanism.
 When implementing a change, also follow the loaded instrumentation skill's
 Implementation Rules and Language-Specific Musts.
 Only define a new instrument when the signal does not correlate 1:1 with a
@@ -837,99 +837,55 @@ endpoint, header, exporter, or forwarding path was configured.
 
 ## Logging Readiness Checks
 
-Apply the [common logging rules](../logging-readiness.md), this guide's SDK
-initialization/bridge ownership and local application-log boundary. Audit and
-verification remain read-only. Keep one provider and the official bridge
-matching the detected logger; SDK defaults can already satisfy the contract.
+Apply the [common logging rules](../logging-readiness.md) to the detected Go
+logger, bridge, provider and launcher. Preserve the existing collection owner,
+resource, native sink and operator configuration. Setup recipes elsewhere in
+this guide are conditional examples; do not introduce their packages or APIs
+solely because they appear here.
 
-### Context, mapping and diagnostics
+### Context and asynchronous work
 
-Pass the actual request `context.Context` into goroutines and context-aware
-logging calls such as `InfoContext`/`ErrorContext` for `slog` with `otelslog`.
-A worker using `context.Background()` loses caller correlation; making IDs
-inside that worker does not prove caller handoff. Capture the context argument
-before scheduling, preserve supported propagation and test exact request-to-log
-IDs/flags, caller return, worker reuse and cancellation/error paths. Preserve
-intentional operation lifetime and cancellation policy rather than detaching
-work merely to keep a log test alive.
+Carry the actual operation's `context.Context` across owned goroutines and into
+the detected logger's supported context-aware path. Capture the argument before
+dispatch, use any active child context at the log call, and preserve intentional
+operation lifetime and cancellation policy. A fresh background context or
+manually copied ID does not prove caller handoff.
 
-For incoming HTTP context, probe the installed `propagation.TraceContext`
-extractor with the actual peer's `traceparent`, including emitted flag bits.
-Check valid extracted IDs and supported flags before blaming a goroutine for a
-new root trace. A runtime-compatible release can still have an upstream parsing
-defect; rejecting a valid peer carrier remains a dependency conformance gap.
-Follow the dependency compatibility procedure above;
-report the exact unsupported join when no compatible official release exists,
-without changing `go`/`toolchain` directives or masking the peer's flags.
+Exercise the actual goroutine path with real SDK spans, exact log/span joins and
+concurrent request isolation. Follow the common sampled, unsampled, outside-span
+and reuse controls. For cross-process failures, inspect the installed propagator's
+handling of the actual valid peer carrier before assigning a logger repair;
+retain dependency limitations without masking carrier fields or changing the
+project's runtime requirements.
 
-Go slog ERROR is numeric level 8, not OTel SeverityNumber 8. Verify the official
-bridge's mapping to the ERROR range, occurrence timestamp and permitted
-structured values. Use real SDK spans and exact received log/span joins from
-the common contract, including valid unsampled and outside-span controls.
+### Native logging and configuration
 
-Require one joint test through the owned goroutine: pass the real SDK caller
-context, use its active child context at `InfoContext`/`ErrorContext`, and join
-that worker log's canonical IDs/flags to its received real span, checking
-parentage/resource. The child can start before dispatch or inside the worker.
-Known-context goroutine checks and separate synchronous joins are insufficient.
+Verify native severity and value conversion rather than copying source numeric
+levels into OTel fields. Preserve occurrence time, structured values and approved
+source metadata. When extending native handler fanout, retain each handler's
+enablement, derived attributes/groups and record ownership; one disabled OTel
+branch must not suppress an enabled original destination.
 
-Keep SDK failures on the existing `otel.ErrorHandler`/diagnostic path, using a
-sink that does not itself traverse `otelslog` or the application's OTel bridge.
-Do not install another global handler when routing is already safe. If a test
-changes global error handling, isolate its process so it cannot affect later
-cases. Prove bounded attempts, diagnostics, original sink and app progress.
+Resolve the existing provider and processor's public configuration, defaults,
+option units and precedence. Inspect the actual construction path before
+proposing record limits, batching or timeout changes. Reuse adequate defaults
+and the selected log configuration; do not copy options from a different signal
+or SDK. Body/privacy policy remains independent of attribute limits.
 
-### Log limits and export budgets
+### Deadlines and lifecycle
 
-For expensive construction, check `logger.Enabled(ctx, slog.LevelInfo)` at the
-worker call using its actual request context. Do not cache the result. A fanout
-must enable the native call when any destination needs it, then dispatch only
-to individually enabled handlers. OTel-only disabled state must preserve an
-enabled original sink; cheap emits need no additional guard.
+Determine whether each timeout covers an attempt, whole export, processor wait
+or application lifecycle. When selected, verify caller cancellation and deadline
+expiry separately, and distinguish retry recovery from persistent-failure
+exhaustion. Measure each claimed boundary; process shutdown duration cannot
+establish an individual export deadline. Retain the bound request/attempt and
+wait evidence required by the common delivery contract, not just aggregate counts.
 
-Verify `sdklog.WithAttributeCountLimit(count)` and
-`sdklog.WithAttributeValueLengthLimit(length)` on the existing provider's
-construction path or effective supported defaults. A Python
-`LoggerProvider(log_record_limits=...)` call is not a Go provider option.
-Preserve the resource and existing processors; Body/privacy policy is separate.
-
-For a selected batching repair, verify `sdklog.NewBatchProcessor` options
-`WithMaxQueueSize`, `WithExportMaxBatchSize`, `WithExportInterval` and
-`WithExportTimeout`, with batch <= queue. Do not substitute trace SDK options
-merely because their names look similar. Adequate defaults remain coverage.
-
-Use the existing batch processor's `sdklog.WithExportTimeout` where adequate.
-For a direct `Exporter.Export`, pass a `context.WithTimeout` context covering
-the whole call and call its cancellation function. The checked fixture's direct
-call with only the HTTP exporter's request timeout exceeded its budget under
-retry. Do not infer a complete bound from that knob. For a selected 1000ms
-policy, leave headroom and test stalling as well as immediate failure. Record
-observed attempt/retry/caller deadlines before the proposal; preserve an
-adequate existing bound. Shutdown waits and receiver acceptance need separate
-proof, and these controlled fixture values are not production defaults.
-If the bound plan selects both direct `Export` and `BatchProcessor` timing,
-measure each boundary separately with its named controls. Direct-export timing
-or whole-process shutdown cannot prove a batch processor's export deadline.
-Distinguish recovery (503 followed by 200) from a persistently failing receiver's
-terminal exhaustion. When explicitly selected, caller-triggered `cancel()` before
-the deadline is separate from `DeadlineExceeded`; retain either omitted control
-not proven rather than treating one as the other. Do not add unselected policy
-overrides or an application retry implementation for these capability tests.
-
-For selected final-record drain proof, exercise the normal launcher's configured
-logging path through shutdown. At the owned receiver, decode its actual OTLP payload
-and assert the selected final record, Resource and appropriate context, including
-an outside-span final log when applicable. An owned handler that only counts a
-request and returns HTTP 200 without decoding the body does not identify which
-record arrived. A successful `Shutdown` return alone supplies no record-level
-receipt either. For a conforming [OTLP full-success response](https://opentelemetry.io/docs/specs/otlp/)
-(HTTP 200 with `partial_success` unset), a known transmitted batch is acknowledged
-as accepted. Keep that protocol acknowledgement separate from this receiver's
-record-content assertion and from backend persistence.
-A focused exporter test also cannot establish the application's lifecycle path.
-Audit specifies this acceptance test without executing it; implementation and
-verification keep the application drain claim unproven until that path's receipt
-is saved. Studio's live snapshot and bounded cleanup remain separate evidence.
+Prove final-log receipt through the existing launcher and lifecycle owner by
+decoding the actual record at the claimed boundary. A request count or successful
+shutdown return cannot identify its content. Preserve final-record, protocol
+acknowledgement and backend-persistence distinctions. Keep SDK diagnostics on the
+existing safe independent path; isolate any test that changes global handlers.
 
 ---
 

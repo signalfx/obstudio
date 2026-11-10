@@ -242,10 +242,10 @@ pass the same command the project already uses, for example
 drop the policy checks.
 
 The wrapper leaves service and resource selection to the existing SDK/configuration
-owner. Do not add CLI `--service_name` or `--resource_attributes` defaults over
-operator values. Supply deployment identity through the existing configuration,
-for example `OTEL_RESOURCE_ATTRIBUTES=deployment.environment.name=production`
-when that is the actual environment. An absent identity retains the SDK fallback
+owner. Do not add higher-precedence wrapper or CLI defaults over operator
+values. Source deployment identity from the effective project configuration;
+use `deployment.environment.name` for a supplied environment identity, with its
+actual configured value. An absent identity retains the SDK fallback
 and needs a source-backed service-name decision; it is not evidence that an
 arbitrary application default was configured.
 
@@ -544,7 +544,7 @@ it is not invoked by the default SIGTERM action. When no lifecycle owner
 exists, install one signal owner that requests the service to stop, wait for
 the serving loop to return, and then call `shutdown`. Do not create a second
 provider or signal handler during reloads or per worker request.
-Follow the shared-role [lifecycle checks](#lifecycle-and-final-record-proof)
+Follow the shared-role [lifecycle checks](#launcher-and-lifecycle)
 for repeated stop requests and final-record proof.
 
 `LoggingInstrumentor` is the current stdlib-to-OTel bridge. Its handler is an
@@ -867,128 +867,57 @@ Add `opentelemetry-instrumentation-django`. Add `opentelemetry.instrumentation.d
 
 ## Logging Readiness Checks
 
-Apply the [common logging rules](../logging-readiness.md), this guide's
-**Dependencies** bridge-capability checks and local application-log boundary.
-Audit and verification remain read-only. Extend the existing provider and
-stdlib bridge; do not add a handler or upgrade solely to copy an example.
+Apply the [common logging rules](../logging-readiness.md) to the detected Python
+logger, bridge and runtime. Resolve the existing provider and configuration
+owner; preserve native handlers, operator settings and verified propagation.
+Setup recipes elsewhere in this guide are conditional examples, not requirements
+to adopt their framework, packages or API shape.
 
-### Context, mapping and diagnostics
+### Context and asynchronous work
 
-Python stdlib ERROR is level 40; let the detected official logging bridge map
-it to OTel's ERROR range rather than copying 40 into SeverityNumber. Preserve
-`LogRecord` occurrence time at its actual source precision and distinguish
-collection time. Existing float-second precision cannot prove arbitrary
-nanosecond precision. Preserve formatters and permitted structured values.
+Inspect the actual task, thread, executor and logging-queue boundaries. Context
+inheritance differs by scheduler; verify it rather than assuming all asynchronous
+APIs propagate contextvars. Where an explicit transfer is needed, capture an
+independent context per work item before dispatch and restore/detach state on
+success, failure and cancellation. Do not enter one context copy concurrently.
+Keep context capture before a logging queue unless its supported integration
+already preserves the caller's context.
 
-`asyncio` tasks and `asyncio.to_thread` can propagate contextvars; raw
-`run_in_executor` does not automatically copy the caller's context. Capture a
-fresh `contextvars.copy_context()` per work item before submission and invoke
-work through that copy where required. Do not enter the same copy concurrently.
-Restore/detach tokens in `finally` and test exact request pairing, caller detach,
-worker reuse and error/cancellation paths. Preserve verified framework
-propagation. A standalone OTel handler after `QueueHandler`/`QueueListener`
-can observe listener context instead of caller context; retain a supported
-context-preserving queue path or keep the one bridge on the caller side beside
-the original queued sink, then use SDK batch export.
+Use the common real-span join contract on the worker's actual native logging
+path. A direct SDK emit or context-copy test does not establish bridge or
+application-runtime coverage. Distinguish native severity from OTel severity and
+preserve the source timestamp's actual precision, formatters and supported
+structured values.
 
-In one joint scenario, carry a real SDK parent/child context through that
-task/thread boundary, emit through the worker's stdlib logger and join its
-canonical IDs/flags to the received span, with parentage/resource checks. Use
-the existing provider and supported contextvars propagation. A copied-context
-unit test plus a separate synchronous span/log test does not close this claim.
+### Configuration and limits
 
-Exclude SDK/exporter and exporter HTTP-client diagnostic loggers from a root
-OTel handler using supported filtering/separate handlers or suppression. Keep
-those diagnostics observable on a separate sink, not recursively forwarded
-through application `logger.error`. Verify bounded attempts, application
-progress and original-handler output under a real exporter fault.
-Assess SDK discard/truncation diagnostics separately from successful value-limit
-behavior. In an isolated probe, capture the installed SDK's actual warning/log
-mechanism and relate messages to individual discarded-attribute records, not
-attributes or total suite output. The common at-most-once-per-record requirement
-can remain an upstream conformance limitation even when truncation works. Record
-that evidence and owner; do not suppress/replace SDK internals to claim coverage.
+Resolve public options, signatures, units and configuration precedence from the
+installed provider/exporter path. Distinguish signal-specific settings from
+generic fallbacks and source-proven defaults. Test the effective selected policy
+with relevant operator overrides present; preserve independent settings.
 
-### Log limits and export budgets
+For limits, replay the original payload and test its boundaries. Derive expected
+retained values and drops from actual input, accounting for bridge-added fields
+and reviewed processors. Direct SDK and native-bridge controls prove different
+paths; keep either missing control unproven. Attribute limits do not define Body
+or exception-capture policy. Use native enablement only to avoid expensive work;
+lazy formatting does not defer argument-producing expressions already evaluated.
 
-Use `logger.isEnabledFor(logging.INFO)` before an expensive argument-producing
-function when needed, checking inside the actual worker. Lazy `%s` formatting
-does not defer a function already called to produce its argument. Do not cache
-enablement or gate an enabled original handler on OTel-only state; cheap emits
-need no extra check.
+### Launcher and lifecycle
 
-Verify the existing provider's public
-`LoggerProvider(log_record_limits=LogRecordLimits(
-max_log_record_attributes=count, max_log_record_attribute_length=length))`
-capability or supported effective log-specific settings. In SDKs exposing these
-arguments, `max_attributes`/`max_attribute_length` are generic fallbacks: existing
-`OTEL_LOGRECORD_ATTRIBUTE_COUNT_LIMIT` and
-`OTEL_LOGRECORD_ATTRIBUTE_VALUE_LENGTH_LIMIT` can override them. For an authorized
-selected limit, use the supported log-specific mechanism and prove the effective
-count/value outcome with those environment variables present. Preserve an
-explicit operator limit when no change was selected; report a policy conflict
-rather than silently deleting configuration or upgrading the SDK. Go's
-`sdklog.WithAttributeCountLimit` is not a Python provider option.
-Preserve the resource and existing processors; do not construct another
-provider for a limit override. Body/privacy policy is separate.
+Resolve the actual launcher, CLI/environment precedence, worker model and reload
+behavior before claiming a process or shutdown profile. Validate the effective
+command and process identities; an environment assignment alone cannot override
+an explicit higher-priority runner setting. Preserve existing development and
+operator policy, and scope proof to the processes actually exercised.
 
-Replay the same failing payload after the proposed repair, in addition to
-below/at/above boundary tests. For the controlled SDK-input example with
-20 valid ASCII attributes of length 80, env 128/64 and selected limits 8/32,
-the generic fallback yields 20 attributes of length 64 with zero drops. The
-supported log-specific repair must retain exactly 8 attributes of length 32
-and report 12 drops. An "at most 8" assertion alone can accept excessive loss.
-Isolate unrelated filters/processors in the test fixture; do not remove the
-application's reviewed processors. This is an SDK-input limit probe, not full
-application proof. For a real logger test, count bridge-added attributes and
-other processing separately rather than assuming every call has 20 attributes
-or must report 12 drops. Preserve the independent authorized 128/64 policy.
-If the bound contract selects both direct SDK and stdlib-bridge limits, exercise
-both. `logger.emit(LogRecord(...))` on an SDK logger does not execute the stdlib
-logger/handler bridge; emit through that actual supported path and account for
-its approved added attributes and drops separately. A passing typed-SDK limit
-test cannot close an omitted bridge-limit control.
-
-For a selected batching repair, verify `BatchLogRecordProcessor` options
-`max_queue_size`, `max_export_batch_size`, `schedule_delay_millis` and
-`export_timeout_millis`, or supported BLRP settings, keeping batch <= queue.
-Check the installed exporter actually honors the required deadline; processor
-configuration or a successful `force_flush` wait alone is not cancellation or
-receiver acceptance proof. Adequate defaults remain coverage.
-
-`OTLPLogExporter(timeout=timeout_seconds)` uses seconds. For a selected 1000ms
-whole-operation budget, a proposed exporter timeout of 800ms is 0.8 seconds,
-leaving headroom to verify. The checked HTTP exporter budgeted retries within
-its deadline; resolve the installed behavior, test a stalled receiver and
-separately bound flush/shutdown. Record observed attempt/retry/caller budgets
-before the proposal. Preserve an adequate existing bound; fixture values are
-not production defaults.
-
-For exporter acceptance probes, derive N from each decoded OTLP request; keep the
-SDK input-list count separate. Check full-success N/0 and partial (N-R)/R before
-writing results. A shared constant from a two-record case is invalid for a
-one-record size-boundary case. Bind report trace IDs to the specific operation's receipt and verify the
-saved local evidence path, rather than projecting one trial's first IDs or
-guessed result filename across every scenario.
-
-### Lifecycle and final-record proof
-
-Make repeated stop requests idempotent while final logging and provider drain
-run outside the signal handler. A handler that raises `SystemExit` on every
-signal can interrupt cleanup already in progress; do not count that as a
-successful drain. Use the server's supported stop mechanism and test repeated
-signals against the actual launcher, retaining final-record receipts separately
-from live explorer visibility. This is Python lifecycle guidance, not an OTel
-signal-handler API requirement; see Python's [signal handler exceptions](https://docs.python.org/3/library/signal.html#note-on-signal-handlers-and-exceptions).
-
-Audit identifies an existing repeated-`SystemExit` handler and plans the
-acceptance case without executing or editing the service. For selected
-implementation/verification, test two stop requests on the same configured
-process, with the second arriving during final logging/provider drain. A
-single-signal receipt plus a separate repeated-stop test without the active
-provider does not prove that combined claim. Preserve final native output and
-decode the selected final OTLP record at the owned receiver; retain failures
-and incomplete proof in the normal report.
+Use the runtime's supported stop mechanism. Repeated stop requests must respect
+the selected shutdown policy and not accidentally interrupt active final logging
+or drain. Prove required event ordering and final-record receipt on that same
+configured lifecycle path. Keep exporter completion, flush waiting, cancellation
+and receiver acknowledgement distinct. Route SDK/exporter diagnostics through a
+supported independent handler or suppression path; assess actual diagnostic
+cadence separately from successful limit enforcement.
 
 ---
 

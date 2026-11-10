@@ -6,9 +6,9 @@ sensitive-data capture, a custom SDK, or changes outside the selected scope.
 
 For audit, instrumentation and verification, read only the detected stack's
 **Logging Readiness Checks** section in the existing language guide, following
-its bridge/provider ownership references as needed. Those guides own the SDK
-options, numeric conversions, async mechanisms and diagnostic-routing recipes;
-the common rules and acceptance obligations below still apply. A guide's setup
+its bridge/provider ownership references as needed. Those guides describe runtime-specific context, record and lifecycle pitfalls;
+resolve concrete SDK APIs and settings from the detected implementation. The
+common rules and acceptance obligations below still apply. A guide's setup
 examples do not authorize application changes in an audit or verification task.
 The logging checks are self-contained for each declared consumer; audit and
 verification do not require a sibling instrumentation skill to be installed.
@@ -158,24 +158,26 @@ may reuse those exact normative bindings from the immutable audit by identifying
 the specific evidence rows, while reconciling capability and observed results
 against current dependencies and commands. Never inherit old runtime success or
 an installed capability merely by referencing the audit.
+Prefer carrying unchanged normative bindings forward by those exact immutable
+audit evidence rows, then annotating current capability and receipt evidence
+separately. Re-summarizing a complete audit clause into a shorter topic phrase
+can lose its conditions; re-extract it only when its source/applicability changes.
 
-Decompose a source paragraph into its separate conditions, actions and requirement
-levels before condensing it into a matrix row. One row may retain several clauses,
-but give each its own strength and disposition; a later failure fallback does not
-cover an earlier recommendation or permission. For example, a receiver response
-row retains all of: MUST bound before compression; SHOULD reduce oversized partial
-responses without changing semantics when possible and practical; MAY trim optional
-diagnostics; MUST fail with HTTP 500 if the response still cannot fit, with acceptance
-unspecified. "May reduce diagnostics" alone loses the separate SHOULD. Compare the
-saved row with each source clause, not only its topic or citation. This is a local
-report-completeness check, not an additional OTel implementation requirement.
-Retain the qualifying condition with its action: "SHOULD reduce oversized partial
-responses" alone omits "when possible and practical". Preserve cross-cutting
-clauses too, such as the SHOULD to make transport limits configurable. Record
-that once in an explicitly referenced shared scope row or in each affected row;
-a generic SDK-configuration topic does not establish that transport disposition.
-Read the actual saved canonical rows back against these predicates, not only
-the downloaded source or a draft summary.
+Preserve each applicable clause's condition, action, strength and owner when
+condensing source text. Recommendations, permissions and failure fallbacks do
+not substitute for one another. Keep applicability qualifiers and cross-cutting
+configuration duties addressable, either in each affected row or an explicitly
+referenced shared row. Read the saved rows against retained source bindings,
+not only a page title or draft summary. This is a local completeness check,
+not an additional OTel implementation requirement.
+
+Read concrete repair proposals back against the retained public API and the
+effective startup configuration too. Check constructor arguments, option names
+and units against the selected SDK's declaration and its own construction path;
+check launch settings against the actual runner's CLI/environment precedence.
+A remembered API shape or environment setting cannot override contrary source
+evidence. Keep an unresolved mechanism unverified with its future check instead
+of presenting a source-contradicted call or launch profile as an executable fix.
 
 For audit, emit concrete application-owned gaps through the normal findings and
 acceptance flow. For instrumentation, implement the authorized ones and retain
@@ -213,50 +215,49 @@ Reserve that audit level for normal application execution, including agent or
 preload startup, framework-resolved routes, automatic metrics or installed log export.
 Audit plans these checks; instrumentation and verification reconcile actual
 results. These are local report-contract checks, not new normative SDK requirements.
-During audit planning, inventory the individual controls and group them by proof
-boundary before assigning stable scenario IDs. Do this before execution too;
-the planning error cannot be corrected merely by labelling all execution Not run.
-Use the following distinction when constructing the saved handoff:
+During audit planning, group controls by the boundary actually needed to prove
+each claim before assigning stable scenario IDs. A dependency's presence or an
+application package location cannot promote an isolated capability check to
+application proof. Use `either` only when one identical contract genuinely permits
+alternative adequate proof. Keep each grouped claim's owner and disposition
+explicit. Application scenarios may reference focused prerequisites without
+claiming that their execution occurred through the application path.
+A related SDK/exporter or receiver acceptance check does not transfer that
+owner's duty to application code; retain unsupported/unverified capability and
+conditional future checks rather than proposing application substitutes.
 
-| Planned control | Audit proof boundary |
-|---|---|
-| Parser failure reached through the normal application entrypoint, agent/preload and installed bridge | `full runtime` |
-| Constructed shutdown Error, outside-context callback, exception/cancellation path or structured-value probe, all in an isolated bridge/SDK fixture | Separate `focused call-site` scenario |
-| Isolated exporter timing/response-size capability check | Separate focused scenario or conditional capability check in matrix evidence, with the SDK/receiver owner |
-| One identical contract that genuinely permits either application or focused proof | `either`, not a mixture of different controls |
-
-An agent-equipped environment does not promote every fixture to application
-proof. A server-close test seam also keeps its actual boundary. An application
-scenario may reference a focused prerequisite's separate ID; do not embed that
-fixture as an assertion under the application's full-runtime level. Read back
-each trigger and acceptance clause against its row's level, rather than checking
-only scenario names. Every grouped assertion keeps its own owner/disposition.
-SDK/exporter and receiver capability checks retain their actual owners. An
-application-wiring finding may reference those related acceptance checks when
-their capability, disposition and proof boundary stay explicit; attachment alone
-does not assign the SDK duty to the application. Assess the actual required fix:
-do not require an application parser/retry substitute or mark unknown SDK support
-working merely because application wiring succeeds. Unverified upstream capability
-can keep conditional future checks in the matrix evidence.
 Before authoring probes/tests, expand each bound scenario's trigger AND acceptance
 criteria into individual controls in existing evidence fields or a Markdown
 checklist. Include list members, input variants, requested operations and event
 orders: scenario ID/control text, expected input/outcome, effective launch/exporter
 configuration, named test/subtest or assertion, planned command, proof boundary
-and initial Not run verdict. Do not generate this inventory retroactively from
-the tests that happened to pass. Copying a whole acceptance paragraph into one
-cell is still a scenario inventory, not this control ledger. Give distinct input
-variants, operations and event orders separate entries. Preserve a required
+and initial Not run verdict. Existing smoke tests and discovery checks may run
+before this inventory; build it before authoring new targeted probes. Do not
+generate the required controls retroactively from the tests that happened to
+pass. A grouped display is valid when it references a parameterized case table,
+test or assertion/output that makes every input, operation and event order
+individually addressable. One physical report row per control is not required.
+Copying a whole acceptance paragraph into one cell without those bindings is
+still only a scenario inventory. Preserve a required
 conjunction on one owned path as joint assertions; do not split it into unrelated
 passing probes. One invocation can supply several controls, but
 link each result to its own assertion and concrete output/receipt. A suite's zero
 exit proves only the assertions present in that suite, not every bound control.
 Preserve the bound audit IDs and schema. Derive scenario and item verdicts from
 their complete required-control sets; initialize unmatched controls Not run/Not
-proven. A report builder must not use a blanket Working/default-true assignment
-plus a short exception list. A SIGINT trial with logs disabled, for example,
-cannot prove final-log drain with the normal exporter enabled. An overall Partial
-result does not make an incompletely tested individual Working row accurate.
+proven. A blanket Working/default-true assignment plus a short exception list
+cannot establish assertions that lack direct evidence. An opt-out run cannot prove delivery through an
+enabled pipeline. An overall Partial result does not make an incompletely tested
+individual Working row accurate.
+For each item, read its own change/name/`product_view` back against the direct
+assertions. A configuration item promising bridge, batching and lifecycle cannot
+be Working from opt-out tests alone when its final drain is unproven. Bind the
+item's required claims explicitly instead of selecting a passing scenario by
+item type or copying the first scenario's mode/visibility. Direct item proof may
+coexist with incomplete related scenario coverage: do not downgrade a directly
+proven claim merely because an attached ancillary probe is focused or incomplete.
+State that narrower item claim and the ancillary boundaries in existing evidence;
+do not present their combined observations as all proven at the strongest mode.
 Later stages retain those bound IDs and distinguish observations in existing
 fields; do not promote a focused error seam to full runtime in a parent row.
 If a frozen row's controls have different observed boundaries, name those
@@ -460,10 +461,10 @@ operation-specific `.exception` name or generic `exception` handler name.
 Check deprecation/version policy for `exception.escaped`; do not migrate span
 exception behavior or delete approved compatibility fields merely by keyword.
 
-Apply a selected exception-field allowlist exactly. Compatibility is not
-permission to retain an excluded alias such as `error.kind` or `error.dump`.
-When only `exception.type` is allowed, omit those aliases as well as message
-and stack, and assert their absence. Do not pass the raw exception to a bridge
+Apply a selected exception-field allowlist to canonical fields and custom
+aliases alike. Compatibility alone does not authorize an excluded representation.
+When policy permits only type/category evidence, omit prohibited message, stack
+and equivalent aliases, and assert their absence. Do not pass the raw exception to a bridge
 and rely on truncation to hide its contents. Preserve an alias only when the
 applicable policy explicitly permits it; do not remove unrelated application
 metadata merely because it is not an exception attribute.
@@ -509,7 +510,7 @@ Keep the Body/privacy policy separate from these options. For each selected
 limit, specify below-limit, exactly-at-limit and above-limit inputs with units
 and expected preservation/truncation/drop behavior. Include non-ASCII input
 when the policy measures UTF-8 bytes. Preserve an adequate verified default;
-do not force the observation's stricter policy onto an independent control.
+preserve independent operator policies and unselected scopes.
 
 State boundary outcomes, not only test sizes: below/at the selected limit
 preserves permitted input; above a count limit retains at most that count and
@@ -631,8 +632,8 @@ visibility claim, keep that claim `not_proven` with the corresponding status and
 explain the individual outcomes; do not change bound audit IDs or invent an enum.
 Read N from each actual decoded request, not a shared fixture constant. Check
 acknowledged accepted/rejected arithmetic against that N before serializing the
-report: full success N/0, valid partial (N-R)/R, with 0 <= R <= N. A one-record
-success cannot report two accepted records because a different subtrial sent two.
+report: full success N/0, valid partial (N-R)/R, with 0 <= R <= N.
+Never reuse another trial's input count.
 Construct the batch/attempt observations before trial totals. Reconcile them
 against raw client and receiver events again during report readback; a combined
 "503/timeout" label does not preserve different known terminal results. If a
@@ -651,10 +652,9 @@ gRPC `RetryInfo`) from client backoff, within the same whole-export deadline.
 HTTP `Retry-After` uses integer delay-seconds or an HTTP-date, never a value
 such as `100ms`; gRPC retry durations use their own protocol representation.
 If the server wait exceeds the remaining export/caller budget, end within the
-earlier deadline instead of retrying early or requiring another attempt. For
-example, `Retry-After: 1` requires a one-second wait; it cannot fit after a
-response arriving 100ms into an 800ms export budget. State the valid header,
-measured wait, remaining budget and expected request count in the handoff.
+earlier deadline instead of retrying early or requiring another attempt.
+Derive throttling input, expected wait and request count from the selected
+transport and actual remaining budget; retain measured waits and outcomes.
 OTLP/HTTP retries use 429, 502, 503 and 504; other 4xx/5xx must not be retried.
 Check installed exporter behavior with a controlled receiver before claiming
 conformance; do not add an application retry loop around an SDK exporter.
@@ -713,13 +713,13 @@ deadline. Then state the proposed or retained mechanism and composed budget
 separately. A generic instruction to "bound retries" or a new timeout number
 does not explain the current failure or establish which wait it bounds.
 
-### Concrete deadline mechanisms
+### Resolve deadline mechanisms
 
-A concrete plan must name a public mechanism, not defer it as an unspecified
-"overall deadline option". Resolve the installed/project-compatible SDK first;
-the detected language guide supplies concrete proposals to verify, not upgrade
-or override mandates. Keep
-unsupported/installed capability unverified. Record checked library versions in
+A concrete repair plan names the supported public mechanism selected for the
+actual project, with its scope, units and effective configuration. Resolve the
+installed/project-compatible SDK first instead of prescribing one constructor,
+method, timeout or dependency release for every application. Keep an unresolved
+mechanism unverified with its future capability check. Record checked library versions in
 the task's evidence artifacts rather than pinning a release recipe in this guide.
 Leave time for encoding/draining within the selected whole-operation budget
 and verify it against a stalled receiver rather than assuming a timeout knob
@@ -813,6 +813,20 @@ in for the separate partial-rejection case:
 | LOG-DIAGNOSTICS | Name the supported separate routing or suppression mechanism. One exporter-fault scenario asserts bounded diagnostic volume and export attempts, application progress, original sink output, and continued operation of each other configured signal. Explicitly mark absent signals not configured; preserving configuration alone is not operation proof. |
 | LOG-VERIFY-FRESH | Unique report storage for each trial; planned manifest/lockfile dependency preparation; binding to source, command and dependency versions; actual success/failure/error/skip counts; preserved timeout console output, failed timeout verdict, owned-process cleanup and incremental structured partial results; explicit evidence scope. |
 
+### Report readback
+
+Read this section immediately before generating/finalizing logging results.
+Use the required controls from the bound contract as the starting set, initialize
+unmatched results Not proven, and join each to its named assertion and actual
+output before deriving scenario/item verdicts. A default-Working builder plus
+exceptions is not evidence for assertions that never ran; assess actual claims,
+not helper syntax alone. Preserve directly proven item scope separately from
+incomplete related scenario coverage.
+Carry unchanged normative clauses by exact immutable audit evidence-row bindings
+or check every condition/strength against the retained source. Annotate current
+installed capability and executed receipts separately; do not replace qualified
+clauses with shorter topic labels or label an executed capability future-only.
+
 Before finalizing, compare the saved scenarios against these obligations and
 the selected source/policy. An omitted obligation leaves that handoff partial;
 unexecuted acceptance never becomes a passing runtime result.
@@ -836,6 +850,11 @@ from an unrelated runtime trial into every row. Refresh current capability and
 proof dispositions after installation/probes while leaving the audit immutable.
 A copied "not installed/executed" baseline row does not describe a newly tested
 exporter, and passing value truncation does not prove discard-diagnostic cadence.
+Keep trial storage distinct on the actual filesystem. Do not rely only on
+capitalization to distinguish cases on a case-insensitive host. Use a distinct stable case ID or separate run directory,
+retain the original input in its metadata, and check that each referenced result
+belongs to the claimed trial. Two paths to the same overwritten file do not
+prove two input variants. This is local evidence integrity, not an OTel naming rule.
 Finally compare status, proof mode, visibility, direct assertions and linked
 controls for each scenario/item; schema validity alone does not reconcile them.
 Plan-only restrictions prohibit executing setup, not specifying it: retain the

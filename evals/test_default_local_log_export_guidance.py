@@ -66,73 +66,45 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
         text = _read(guide)
         assert "## Logging Readiness Checks" in text
         readiness = text.split("## Logging Readiness Checks", 1)[1].split("\n## ", 1)[0]
-        if target == "languages/java.md":
-            assert "whitespace" in readiness and "resource-only" in readiness
-            assert "substring" in readiness and "normal launcher" in readiness
-            assert "synthetic `LoggingEvent`" in readiness and "unit+otlp" in readiness
-            assert "@ControllerAdvice" in readiness and "malformed request" in readiness
-            assert "JULI/`java.util.logging`" in readiness
-            assert "actual bridge" in readiness and "message parameters" in readiness
-            assert "after handing it to asynchronous code" in readiness
-        if target == "languages/node.md":
-            assert "per-batch" in readiness and "acknowledged" in readiness
-            assert "mixed" in readiness and "otlp_accepted" in readiness
-            assert "SeverityText" in readiness and "casing" in readiness
-            assert ".env" in readiness and "actual application" in readiness
-            assert "generic" in readiness and "diagnostic category" in readiness
-            assert "process-local transport fault seam" in readiness
-            assert "error-handling middleware" in readiness and "headersSent" in readiness
-            assert "limit-resolution code" in readiness and "exported files" in readiness
-            assert "Replay the same existing failing" in readiness
-            assert '"Partial success not tested"' in readiness
-            assert "clearImmediate" in readiness and "observable drain-entry boundary" in readiness
-        if target == "languages/python.md":
-            assert "SystemExit" in readiness and "repeated" in readiness
-            assert "signal handler" in readiness and "drain" in readiness
-            assert "at-most-once-per-record" in readiness and "two-record case" in readiness
-        if target == "languages/go.md":
-            assert "decode its actual OTLP payload" in readiness
-            assert "final record" in readiness
-            assert "503 followed by 200" in readiness and "caller-triggered `cancel()`" in readiness
+        normalized = " ".join(readiness.lower().split())
+        assert "detected" in normalized and "installed" in normalized
+        assert "common logging rules" in normalized
+        runtime_terms = {
+            "languages/java.md": ("executor", "thread-local", "asynchronous"),
+            "languages/python.md": ("contextvars", "launcher", "process"),
+            "languages/go.md": ("context.context", "goroutine", "cancellation"),
+            "languages/node.md": ("callback", "precision", "constructor"),
+        }
+        assert all(term in normalized for term in runtime_terms[target])
+        # The new rules resolve capabilities; concrete recipes stay in setup examples/evals.
+        assert not re.search(
+            r"\b(?:Flask|Spring|Express|Tomcat|BatchLogRecordProcessor|LogLimitsBuilder)\b",
+            readiness,
+        )
+        assert not re.search(r"\b\d+(?:ms|milliseconds|seconds)\b", readiness)
+        assert "fixture-disabled" not in readiness
         for relative in re.findall(r"`((?:\.\.?/)[^`\s]+\.md)`", text):
             assert (guide.parent / relative).is_file(), (skill, target, relative)
         assert skill in consumers[target]
-    assert "read only the detected stack's" in common
-    assert "per-batch" in common and "per-outcome" in common
-    assert "mixed fault scenario" in common and "otlp_accepted" in common
-    assert "per-scenario" in common and "unit+otlp" in common
-    assert "trigger and acceptance criteria" in common
-    assert "proof_level" in common and "focused call-site" in common
-    assert "64 MiB" in common and "4 MiB" in common
-    assert "after decompression" in common and "HTTP 413" in common
-    assert "when possible and practical" in common
-    assert "MAY trim optional diagnostic fields" in common
-    assert "Ending a span" in common and "business cancellation" in common
-    assert "individual results" in common and "automated finalizer" in common
-    assert "separate conditions, actions and requirement" in common
-    assert "Constructed shutdown Error" in common and "server-close test seam" in common
-    assert "not a mixture" in common and "conditional future checks" in common
-    assert "attachment alone" in common and "shared scope row" in common
-    assert "precisely bounded retained excerpt" in common and "specific evidence rows" in common
-    assert "HTTP full success" in common and "zero rejected" in common
-    assert "Before authoring probes/tests" in common and "effective launch/exporter" in common
-    assert "server response intent" in common and "client timeout/failure" in common
-    assert "measured export duration" in common and "shutdown wall time" in common
-    assert "not_explorer_visible" in common and "framework records" in common
-    assert "Batch/attempt and raw evidence" in common
-    assert "timed-out batch" in common and "completed-503 batch" in common
-    assert "Protocol surface / owner" in common
-    assert "configuration settings cannot bind" in common
-    assert "direct instrumentation baseline without an audit" in common
-    assert "During audit planning" in common and "before assigning stable scenario IDs" in common
-    assert "An agent-equipped environment" in common
-    assert "0 < R <= N" in common and "inferred rejected subset" in common
-    assert "separate partial-rejection case" in common
-    assert "blanket Working/default-true" in common
-    assert "instrumentation item result" in common and "in memory" in common
-    assert "one-record" in common and "shared fixture constant" in common
-    assert "local execution-evidence" in common and "operation/receipt" in common
-    assert "MAY emit a diagnostic" in common and "truncation, discard or replacement" in common
+    rules = set(re.findall(r"^## (LOG-[A-Z-]+) --", common, re.MULTILINE))
+    assert rules == {
+        "LOG-SPEC-CLOSURE", "LOG-RECORD", "LOG-CONTEXT", "LOG-ASYNC-HANDOFF",
+        "LOG-EXCEPTION", "LOG-LIMITS", "LOG-DELIVERY", "LOG-DIAGNOSTICS",
+        "LOG-VERIFY-FRESH",
+    }
+    for term in (
+        "requirement", "owner", "source/config/default", "TraceId", "SpanId",
+        "TraceFlags", "ObservedTimestamp", "SeverityText", "SDK-owned",
+        "proof_level", "proof_mode", "unit+otlp", "full_runtime", "app_test",
+        "trigger AND acceptance", "individually addressable", "operator",
+        "partial_success", "N-R", "after decompression", "when possible and practical",
+        "not_explorer_visible", "not_proven", "at most", "original sink",
+        "CLI/environment precedence", "case-insensitive host", "original input",
+        "### Report readback", "named assertion and actual",
+    ):
+        assert term in common
+    assert "Flask" not in common and "BatchLogRecordProcessor" not in common
+    assert "800ms" not in common and "1000ms" not in common
     if skill == "otel-audit":
         instructions = _read(side / ".agents" / "skills" / skill / "SKILL.md")
         assert "before assigning scenario IDs" in instructions
@@ -143,12 +115,14 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
         assert "supported" in instructions and "logging-only sanitizer" in instructions
         assert "another audit merely" in instructions
         assert "Before serializing logging verdicts" in instructions
+        assert "logging-readiness.md#report-readback" in instructions
         assert "before authoring probes" in instructions
 
     if skill == "otel-verify":
         instructions = _read(side / ".agents" / "skills" / skill / "SKILL.md")
         assert "before writing probes" in instructions
         assert "Reconcile newly executed results" in instructions
+        assert "logging-readiness.md#report-readback" in instructions
 
 
 @pytest.mark.parametrize("language", ["java", "python", "go", "node"])
