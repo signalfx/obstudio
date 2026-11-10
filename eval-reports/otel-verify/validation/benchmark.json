@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-verify",
-    "run_id": "20261109T170335531848Z",
+    "run_id": "20261110T214238627915Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-6-luna",
     "judge_model": "",
@@ -18,8 +18,7 @@
     "rubric_enabled": false,
     "runtime_enabled": false,
     "workers": "1",
-    "validation_scope": "full",
-    "source_snapshot_refreshed_without_eval_execution": true
+    "validation_scope": "full"
   },
   "evals": [
     {
@@ -337,7 +336,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "02f519faf6ec8d7e88bca6ebdd371d4f9c45c13e7afd79d8e6998e567071b7f0",
+    "digest": "6bf5bf4e7f28c5c9d6f8b25682df8e4888d8607d5d1ff0bd8206c8a74a64a6e8",
     "eval_kinds": [
       "rubric"
     ],
@@ -457,7 +456,7 @@
       "evals/python/existing-otel-agent-demo/eval/inputs/vendor-route-capture.json": "6505493b4367a977e8cc9808ad21027fc802a12fe6a2b64fa93d783cee1abfef",
       "evals/python/existing-otel-agent-demo/eval/qual/route-recovery-verify.json": "bff6e2d54a3f68ea0924c347760780ea9a7250d173a0034563acc4993390e224",
       "evals/python/existing-otel-agent-demo/probe.py": "8cc9dd2ba1124e3bf5a20ee65c500c688a0db7429eed9396013485d46d0f737a",
-      "evals/python/existing-otel-agent-demo/pyproject.toml": "7fe7daadd322fda4e83145697119bb3ae4c79d99f3a6ac54971f27cbf867a272",
+      "evals/python/existing-otel-agent-demo/pyproject.toml": "6e229a97d1e9b387cd29377d72e406f85d4a5dcedfb90408499910e87b8da9b9",
       "evals/python/existing-otel-agent-demo/eval/inputs/content-counterexamples.json": "cb2a137c61432b814f6fca5d7094140c922989b75cdffaee67b131d87e18c76b",
       "evals/python/existing-otel-agent-demo/eval/inputs/genai-schema-evidence.json": "cb2d154a37cd662e4ddbcae6d30f7ce5588524d660d6ce19abdf42adc5032a5d",
       "evals/python/existing-otel-agent-demo/eval/inputs/python-preflight-requirements.txt": "9bc8378353b95a0405d8b052226aa3075aa7f7f32d30c29c235b0a343df6fa3f",
@@ -475,7 +474,7 @@
       "evals/python/model-directed-agent/otel_setup.py": "d7d591e2ca3aeef688aa2df30e4c2d89286917102c22439864fbb5c6a9d53b12",
       "evals/python/model-directed-agent/probe.py": "f190d42c2b2308660ba60c1f6d12d74207ef62b33162bc526cadbc12295db929",
       "evals/python/model-directed-agent/recommendations.py": "c0704e3b6baba32477943c826d9e4a2fa9b94e9fcda3c20ad0f4b57179255a09",
-      "evals/python/model-directed-agent/requirements.txt": "517729b737f9cac1ba8a6a61f2d3b9febf333fbfac3acf28632061b9b1ac1a50",
+      "evals/python/model-directed-agent/requirements.txt": "f170c49d65ebb97b85ff0d868d7c67342f6feab2634e22b00793a1ad851678cf",
       "evals/python/model-directed-agent/roles.py": "8d254346b01cbcf7bda6d38778732d44656ff585b5f0fbb56bdf3f65d818bbdc",
       "evals/python/model-directed-agent/templates/index.html": "499ff2bfcefb3e0263b6c2af41f7d81a1dc20c1417854350bcf44b9465e6ce81",
       "evals/python/model-directed-agent/eval/qual/resource-table-verify.json": "1b655b83cefa0af719b163ecaef8032c496a49e525a1098ac719529404151737",
