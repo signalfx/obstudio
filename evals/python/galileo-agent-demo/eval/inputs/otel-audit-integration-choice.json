@@ -24,12 +24,12 @@
     {
       "check": "Entry point",
       "finding": "GalileoSpanProcessor plus app-owned workflow, chat, and tool spans",
-      "source": "app.py:21-90"
+      "source": "app.py:23-92"
     },
     {
       "check": "Route source",
       "finding": "Health and streaming assistant routes",
-      "source": "app.py:45-93"
+      "source": "app.py:47-95"
     },
     {
       "check": "Runtime/startup",
@@ -39,7 +39,7 @@
     {
       "check": "GenAI ownership",
       "finding": "Yes",
-      "source": "app.py:51-93"
+      "source": "app.py:53-95"
     },
     {
       "check": "Target-product evidence",
@@ -64,17 +64,17 @@
     "spans": [
       {
         "name": "invoke_workflow support_turn",
-        "source": "app.py:61-65",
+        "source": "app.py:63-67",
         "type": "custom"
       },
       {
         "name": "execute_tool search_docs",
-        "source": "app.py:72-76",
+        "source": "app.py:74-78",
         "type": "custom"
       },
       {
         "name": "chat gpt-4o-mini",
-        "source": "app.py:80-84",
+        "source": "app.py:82-86",
         "type": "custom"
       }
     ],
@@ -86,9 +86,9 @@
     {
       "surface": "Streaming lifecycle telemetry",
       "status": "partial",
-      "evidence": "app.py:51-93",
+      "evidence": "app.py:53-95",
       "required_signals": "gen_ai.client.operation.time_to_first_chunk, gen_ai.client.operation.time_per_output_chunk, bounded chunk count, finish/close reason, cancellation, timeout, disconnect, and send/write failure while preserving one workflow/chat/tool span source",
-      "owner": "App-owned: app.py:51-93",
+      "owner": "App-owned: app.py:53-95",
       "acceptance_criteria": "A completed, cancelled, timed-out, disconnected, and failed-write stream produces bounded lifecycle telemetry without duplicate invoke_workflow, chat, or execute_tool spans.",
       "impact": "Operators cannot distinguish slow-first-token, partial, cancelled, timed-out, disconnected, or failed-write streams."
     }
@@ -132,7 +132,7 @@
       ],
       "dependencies": [],
       "evidence": [
-        "app.py:25-93",
+        "app.py:27-95",
         "README.md:3-11"
       ],
       "acceptance_criteria": [
@@ -173,7 +173,7 @@
         "OTEL-001"
       ],
       "evidence": [
-        "app.py:51-93"
+        "app.py:53-95"
       ],
       "acceptance_criteria": [
         "Completed, cancelled, timed-out, disconnected, and failed-write streams emit the required metrics and terminal attributes through Galileo.",
@@ -239,7 +239,7 @@
         "OTEL-001"
       ],
       "evidence": [
-        "app.py:25-93",
+        "app.py:27-95",
         "Makefile:6"
       ],
       "acceptance_criteria": [
@@ -281,7 +281,7 @@
       {
         "id": "telemetry.integration.selection",
         "trigger": "Record whether the task includes a distinct additional Studio destination before configuration",
-        "entrypoint": "app.py:25",
+        "entrypoint": "app.py:27",
         "expected_signals": "one explicit additional-destination policy with existing Galileo preserved",
         "proof_level": "focused call-site",
         "acceptance_criteria": "Only the executable option unlocked by the recorded export-path choice enters selection.",
@@ -292,7 +292,7 @@
       {
         "id": "genai.stream.lifecycle",
         "trigger": "Exercise completed, cancelled, timed-out, disconnected, and failed-write POST /v1/chat/stream requests",
-        "entrypoint": "app.py:51",
+        "entrypoint": "app.py:53",
         "expected_signals": "streaming timing metrics and bounded terminal events exported by the retained Galileo path",
         "proof_level": "full runtime",
         "acceptance_criteria": "The required lifecycle signals appear and one canonical workflow/chat/tool topology remains.",
@@ -303,7 +303,7 @@
       {
         "id": "ao.routing.existing-otel",
         "trigger": "Run a fresh POST /v1/chat/stream after selecting native OTel routing to a distinct Studio destination",
-        "entrypoint": "app.py:51",
+        "entrypoint": "app.py:53",
         "expected_signals": "Existing canonical workflow/model/tool spans with selected trace-only resource binding and preserved Galileo delivery",
         "proof_level": "full runtime",
         "acceptance_criteria": "Existing producers/provider/exporter identities remain, one export reaches each intended destination, routing headers stay on traces and unavailable cloud proof remains incomplete.",
