@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-audit",
-    "run_id": "20261109T180310485767Z",
+    "run_id": "20261110T163526768092Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-6-luna",
     "judge_model": "",
@@ -18,8 +18,7 @@
     "rubric_enabled": false,
     "runtime_enabled": false,
     "workers": "1",
-    "validation_scope": "full",
-    "source_snapshot_refreshed_without_eval_execution": true
+    "validation_scope": "full"
   },
   "evals": [
     {
@@ -656,7 +655,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "f011be212068479435316b97ee95e2b4014217c3232119cee6e550ba3bf8ec33",
+    "digest": "a6d5a09bd2f0a4fa456c0f651148e55d36142cd3e2b3708842811a12a9b504aa",
     "eval_kinds": [
       "rubric",
       "sanity"
@@ -856,6 +855,7 @@
       "evals/python/galileo-agent-demo/galileo_compat.py": "a94d05b35aade11b9686881b92ce3a84de442882e7efcee39f3dffdb2da59879",
       "evals/python/galileo-agent-demo/pyproject.toml": "bfb227381b5219b92fc4238fdb4a47b0b781e4c2818628b6d977e408b9304901",
       "evals/python/galileo-agent-demo/tests/test_agent.py": "33d5fea1eebfbdc855fafd00e7a3600a06a1a90f1b97d1c8942e8e0460b4f124",
+      "evals/python/galileo-agent-demo/tests/test_galileo_compat.py": "5cfbd1cb95bbec495be7643dbb6d1fc4243586c8d3897d6830f3e9ca21f63ceb",
       "evals/python/mcp-ai-tool-demo/Makefile": "87d12c2866f8dbd360a98ed53448c98ee805fa7f55a7b61e03862734fa4f63a2",
       "evals/python/mcp-ai-tool-demo/README.md": "56f9c6b444d4fc18a62c0f8bed5dbcd21c81ac5753911d25a8d61cb2816b6d73",
       "evals/python/mcp-ai-tool-demo/app.py": "3e224b78e316ad5ee07fa06f2773be2a5299e1b3a8d8e12febd0b33ef17718c4",
@@ -884,7 +884,7 @@
       "evals/python/splunk-ao-integration-demo/decorator_app.py": "65cbdeb9ba515386d6f122ae085bd299f640952cf3e338c76bc285c8df01cd56",
       "evals/python/splunk-ao-integration-demo/eval/qual/audit.json": "b0131ecd6235022f8276935e6cc777e27036d3b8c06e91cad9f142ffa0f88600",
       "evals/python/splunk-ao-integration-demo/existing_otel_app.py": "11103e93e200d4f35bb2e3c230ca06da3cbc9180af105baa2a4caa9bec9c81d4",
-      "evals/python/splunk-ao-integration-demo/pyproject.toml": "db8a6027af3c5c81943bc0eda6d13797af6a1aecb4f23564421eecb3993ba47b",
+      "evals/python/splunk-ao-integration-demo/pyproject.toml": "af0ebcbf966f782df354973d50395d20359db6877cc8ba99984f97a9b98e6908",
       "evals/python/splunk-ao-langchain-demo/Makefile": "c9da5dd95276d141b0a32e21a2011ac263117a3e449121688573b882fe87fc0d",
       "evals/python/splunk-ao-langchain-demo/README.md": "30a1e175482d6071a5a8746b1c61b208b2756aa157205c268466cdd336578b9b",
       "evals/python/splunk-ao-langchain-demo/app.py": "05d2a0a640aedc252b3b38626fe12099ef8ad805a842607a6e59bf666644fda5",

@@ -1,6 +1,6 @@
-opentelemetry-api>=1.45.1
-opentelemetry-sdk>=1.45.1
-opentelemetry-exporter-otlp>=1.45.1
+opentelemetry-api>=1.45.1,<2
+opentelemetry-sdk>=1.45.1,<2
+opentelemetry-exporter-otlp>=1.45.1,<2
 opentelemetry-instrumentation-fastapi>=0.66b0
 opentelemetry-instrumentation-logging>=0.66b0
 splunk-ao==0.4.0

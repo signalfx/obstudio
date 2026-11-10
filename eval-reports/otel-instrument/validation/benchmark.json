@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-instrument",
-    "run_id": "20261109T180402192105Z",
+    "run_id": "20261110T163527739814Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-6-luna",
     "judge_model": "",
@@ -18,8 +18,7 @@
     "rubric_enabled": false,
     "runtime_enabled": false,
     "workers": "1",
-    "validation_scope": "full",
-    "source_snapshot_refreshed_without_eval_execution": true
+    "validation_scope": "full"
   },
   "evals": [
     {
@@ -987,7 +986,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "8241c3f5c944d752ceebd600577f729bd057a2bf7e4f7305d1cacf1c5e96b4eb",
+    "digest": "b0ee2dda985c9fa8a13f8facab636e1b2e83c4dfee4b05580a93a51a3d7a3455",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -1492,7 +1491,7 @@
       "evals/python/ai-assistant-demo/eval/inputs/genai-sdk-source-snapshot.json": "9d4bb13d28c1892c96cf069f65fe129674e4dc5c86b21adb3823a82b2a378ef6",
       "evals/python/ai-assistant-demo/eval/inputs/genai-semconv-source-snapshot.json": "37dcf51de2138b706b7272c32e4215d280a94790b3d4bb454000ef66ef24e3ae",
       "evals/python/ai-assistant-demo/eval/qual/genai-sdk-default-instrument.json": "8ffa9b4ade3c15f7ca1bf95f42a4e1040f9ae94075fcc7f100cdfdc0447307f1",
-      "evals/python/ai-assistant-demo/eval/inputs/python-preflight-requirements.txt": "63e7a2943c1099d91ea5cf16196d10fd4ce4f365d7d168fef4d38433c005c1e3",
+      "evals/python/ai-assistant-demo/eval/inputs/python-preflight-requirements.txt": "b0b8f31b82900833d80bc473c89cbe7c19d8a702f7d0ba17e7299ba3cf818c68",
       "evals/python/ai-assistant-demo/eval/qual/instrument.json": "797351844eeff675a5c64f7c739e1394fe251343c523d78d44fc669e6f9a1216",
       "evals/python/ai-assistant-demo/eval/inputs/per-function-decorator-gate-evidence.json": "ade2556c260fef65e1952236e26e474c9f24333f78ce18f87667b189505752b9",
       "evals/python/ai-assistant-demo/eval/inputs/per-function-full-conformance-evidence.json": "cfeb7eb26410f9aa70fb7e2c77355ea4a67b5d92b0f9e7f02cd15a8ff528c805",
@@ -1578,6 +1577,7 @@
       "evals/python/galileo-agent-demo/galileo_compat.py": "a94d05b35aade11b9686881b92ce3a84de442882e7efcee39f3dffdb2da59879",
       "evals/python/galileo-agent-demo/pyproject.toml": "bfb227381b5219b92fc4238fdb4a47b0b781e4c2818628b6d977e408b9304901",
       "evals/python/galileo-agent-demo/tests/test_agent.py": "33d5fea1eebfbdc855fafd00e7a3600a06a1a90f1b97d1c8942e8e0460b4f124",
+      "evals/python/galileo-agent-demo/tests/test_galileo_compat.py": "5cfbd1cb95bbec495be7643dbb6d1fc4243586c8d3897d6830f3e9ca21f63ceb",
       "evals/python/galileo-agent-demo/eval/inputs/galileo-native-profile.env": "723e03bf855ce965d485645a4bef3180609346b6335a0c0e44aff11264caeb28",
       "evals/python/mcp-ai-tool-demo/Makefile": "87d12c2866f8dbd360a98ed53448c98ee805fa7f55a7b61e03862734fa4f63a2",
       "evals/python/mcp-ai-tool-demo/README.md": "56f9c6b444d4fc18a62c0f8bed5dbcd21c81ac5753911d25a8d61cb2816b6d73",
@@ -1603,7 +1603,7 @@
       "evals/python/splunk-ao-integration-demo/decorator_app.py": "65cbdeb9ba515386d6f122ae085bd299f640952cf3e338c76bc285c8df01cd56",
       "evals/python/splunk-ao-integration-demo/eval/qual/instrument.json": "73dab129274a7d9b54646433e17ebad5b0b66a43d0e08b3293ba251281f03038",
       "evals/python/splunk-ao-integration-demo/existing_otel_app.py": "11103e93e200d4f35bb2e3c230ca06da3cbc9180af105baa2a4caa9bec9c81d4",
-      "evals/python/splunk-ao-integration-demo/pyproject.toml": "db8a6027af3c5c81943bc0eda6d13797af6a1aecb4f23564421eecb3993ba47b",
+      "evals/python/splunk-ao-integration-demo/pyproject.toml": "af0ebcbf966f782df354973d50395d20359db6877cc8ba99984f97a9b98e6908",
       "evals/python/splunk-ao-langchain-demo/Makefile": "c9da5dd95276d141b0a32e21a2011ac263117a3e449121688573b882fe87fc0d",
       "evals/python/splunk-ao-langchain-demo/README.md": "30a1e175482d6071a5a8746b1c61b208b2756aa157205c268466cdd336578b9b",
       "evals/python/splunk-ao-langchain-demo/app.py": "05d2a0a640aedc252b3b38626fe12099ef8ad805a842607a6e59bf666644fda5",
