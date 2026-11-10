@@ -227,7 +227,7 @@ func run(config runConfig) error {
 		log.Printf("[splunk-logs] logs forwarding disabled: %s", logsStatus.LastExportError)
 	}
 
-	observerOwner := envOr("OBSTUDIO_OWNER", "cli")
+	observerOwner := resolveObserverOwner()
 	observerMode := envOr("OBSTUDIO_MODE", "standalone")
 	if observerMode == managedObserverMode && !managedLaunchAuthorized {
 		observerMode = "standalone"
@@ -238,6 +238,11 @@ func run(config runConfig) error {
 		// Deferred so it runs after srv.Shutdown has drained the handlers.
 		defer userConfig.manager.Close()
 	}
+	// With no Manager this is inert. Deferred after the Manager's Close so it
+	// runs first: the shutdown flush, then the gate's Close. The launcher sent
+	// with usage data is the resolved owner, bucketed by the emitter.
+	adoptionTelemetry := buildAdoption(userConfig.manager, userConfig.path, observerOwner, s)
+	defer adoptionTelemetry.shutdown()
 	stopManaged := make(chan struct{}, 1)
 	freeAccountSubmitter := freeaccount.New(freeaccount.Config{})
 	mux := http.NewServeMux()
@@ -261,7 +266,8 @@ func run(config runConfig) error {
 	}, splunkExportController, splunkTracesController,
 		newSplunkExportConfigurationRefresher(splunkExportController, splunkTracesController, connectionSettings),
 		freeAccountSubmitter, userConfig.api, userConfig.status, api.SplunkCloudSettingsSaver(connectionSettings.SaveCloud), api.SplunkCloudPreferencesSaver(connectionSettings.SaveCloudPreferences), api.SplunkCloudStorageManaged(connectionSettings.CloudStorageManaged), api.SplunkCloudCleanupPending(connectionSettings.CloudCleanupPending),
-		api.SplunkLogsSettings{Controller: logsController, Save: connectionSettings.SaveLogs, SavePreferences: connectionSettings.SaveLogsPreferences, HasCredential: connectionSettings.HasLogsCredential, CleanupPending: connectionSettings.LogsCleanupPending, Refresh: func() error { return connectionSettings.RefreshLogs(logsController) }})
+		api.SplunkLogsSettings{Controller: logsController, Save: connectionSettings.SaveLogs, SavePreferences: connectionSettings.SaveLogsPreferences, HasCredential: connectionSettings.HasLogsCredential, CleanupPending: connectionSettings.LogsCleanupPending, Refresh: func() error { return connectionSettings.RefreshLogs(logsController) }},
+		adoptionTelemetry.cloudConnected(), adoptionTelemetry.validationRan())
 	mux.Handle("POST /otel/v1/traces", rcv.HTTPHandler())
 	mux.Handle("POST /v2/trace/otlp", rcv.HTTPHandler())
 	if managedLaunchAuthorized && observerOwner == "cli" && observerMode == managedObserverMode {
@@ -281,11 +287,12 @@ func run(config runConfig) error {
 		repositoryCorrelationModeResolver,
 		freeAccountSubmitter,
 		userConfig.status,
+		adoptionTelemetry.mcpHooks(),
 	}
 	mcp.Register(mux, s, mcpParams...)
 	webCleanup := web.Register(mux, s, v)
 
-	srv := &http.Server{Addr: mainAddr, Handler: mux, ConnContext: rcv.HTTPConnContext}
+	srv := &http.Server{Addr: mainAddr, Handler: adoptionTelemetry.handler(mux), ConnContext: rcv.HTTPConnContext}
 	mainListener, err := listenObserverHTTP("tcp", mainAddr)
 	if err != nil {
 		// We reached here having bound the OTLP ports, so this process owns the
@@ -346,6 +353,7 @@ func run(config runConfig) error {
 		}
 	}()
 
+	adoptionTelemetry.observerStarted()
 	fmt.Fprint(os.Stderr, renderStartupBanner(mainAddr, otlpHTTPAddr, otlpGRPCAddr))
 	warnStaleMCPPortConfigs(os.Stderr, port)
 
@@ -381,6 +389,12 @@ func envOr(key, fallback string) string {
 	}
 	return fallback
 }
+
+// resolveObserverOwner names what started this observer. Whatever launches
+// obstudio (the VS Code extension, a managed start, the eval image) sets
+// OBSTUDIO_OWNER in its environment; a person running the binary directly
+// sets nothing, so the default is cli.
+func resolveObserverOwner() string { return envOr("OBSTUDIO_OWNER", "cli") }
 
 func envBool(key string) bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv(key))) {

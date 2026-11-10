@@ -146,6 +146,26 @@ type toolContent struct {
 // repository-correlation mode for a provider.
 type RepositoryCorrelationModeResolver func(provider string) string
 
+// UsageHooks lets the composition root observe tool use without this package
+// knowing who listens. Nil fields are ignored.
+type UsageHooks struct {
+	// ToolsCall runs after a tools/call request is served, on POST /mcp or
+	// on stdio.
+	ToolsCall func()
+	// ValidationRun runs after a validation tool call that executed a run.
+	ValidationRun func()
+	// Connect runs after a tool call succeeds and the observer then holds a
+	// realm and access token for a Splunk Observability Cloud org. Whether
+	// export is enabled does not matter.
+	Connect func()
+}
+
+func runHook(fn func()) {
+	if fn != nil {
+		fn()
+	}
+}
+
 // Dispatcher handles MCP JSON-RPC method dispatch independent of transport.
 type Dispatcher struct {
 	store                             *store.Store
@@ -155,6 +175,7 @@ type Dispatcher struct {
 	repositoryCorrelationModeResolver RepositoryCorrelationModeResolver
 	freeAccount                       freeaccount.Submitter
 	configStatus                      *configstatus.Builder
+	hooks                             UsageHooks
 	tools                             []toolDef
 }
 
@@ -167,8 +188,11 @@ func NewDispatcher(s *store.Store, params ...any) *Dispatcher {
 	var repositoryCorrelationModeResolver RepositoryCorrelationModeResolver
 	var freeAccountSubmitter freeaccount.Submitter
 	var configStatus *configstatus.Builder
+	var hooks UsageHooks
 	for _, param := range params {
 		switch value := param.(type) {
+		case UsageHooks:
+			hooks = value
 		case *configstatus.Builder:
 			if value != nil {
 				configStatus = value
@@ -210,6 +234,7 @@ func NewDispatcher(s *store.Store, params ...any) *Dispatcher {
 		repositoryCorrelationModeResolver: repositoryCorrelationModeResolver,
 		freeAccount:                       freeAccountSubmitter,
 		configStatus:                      configStatus,
+		hooks:                             hooks,
 		tools:                             buildToolDefs(splunkMetricsCtrl != nil, freeAccountSubmitter != nil),
 	}
 }
@@ -232,7 +257,9 @@ func (d *Dispatcher) DispatchContext(ctx context.Context, req jsonRPCRequest) (j
 	case "tools/list":
 		return d.handleToolsList(req), true
 	case "tools/call":
-		return d.handleToolsCall(ctx, req), true
+		resp := d.handleToolsCall(ctx, req)
+		runHook(d.hooks.ToolsCall)
+		return resp, true
 	default:
 		return rpcError(req.ID, -32601, fmt.Sprintf("Method not found: %s", req.Method)), true
 	}
@@ -433,6 +460,9 @@ func (d *Dispatcher) validationAnalyze(ctx context.Context, args map[string]any)
 		}
 		return jsonValidationErrorResult(err, suggestedTool, "observer_validation_status")
 	}
+	if analysis.AnalysisBasis == validator.AnalysisBasisFreshRun {
+		runHook(d.hooks.ValidationRun)
+	}
 	return jsonToolResult(analysis)
 }
 
@@ -442,6 +472,7 @@ func (d *Dispatcher) validationRefresh(ctx context.Context, args map[string]any)
 	if err != nil {
 		return jsonValidationErrorResult(err, "observer_validation_status")
 	}
+	runHook(d.hooks.ValidationRun)
 	return jsonToolResult(analysis)
 }
 
@@ -506,6 +537,9 @@ func (d *Dispatcher) splunkMetricsExportConfigure(args map[string]any) toolResul
 	}
 	if err := d.splunkMetricsCtrl.Configure(cfg); err != nil {
 		return errorResult(fmt.Sprintf("configure Splunk metrics export: %v", err))
+	}
+	if held := d.splunkMetricsCtrl.Config(); held.Realm != "" && held.AccessToken != "" && held.Endpoint == "" {
+		runHook(d.hooks.Connect)
 	}
 	return jsonToolResult(d.splunkMetricsCtrl.Status())
 }

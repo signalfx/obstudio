@@ -17,6 +17,7 @@ var notifyConfigChanged = web.NotifyConfigChanged
 // could not be built.
 type userConfigWiring struct {
 	manager *userconfig.Manager
+	path    string
 	api     api.UserConfig
 	status  *configstatus.Builder
 }
@@ -46,5 +47,5 @@ func openUserConfig() userConfigWiring {
 		return userConfigWiring{}
 	}
 	m.SubscribeFile(func() { notifyConfigChanged() })
-	return userConfigWiring{manager: m, api: api.NewUserConfig(m), status: configstatus.New(m, path)}
+	return userConfigWiring{manager: m, path: path, api: api.NewUserConfig(m), status: configstatus.New(m, path)}
 }
