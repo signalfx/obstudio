@@ -18,7 +18,8 @@
     "rubric_enabled": false,
     "runtime_enabled": false,
     "workers": "1",
-    "validation_scope": "full"
+    "validation_scope": "full",
+    "source_snapshot_refreshed_without_eval_execution": true
   },
   "evals": [
     {
@@ -986,7 +987,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "a92c0c4d5dbf5e3eda5ad8509b272d82ec67d73239112a9bfb211d65f9b32182",
+    "digest": "0ea0b081e8bed19ac1c3257d4850e7cc1e734c1c269bdfa7610e83cdf1989dd9",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -1432,7 +1433,7 @@
       "evals/java/kafka-streams/src/test/java/com/example/streaming/OrderStreamTopologyTest.java": "ac6d6948bd24050982b1a6eaca082f70469c468e5ffdad1f9eec4efd438e8ef1",
       "evals/java/kafka-streams/eval/qual/instrument.json": "a0f6d6085af022ffe941d09f34536270ac31dbf70e06ad90f639dadb6302757c",
       "evals/java/springboot-basic/eval/qual/instrument.json": "6ec505436c131f1ecebe0f97fdd8142d7f9e9440f7968b429a939deb112ab296",
-      "evals/java/springboot-basic/pom.xml": "2b6e5f88faf91bf8891d728bd51bc6737ca8919bd657caaaa416ff3c6550f625",
+      "evals/java/springboot-basic/pom.xml": "488faed3b8cb11d40b192e575667f34085485a08da6a74200974e91e5d7fd9f6",
       "evals/java/springboot-basic/src/main/java/com/example/tasks/Task.java": "97437951adcb1592b1f4e48af10f799501858ed40949575f8278d9a644f80cfc",
       "evals/java/springboot-basic/src/main/java/com/example/tasks/TaskController.java": "a32f9883586bd13b5ecf6f015f587b25ac696a55423398a01e3fe1619f9020fa",
       "evals/java/springboot-basic/src/main/java/com/example/tasks/TasksApplication.java": "2aeefcee33840914b4118f0b6615205c37ae50ecf5cb774c32a6f5d9431f62c5",
