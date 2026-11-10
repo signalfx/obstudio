@@ -7,7 +7,7 @@
     "mode": "with_skill",
     "eval_kind": "rubric",
     "skill": "otel-instrument",
-    "run_id": "20261110T184739892225Z",
+    "run_id": "20261110T191507611780Z",
     "agent_model": "gpt-6.1-sol",
     "judge_model": "gpt-6.1-sol",
     "rubric_enabled": true,
@@ -21,11 +21,11 @@
     "failure_count": 5,
     "with_skill": {
       "prompt_count": 1,
-      "command_count": 70,
-      "duration_seconds": 1139.265,
-      "agent_duration_seconds": 983.605,
-      "tokens": 7519114,
-      "agent_tokens": 6404657,
+      "command_count": 69,
+      "duration_seconds": 1214.483,
+      "agent_duration_seconds": 995.77,
+      "tokens": 8278455,
+      "agent_tokens": 6281187,
       "error_count": 0,
       "agent_usage": {
         "provider": "codex",
@@ -33,14 +33,14 @@
         "observed": true,
         "usage_record_count": 1,
         "selected_record_count": 1,
-        "input_tokens": 6363538,
-        "cached_input_tokens": 6186752,
+        "input_tokens": 6238260,
+        "cached_input_tokens": 6101120,
         "cache_creation_input_tokens": 0,
-        "output_tokens": 41119,
-        "reasoning_output_tokens": 9061,
+        "output_tokens": 42927,
+        "reasoning_output_tokens": 10027,
         "provider_total_tokens": null,
-        "derived_total_tokens": 6404657,
-        "effective_total_tokens": 6404657,
+        "derived_total_tokens": 6281187,
+        "effective_total_tokens": 6281187,
         "coverage": {
           "record_count": 1,
           "modeled_count": 1,
@@ -61,24 +61,24 @@
       "rubric": {
         "passed": 9,
         "total": 14,
-        "average_score": 79.0
+        "average_score": 78.0
       },
-      "rubric_tokens": 1114457,
-      "rubric_duration_seconds": 155.536,
+      "rubric_tokens": 1997268,
+      "rubric_duration_seconds": 218.604,
       "rubric_usage": {
         "provider": "codex",
         "source": "cumulative",
         "observed": true,
         "usage_record_count": 1,
         "selected_record_count": 1,
-        "input_tokens": 1108193,
-        "cached_input_tokens": 979968,
+        "input_tokens": 1988363,
+        "cached_input_tokens": 1828480,
         "cache_creation_input_tokens": 0,
-        "output_tokens": 6264,
-        "reasoning_output_tokens": 1563,
+        "output_tokens": 8905,
+        "reasoning_output_tokens": 3166,
         "provider_total_tokens": null,
-        "derived_total_tokens": 1114457,
-        "effective_total_tokens": 1114457,
+        "derived_total_tokens": 1997268,
+        "effective_total_tokens": 1997268,
         "coverage": {
           "record_count": 1,
           "modeled_count": 1,
@@ -111,11 +111,11 @@
       ],
       "with_skill": {
         "prompt_count": 1,
-        "command_count": 70,
-        "duration_seconds": 1139.265,
-        "agent_duration_seconds": 983.605,
-        "tokens": 7519114,
-        "agent_tokens": 6404657,
+        "command_count": 69,
+        "duration_seconds": 1214.483,
+        "agent_duration_seconds": 995.77,
+        "tokens": 8278455,
+        "agent_tokens": 6281187,
         "error_count": 0,
         "agent_usage": {
           "provider": "codex",
@@ -123,14 +123,14 @@
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 6363538,
-          "cached_input_tokens": 6186752,
+          "input_tokens": 6238260,
+          "cached_input_tokens": 6101120,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 41119,
-          "reasoning_output_tokens": 9061,
+          "output_tokens": 42927,
+          "reasoning_output_tokens": 10027,
           "provider_total_tokens": null,
-          "derived_total_tokens": 6404657,
-          "effective_total_tokens": 6404657,
+          "derived_total_tokens": 6281187,
+          "effective_total_tokens": 6281187,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -151,24 +151,24 @@
         "rubric": {
           "passed": 9,
           "total": 14,
-          "average_score": 79.0
+          "average_score": 78.0
         },
-        "rubric_tokens": 1114457,
-        "rubric_duration_seconds": 155.536,
+        "rubric_tokens": 1997268,
+        "rubric_duration_seconds": 218.604,
         "rubric_usage": {
           "provider": "codex",
           "source": "cumulative",
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 1108193,
-          "cached_input_tokens": 979968,
+          "input_tokens": 1988363,
+          "cached_input_tokens": 1828480,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 6264,
-          "reasoning_output_tokens": 1563,
+          "output_tokens": 8905,
+          "reasoning_output_tokens": 3166,
           "provider_total_tokens": null,
-          "derived_total_tokens": 1114457,
-          "effective_total_tokens": 1114457,
+          "derived_total_tokens": 1997268,
+          "effective_total_tokens": 1997268,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -190,9 +190,9 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/otel-instrument/20261110T184739892225Z/results/go/chi-basic/qual-logging-instrument-contract/eval.json",
-        "with_skill": ".workspace/codex-evals/otel-instrument/20261110T184739892225Z/results/go/chi-basic/qual-logging-instrument-contract/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/otel-instrument/20261110T184739892225Z/results/go/chi-basic/qual-logging-instrument-contract/with_baseline.json"
+        "eval": ".workspace/codex-evals/otel-instrument/20261110T191507611780Z/results/go/chi-basic/qual-logging-instrument-contract/eval.json",
+        "with_skill": ".workspace/codex-evals/otel-instrument/20261110T191507611780Z/results/go/chi-basic/qual-logging-instrument-contract/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/otel-instrument/20261110T191507611780Z/results/go/chi-basic/qual-logging-instrument-contract/with_baseline.json"
       }
     }
   ],
@@ -203,7 +203,7 @@
       "prompt": "logging-trial-1",
       "category": "rubric",
       "result": "rubric:rubric-2 FAIL",
-      "evidence": "service/.observe/otel-instrumentation.md:158-187 groups exporter timeout/compression/headers/TLS/proxy and several numeric settings; installed config.go exposes additional resolvable branches.",
+      "evidence": ".observe/otel-instrumentation.md:135-154 leaves multiple numeric/enum branches future-only. Its certificate row says HTTP does not use TLS certificates, but installed loadEnvTLS constructs TLS configuration and newHTTPClient rejects its combination with the selected insecure endpoint, disabling local log export.",
       "mode": "with_skill"
     },
     {
@@ -212,7 +212,7 @@
       "prompt": "logging-trial-1",
       "category": "rubric",
       "result": "rubric:rubric-9 FAIL",
-      "evidence": "Instrumentation report lines 149 and 183; installed sdk/log v0.22.0 record.go defines logAttrDropped with sync.OnceFunc, while attrnorm/truncate.go emits no diagnostic.",
+      "evidence": "The report gives count=128 and value length=-1 but leaves depth and combined diagnostic cadence unproven. Installed record.go has a package-wide sync.OnceFunc for count-limit diagnostics; attrnorm.TruncateValue recursively handles supported values without emitting diagnostics or enforcing depth. These distinctions are absent from the report.",
       "mode": "with_skill"
     },
     {
@@ -221,7 +221,7 @@
       "prompt": "logging-trial-1",
       "category": "rubric",
       "result": "rubric:rubric-10 FAIL",
-      "evidence": "otel-verify.md response ledger records full 3/0, partial 2/1 and warning 3/0. Installed client.go assigns timeout to http.Client; retry.go checks elapsed+throttle but waits max(throttle, backoff). The batch timeout wrapper supplies a separate enclosing deadline.",
+      "evidence": "TestLogDeliveryControls records N=2 with accepted/rejected counts 2/0, 1/1 and 2/0. verify_runtime.py:156-161 checks final body/count/severity and service filtering, but not its environment/version or absent context. The report lists a 60-second retry elapsed setting without resolving the loop's max(backoff, throttle) overshoot condition.",
       "mode": "with_skill"
     },
     {
@@ -230,7 +230,7 @@
       "prompt": "logging-trial-1",
       "category": "rubric",
       "result": "rubric:rubric-13 FAIL",
-      "evidence": "TestResourcePreservesOperator covers resource-only identity through telemetryResource. runtime_probe.py always assigns OTEL_SERVICE_NAME; the host checker also uses an explicit service name.",
+      "evidence": "TestResourceMerge tests resource-only identity through the helper. Every verify_runtime.py trial explicitly sets OTEL_SERVICE_NAME, and the host run also supplies it. No normal-launch receipt exercises resource-only service.name or the go-chi-basic fallback.",
       "mode": "with_skill"
     },
     {
@@ -239,13 +239,13 @@
       "prompt": "logging-trial-1",
       "category": "rubric",
       "result": "rubric:rubric-14 FAIL",
-      "evidence": "otel-instrumentation.md LOG-SPEC-CLOSURE and remaining controls; retained otlp.md:464-500 distinguishes these transport clauses. The installed record.go, config.go and retry.go resolve facts omitted from the report.",
+      "evidence": "LOG-SPEC-CLOSURE primarily binds hashed logging-readiness.md excerpts rather than retained primary clauses. The transport row does not separately dispose the semantics-preserving reduction SHOULD, diagnostic-trimming MAY and cross-surface configurability SHOULD. Configuration equivalence, SDK-disabled propagation, processor Export synchronization and complete timeout/TLS consumer behavior are also not reconciled.",
       "mode": "with_skill"
     }
   ],
   "source": {
     "digest_version": 4,
-    "digest": "92b1d9e1414cd85f9dd6bc71f297c1b070acba445af6642b88ac2c62af30341a",
+    "digest": "b741602e618afa15622162594d3af98908cf9135a355a170d757b0a96954a210",
     "eval_kinds": [
       "rubric"
     ],
@@ -254,7 +254,7 @@
       "evals/codex-evals.toml": "d89dac81794f47361a312db0b9e303f37a0e5ff60a075e2924ff3c9589ee472b",
       "evals/go/chi-basic/Makefile": "4fa7a1c389866c15986b27d22da0bee109bf6bc438f0d29e2b42d7f6d36ea68a",
       "evals/go/chi-basic/README.md": "d45bc585c33f2b9e0e09b22bb7113322fc9be9d981c4e56d513be05905913984",
-      "evals/go/chi-basic/eval/qual/logging-instrument-contract.json": "a384621bde4077ca5e0b598d2e7704a18874f70d72fcec6a0042e67ee2d2ee40",
+      "evals/go/chi-basic/eval/qual/logging-instrument-contract.json": "ff3c4710735a4b855ee5e59d1af89b127b26d0f393f002f845cee4c381a71dd7",
       "evals/go/chi-basic/go.mod": "908fdaa4c13ee16e8f08583f45cfcaa4ac2c5ba06ba8d3b8473928f2e7d0c8f3",
       "evals/go/chi-basic/main.go": "bb8ca564254a9fc733166fccb1b60aacb3a2ee04d8fc5932a25b1a8cd31ba70b",
       "pytest-codex-evals/src/pytest_codex_evals/ab.py": "a100dcc1e6c99ea54fc619c0a80b1ebf863529cff5c18ac42da59f80de65b952",
@@ -285,7 +285,7 @@
       "skills/references/languages/python.md": "f182b81e814a3a78a74fa3532c23c98932f3b43a5e0759b7c7f5b76d1bf6f5c1",
       "skills/references/ledger-template.md": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc",
       "skills/references/local-otlp-receiver.md": "6f58148de9ef2fd3e617ddc2622ee09ba785b202100b91261a727af6e3dc7cec",
-      "skills/references/logging-readiness.md": "dd23ca09cffc8b35f985a3d1550b1599970c4a3fb1148ec8b8de6c99fd9434b2",
+      "skills/references/logging-readiness.md": "138343d9171286f41f28ad0b14b24f5518e85d40b1207e08de27b0c4d82535ce",
       "skills/references/report-flow-contract.md": "d00ca857d4a875dcdb8a699cbf82eda612f42a4f88152ff7a83b4a74eb1b4d0f",
       "skills/references/scripts/observe_report.py": "2a14c9f74d1bfff9f42bae2a7328ea740028a4858db587d0eb6758538f9fcbe5",
       "skills/references/scripts/observe_report_core.py": "17c3fc981a358725161856b9484b368cc6980b62e5e92e78153a363ee68db8ae",
