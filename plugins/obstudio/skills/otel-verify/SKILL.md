@@ -291,12 +291,12 @@ Inspect the repo before running anything:
 
 Create these working inventories before choosing commands:
 
-For logging, reopen `../references/logging-readiness.md` now. Expand each bound
-trigger and acceptance list into individual controls before writing probes, with
-named assertions, actual configuration, proof boundary and initial Not run state.
-Prior Working rows and aggregate suite counts do not supply missing controls.
-Use the common proof-mode table for both scenario and item results; a test's
-location in the app repository does not make an isolated SDK probe `app_test`.
+For logging, read `../references/logging-readiness.md` now. Independently derive
+the required controls from the complete bound contract, then reconcile named
+assertions, actual configuration, proof boundaries and missing results. Prefer
+this before writing probes; assess completeness rather than chronology alone.
+Prior Working rows and suite totals do not supply missing controls. Use the common
+proof-mode table for both scenarios and item results; package location is not proof.
 
 ```markdown
 ## Signal Inventory

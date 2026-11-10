@@ -1841,11 +1841,11 @@ permission to run a project-configured syntax, compile, typecheck, import, or
 focused test command. Do not require full app startup, Docker, credentials,
 live providers, or an OTLP collector for this gate.
 
-For logging, reopen `../references/logging-readiness.md` before authoring probes.
-Build its individual required-control inventory from both the bound trigger and
-acceptance text first; keep named assertions and initial Not run states. Use its
-proof-mode table for the actual SDK/application path. A passing suite cannot
-promote controls omitted from that suite, or give all item results one proof mode.
+For logging, read the planning and readback checks in
+`../references/logging-readiness.md`. Reconcile the full required-control set with
+named assertions, actual outcomes and missing proof. Prefer doing this before
+authoring probes; a complete independent reconciliation remains valid afterward.
+Use the actual path's proof mode, and do not infer omitted controls from suite totals.
 
 At minimum:
 

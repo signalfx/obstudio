@@ -105,10 +105,20 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
         assert term in common
     assert "Flask" not in common and "BatchLogRecordProcessor" not in common
     assert "800ms" not in common and "1000ms" not in common
+    common_words = " ".join(common.split())
+    for term in (
+        "Configuration value types", "accepted representation", "declared type",
+        "non-negative integer milliseconds", "normative references imported",
+        "promised operation/outcome", "scalar level applies", "prose caveat",
+        "same configured process", "event ordering", "not a particular tool-call order",
+    ):
+        assert term in common_words
+    assert "https://opentelemetry.io/docs/specs/otel/configuration/common/" in common
     if skill == "otel-audit":
         instructions = _read(side / ".agents" / "skills" / skill / "SKILL.md")
-        assert "before assigning scenario IDs" in instructions
-        assert "including planned controls" in instructions
+        assert "Judge the completed allocation, not draft chronology" in instructions
+        assert "promised operations/outcomes" in instructions
+        assert "IDs, environments and scalar proof level" in instructions
     if skill == "otel-instrument":
         instructions = _read(side / ".agents" / "skills" / skill / "SKILL.md")
         assert "Captured framework/container records" in instructions
@@ -116,11 +126,11 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
         assert "another audit merely" in instructions
         assert "Before serializing logging verdicts" in instructions
         assert "logging-readiness.md#report-readback" in instructions
-        assert "before authoring probes" in instructions
+        assert "complete independent reconciliation remains valid afterward" in instructions
 
     if skill == "otel-verify":
         instructions = _read(side / ".agents" / "skills" / skill / "SKILL.md")
-        assert "before writing probes" in instructions
+        assert "assess completeness rather than chronology alone" in instructions
         assert "Reconcile newly executed results" in instructions
         assert "logging-readiness.md#report-readback" in instructions
 

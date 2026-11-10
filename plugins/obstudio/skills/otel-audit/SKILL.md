@@ -376,12 +376,12 @@ proof.
   `full runtime`, or `either`. Use `full runtime` when that control depends on agent or
   preload startup, framework-resolved route names, automatic metrics,
   runtime-installed log export, or absence of duplicate automatic spans.
-  For logging, inventory individual controls and group them by proof boundary
-  before assigning scenario IDs. Classify each claim by the actual path needed
-  to prove it, separating isolated capability checks from normal application
-  execution. Reference related focused prerequisites without promoting their
-  scope or transferring their upstream owner to application code. Reconcile
-  every trigger and acceptance clause, including planned controls.
+  For logging, map selected findings' promised operations/outcomes into individual
+  controls using the shared allocation check. Each published scenario must have
+  compatible paths, IDs, environments and scalar proof level. That level applies
+  to every trigger and acceptance assertion; prose cannot override it for a
+  subcase. Reference separately scoped prerequisites without promoting their
+  proof or upstream owner. Judge the completed allocation, not draft chronology.
 - For a default local application-log pipeline, include scenarios that prove
   body/category, severity, the same service resource identity as traces and
   metrics, trace/span correlation inside an active span, final-pipeline

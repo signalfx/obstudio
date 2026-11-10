@@ -36,6 +36,7 @@ The [log data model](https://opentelemetry.io/docs/specs/otel/logs/data-model/),
 [Logs API](https://opentelemetry.io/docs/specs/otel/logs/api/),
 [Logs SDK](https://opentelemetry.io/docs/specs/otel/logs/sdk/),
 [SDK configuration](https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/),
+[common configuration types](https://opentelemetry.io/docs/specs/otel/configuration/common/),
 [resource merging](https://opentelemetry.io/docs/specs/otel/resource/sdk/),
 [event/attribute naming](https://opentelemetry.io/docs/specs/semconv/general/naming/),
 [log registry](https://opentelemetry.io/docs/specs/semconv/registry/attributes/log/),
@@ -124,6 +125,34 @@ the normal pipeline cannot be excluded from its privacy assessment merely
 because the original call-site inventory listed only application messages.
 Keep separately routed SDK self-diagnostics distinct from those framework records.
 
+### Configuration value types
+
+Resolve a setting's accepted representation as well as its unit. Validate the
+actual proposed value against the selected configuration source's declared type,
+range and parser. A unit label does not authorize a unit suffix or a different
+serialization. Native APIs can use language-specific typed values; inspect their
+conversion rather than copying environment syntax into a constructor or vice versa.
+
+For supported standard configuration sources, retain the applicable
+[common type rules](https://opentelemetry.io/docs/specs/otel/configuration/common/):
+duration and timeout values MUST represent non-negative integer milliseconds;
+negative values MUST generate a warning and be ignored, using a default when defined.
+Timeout zero SHOULD mean no limit, which MAY use a sufficiently large internal
+duration. Integer support SHOULD cover 0 through 2^31-1 and MAY extend it,
+subject to the setting's valid range. Unparseable or out-of-range numeric settings
+SHOULD be warned about and ignored; retain the post-stabilization compatibility
+qualification and its MUST treatment for new implementations. A rejected
+value falling back to a default does not prove the proposed bound is effective.
+
+Enum sources MAY extend supported values. If an enum accepts a null/no-op choice,
+its name MUST be `none`. Standard environment enums SHOULD be case-insensitive; unknown
+values MUST generate a warning and be ignored. The common specification's SHOULD
+to show the original value in configuration errors supports diagnosis; retain any
+privacy constraint instead of exposing a forbidden value. Environment configuration
+MUST have a direct code equivalent. These are configuration-implementation duties:
+verify the installed owner, preserve adequate defaults and report unsupported
+capability instead of adding an application parser or exposing secret values.
+
 ## LOG-SPEC-CLOSURE -- Reconcile sources, implementation and proof
 
 Begin with the applicable official source sections, not only this guide's rule
@@ -133,6 +162,10 @@ semantic-convention author, application, collector or operator). Attribute
 requirement levels bind the instrumentation library; inspect its ownership
 before assigning an application fix. Supplementary guidance adds no normative
 SDK requirements.
+Follow applicable normative references imported by those sections, including
+common type and value rules. Record inherited obligations with their source,
+strength and owner; reading a referring page alone does not establish coverage
+of its referenced contract. Keep this traversal scoped to the selected path.
 Separate upstream requirements, optional/development capabilities and the
 repository's local destination/privacy policy. If current sources are unavailable,
 name the snapshot and leave unsupported conclusions unverified.
@@ -148,6 +181,18 @@ evidence, covered/partial/missing/unverified/not-applicable, finding/scenario
 IDs where needed, and the actual proof boundary. An SDK-owned default can be
 covered without an application override; absence of an installed capability is
 not proof that an application has implemented it.
+
+Use source-clause bindings rather than topic summaries as the stable matrix key:
+
+| Source and exact clause binding | Strength, conditions and applicability | Owner | Current capability/evidence | Finding/control and actual proof |
+|---|---|---|---|---|
+| Retained excerpt with hash/lines, or precise clause text with source/date | Preserve each distinct duty, permission and qualifier | Actual component | Supported/default/unsupported/unverified with current evidence | Selected mapping, executed boundary or concrete future check |
+
+A grouped excerpt can retain several clauses when their individual dispositions
+remain addressable. Keep that binding intact while updating implementation and
+proof columns. A shorter summary may aid reading, but cannot replace a clause or
+its conditions. Without an audit, build the same bindings in the normal direct
+instrumentation report; no fabricated audit or additional artifact type is needed.
 
 To avoid duplicating or weakening source text, a matrix row may bind its
 normative clauses to a precisely bounded retained excerpt (file/hash plus lines
@@ -222,19 +267,30 @@ application proof. Use `either` only when one identical contract genuinely permi
 alternative adequate proof. Keep each grouped claim's owner and disposition
 explicit. Application scenarios may reference focused prerequisites without
 claiming that their execution occurred through the application path.
+Map every selected finding's promised operation/outcome, including its
+`expected_telemetry` and acceptance text, to an addressable planned trigger and
+acceptance control. Classify each control's execution path first,
+then group compatible controls and assign IDs, environments and `proof_level`.
+That scalar level applies to every trigger/acceptance assertion in its row; a
+prose caveat cannot give one subcase a different level. Give differing paths
+separate scenario IDs and reference their relationship. An identical contract
+may use `either` only when either boundary independently supplies adequate proof.
+Before serializing, compare promised outcomes, allocated controls and row levels
+to find omitted operations or mixed scopes without changing the selected scope.
 A related SDK/exporter or receiver acceptance check does not transfer that
 owner's duty to application code; retain unsupported/unverified capability and
 conditional future checks rather than proposing application substitutes.
 
-Before authoring probes/tests, expand each bound scenario's trigger AND acceptance
-criteria into individual controls in existing evidence fields or a Markdown
-checklist. Include list members, input variants, requested operations and event
+Expand each bound scenario's trigger AND acceptance criteria into individual
+controls in existing evidence fields or a Markdown checklist. Prefer doing this
+before authoring targeted probes; the required outcome is a complete, independently
+contract-derived reconciliation, not a particular tool-call order. Include list members, input variants, requested operations and event
 orders: scenario ID/control text, expected input/outcome, effective launch/exporter
 configuration, named test/subtest or assertion, planned command, proof boundary
-and initial Not run verdict. Existing smoke tests and discovery checks may run
-before this inventory; build it before authoring new targeted probes. Do not
-generate the required controls retroactively from the tests that happened to
-pass. A grouped display is valid when it references a parameterized case table,
+and an evidence-derived verdict. Initial discovery or tests can precede the
+inventory. A later inventory is valid when it independently covers the complete
+required contract and reconciles actual assertions, receipts and missing proof.
+Do not derive the required control set from only the tests that happened to pass. A grouped display is valid when it references a parameterized case table,
 test or assertion/output that makes every input, operation and event order
 individually addressable. One physical report row per control is not required.
 Copying a whole acceptance paragraph into one cell without those bindings is
@@ -552,6 +608,12 @@ without secrets, and configured unrelated signals remain usable. An HTTP 200
 with OTLP partial-success rejected records is not full acceptance. Report
 attempted, received, rejected and dropped evidence separately; never infer
 receipt from a successful enqueue or flush call alone.
+When the existing or selected stop policy handles repeated requests, exercise
+them on the same configured process while final logging/provider drain is still
+active. Retain observable request delivery and event ordering. Separate single
+stops, requests after exit or a test without the active pipeline cannot prove
+that lifecycle conjunction. Assess deliberate forced exit under its actual
+policy rather than describing it as a successful graceful drain.
 Where implemented, [development SDK log metrics](https://opentelemetry.io/docs/specs/semconv/otel/sdk-metrics/) can supply
 creation, queue-pressure, processed and exported counts. Record each instrument's
 stage and retry/rejection semantics; created/processed is not receiver acceptance.
