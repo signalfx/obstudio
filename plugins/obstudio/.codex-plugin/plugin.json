@@ -9,6 +9,7 @@
   "homepage": "https://github.com/signalfx/obstudio",
   "repository": "https://github.com/signalfx/obstudio",
   "license": "Apache-2.0",
+  "privacyPolicyUrl": "https://github.com/signalfx/obstudio/blob/main/plugins/obstudio/PRIVACY.md",
   "keywords": [
     "opentelemetry",
     "observability",
