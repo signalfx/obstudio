@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-instrument",
-    "run_id": "20261110T213608756559Z",
+    "run_id": "20261110T213900608798Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-6-luna",
     "judge_model": "",
@@ -986,7 +986,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "ee03c7bd9751168ed1db3cbbd9e15aa91acabae70d0c8eb84cdd73e2a2341921",
+    "digest": "c85d52a99811d9c134f3895bd512fc7fb9036d89038a36dc3c484a0442216a36",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -1432,7 +1432,7 @@
       "evals/java/kafka-streams/src/test/java/com/example/streaming/OrderStreamTopologyTest.java": "ac6d6948bd24050982b1a6eaca082f70469c468e5ffdad1f9eec4efd438e8ef1",
       "evals/java/kafka-streams/eval/qual/instrument.json": "a0f6d6085af022ffe941d09f34536270ac31dbf70e06ad90f639dadb6302757c",
       "evals/java/springboot-basic/eval/qual/instrument.json": "6ec505436c131f1ecebe0f97fdd8142d7f9e9440f7968b429a939deb112ab296",
-      "evals/java/springboot-basic/pom.xml": "6c6eb3ffe280927f6e5538292d29154e08068342582a27b4992839910b07404f",
+      "evals/java/springboot-basic/pom.xml": "c05ac1f7284741811fda243e0ee98cc61c5046c323e74d0f124816cc5fb2d690",
       "evals/java/springboot-basic/src/main/java/com/example/tasks/Task.java": "97437951adcb1592b1f4e48af10f799501858ed40949575f8278d9a644f80cfc",
       "evals/java/springboot-basic/src/main/java/com/example/tasks/TaskController.java": "a32f9883586bd13b5ecf6f015f587b25ac696a55423398a01e3fe1619f9020fa",
       "evals/java/springboot-basic/src/main/java/com/example/tasks/TasksApplication.java": "2aeefcee33840914b4118f0b6615205c37ae50ecf5cb774c32a6f5d9431f62c5",
