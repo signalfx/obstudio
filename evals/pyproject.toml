@@ -9,7 +9,7 @@ dependencies = [
   "pytest-codex-evals",
   "pytest>=8.0.0",
   "pytest-xdist>=3.6.0",
-  "python-dotenv>=1",
+  "python-dotenv>=1.2.2",
 ]
 
 [tool.uv.sources]
