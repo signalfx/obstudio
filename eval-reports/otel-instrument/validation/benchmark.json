@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-instrument",
-    "run_id": "20261110T214826824198Z",
+    "run_id": "20261110T215145540375Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-6-luna",
     "judge_model": "",
@@ -986,7 +986,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "00230fb68b54ea28af110f5a4e5b486e48eb6196a9fa1db83b7edccf4160a6a5",
+    "digest": "c85c6a02419943f9843e2c6bbaa3290250ce8c341e98f1d3ce45b8a3e95e3cfa",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -1189,8 +1189,8 @@
       "observer/cmd/obstudio/userconfig_wiring.go": "a72e3a3f1aea732b381db781660f68bb67f4e6d749d7126068abb55262218a2b",
       "observer/cmd/obstudio/userconfig_wiring_test.go": "34cc5e86686e8145c9aff41fd2bb76f0ff04362230c7e0c78ad74272e5ad9286",
       "observer/cmd/stage-skills/main.go": "c5c54a1f0cc64b5738622cf43b24e76204cdb6b4b1cf40b9c6c8108b316bdc65",
-      "observer/go.mod": "c9907c9d5246d577433d0395327f2bf001efd58fa264840b0c1e04b6a27b5c6a",
-      "observer/go.sum": "fda4b6024ba76136bd8c0f2618675d0d407bb356674f68454c8ecbad94c2454b",
+      "observer/go.mod": "f43b7fed5ad2bc43775ae310331ccb782b7591da6c296073140f149a9b005c99",
+      "observer/go.sum": "e763735b8a05e486f79746bc7975768ff69cf942fd126ac7f24c79d1f1a69007",
       "observer/internal/api/agent_observability_proxy.go": "27ad831bae44ae91fb7924e253c2c157d7859261225978096b3c4cb07e28789e",
       "observer/internal/api/agent_observability_proxy_test.go": "76a98f3b7fca3c3357b990faaba44bfd46fbc6c3b0f13d019f68bec5114a59b2",
       "observer/internal/api/ao_gateway_auth.go": "073e09f3bc34c8685b7b996f2d879a253295ac25c901080eecb21a2ff8096dff",
