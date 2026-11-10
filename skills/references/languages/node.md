@@ -721,11 +721,31 @@ unknown body with a generic redaction label loses that category even when native
 stderr still contains it. Use a supported hook at the selected privacy boundary,
 then rerun the original failing request and inspect both outputs; unsupported
 boundaries remain unresolved rather than being hidden by blanket replacement.
+When policy requires sanitization before native/bridge capture, an SDK `onEmit`
+processor is too late for the original console arguments and native sink. For
+Express, inspect its documented [error-handling middleware](https://expressjs.com/en/guide/error-handling/)
+after the routes: retain a bounded permitted category before logging, and preserve
+the selected status, headers and response contract. Account for `headersSent`
+delegation and downstream default error rendering so the original error is not
+logged again. Do not suppress the diagnostic, change unrelated responses or
+declare the native boundary covered merely because OTLP was sanitized. If that
+boundary cannot safely be repaired in scope, retain the exact unresolved result.
 
 For an exporter outage, start the actual application with its normal bootstrap,
 fault only the log destination, and prove HTTP/native progress plus real receipt
 of its other configured signals at healthy destinations. A separate log-only SDK
 provider and counting diagnostic logger cannot establish that application path.
+If an approved-destination guard prevents redirecting the live log endpoint,
+use an isolated application test with a process-local transport fault seam on
+the log route. Keep the real SDK/bootstrap, application call sites and healthy
+trace/metric exporters; retain actual failing log requests/responses and other
+signal receipts. Use the installed test framework's supported mocks/seams and
+restore them, as supported by [Node test mocking](https://nodejs.org/api/test.html#mocking).
+Report the actual `app_test` boundary rather than unmodified `full_runtime`.
+Do not stop a shared receiver, weaken production destination checks or replace
+the application's SDK with a standalone fixture. If no safe seam is available,
+name that limitation and the concrete future test; lack of an isolated namespace
+alone does not establish that all process-local test paths are unavailable.
 Exercise repeated stop requests during the active application drain under its
 chosen shutdown policy. Separate deliberate forced exit from graceful drain and
 assess the final-record receipt at its own boundary; a single-signal run does not
@@ -766,6 +786,14 @@ Verify the existing `LoggerProvider` option
 or supported effective defaults. Java's `LogLimitsBuilder` is not a Node SDK
 option. Preserve existing resource/scope and processors, and keep Body/privacy
 policy separate; do not create a second provider merely to copy these fields.
+Follow the active `NodeSDK` construction into its installed `LoggerProvider`
+configuration and limit-resolution code. Record the effective count and value
+length defaults, including an unbounded value if that is the resolved default,
+plus any actual operator/configuration support. A `LoggerProvider` option is
+not proof that `NodeSDK` forwards it, and a failed guessed source-file path is
+not an unsupported capability: locate the installed module's exported files.
+Source-proven defaults can be covered without adding an arbitrary override;
+keep unexecuted boundary tests separate from unresolved configuration evidence.
 
 For a selected batching repair, verify the installed `BatchLogRecordProcessor`
 API and `maxQueueSize`, `maxExportBatchSize`, `scheduledDelayMillis` and

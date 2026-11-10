@@ -75,6 +75,9 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
             assert "SeverityText" in readiness and "casing" in readiness
             assert ".env" in readiness and "actual application" in readiness
             assert "generic" in readiness and "diagnostic category" in readiness
+            assert "process-local transport fault seam" in readiness
+            assert "error-handling middleware" in readiness and "headersSent" in readiness
+            assert "limit-resolution code" in readiness and "exported files" in readiness
         if target == "languages/python.md":
             assert "SystemExit" in readiness and "repeated" in readiness
             assert "signal handler" in readiness and "drain" in readiness
