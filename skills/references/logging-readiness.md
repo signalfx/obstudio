@@ -55,11 +55,19 @@ fields. Reuse a parameterized table when every setting/case remains addressable:
 | Selected name and configuration source | Concrete intended input/representation | Effective value, fallback/error and diagnostic; cite parser, conversion and validation/delegate | Applicable source strength, supported/default/partial/unsupported/unverified and reason | Exact field/operation assertion or checked missing capability step |
 
 Keep each setting's valid range, default and conversion distinct even when it
-shares a primitive parser with another setting. Resolve negative, zero,
-fractional, malformed/overflow and enum/Boolean cases where applicable; naming
-the group is not their expected outcome. A Boolean control for one flag does
-not allocate another flag or numeric/enum branches. Future runtime status can
-be Not run while the corresponding source behavior is already known.
+shares a primitive parser with another setting. Trace the complete resolution:
+raw input or omission → reader → conversion → precedence/fallback → validation
+or default factory → consuming operation. An intermediate null, sentinel or
+conversion error is not the effective value. Resolve symbolic constants to
+their actual values; a constant's name is not its serialized spelling. Include
+transitively consumed fallback settings in the inventory. Where precedence
+exists, pair the higher-priority setting's absent, empty and invalid cases with
+a valid nondefault lower-priority value, as well as both absent; derive each
+result from this implementation rather than assuming universal inheritance.
+Resolve negative, zero, fractional, malformed/overflow and enum/Boolean cases
+where applicable; naming the group is not their expected outcome. A Boolean
+control for one flag does not allocate another flag or numeric/enum branches.
+Future runtime status can be Not run while source behavior is already known.
 
 Read concrete repair proposals back against the retained public API and the
 effective startup configuration too. Check constructor arguments, option names
@@ -197,7 +205,9 @@ Keep separately routed SDK self-diagnostics distinct from those framework record
 
 ### Configuration value types
 
-Resolve a setting's accepted representation as well as its unit. Validate the
+Resolve a setting's accepted representation as well as its unit. Keep a raw
+serialized assignment distinct from a display quantity with a unit label; check
+the actual assignment, not prose displaying its interpreted duration. Validate the
 actual proposed value against the selected configuration source's declared type,
 range and parser. A unit label does not authorize a unit suffix or a different
 serialization. Native APIs can use language-specific typed values; inspect their
@@ -752,6 +762,15 @@ When an OTLP response has populated
 rejected subset; this also covers warning-only responses with zero rejections.
 Keep request-attempt counts, received/accepted/rejected record counts and local
 drops distinct; receiver rejection is not evidence of a local queue drop.
+For protocol response-classification proof, keep the exporter's retry mechanism
+capable of another attempt and include a retryable-response positive control
+under that same retry policy. Disabling retries, allowing only one attempt or
+exhausting the budget before a retry is possible proves that policy/budget,
+not that the response was classified non-retryable. Preserve operator settings:
+if they preclude this distinction, retain the scoped application result and use
+an explicitly separate supported SDK control or leave classification unproven.
+This is a test-validity rule, not an OTel requirement to enable retries in every
+application.
 
 A completed negative OTLP response is a known protocol failure, not a request
 still awaiting a response from a stalled server. Record the response and any
@@ -930,7 +949,9 @@ uniqueness enforcement or other independent SDK diagnostics are not automaticall
 limit diagnostics, even when they also discard data. Configuration validation
 warnings about a limit option are also distinct from a diagnostic for record data
 actually changed by a limit. Do not classify solely from a message containing
-the word "limit". Aggregate all messages
+the word "limit" or its location in a normalization function. Follow the branch
+to its returned/stored value: a warning followed by unchanged data does not
+establish truncation, discard or replacement due to a limit. Aggregate all messages
 actually caused by limits for one record; independent once guards do not imply
 a shared per-record budget. Preserve the separate applicable diagnostic policies. Preserve an observed upstream limitation as such without
 replacing SDK diagnostic internals or claiming an application suppression fixes it.
