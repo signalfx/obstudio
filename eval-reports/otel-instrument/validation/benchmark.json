@@ -18,7 +18,8 @@
     "rubric_enabled": false,
     "runtime_enabled": false,
     "workers": "1",
-    "validation_scope": "full"
+    "validation_scope": "full",
+    "source_snapshot_refreshed_without_eval_execution": true
   },
   "evals": [
     {
@@ -986,7 +987,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "a92c0c4d5dbf5e3eda5ad8509b272d82ec67d73239112a9bfb211d65f9b32182",
+    "digest": "3f77597a90d0a5751375c9fbdac07459e528fd90dc3b5ab6ee34d397bdfa38c7",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -1189,8 +1190,8 @@
       "observer/cmd/obstudio/userconfig_wiring.go": "a72e3a3f1aea732b381db781660f68bb67f4e6d749d7126068abb55262218a2b",
       "observer/cmd/obstudio/userconfig_wiring_test.go": "34cc5e86686e8145c9aff41fd2bb76f0ff04362230c7e0c78ad74272e5ad9286",
       "observer/cmd/stage-skills/main.go": "c5c54a1f0cc64b5738622cf43b24e76204cdb6b4b1cf40b9c6c8108b316bdc65",
-      "observer/go.mod": "7867530effb8139556cdddf82fe4d5d31d564f66cb8dab436738f7f91c82001e",
-      "observer/go.sum": "e0dc05f3f4127bbe0344f842d6e968df97fda48f11d4161689ef97aa647b5403",
+      "observer/go.mod": "5960a25725e20168bab7f11205dbe5dbcc6cde76ad58971b2987b585751d1f43",
+      "observer/go.sum": "ef68a9062e9db75225df160eaa3aec37638864bac7be27e204e686e2a4b4dc19",
       "observer/internal/api/agent_observability_proxy.go": "27ad831bae44ae91fb7924e253c2c157d7859261225978096b3c4cb07e28789e",
       "observer/internal/api/agent_observability_proxy_test.go": "76a98f3b7fca3c3357b990faaba44bfd46fbc6c3b0f13d019f68bec5114a59b2",
       "observer/internal/api/ao_gateway_auth.go": "073e09f3bc34c8685b7b996f2d879a253295ac25c901080eecb21a2ff8096dff",
