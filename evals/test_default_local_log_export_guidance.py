@@ -73,6 +73,8 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
             assert "per-batch" in readiness and "acknowledged" in readiness
             assert "mixed" in readiness and "otlp_accepted" in readiness
             assert "SeverityText" in readiness and "casing" in readiness
+            assert ".env" in readiness and "actual application" in readiness
+            assert "generic" in readiness and "diagnostic category" in readiness
         if target == "languages/python.md":
             assert "SystemExit" in readiness and "repeated" in readiness
             assert "signal handler" in readiness and "drain" in readiness
@@ -92,6 +94,8 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
     assert "after decompression" in common and "HTTP 413" in common
     assert "when possible and practical" in common
     assert "MAY trim optional diagnostic fields" in common
+    assert "Ending a span" in common and "business cancellation" in common
+    assert "individual results" in common and "automated finalizer" in common
 
 
 @pytest.mark.parametrize("language", ["java", "python", "go", "node"])

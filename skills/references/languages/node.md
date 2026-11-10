@@ -689,8 +689,10 @@ An EventEmitter listener registered inside a request can later be invoked
 outside its context. With the existing functioning context manager, verify
 `context.bind(context.active(), callback)` or the framework's supported
 binding. Registration alone is not proof. Check exact request-to-log IDs and
-SDK flags under concurrency, caller detach, callback reuse and error/cancel
-cleanup; do not add another context manager or wrapper to a verified path.
+SDK flags under concurrency, caller detach and callback reuse. Test error/cancel
+cleanup on an existing owned path; do not add business cancellation just for a
+logging probe or confuse ending a span with canceling a callback. Keep a focused
+context-manager control focused; do not add a wrapper to a verified path.
 Check where a transport creates the SDK record relative to any async queue.
 Use the common real-span join, unsampled and outside-span acceptance contract.
 
@@ -706,6 +708,29 @@ OTel application bridge. Do not route exporter errors back through the same
 Winston/Pino/Console export path. Prove bounded attempts, observable diagnostics,
 application progress and original transport output during an exporter fault.
 
+### Normal-launcher resource and diagnostic controls
+
+For resource-only and absent-identity tests, use the actual application startup
+command and account for an active `.env`/profile reintroducing `OTEL_SERVICE_NAME`.
+A helper test or an inherited unset alone cannot prove absence; use an isolated
+copy for the control and retain operator-owned configuration.
+
+For a captured framework/parser failure, preserve the permitted diagnostic category
+in the exported record as well as the permitted native output. Replacing every
+unknown body with a generic redaction label loses that category even when native
+stderr still contains it. Use a supported hook at the selected privacy boundary,
+then rerun the original failing request and inspect both outputs; unsupported
+boundaries remain unresolved rather than being hidden by blanket replacement.
+
+For an exporter outage, start the actual application with its normal bootstrap,
+fault only the log destination, and prove HTTP/native progress plus real receipt
+of its other configured signals at healthy destinations. A separate log-only SDK
+provider and counting diagnostic logger cannot establish that application path.
+Exercise repeated stop requests during the active application drain under its
+chosen shutdown policy. Separate deliberate forced exit from graceful drain and
+assess the final-record receipt at its own boundary; a single-signal run does not
+test the repeated-stop policy.
+
 ### Severity text mapping
 
 Derive `SeverityText` and its exact casing from the selected bridge's resolved
@@ -719,7 +744,9 @@ rather than rewriting source severity text to fit an assumed uppercase label.
 When testing the selected OTLP exporter, decode each transmitted batch and its
 response and save per-batch N/R accounting before reporting trial totals. For a
 valid partial success, acknowledged accepted is N-R; warning-only R=0 accepts
-all N without retry. Keep received copies and persistence separate. A mixed
+all N without retry. Put the actual per-outcome numbers and durable raw-receipt
+links in the canonical report, not only a general pass or an external ledger.
+Keep received copies and persistence separate. A mixed
 fault test containing a completed negative response or stall cannot take an
 unqualified `otlp_accepted` visibility from another subtrial. Split its canonical
 observations or explain each outcome using the report's supported visibility;

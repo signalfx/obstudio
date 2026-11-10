@@ -70,13 +70,17 @@ conflicting code values, not by assuming the environment wins. Check decoding
 errors and actual merge order rather than replacing the existing provider.
 An existing `service.name` in the effective resource configuration is valid
 operator identity even when `OTEL_SERVICE_NAME` is absent. Do not add a higher-
-precedence Make, shell, CLI, image or JVM fallback that replaces it. Resolve
-resource values with the installed SDK's supported detector/merge, apply new
+precedence Make, shell, CLI, `.env`, launch profile, image or JVM fallback that
+replaces it. Resolve resource values with the installed SDK's supported detector/merge, apply new
 application defaults underneath supplied values, and inspect the actual merge
 order. Verify the normal launcher as well as the helper with resource-only
-identity, explicit service-name override and absent-identity controls. These
-preservation checks are local workflow; SDK configuration defines each setting's
-precedence, and an active file loader retains its own contract. Include resource
+identity, explicit service-name override and absent-identity controls.
+Resource-only and absent-identity controls must also account for values reloaded
+by an active `.env` or launch profile; clearing the parent environment alone can
+leave a hidden service-name override. Use an isolated configuration/project copy
+for those controls rather than deleting operator-owned settings.
+These preservation checks are local workflow; SDK configuration defines each
+setting's precedence, and an active file loader retains its own contract. Include resource
 encodings accepted by that installed configuration owner, such as whitespace
 around resource entries where supported. A shell substring match is not SDK
 parsing: appending a default after a supplied key the substring test missed can
@@ -107,7 +111,13 @@ behavior and permitted diagnostics instead of disabling all framework logging
 or replacing the provider. If no supported hook exists at that boundary, record
 the exact limitation and leave coverage unresolved. These are selected privacy
 workflow rules supported by the non-normative sensitive-data guidance, not a
-universal OTel payload prohibition.
+universal OTel payload prohibition. Preserve the permitted diagnostic category
+at each selected output boundary; retaining it only in native output does not
+justify replacing the exported category with a generic redaction label.
+An input or attribute that source evidence shows cannot reach the selected
+logging path may be not applicable; do not add a capture path just to test it.
+A control already required by the bound scenario must still be executed or
+retained as not proven, not silently removed from the contract.
 
 ## LOG-SPEC-CLOSURE -- Reconcile sources, implementation and proof
 
@@ -159,6 +169,12 @@ Reserve that audit level for normal application execution, including agent or
 preload startup, framework-resolved routes, automatic metrics or installed log export.
 Audit plans these checks; instrumentation and verification reconcile actual
 results. These are local report-contract checks, not new normative SDK requirements.
+Audit separates scenarios when their owners or required proof boundaries differ.
+Later stages retain bound IDs and distinguish observations in existing evidence
+fields. Retain each required control's expected input/outcome, actual command,
+concrete evidence and verdict; one invocation can supply several controls.
+Derive working status from those individual results, not a total test count or
+an automated finalizer that marks every selected scenario working together.
 
 For a claim combining properties, bind its evidence to the same owned path and
 operation. Separate passing unit tests for context copying and synchronous
@@ -310,7 +326,11 @@ context instead of the caller's. Preserve a supported context-capturing queue
 path, or keep the existing bridge on the caller side beside the original
 asynchronous sink and use the SDK batch processor. Never duplicate bridges.
 Test caller-created sampled/unsampled context, exact record-to-request pairing
-under concurrency, caller detach, worker reuse and error/cancellation cleanup.
+under concurrency, caller detach and worker reuse. Exercise error/cancellation
+cleanup where the owned path supports those outcomes; otherwise classify that
+application path not applicable and keep any supported SDK-scope control focused.
+Do not add business cancellation behavior solely for a logging check. Ending a span
+or detaching context is not cancellation of scheduled work.
 Include a missing-propagation control where feasible; its expected context loss
 is evidence of an unsafe path, not an acceptable production configuration.
 Link the combined real-span async scenario required by LOG-CONTEXT; independent
