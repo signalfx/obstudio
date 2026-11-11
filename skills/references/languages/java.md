@@ -829,7 +829,17 @@ overload with the same name can validate differently; another overload's check
 does not establish where or when the selected path rejects an input.
 
 Verify effective identity and configuration through the real launcher, including
-loaded profiles and operator overrides. For selected delivery checks, distinguish
+loaded profiles and operator overrides. Follow every actual child-VM property
+channel assembled by the launcher, build tool or wrapper, together with the
+selected owner's programmatic and file inputs. Supported higher-priority inputs
+can override environment variables; an environment-only endpoint/header guard
+does not establish the effective local-log policy. Test a conflicting value at
+the winning supported input and observe the effective destination, credential
+boundary and activation without printing secrets. Reuse the existing SDK/config
+owner rather than creating another parser or silently overriding operator policy;
+retain the exact unresolved boundary when it cannot be established.
+
+For selected delivery checks, distinguish
 export completion, waiting on a result, cancellation and receiver acknowledgement.
 A wait ending does not establish that background export stopped. Exercise the
 existing lifecycle owner's final-record drain and configured fault bounds without

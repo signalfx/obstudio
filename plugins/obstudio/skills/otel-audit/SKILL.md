@@ -1644,13 +1644,18 @@ JSON requirements:
   step; audit owns selection planning, while `$otel-instrument` invokes
   verification internally after implementation.
 - Every finding dependency must reference another finding ID and point from the
-  work toward its prerequisite. Give foundational setup only the acceptance it
-  can deliver with those prerequisites; bind request/worker/log integration
-  checks to the finding that owns the complete path. A repair owned only by a
-  dependent finding is unavailable when the foundation alone is selected.
-  Regroup contracts or prerequisites without cycles or dropping required
-  context transfer, final-record joins or other selected invariants. Every
-  verification scenario reference must exist in `verification.scenarios`.
+  work toward its prerequisite. Before finalizing a new audit's IDs, plan each
+  repair promise, acceptance assertion and required producer together. Give
+  foundational setup only acceptance it can deliver with its transitive
+  prerequisites; a focused provider test does not cover promised normal-launch
+  behaviour. Bind request/worker/log integration checks to the finding that owns
+  the complete path, including producers of other signals consumed by a control.
+  A repair owned only by a dependent finding is unavailable when the foundation
+  alone is selected. Group coupled bootstrap/activation/producer work when it
+  cannot form independently deliverable contracts, without cycles or dropping
+  required context transfer, final-record joins or other selected invariants.
+  Preserve established audit/selection IDs and obligations. Every verification
+  scenario reference must exist in `verification.scenarios`.
 - Put bulky command output under `.observe/evidence/` and cite it from JSON.
 
 After writing `.observe/otel-audit.json`, run `finalize-audit`. This command

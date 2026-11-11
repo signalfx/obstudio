@@ -873,6 +873,16 @@ source metadata. When extending native handler fanout, retain each handler's
 enablement, derived attributes/groups and record ownership; one disabled OTel
 branch must not suppress an enabled original destination.
 
+Resolve the native handler's actual output path before rebinding a process-wide
+default. An untouched built-in `slog` default handler can write through the
+standard logger that `slog.SetDefault` rewires; nesting it beneath the new default
+can recurse or deadlock. An application-owned logger can retain that handler
+without rebinding the process default. A captured standard-log writer adapter
+is appropriate only when it preserves the detected source's semantics; it does
+not automatically preserve native `slog` formatting or level markers. Verify the
+original formatting, enablement, sinks and ownership as well as multiplicity.
+This native-handler cycle is separate from SDK diagnostic reexport below.
+
 Resolve the existing provider and processor's public configuration, defaults,
 option units and precedence. Inspect the actual construction path before
 proposing record limits, batching or timeout changes. Reuse adequate defaults

@@ -45,26 +45,37 @@ every normal application audit, instrumentation or verification report.
    stability; a stable data model does not establish component maturity. Retain
    a source-backed status or explicit unknown/not-inspected disposition for those
    components, without inventing a beta label or upgrade requirement. Keep SDK, receiver and library duties distinct from
-   application wiring and retain precise delegated capability dispositions.
+   application wiring and retain precise delegated capability dispositions. Read
+   and retain the actual primary slice before writing a normative or specification-
+   revision claim; a remembered revision, topic URL or SDK implementation does
+   not establish it. A sourced URL/date is sufficient when no precise revision
+   has been established.
 2. **Capability:** resolve mechanisms necessary to selected application/operator
    invariants and every actual capability claim. Follow relevant parser, default,
    normalization, diagnostic and retry/deadline delegates to their consuming
    operation. “Not run” describes execution, not source capability; it cannot
    substantiate a source-contradicted claim. Resolve accessible facts for proposed
    dependencies too, or retain the exact access boundary and conditional check.
-3. **Acceptance:** combine selected source-clause controls, operator policy and
-   every promised telemetry item/field, then map each condition to an assertion
-   or precise conditional resolution step. The
-   `required-controls` helper inventories audit promises only; its output
-   excludes source-clause and acceptance controls. Add those independently.
+3. **Acceptance:** decompose repair promises before finalizing a new audit's IDs
+   or an instrumentation plan without an audit. Bind each signal, setting/mode,
+   input branch, deciding authority and required producer.
+   Include procedural `required_fix` promises as well as telemetry fields and
+   selected source/policy conditions. Bind each to an addressable assertion and
+   feasible observation boundary. Its owning finding and transitive prerequisites
+   must supply every change and producer that assertion consumes; a listed ID
+   alone cannot establish this closure. Group coupled activation/producer repairs
+   when no independently deliverable contract exists, without cycles or dropping
+   invariants. Shared parameterized assertions are valid when these bindings are
+   explicit. The `required-controls` helper inventories audit promises only; its
+   output excludes source-clause and acceptance controls. Add those independently.
 
 Keep `required_fix` to the smallest authorized application change. Put delegated
 defaults and optional capability facts in evidence with their owner/disposition;
-do not turn them into new application configuration promises. Each independently
-selectable finding's acceptance must be executable using its own repair and
-transitive prerequisites. Check the changes each assertion needs, not only its
-scenario's listed IDs: a dependent's repair cannot establish its prerequisite's
-acceptance. Bind shared whole-path integration checks to their actual owner.
+do not turn them into new application configuration promises. Genuinely unselected
+extra claims need not be added to a new contract. Established, critical and
+operator requirements cannot be withdrawn to avoid their tests; preserve an
+existing audit/selection's immutable IDs and obligations. Bind shared whole-path
+integration checks to the finding that can deliver them.
 
 Derive a named configuration inventory independently from application-owned or
 new overrides, supplied selected settings, and dependencies necessary to the
@@ -77,6 +88,11 @@ prove consumption. Key entries by owner/reader as well as setting name, since
 consumers can apply different defaults and diagnostics. A queried startup key
 is read even if absent, and an eagerly evaluated default expression can read a
 value that is ultimately ignored. Separate reading from effective consumption.
+A promised exporter/activation policy needs its own signal and selected mode
+controls; a logs-only opt-out cannot establish trace or metric selector behaviour.
+Allocate absent/empty, `none`/other and protocol branches where promised/reachable,
+without installing an unselected exporter. Keep the planned repair consistent
+with acceptance: supporting a transport and rejecting it are different outcomes.
 
 Do not expand an application task into exhaustive upstream SDK certification.
 Mere transitive consumption does not require enumerating every unused SDK
@@ -229,6 +245,7 @@ order. These local preservation controls exercise the supported selected owner:
 | Explicit identity override | Supply the selected higher-priority identity and a different lower-priority value; assert the actual documented winner through normal startup. |
 | Absent identity | Remove supplied identity from the actual child environment and active loader/profile; assert the supported default without changing unrelated supplied Resource attributes. |
 | Disabled SDK, retained propagation | Through the same disabled initialization, prove effective no-op SDK signals, the selected app-owned provider/bridge activation policy, preserved native output, and actual carrier operations for the configured propagator's selected directions and fields. A separate enabled-path helper test cannot establish this conjunction. |
+| Effective policy authority | Supply a conflicting selected endpoint/header/activation value through the highest-priority input the actual SDK/runner honours, such as a loader, programmatic option or VM property. Assert the effective destination, credential boundary and preserved independent signals; environment-only checks cannot establish this when another layer wins. |
 
 These are identity/activation controls, not an exhaustive SDK input suite. Build
 each child environment explicitly and check key presence and active configuration
@@ -296,6 +313,13 @@ replaces or only denies a record; denial alone cannot preserve a required
 category. Apply the action before SDK/writer capture when the selected policy
 requires it. Bind forbidden-sentinel absence AND permitted category at every
 covered output, preserving application responses and original sinks.
+For an asserted event order, resolve registration/enqueue, actual callback
+invocation and completion relative to synchronous work and teardown. Scheduling
+is not invocation. A deferred logging callback can run after response/socket
+teardown while still acting before SDK/writer capture; do not invent an earlier
+lifecycle requirement when policy only requires that capture boundary. Cite the
+establishing source or supported ordering observation. An unachievable required
+boundary remains a gap; preserve the actual policy rather than weakening it.
 For an unresolved link, name its exact producer/event/API edge and owner, then
 the next source symbol or supported probe AND the observation that would decide
 support or coverage. A framework name or instruction to find a hook is not that
@@ -529,9 +553,12 @@ invent an ERROR classification. If an event is known erroneous and its source
 has no severity concept, the data model recommends ERROR=17 during mapping.
 Keep that recommendation and its preconditions distinct from a universal MUST.
 
-Preserve the event's occurrence Timestamp when available; ObservedTimestamp
-represents collection time. Do not replace an older event time with export
-time or assert that the two clocks must be equal. Treat nanoseconds/seconds
+Preserve the event's occurrence Timestamp when available. ObservedTimestamp is
+when the collecting component observes it, which may be the SDK at emission;
+a receiver can preserve that value. Do not assume it is the selected receiver's
+ingestion clock or use it alone as proof of delivery order. Do not replace an
+older event time with export time or assert that the two clocks must be equal.
+Treat nanoseconds/seconds
 conversion explicitly and preserve 64-bit nanosecond precision. Optional
 absent fields alone are not defects. Preserve
 structured values rather than turning an entire structured record into an
@@ -836,6 +863,10 @@ does not consume those environment variables. A bounded queue may drop logs
 when full. Do not promise durable or exactly-once delivery from an in-memory
 batch processor; the one-record acceptance check is a healthy-path duplicate
 check, not an OTLP network delivery guarantee.
+Derive test success and telemetry visibility separately for each claimed signal
+and phase. An expected fault with zero received logs can pass its assertions but
+cannot claim log `otlp_accepted`; healthy traces/metrics cannot supply that log
+visibility. Retain the existing non-receipt/unproven state and accurate counts.
 The built-in simple and batching processors [MUST synchronize calls to the
 exporter's `Export`](https://opentelemetry.io/docs/specs/otel/logs/sdk/#built-in-processors)
 so those calls are not invoked concurrently. Assess that processor/exporter
@@ -851,6 +882,17 @@ the operator-owned branch, and do not confuse that exporter with a native
 console sink. Its [unspecified format](https://opentelemetry.io/docs/specs/otel/logs/sdk_exporters/stdout/)
 is not a production format contract.
 
+Choose a feasible observation boundary for selected receiver faults and shutdown
+before execution. An `app_test` may use a supported instance-local transport or
+exporter seam through the actual initializer, production provider/processor path
+(including batching when selected), bridge and application operations. Capture
+the actual native diagnostic owner rather than replacing it with a counting
+handler. Decode each other configured
+signal's actual receipts from its owning producers; do not label an enabled but
+untested pipeline `not configured`. SDK-only substitute probes establish
+capability, not this application conjunction. Keep separate normal-launch proof
+and never downgrade an already bound full-runtime control. Do not redirect shared
+receivers or intercept global transports to manufacture evidence.
 Exercise the selected receiver-fault/operation combinations, bounded shutdown
 after final logs, and overload when the application has a source-backed risk.
 For each exercised fault/operation, assert its application outcome, own native
@@ -866,12 +908,20 @@ effective application handler/finalizer; permitted outcome; budget/source`.
 Name how that path and order will be observed through normal startup; stopping
 a launcher or cleaning up a child alone does not prove application drain.
 A drain claim needs a genuine pending-record witness when the selected lifecycle
-owner enters provider drain, possibly after the stop request and finalizer logging,
-and that record's receipt attributable to shutdown before process exit. A pre-stop
-emit may already have exported; holding a receiver response may show only an
-in-flight export. Resolve queue/interval or equivalent supported evidence and
-the actual shutdown/export order. Reuse an existing real application operation/
-log where possible; do not add production logging solely for a test.
+owner enters provider drain, possibly after the stop request and finalizer logging.
+Name its effective queue/schedule/batch conditions and observation; a pre-stop
+emit may already have exported, and a held response may show only an in-flight
+export. Then prove that record's receipt attributable to shutdown before actual
+SDK-child exit. Feasible evidence includes an exact decoded receiver/Studio
+record observation followed by verified SDK-child liveness, or a bound raw-record
+→ conforming acknowledgement → actually awaited shutdown causal chain with the
+client outcome retained. An owned receiver's separate receipt/ack event is another
+option, not a required product field. SDK ObservedTimestamp, after-exit queries,
+a nil shutdown result, exit zero, or launcher wait timing alone cannot prove it;
+resolve ignored shutdown errors and the real child lifetime. Record the actual
+selected settings/authority and honest proof scope, without arbitrary tuning.
+Reuse an existing real application operation/log where possible; do not add
+production logging solely for a test.
 Assert the final record's own selector/predicate, body/severity/count/time,
 Resource and associated or legitimately absent context, and receipt/exit order.
 Check per-body/identity multiplicities, both trace and span IDs (or their required
