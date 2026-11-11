@@ -1120,6 +1120,9 @@ it.each([
   expect(screen.getByRole("alert").textContent).toBe(message);
   expect(document.activeElement).toBe(input);
   expect(input.getAttribute("aria-invalid")).toBe("true");
+  const descriptions = input.getAttribute("aria-describedby")?.split(" ");
+  expect(descriptions?.[0]).toBe(screen.getByRole("alert").id);
+  if (field === "HEC endpoint") expect(descriptions).toContain("cloud-logs-endpoint-help");
   await act(async () => { view.rerender(<LogsConnection onDetailsChange={onDetailsChange} refreshKey="second" />); });
   expect(screen.getByRole("alert").textContent).toBe(message);
   expect(onDetailsChange.mock.lastCall?.[0].failed).toBe(true);

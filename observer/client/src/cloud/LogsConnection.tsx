@@ -546,7 +546,7 @@ export function LogsConnection({
                   onClick={(event) => openExternal(event, "open-hec-endpoint-help")}>Find your HEC endpoint</a>
               </div>
               <input id="cloud-logs-endpoint" type="url" autoComplete="off" spellCheck={false}
-                aria-invalid={fieldError === "endpoint"} aria-describedby={fieldError === "endpoint" ? "cloud-logs-endpoint-help cloud-logs-error" : "cloud-logs-endpoint-help"}
+                aria-invalid={fieldError === "endpoint"} aria-describedby={fieldError === "endpoint" ? "cloud-logs-error cloud-logs-endpoint-help" : "cloud-logs-endpoint-help"}
                 placeholder="HEC endpoint" value={endpoint} ref={endpointRef}
                 onChange={(event) => { edit(); if (event.target.value.trim() !== endpoint.trim()) setInsecureSkipVerify(false); setEndpoint(event.target.value); }} />
               <small id="cloud-logs-endpoint-help">Enter the full HEC ingestion URL, including /services/collector/event.</small>
