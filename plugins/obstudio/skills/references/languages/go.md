@@ -180,7 +180,13 @@ Create a dedicated file for OTel setup that returns a shutdown function.
 Call it early in `main()`. Establish the selected propagator before provider
 construction and any SDK-disabled return. Apply the common disabled-SDK policy
 to the signal branches without bypassing that setup; this conditional example
-does not supply every application-owned activation reader.
+does not supply every application-owned activation reader. For a newly owned
+standard environment Boolean reader, compare the raw value to `true` ignoring
+case; do not reuse a selector's `TrimSpace` normalization. `strconv.ParseBool`
+accepts `1`/`t`/`T` and rejects `TrUe`, so it does not supply
+the [standard Boolean rule](https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/#boolean).
+Keep the detected configuration owner and its actual loader; this does not
+require replacing an unchanged SDK reader. See [Go's parser contract](https://pkg.go.dev/strconv#ParseBool).
 Resolve the approved local logs URL during preflight, then embed that exact
 host, port, base path, and `/v1/logs` leaf in the generated setup. Do not use
 `localhost`, loopback IP, or `/v1/logs` shape as a runtime proxy for approval:

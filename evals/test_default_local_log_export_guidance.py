@@ -292,14 +292,16 @@ def test_python_log_boundary_conflict_never_aborts_application_startup() -> None
     assert "_skip_local_logs" in log_helper
     assert "raise RuntimeError" not in log_helper
     assert "_local_http_endpoint(endpoint)" in log_helper
-    assert "_local_http_endpoint(generic_endpoint)" in log_helper
+    assert "PREFLIGHT_APPROVED_LOCAL_OTLP_LOGS_ENDPOINT" in log_helper
     assert "log_exporter = _local_log_exporter() if use_local_log_export else None" in setup
     assert "tracer_provider = TracerProvider" in setup
     assert "meter_provider = MeterProvider" in setup
     assert "must not abort application startup" in _normalized(guide)
 
 
-def _python_local_log_helpers(exporter):
+def _python_local_log_helpers(
+    exporter, *, approved_endpoint="http://127.0.0.1:4318/v1/logs",
+):
     setup = _fenced_code_after(
         LANGUAGES / "python.md", "**File**: `otel_setup.py`", "python"
     )
@@ -308,7 +310,7 @@ def _python_local_log_helpers(exporter):
         "_http_logs_endpoint_from_base", "_use_default_local_log_export",
         "_local_log_exporter",
     }
-    constants = {"FALLBACK_LOCAL_OTLP_LOGS_ENDPOINT", "LOCAL_OTLP_HOSTS"}
+    constants = {"PREFLIGHT_APPROVED_LOCAL_OTLP_LOGS_ENDPOINT"}
     nodes = [
         node for node in ast.parse(setup).body
         if (isinstance(node, ast.FunctionDef) and node.name in helpers)
@@ -322,6 +324,7 @@ def _python_local_log_helpers(exporter):
         "urlunsplit": urlunsplit, "OTLPLogExporter": exporter,
     }
     exec(compile(ast.Module(body=nodes, type_ignores=[]), str(LANGUAGES / "python.md"), "exec"), namespace)
+    namespace["PREFLIGHT_APPROVED_LOCAL_OTLP_LOGS_ENDPOINT"] = approved_endpoint
     return namespace
 
 
@@ -383,7 +386,9 @@ def test_python_signal_headers_reach_official_exporter_without_override(
         return _log_exporter.OTLPLogExporter(**kwargs)
 
     monkeypatch.setattr(_log_exporter, "_resolve_headers", resolve_headers)
-    helpers = _python_local_log_helpers(create_exporter)
+    helpers = _python_local_log_helpers(
+        create_exporter, approved_endpoint="http://127.0.0.1:55444/v1/logs",
+    )
     exporter = helpers["_local_log_exporter"]()
     try:
         assert exporter is not None
@@ -399,8 +404,19 @@ def test_python_signal_headers_reach_official_exporter_without_override(
 
 
 @pytest.mark.parametrize("headers", [None, "  "])
+@pytest.mark.parametrize("configuration,accepted", [
+    ({}, True),
+    ({"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:55444/collector/v1/traces"}, True),
+    ({"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:55318/other",
+      "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://localhost:55444/collector/v1/logs"}, True),
+    ({"OTEL_EXPORTER_OTLP_ENDPOINT": "http://[::1",
+      "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://localhost:55444/collector/v1/logs"}, True),
+    ({"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://localhost:55445/collector/v1/logs"}, False),
+    ({"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://localhost:55444/other/v1/logs"}, False),
+    ({"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:55445/collector"}, False),
+])
 def test_python_local_logs_preserve_normal_nondefault_receiver(
-    monkeypatch, headers,
+    monkeypatch, headers, configuration, accepted,
 ) -> None:
     calls = []
     exporter = object()
@@ -409,20 +425,28 @@ def test_python_local_logs_preserve_normal_nondefault_receiver(
         calls.append(kwargs)
         return exporter
 
-    helpers = _python_local_log_helpers(create_exporter)
+    helpers = _python_local_log_helpers(
+        create_exporter, approved_endpoint="http://localhost:55444/collector/v1/logs",
+    )
     for name in tuple(os.environ):
         if name.startswith("OTEL_"):
             monkeypatch.delenv(name)
     monkeypatch.setenv("OTEL_LOGS_EXPORTER", "otlp")
-    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:55444/collector/v1/traces")
+    for name, value in configuration.items():
+        monkeypatch.setenv(name, value)
     if headers is not None:
         for name in ("OTEL_EXPORTER_OTLP_HEADERS", "OTEL_EXPORTER_OTLP_LOGS_HEADERS"):
             monkeypatch.setenv(name, headers)
     before = dict(os.environ)
 
     assert helpers["_use_default_local_log_export"]() is True
-    assert helpers["_local_log_exporter"]() is exporter
-    assert calls == [{"endpoint": "http://localhost:55444/collector/v1/logs"}]
+    if accepted:
+        assert helpers["_local_log_exporter"]() is exporter
+        assert calls == [{"endpoint": "http://localhost:55444/collector/v1/logs"}]
+    else:
+        with pytest.warns(RuntimeWarning, match="preflight-approved receiver"):
+            assert helpers["_local_log_exporter"]() is None
+        assert calls == []
     assert dict(os.environ) == before
 
 
@@ -754,11 +778,22 @@ printf 'AUTO=%s\\n' "${OTEL_PYTHON_LOG_AUTO_INSTRUMENTATION-<unset>}"
     assert opted_out.stdout == "AUTO=false\n"
 
 
-def _python_cli_launcher(tmp_path: Path) -> tuple[Path, Path, dict[str, str]]:
+def _python_cli_launcher(
+    tmp_path: Path, *, approved_endpoint="http://127.0.0.1:4318/v1/logs",
+    approved_protocol="http/protobuf",
+) -> tuple[Path, Path, dict[str, str]]:
     launcher = tmp_path / "otel-entrypoint.sh"
-    _write_executable(launcher, _fenced_code_after(
+    source = _fenced_code_after(
         LANGUAGES / "python.md", "## Auto-Instrumentation (CLI Wrapper)", "bash"
-    ))
+    )
+    source = source.replace(
+        'approved_logs_endpoint = "http://127.0.0.1:4318/v1/logs"',
+        f"approved_logs_endpoint = {json.dumps(approved_endpoint)}",
+    ).replace(
+        'approved_logs_protocol = "http/protobuf"',
+        f"approved_logs_protocol = {json.dumps(approved_protocol)}",
+    )
+    _write_executable(launcher, source)
     subprocess.run(["/bin/sh", "-n", launcher], check=True)
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
@@ -864,8 +899,13 @@ _PYTHON_CLI_TRACE_METRIC_SETTINGS = {
 }
 
 
-def _run_python_cli(tmp_path, config, *, exit_code=0):
-    launcher, app, base_env = _python_cli_launcher(tmp_path)
+def _run_python_cli(
+    tmp_path, config, *, exit_code=0,
+    approved_endpoint="http://127.0.0.1:4318/v1/logs", approved_protocol="http/protobuf",
+):
+    launcher, app, base_env = _python_cli_launcher(
+        tmp_path, approved_endpoint=approved_endpoint, approved_protocol=approved_protocol,
+    )
     app_args = ["two words", "quoted 'value'", "$NOT_EXPANDED", "*"]
     result = subprocess.run(
         [launcher, "python", str(app), *app_args],
@@ -896,6 +936,8 @@ def _run_python_cli(tmp_path, config, *, exit_code=0):
     {"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://localhost:0/v1/logs"},
     {"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://[::1/v1/logs"},
     {"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://localhost:4318/not-logs"},
+    {"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://127.0.0.1:55319/collector/v1/logs"},
+    {"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://127.0.0.1:55318/other/v1/logs"},
     {"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://localhost:4318/a b/v1/logs"},
     {"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://localhost:4318/v1/logs\n"},
     {"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "\n"},
@@ -910,7 +952,10 @@ def test_python_cli_log_conflicts_preserve_app_trace_metric_and_profile(
         "OTEL_PYTHON_LOG_AUTO_INSTRUMENTATION": "true",
         **conflict,
     }
-    result, instrument = _run_python_cli(tmp_path, config, exit_code=37)
+    result, instrument = _run_python_cli(
+        tmp_path, config, exit_code=37,
+        approved_endpoint="http://127.0.0.1:55318/collector/v1/logs",
+    )
     assert instrument["options"]["--logs_exporter"] == "none"
     assert instrument["options"]["--exporter_otlp_endpoint"] == config["OTEL_EXPORTER_OTLP_ENDPOINT"]
     assert instrument["options"]["--exporter_otlp_protocol"] == config["OTEL_EXPORTER_OTLP_PROTOCOL"]
@@ -922,6 +967,8 @@ def test_python_cli_log_conflicts_preserve_app_trace_metric_and_profile(
 
 
 @pytest.mark.parametrize("config,endpoint,protocol", [
+    ({}, "http://localhost:55444/v1/logs", "http/protobuf"),
+    ({}, "http://localhost:55317", "grpc"),
     ({}, "http://127.0.0.1:4318/v1/logs", "http/protobuf"),
     ({"OTEL_EXPORTER_OTLP_LOGS_HEADERS": "X-Local=synthetic%20local,X-Route=a%2Fb"}, "http://127.0.0.1:4318/v1/logs", "http/protobuf"),
     ({"OTEL_EXPORTER_OTLP_HEADERS": "  ", "OTEL_EXPORTER_OTLP_LOGS_HEADERS": "\t \r\n"}, "http://127.0.0.1:4318/v1/logs", "http/protobuf"),
@@ -930,6 +977,7 @@ def test_python_cli_log_conflicts_preserve_app_trace_metric_and_profile(
     ({"OTEL_EXPORTER_OTLP_ENDPOINT": "http://otel-collector:55318/collector"}, "http://otel-collector:55318/collector/v1/logs", "http/protobuf"),
     ({"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://[::1]:55444/v1/logs"}, "http://[::1]:55444/v1/logs", "http/protobuf"),
     ({"OTEL_EXPORTER_OTLP_ENDPOINT": "https://trace.invalid", "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://localhost:55444/v1/logs"}, "http://localhost:55444/v1/logs", "http/protobuf"),
+    ({"OTEL_EXPORTER_OTLP_ENDPOINT": "http://[::1", "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://localhost:55444/v1/logs"}, "http://localhost:55444/v1/logs", "http/protobuf"),
     ({"OTEL_EXPORTER_OTLP_PROTOCOL": "grpc", "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:55317"}, "http://localhost:55317", "grpc"),
     ({"OTEL_EXPORTER_OTLP_PROTOCOL": "grpc", "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:55317", "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL": "http/protobuf", "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://localhost:55444/v1/logs"}, "http://localhost:55444/v1/logs", "http/protobuf"),
     ({"OTEL_LOGS_EXPORTER": "  OTLP  "}, "http://127.0.0.1:4318/v1/logs", "http/protobuf"),
@@ -937,7 +985,10 @@ def test_python_cli_log_conflicts_preserve_app_trace_metric_and_profile(
 def test_python_cli_normal_local_logs_keep_checked_transport_and_app(
     tmp_path, config, endpoint, protocol,
 ) -> None:
-    result, instrument = _run_python_cli(tmp_path, config, exit_code=19)
+    result, instrument = _run_python_cli(
+        tmp_path, config, exit_code=19,
+        approved_endpoint=endpoint, approved_protocol=protocol,
+    )
     assert instrument["options"]["--logs_exporter"] == "otlp"
     assert instrument["env"]["OTEL_LOGS_EXPORTER"] == config.get("OTEL_LOGS_EXPORTER", "otlp")
     assert instrument["env"]["OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"] == endpoint
@@ -973,16 +1024,9 @@ def test_python_cli_preserves_resolved_nondefault_receiver_ports(
     tmp_path: Path,
 ) -> None:
     launcher = tmp_path / "otel-entrypoint.sh"
-    _write_executable(
-        launcher,
-        _fenced_code_after(
-            LANGUAGES / "python.md",
-            "## Auto-Instrumentation (CLI Wrapper)",
-            "bash",
-        ),
+    source = _fenced_code_after(
+        LANGUAGES / "python.md", "## Auto-Instrumentation (CLI Wrapper)", "bash",
     )
-    subprocess.run(["/bin/sh", "-n", launcher], check=True)
-
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
     (fake_bin / "python").symlink_to(sys.executable)
@@ -993,54 +1037,33 @@ printf 'COMMON=%s\n' "${OTEL_EXPORTER_OTLP_ENDPOINT-<unset>}"
 printf 'LOGS=%s\n' "${OTEL_EXPORTER_OTLP_LOGS_ENDPOINT-<unset>}"
 """,
     )
-
-    for port in (55318, 55319):
+    cases = [
+        ({"OTEL_EXPORTER_OTLP_ENDPOINT": f"http://127.0.0.1:{port}"},
+         f"http://127.0.0.1:{port}/v1/logs") for port in (55318, 55319)
+    ] + [
+        ({"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:55318",
+          "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://127.0.0.1:55444/v1/logs"},
+         "http://127.0.0.1:55444/v1/logs"),
+        ({"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:55318/collector/v1/traces"},
+         "http://127.0.0.1:55318/collector/v1/logs"),
+    ]
+    for config, approved in cases:
+        # Model the preflight adaptation of the checked-in literal, not a
+        # runtime permission for every port on the same loopback host.
+        _write_executable(launcher, source.replace(
+            'approved_logs_endpoint = "http://127.0.0.1:4318/v1/logs"',
+            f"approved_logs_endpoint = {json.dumps(approved)}",
+        ))
+        subprocess.run(["/bin/sh", "-n", launcher], check=True)
         result = subprocess.run(
             [launcher, "python", "app.py"],
-            env={
-                "PATH": str(fake_bin),
-                "OTEL_EXPORTER_OTLP_ENDPOINT": f"http://127.0.0.1:{port}",
-            },
-            text=True,
-            capture_output=True,
-            check=True,
+            env={"PATH": str(fake_bin), **config},
+            text=True, capture_output=True, check=True,
         )
         assert result.stdout == (
-            f"COMMON=http://127.0.0.1:{port}\n"
-            f"LOGS=http://127.0.0.1:{port}/v1/logs\n"
+            f"COMMON={config['OTEL_EXPORTER_OTLP_ENDPOINT']}\n"
+            f"LOGS={approved}\n"
         )
-
-    signal_specific = subprocess.run(
-        [launcher, "python", "app.py"],
-        env={
-            "PATH": str(fake_bin),
-            "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:55318",
-            "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": (
-                "http://127.0.0.1:55444/v1/logs"
-            ),
-        },
-        text=True,
-        capture_output=True,
-        check=True,
-    )
-    assert "LOGS=http://127.0.0.1:55444/v1/logs\n" in signal_specific.stdout
-
-    signal_path = subprocess.run(
-        [launcher, "python", "app.py"],
-        env={
-            "PATH": str(fake_bin),
-            "OTEL_EXPORTER_OTLP_ENDPOINT": (
-                "http://127.0.0.1:55318/collector/v1/traces"
-            ),
-        },
-        text=True,
-        capture_output=True,
-        check=True,
-    )
-    assert (
-        "LOGS=http://127.0.0.1:55318/collector/v1/logs\n"
-        in signal_path.stdout
-    )
 
 
 def test_python_logging_trace_injection_requires_installed_capability() -> None:

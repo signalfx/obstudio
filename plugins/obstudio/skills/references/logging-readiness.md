@@ -12,6 +12,10 @@ common rules and acceptance obligations below still apply. A guide's setup
 examples do not authorize application changes in an audit or verification task.
 The logging checks are self-contained for each declared consumer; audit and
 verification do not require a sibling instrumentation skill to be installed.
+Read the needed sections in bounded pieces. A truncation banner means the
+returned content is incomplete: retrieve the missing selected section before
+using its rule or making an exact source claim. A successful command or a file
+present in the bundle does not establish what its tool response actually showed.
 
 | Detected stack | Existing language reference |
 |---|---|
@@ -1191,9 +1195,15 @@ Trace SDK/exporter diagnostic routing through handlers, appenders, transports
 and HTTP-client instrumentation. Avoid returning a log exporter failure to
 the same application bridge recursively. Prefer the SDK's suppression and
 separate diagnostic mechanism; preserve the ordinary application sink.
-Prove bounded diagnostics, no recursive export storm and continued application
-work under an exporter fault. Existing safe routing is coverage, not a reason
-to add another error handler.
+For continued-operation proof, first observe the selected log-export refusal,
+failure or blocked operation while the application and other configured
+producers are running. Then exercise the selected application work and retain
+its native output and independent signal receipts during that same fault.
+A trial that first exports logs during shutdown cannot establish this live
+conjunction. Keep its batch timing separate from a pending-record drain trial,
+where a long schedule may deliberately hold records until stop. Prove bounded
+diagnostics and no recursive export storm over the actual fault interval.
+Existing safe routing is coverage, not a reason to add another error handler.
 Name the actual routing/suppression mechanism in the repair and handoff, not
 only a desired zero-recursion outcome.
 Resolve each selected diagnostic claim from its originating operation through

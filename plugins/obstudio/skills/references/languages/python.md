@@ -149,9 +149,10 @@ import os
 import sys
 from urllib.parse import urlsplit, urlunsplit
 
-# Retain only receiver names confirmed in preflight; otel-collector matches
-# the Compose example below. Replace it for a different service topology.
-local_hosts = {"127.0.0.1", "localhost", "::1", "otel-collector"}
+# Replace these literals with the protocol and complete logs URL resolved in
+# preflight. The conventional values apply only when no receiver was found.
+approved_logs_protocol = "http/protobuf"
+approved_logs_endpoint = "http://127.0.0.1:4318/v1/logs"
 
 
 def local_endpoint(raw, protocol, *, signal=False):
@@ -162,7 +163,7 @@ def local_endpoint(raw, protocol, *, signal=False):
         raise ValueError("whitespace")
     parsed = urlsplit(value)
     port = parsed.port  # Validate numeric port syntax and range.
-    if (parsed.scheme != "http" or parsed.hostname not in local_hosts
+    if (parsed.scheme != "http" or not parsed.hostname
             or parsed.username is not None or parsed.password is not None
             or "?" in value or "#" in value
             or (port is not None and not 1 <= port <= 65535)):
@@ -178,7 +179,10 @@ try:
     if os.environ.get("OTEL_EXPORTER_OTLP_HEADERS", "").strip():
         raise ValueError("generic local log headers")
     generic_protocol = os.environ.get("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf").strip().lower()
-    logs_protocol = os.environ.get("OTEL_EXPORTER_OTLP_LOGS_PROTOCOL", generic_protocol).strip().lower()
+    logs_protocol = os.environ.get(
+        "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL",
+        os.environ.get("OTEL_EXPORTER_OTLP_PROTOCOL", approved_logs_protocol),
+    ).strip().lower()
     if logs_protocol not in ("http/protobuf", "grpc"):
         raise ValueError("unsupported logs protocol")
     logs_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", "")
@@ -203,9 +207,12 @@ try:
                 generic = generic._replace(path=path.rstrip("/") + "/v1/logs")
             resolved = generic
         else:
-            fallback = ("http://127.0.0.1:4318/v1/logs"
-                        if logs_protocol == "http/protobuf" else "http://127.0.0.1:4317")
-            resolved = local_endpoint(fallback, logs_protocol, signal=True)
+            resolved = local_endpoint(approved_logs_endpoint, logs_protocol, signal=True)
+    approved = local_endpoint(approved_logs_endpoint, approved_logs_protocol, signal=True)
+    if (logs_protocol != approved_logs_protocol
+            or (resolved.scheme, resolved.hostname, resolved.port or 80, resolved.path)
+            != (approved.scheme, approved.hostname, approved.port or 80, approved.path)):
+        raise ValueError("logs tuple differs from preflight approval")
     print(logs_protocol + " " + urlunsplit(resolved))
 except Exception:
     sys.exit(1)
@@ -234,6 +241,15 @@ exec opentelemetry-instrument \
   --exporter_otlp_protocol "${OTEL_EXPORTER_OTLP_PROTOCOL:-http/protobuf}" \
   "$@"
 ```
+
+Before saving the wrapper, replace its `approved_logs_protocol` and
+`approved_logs_endpoint` literals with the receiver resolved during preflight,
+including its authority, port and signal path. Keep the conventional literals
+only when existing signal/generic settings, receiver status and project topology
+supply no receiver. An explicit approved signal endpoint wins even when the
+generic endpoint differs; a compatible generic base is considered only without
+a signal endpoint. Loopback membership alone does not approve a tuple. These
+literals record the preflight decision, not new runtime environment controls.
 
 Save the checked-in wrapper as `otel-entrypoint.sh`, make it executable, and
 pass the same command the project already uses, for example
@@ -356,15 +372,26 @@ from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import OTELResourceDetector, Resource
 
 
-FALLBACK_LOCAL_OTLP_LOGS_ENDPOINT = "http://127.0.0.1:4318/v1/logs"
-# Adapt this host set to the receiver resolved during instrumentation for
-# Docker/Compose or other deployment-local names; never infer a cloud host.
-LOCAL_OTLP_HOSTS = {"127.0.0.1", "localhost", "::1"}
+# Replace with the complete logs URL resolved in preflight; use this
+# conventional fallback only when no existing receiver evidence is available.
+PREFLIGHT_APPROVED_LOCAL_OTLP_LOGS_ENDPOINT = "http://127.0.0.1:4318/v1/logs"
 
 
 def _local_http_endpoint(endpoint):
-    parsed = urlsplit(endpoint)
-    return parsed.scheme == "http" and parsed.hostname in LOCAL_OTLP_HOSTS
+    try:
+        parsed = urlsplit(endpoint)
+        approved = urlsplit(PREFLIGHT_APPROVED_LOCAL_OTLP_LOGS_ENDPOINT)
+        return (parsed.scheme == approved.scheme == "http"
+                and bool(parsed.hostname) and parsed.username is None
+                and parsed.password is None and "?" not in endpoint
+                and "#" not in endpoint
+                and not any(char.isspace() or ord(char) < 32 or ord(char) == 127
+                            for char in endpoint)
+                and (parsed.port is None or 1 <= parsed.port <= 65535)
+                and (parsed.hostname, parsed.port or 80, parsed.path)
+                == (approved.hostname, approved.port or 80, approved.path))
+    except ValueError:
+        return False
 
 
 def _skip_local_logs(reason):
@@ -413,8 +440,6 @@ def _local_log_exporter():
             "move generic OTLP headers to trace/metric signal variables"
         )
     endpoint = os.environ.get("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", "").strip()
-    if endpoint and not _local_http_endpoint(endpoint):
-        return _skip_local_logs("explicit logs endpoint is not the local receiver")
     if not endpoint:
         generic_endpoint = os.environ.get(
             "OTEL_EXPORTER_OTLP_ENDPOINT", ""
@@ -422,12 +447,15 @@ def _local_log_exporter():
         # Preserve a compatible local OTLP/HTTP receiver, including its
         # non-default port. A cloud generic endpoint may still serve traces
         # and metrics, but must never become the application-log endpoint.
-        if generic_endpoint and not _local_http_endpoint(generic_endpoint):
-            return _skip_local_logs("generic endpoint is not the local receiver")
         if generic_protocol == protocol and generic_endpoint:
-            endpoint = _http_logs_endpoint_from_base(generic_endpoint)
+            try:
+                endpoint = _http_logs_endpoint_from_base(generic_endpoint)
+            except ValueError:
+                return _skip_local_logs("invalid generic logs endpoint")
         else:
-            endpoint = FALLBACK_LOCAL_OTLP_LOGS_ENDPOINT
+            endpoint = PREFLIGHT_APPROVED_LOCAL_OTLP_LOGS_ENDPOINT
+    if not _local_http_endpoint(endpoint):
+        return _skip_local_logs("logs endpoint differs from the preflight-approved receiver")
     return OTLPLogExporter(endpoint=endpoint)
 
 
@@ -525,9 +553,15 @@ This new-process example defaults only an absent or explicit `otlp` log
 exporter with an absent or detected-local endpoint to Splunk Observability Studio. Adapt
 the standard `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` launch setting to the receiver
 address resolved during instrumentation, including any non-default port and
-Docker/Compose service name; add that service host to `LOCAL_OTLP_HOSTS` in
-the checked-in setup. The in-code literal remains only the host fallback;
-do not add a runtime Obstudio lookup. Report a source-proven non-local endpoint
+Docker/Compose service name. Set `PREFLIGHT_APPROVED_LOCAL_OTLP_LOGS_ENDPOINT`
+to that complete approved URL in the checked-in setup. Keep its conventional
+value only when no existing configuration, receiver status or project topology
+supplies a receiver; do not add a runtime Obstudio lookup. The shown exporter
+supports HTTP/protobuf only. Compare the resolved protocol, authority, port and
+path with preflight approval rather than treating any loopback URL as approved.
+An explicit approved signal endpoint is independent of a differing or invalid
+generic endpoint; consult a compatible generic base only when the signal endpoint
+is absent. Report a source-proven non-local endpoint
 as an operator-owned boundary conflict before copying this pattern. A
 conflict disables only local log export and emits a value-free warning; it
 must not abort application startup or operator-owned trace/metric export. If
@@ -569,27 +603,24 @@ the collector before the process stops.
 
 ### Loading the SDK
 
-**Option 1** -- import at top of entry point (preferred):
+**Option 1** -- integrate with the existing bootstrap (preferred):
 
-```python
-# app.py
-import atexit
+Use the detected application's actual startup owners in this order:
 
-from otel_setup import configure_opentelemetry
-install_logging_bridge, shutdown_opentelemetry = configure_opentelemetry()
-# This is a normal-exit fallback, not the SIGTERM integration.
-atexit.register(shutdown_opentelemetry)
-
-from opentelemetry.instrumentation.flask import FlaskInstrumentor
-from flask import Flask
-
-app = Flask(__name__)
-# Accessing app.logger establishes Flask's default console handler. If the
-# project configures logging explicitly, run that configuration here instead.
-_ = app.logger
-install_logging_bridge()
-FlaskInstrumentor().instrument_app(app)
-```
+1. Initialize the selected providers before their framework instrumentation
+   binds them, preserving any existing provider ownership.
+2. Establish the original native sinks for each selected application, framework
+   and server producer through its supported logging configuration or startup
+   hook. Preserve its format, level and multiplicity. Creating an application
+   logger does not initialize a sibling server producer's lazy native handler.
+3. Call the returned `install_logging_bridge()` only after those sinks are
+   established and before the selected records are emitted. Some producers test
+   ancestor handlers by level alone: a root OTel handler can suppress their
+   native-handler installation even if its filter rejects their records.
+   Reconcile that producer's actual initialization rather than adding a handler
+   indiscriminately or treating an application handler as its native sink.
+4. Register the returned shutdown function with the existing graceful lifecycle
+   owner. `atexit.register(shutdown_opentelemetry)` is only a normal-exit fallback.
 
 Register `shutdown_opentelemetry` with the process's existing graceful hook,
 such as the ASGI lifespan shutdown, Gunicorn worker/server exit hook, or the
