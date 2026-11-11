@@ -70,8 +70,10 @@ every normal application audit, instrumentation or verification report.
    alone cannot establish this closure. Group coupled activation/producer repairs
    when no independently deliverable contract exists, without cycles or dropping
    invariants. Shared parameterized assertions are valid when these bindings are
-   explicit. The `required-controls` helper inventories audit promises only; its
-   output excludes source-clause and acceptance controls. Add those independently.
+   explicit. The helper's default telemetry-hint view inventories audit promises
+   only. `--view contracts` also exposes saved finding/scenario acceptance and
+   declared prerequisites. Neither view discovers omitted source clauses or
+   evaluates coverage; reconcile those independently against the actual fields.
 
 Keep `required_fix` to the smallest authorized application change. Put delegated
 defaults and optional capability facts in evidence with their owner/disposition;
@@ -115,10 +117,13 @@ establish support and the active owner before imposing its parsing contract.
 
 Populate the value-case table for required settings now in existing report/
 evidence fields. Derive cases from the actual selected operator/environment
-reader or precise input-behavior claim. A fixed typed public option requires
-proof of its applied value, units, native API, startup consumption and operator
-preservation; it does not select malformed serialized inputs that cannot reach
-that path. Resolve whether a proposed value uses an option or an active reader;
+reader or precise input-behavior claim. A fixed typed public option, or a valid
+SDK value supplied solely to establish a test state, needs its applied value,
+units, actual API/reader, consumption and intended-state evidence. Keep operator
+preservation where relevant; this does not select an upstream parser-conformance
+suite. New app-owned or operator-selected readers still need their input-class
+oracles, and broader exact validation/default/fallback claims still need their
+terminal implementation. Resolve whether a proposed value uses an option or an active reader;
 keep genuinely unresolved wiring explicit. Accessible facts needed for a selected
 guarantee cannot be deferred as an instruction to resolve them later. Share
 parameterized cases only with an explicit setting-name → case/default/outcome
@@ -414,8 +419,12 @@ extra artifact.
 
 A source binding preserves a requirement, not proof that its mapped control
 exercises it. Match selected promises and claims to assertions for their distinct
-conditions, input branches, fields and operations. A related control or delegated
-disposition cannot close a critical invariant; retain its concrete missing check
+conditions, input branches, fields and operations. Credit a control's implication
+only when the actual source path shows that violating the selected property
+would fail that same assertion for those inputs and phase. Do not require a
+duplicate literal test, or infer an orthogonal property: synchrony or eventual
+completion does not establish nonblocking work. A delegated disposition or
+unrelated pass cannot close a critical invariant; retain the missing assertion
 or conditional resolution rather than a blanket future label.
 
 Preserve each applicable clause's condition, action, strength and owner when
@@ -1334,15 +1343,20 @@ and readback before handoff; earlier receipts do not prove later bytes. An
 equivalent complete inspection is valid; no additional report or schema fields
 are required. Preserve established audit/selection bindings downstream.
 
-For complex selected claims, an available and authorized independent read-only
-context can perform this readback over bounded saved contracts, retained
-source/policy and raw observations. Give it the obligations and artifacts rather
-than the author's conclusions or prior grades, and preserve the requested
-provider, model/effort and permissions without adding an external service. It
-reports concrete mismatches and proof limits, not approval. Verify its findings,
-repair within this skill's authority and rerun affected checks; otherwise retain
-unresolved gaps. When delegation is unavailable or unwarranted, perform the same
-readback yourself. A reviewer response is no execution evidence and does not
+Perform the Contract, Capability and Acceptance worklists separately against
+whole saved entities and necessary shared context. Within Capability, inventory
+the selected configuration readers before checking their input/outcome maps;
+within Acceptance, follow each promised operation and failure phase to its own
+assertion. A broad clean verdict is not evidence that every worklist was covered.
+For complex claims, an already available and authorized independent read-only
+context can inspect a bounded worklist. Give it source/policy and actual artifacts,
+without the author's conclusions or prior grades; preserve the requested provider,
+model/effort and permissions without adding an external service. Verify each
+finding's owner, condition, strength and actual oracle before changing the plan
+or code; retain valid shared and source-implied coverage. Repair within this
+skill's authority and rerun affected checks, or retain unresolved gaps. When
+delegation is unavailable or unwarranted, inspect the same worklists yourself.
+A reviewer response supplies no execution or completeness proof and does not
 replace requested verification or independent review.
 
 For an existing audit, capture the read-only saved-contract view's stdout to

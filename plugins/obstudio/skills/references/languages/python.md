@@ -611,8 +611,10 @@ Use the detected application's actual startup owners in this order:
    binds them, preserving any existing provider ownership.
 2. Establish the original native sinks for each selected application, framework
    and server producer through its supported logging configuration or startup
-   hook. Preserve its format, level and multiplicity. Creating an application
-   logger does not initialize a sibling server producer's lazy native handler.
+   hook. Name that producer's concrete public setup mechanism and expected handler,
+   stream, format and level; a generic instruction to initialize handlers is not
+   a repair mechanism. Preserve multiplicity. Creating an application logger or
+   attaching a filter does not initialize a sibling producer's lazy native sink.
 3. Call the returned `install_logging_bridge()` only after those sinks are
    established and before the selected records are emitted. Some producers test
    ancestor handlers by level alone: a root OTel handler can suppress their
