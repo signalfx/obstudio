@@ -85,6 +85,14 @@ Repeat for `java`, `go`, and `node` and trials 1 through 3. The runner requires
 the normal language toolchains on `PATH` (Java 21 for Spring Boot), creates a
 separate local receiver with no cloud credentials, and retains the generated
 service workspace plus per-stage source, report, task and rubric evidence.
+Grader feedback is archived and checked byte for byte, then removed from the
+workspace before the next bare task. Application reports remain available for
+the normal skill handoff. By default, any failed stage stops that workflow.
+Use `--collect-semantic-failures` to collect later stages after a semantic rubric
+failure when execution, required guards, source bindings, canonical audit and
+applicable runtime checks remain valid. Original grades stay failed and the
+whole workflow exits unsuccessfully; later stages provide diagnostic evidence
+only. Execution, malformed evidence, binding and runtime failures still stop it.
 The Go live interop fixture explicitly requires Go 1.25, allowing an official
 propagator compatible with the driver's emitted trace flags. This test setup
 does not authorize a skill to raise another application's runtime requirement.
@@ -100,6 +108,15 @@ receipt tests. A regression models eviction on exit to enforce this ordering.
 The checker resolves expected service identity with the SDK environment detector:
 resource-only `service.name` is supported, an explicit `OTEL_SERVICE_NAME` takes
 its normal precedence, and missing expected identity fails clearly before launch.
+The workflow runner additionally enables `--operator-identity-profiles`: two
+fresh launches with host-supplied plain Resource values check Resource-only
+identity and an explicit service name overriding a conflicting Resource name.
+The checker independently defines expected name, version and an unrelated
+attribute, then checks them on received application logs and their owning/server
+spans. Each launch retains its inputs, expectations and raw evidence; a later
+passing profile cannot erase a failure. The option leaves the original launch
+in place and allows 540 seconds for the three-launch check. These cases do not
+prove absent/default identity, encoded inputs, metrics Resources or headers.
 This host runtime proof supplements the regular per-skill rubric commands;
 a standalone verify task on an uninstrumented fixture is only a precondition
 check. It is not positive runtime verification.

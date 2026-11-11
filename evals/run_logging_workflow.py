@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -129,6 +130,60 @@ def archive_stage(workspace: Path, destination: Path) -> None:
                     ignore=shutil.ignore_patterns(".venv", "node_modules", "target", "__pycache__", "*.db"))
 
 
+GRADER_FEEDBACK_ARTIFACTS = (
+    "grade.json", "rubric_grade.json", "rubric_trace.jsonl", "rubric_stderr.txt",
+)
+
+
+def isolate_stage_feedback(workspace: Path, archived_stage: Path) -> None:
+    """Remove known grader handoffs only after their external copies are verified."""
+    if archived_stage.resolve().is_relative_to(workspace.resolve()):
+        raise ValueError("Grader archive must be outside the actor workspace")
+    feedback = [workspace / name for name in GRADER_FEEDBACK_ARTIFACTS
+                if (workspace / name).exists()]
+    for path in feedback:
+        archived = archived_stage / path.name
+        if not archived.is_file() or path.read_bytes() != archived.read_bytes():
+            raise RuntimeError(f"Grader archive is missing or differs: {path.name}")
+    for path in feedback:
+        path.unlink()
+
+
+def validate_audit_handoff(repo: Path, workspace: Path) -> None:
+    """Use the existing canonical parser, without creating or repairing an audit."""
+    script = repo / "skills/references/scripts/observe_report_core.py"
+    spec = importlib.util.spec_from_file_location("logging_workflow_report_core", script)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("Canonical audit parser unavailable")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    report = json.loads((workspace / "service/.observe/otel-audit.json").read_text())
+    normalized = module.normalize_audit_report(report)
+    if normalized["meta"]["status"] == "Blocked":
+        raise RuntimeError("Blocked audit cannot authorize diagnostic continuation")
+
+
+class CheckedJudgeBackend:
+    """Reject failed judge execution even if it left schema-valid output behind."""
+    def __init__(self, backend: CodexBackend):
+        self.backend = backend
+
+    def run_judge(self, **kwargs):
+        result = self.backend.run_judge(**kwargs)
+        if result.returncode != 0:
+            raise RuntimeError(f"Rubric judge exited with status {result.returncode}")
+        return result
+
+
+def valid_rubric(rubric: dict) -> bool:
+    checks = rubric.get("checks")
+    return (type(rubric.get("overall_pass")) is bool and isinstance(checks, list)
+            and len(checks) == 14
+            and all(isinstance(check, dict) and isinstance(check.get("id"), str)
+                    and type(check.get("pass")) is bool for check in checks)
+            and {check["id"] for check in checks} == {f"rubric-{i}" for i in range(1, 15)})
+
+
 def prepare_dependencies(language: str, workspace: Path, output: Path) -> None:
     commands = {"python": ["uv", "sync"], "node": ["npm", "install"],
                 "go": ["go", "mod", "download", "all"], "java": ["mvn", "-q", "test"]}
@@ -177,7 +232,9 @@ def run(args: argparse.Namespace) -> int:
         os.environ[f"OTEL_EXPORTER_OTLP_{signal}_ENDPOINT"] = endpoint + "/v1/" + signal.lower()
     summary = {"status": "running", "language": args.language, "trial": args.trial,
                "workspace": str(workspace), "stages": [], "ports": ports,
-               "model": "gpt-6.1-sol", "reasoning_effort": "high"}
+               "model": "gpt-6.1-sol", "reasoning_effort": "high",
+               "collect_semantic_failures": getattr(args, "collect_semantic_failures", False),
+               "diagnostic_only": False}
     receiver = None
     try:
         prepare_dependencies(args.language, workspace, output)
@@ -203,38 +260,60 @@ def run(args: argparse.Namespace) -> int:
             stage["guards"] = grade.model_dump(mode="json")
             if role != "audit":
                 command = [sys.executable, str(repo / "evals/logging_workflow_check.py"),
-                           "--start-command-json", '["make","dev"]']
+                           "--start-command-json", '["make","dev"]', "--operator-identity-profiles"]
+                stage["independent_runtime_command"] = command
+                stage["independent_runtime_timeout_seconds"] = 540
                 with (output / f"{role}-independent-runtime.log").open("w") as log:
                     check = subprocess.Popen(command, cwd=workspace / "service", stdout=log,
                                              stderr=subprocess.STDOUT, start_new_session=True)
                     try:
-                        check.wait(timeout=180)
+                        check.wait(timeout=stage["independent_runtime_timeout_seconds"])
                     finally:
                         if check.poll() is None:
                             stop_owned(check, timeout=15)
                 stage["independent_runtime_exit_code"] = check.returncode
             judge_before = source_hashes(workspace / "service")
-            rubric_path = run_rubric_grade(case=case, side_dir=workspace, model="gpt-6.1-sol", backend=backend, timeout=args.judge_timeout)
+            rubric_path = run_rubric_grade(case=case, side_dir=workspace, model="gpt-6.1-sol", backend=CheckedJudgeBackend(backend), timeout=args.judge_timeout)
             stage["rubric_model"] = bind_model_metadata(workspace / "rubric_trace.jsonl", args.codex_home.resolve(), workspace)
             assert source_hashes(workspace / "service") == judge_before, "Read-only grader changed service inputs"
             rubric = json.loads(rubric_path.read_text())
             stage["rubric"] = rubric
-            checks = rubric["checks"]
-            passed = (result.returncode == 0 and all(check.passed for check in grade.checks)
-                      and len(checks) == 14 and {check["id"] for check in checks} == {f"rubric-{i}" for i in range(1, 15)}
-                      and rubric["overall_pass"] and all(check["pass"] for check in checks)
-                      and stage["skill_bundle_unchanged"]
-                      and (role == "audit" or stage["audit_sha256_before"] is not None
-                           and stage["audit_sha256_before"] == stage["audit_sha256_after"])
-                      and (role == "audit" or stage["independent_runtime_exit_code"] == 0)
-                      and (role == "instrument" or stage["source_before"] == stage["source_after"]))
+            stage["skill_bundle_unchanged"] = bundle_hashes(workspace) == original_bundle
+            rubric_complete = isinstance(rubric, dict) and valid_rubric(rubric)
+            required_guards = {"final-message-present", "skills-loaded", "skill-instructions-read"}
+            guards_passed = (required_guards <= {check.id for check in grade.checks}
+                             and all(check.passed and not check.skipped for check in grade.checks))
+            fatal_passed = (result.returncode == 0 and guards_passed and rubric_complete
+                            and stage["skill_bundle_unchanged"]
+                            and stage["audit_sha256_after"] == audit_hash(workspace)
+                            and (role == "audit" or stage["audit_sha256_before"] is not None
+                                 and stage["audit_sha256_before"] == stage["audit_sha256_after"] == audit_hash(workspace))
+                            and (role == "audit" or stage["independent_runtime_exit_code"] == 0)
+                            and (role == "instrument" or stage["source_before"] == stage["source_after"]))
+            if fatal_passed and summary["collect_semantic_failures"]:
+                try:
+                    validate_audit_handoff(repo, workspace)
+                except Exception as error:
+                    fatal_passed = False
+                    stage["audit_handoff_error"] = type(error).__name__ + ": " + str(error)
+            semantic_passed = rubric_complete and rubric["overall_pass"] and all(check["pass"] for check in rubric["checks"])
+            passed = fatal_passed and semantic_passed
             stage["status"] = "passed" if passed else "failed"
+            stage["failure_kind"] = None if passed else "semantic" if fatal_passed else "fatal"
             archive_stage(workspace, output / role)
+            isolate_stage_feedback(workspace, output / role)
             save(output / "summary.json", summary)
             print(json.dumps({"language": args.language, "trial": args.trial, "role": role, "status": stage["status"]}), flush=True)
             if not passed:
-                raise RuntimeError(f"{role} stage did not pass all required guards, rubric and applicable runtime checks")
-        summary["status"] = "passed"
+                if not (fatal_passed and summary["collect_semantic_failures"]):
+                    raise RuntimeError(f"{role} stage did not pass all required guards, rubric and applicable runtime checks")
+                stage["diagnostic_continuation"] = True
+                summary["diagnostic_only"] = True
+                save(output / "summary.json", summary)
+        if any(stage["status"] != "passed" for stage in summary["stages"]):
+            summary.update(status="failed", error="Semantic rubric failure; later stages are diagnostic only")
+        else:
+            summary["status"] = "passed"
     except Exception as error:
         summary.update(status="failed", error=type(error).__name__ + ": " + str(error))
     finally:
@@ -257,6 +336,8 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--agent-timeout", type=int, default=3600)
     parser.add_argument("--judge-timeout", type=int, default=1200)
+    parser.add_argument("--collect-semantic-failures", action="store_true",
+                        help="Collect later bare stages after semantic-only failure; workflow remains failed")
     return run(parser.parse_args())
 
 

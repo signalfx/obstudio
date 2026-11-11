@@ -1,4 +1,5 @@
 import copy
+import datetime as dt
 import hashlib
 import json
 import io
@@ -11,6 +12,7 @@ import threading
 import time
 
 import pytest
+import logging_workflow_check as workflow
 
 from logging_workflow_check import configured_service_name, drain_output, local_url, source_hashes, stop_owned, validate_receipts
 from run_logging_workflow import bind_model_metadata
@@ -699,3 +701,238 @@ def test_source_settings_cli_omits_unrelated_content_and_writes_no_input(tmp_pat
     failure = subprocess.run(command + ["--source", str(tmp_path / "missing")], capture_output=True, text=True)
     assert failure.returncode == 1 and "FAIL:" in failure.stderr and not failure.stdout
     assert {p: p.read_bytes() for p in tmp_path.iterdir()} == before
+
+
+def identity_receipts(name="app", *, version="operator-v1", retained="kept"):
+    attributes = {"service.name": name, "service.version": version, "obstudio.eval.preserved": retained}
+    resource = {"serviceName": name, "attributes": attributes}
+    spans = [{"spanId": "parent", "traceId": "trace", "resource": {"serviceName": "driver"}}]
+    requests, logs, native = [], [], []
+    for slot in ("left", "right"):
+        client, server, handler = (slot + suffix for suffix in ("-client", "-server", "-handler"))
+        requests.append({"slot": slot, "trace_id": "trace", "client_span_id": client, "parent_span_id": "parent"})
+        spans += [{"spanId": client, "parentSpanId": "parent", "traceId": "trace", "resource": {"serviceName": "driver"}},
+                  {"spanId": server, "parentSpanId": client, "traceId": "trace", "kind": "SERVER", "resource": copy.deepcopy(resource)},
+                  {"spanId": handler, "parentSpanId": server, "traceId": "trace", "kind": "INTERNAL", "resource": copy.deepcopy(resource)}]
+        for kind in ("sync", "async"):
+            body = f"workflow {kind} completed {slot}"
+            logs.append({"body": body, "traceId": "trace", "spanId": handler, "severityNumber": 13, "resource": copy.deepcopy(resource)})
+            native.append(body)
+    logs.append({"body": "workflow outside completed", "resource": copy.deepcopy(resource)})
+    native.append("workflow outside completed")
+    return requests, logs, {"trace": {"spans": spans}}, name, "\n".join(native)
+
+
+def test_host_profile_inputs_and_expected_values_are_explicit_independent_copies(monkeypatch):
+    monkeypatch.setattr(workflow.secrets, "token_hex", lambda _: "unique")
+    base = {"OTEL_SERVICE_NAME": "old-name", "OTEL_RESOURCE_ATTRIBUTES": "old.input=value",
+            "PORT": "1234", "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://127.0.0.1:555/v1/logs"}
+    before = dict(base)
+    profiles = workflow.identity_profiles(base)
+    assert base == before
+    assert [p[0] for p in profiles] == ["resource-only", "explicit-override"]
+    _, resource_child, resource_expected = profiles[0]
+    assert "OTEL_SERVICE_NAME" not in resource_child
+    assert resource_expected == {"service.name": "operator-resource-resource-only-unique",
+                                 "service.version": "operator-version-unique", "obstudio.eval.preserved": "kept-unique"}
+    _, explicit_child, explicit_expected = profiles[1]
+    assert explicit_child["OTEL_SERVICE_NAME"] == explicit_expected["service.name"] == "operator-explicit-unique"
+    assert "service.name=operator-resource-explicit-override-unique" in explicit_child["OTEL_RESOURCE_ATTRIBUTES"]
+    assert explicit_expected["service.name"] not in explicit_child["OTEL_RESOURCE_ATTRIBUTES"]
+    for _, child, _ in profiles:
+        assert child["PORT"] == "1234"
+        assert child["OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"] == base["OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"]
+    resource_expected["service.name"] = "changed"
+    assert resource_child["OTEL_RESOURCE_ATTRIBUTES"].startswith("service.name=operator-resource-resource-only-unique,")
+    assert explicit_expected["service.name"] == "operator-explicit-unique"
+
+
+def test_profile_names_are_fresh_between_invocations():
+    first, second = workflow.identity_profiles({}), workflow.identity_profiles({})
+    assert first[0][2]["service.name"] != second[0][2]["service.name"]
+    assert first[1][2]["service.name"] != second[1][2]["service.name"]
+
+
+def test_actual_rest_shape_preserves_operator_attributes_and_existing_joins():
+    data = identity_receipts()
+    expected = {"service.name": "app", "service.version": "operator-v1", "obstudio.eval.preserved": "kept"}
+    assert len(workflow.validate_receipts(*data, expected_resource=expected)) == 4
+    # Existing unflagged compatibility does not manufacture new requirements.
+    old_shape = list(copy.deepcopy(data))
+    for span in old_shape[2]["trace"]["spans"]:
+        span["resource"].pop("attributes", None)
+    for record in old_shape[1]:
+        record["resource"].pop("attributes", None)
+    assert len(workflow.validate_receipts(*old_shape)) == 4
+
+
+@pytest.mark.parametrize("target,key", [
+    ("record", "service.version"), ("record", "obstudio.eval.preserved"),
+    ("server", "service.version"), ("server", "obstudio.eval.preserved"),
+    ("owner", "service.version"), ("owner", "obstudio.eval.preserved"),
+    ("startup", "service.version"), ("startup", "obstudio.eval.preserved"),
+    ("record", "service.name"), ("server", "service.name"),
+    ("owner", "service.name"), ("startup", "service.name"),
+])
+def test_lost_supplied_attribute_rejects_each_selected_owner(target, key):
+    data = list(identity_receipts())
+    expected = {"service.name": "app", "service.version": "operator-v1", "obstudio.eval.preserved": "kept"}
+    if target == "record": resource = data[1][0]["resource"]
+    elif target == "startup": resource = data[1][-1]["resource"]
+    else:
+        suffix = "-server" if target == "server" else "-handler"
+        resource = next(s["resource"] for s in data[2]["trace"]["spans"] if s["spanId"] == "left" + suffix)
+    resource["attributes"].pop(key)
+    with pytest.raises(AssertionError, match="Resource attribute lost/changed"):
+        workflow.validate_receipts(*data, expected_resource=expected)
+
+
+@pytest.mark.parametrize("actual", ["hardcoded-service", "lower-priority-resource"])
+def test_wrong_effective_identity_rejects_hardcoded_or_reversed_precedence(actual):
+    data = list(identity_receipts(actual))
+    expected = {"service.name": "operator-winner", "service.version": "operator-v1", "obstudio.eval.preserved": "kept"}
+    with pytest.raises(AssertionError, match="application server span"):
+        workflow.validate_receipts(*data[:3], expected["service.name"], data[4], expected_resource=expected)
+
+
+def mock_identity_run(monkeypatch, tmp_path, *, profiles, mutant=None):
+    """Drive actual checker role loop; substitute only process, wire and clock seams."""
+    environment = {"PORT": "3333", "OTEL_SERVICE_NAME": "baseline", "OTEL_RESOURCE_ATTRIBUTES": "deployment.environment.name=eval",
+                   "LOGGING_WORKFLOW_STUDIO_URL": "http://127.0.0.1:5555", "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": "http://127.0.0.1:5556/v1/traces"}
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "app.py").write_text("# no application is executed\n")
+    for key in ("PORT", "OTEL_SERVICE_NAME", "OTEL_RESOURCE_ATTRIBUTES", "LOGGING_WORKFLOW_STUDIO_URL", "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"):
+        monkeypatch.setenv(key, environment[key])
+    ambient = dict(os.environ)
+    state = {"launches": [], "current": None}
+    monkeypatch.setattr(workflow, "configured_service_name", lambda: "baseline")
+    monkeypatch.setattr(workflow.secrets, "token_hex", lambda _: "fixture-nonce")
+    clock = iter(range(10000))
+    monkeypatch.setattr(workflow.time, "monotonic", lambda: next(clock))
+    monkeypatch.setattr(workflow.time, "sleep", lambda _: None)
+
+    class Probe:
+        def __enter__(self): return self
+        def __exit__(self, *_): return False
+        def connect_ex(self, _): return 1
+    monkeypatch.setattr(workflow.socket, "socket", lambda *_: Probe())
+    monkeypatch.setattr(workflow.urllib.request, "urlopen", lambda *_a, **_kw: pytest.fail("No network permitted in mock prototype"))
+
+    class Process:
+        pid = 987654
+        returncode = None
+        def __init__(self, command, **kwargs):
+            assert command == ["make", "dev"]
+            assert kwargs["cwd"] == tmp_path and kwargs["start_new_session"] is True
+            child = dict(kwargs["env"])
+            state["launches"].append(child)
+            # Fixture-only model for the plain input pairs; no SDK/parser conformance claim.
+            attrs = dict(piece.split("=", 1) for piece in child["OTEL_RESOURCE_ATTRIBUTES"].split(","))
+            name = child.get("OTEL_SERVICE_NAME") or attrs.get("service.name")
+            data = list(identity_receipts(name, version=attrs.get("service.version", "baseline-v"), retained=attrs.get("obstudio.eval.preserved", "baseline-kept")))
+            if mutant and len(state["launches"]) == 2:
+                if mutant == "hardcoded":
+                    data = list(identity_receipts("hardcoded"))
+                elif mutant == "lost-version":
+                    data[1][0]["resource"]["attributes"].pop("service.version")
+                elif mutant == "lost-attribute":
+                    data[2]["trace"]["spans"][2]["resource"]["attributes"].pop("obstudio.eval.preserved")
+            if mutant == "reversed-precedence" and len(state["launches"]) == 3:
+                # Incorrect generated app honors the lower-priority Resource name.
+                data = list(identity_receipts(attrs["service.name"], version=attrs["service.version"],
+                                   retained=attrs["obstudio.eval.preserved"]))
+            timestamp = dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=1)
+            if mutant == "stale" and len(state["launches"]) == 2:
+                timestamp -= dt.timedelta(days=2)
+            for record in data[1]: record["timeUnixNano"] = timestamp.isoformat()
+            state["current"] = data
+            self.stdout = io.StringIO(data[4] + "\n")
+        def poll(self): return self.returncode
+    monkeypatch.setattr(workflow.subprocess, "Popen", Process)
+    monkeypatch.setattr(workflow, "traced_requests", lambda *_: state["current"][0])
+    def stop(process, *, drained=None, **_):
+        process.returncode = 0
+        return drained.wait(timeout=1)
+    monkeypatch.setattr(workflow, "stop_owned", stop)
+    def query(url):
+        if url.endswith("/health"): return {"status": "ok"}
+        return state["current"][1] if "/api/query/logs" in url else state["current"][2]["trace"]
+    monkeypatch.setattr(workflow, "get_json", query)
+    args = ["checker", "--start-command-json", '["make","dev"]']
+    if profiles: args.append("--operator-identity-profiles")
+    monkeypatch.setattr(sys, "argv", args)
+    # The real pump thread writes the complete fresh captured sink before validation.
+    real_capture = workflow.capture_live_receipts
+    def capture(process, studio, requests, name, started, output, expected):
+        deadline = dt.datetime.now() + dt.timedelta(seconds=1)
+        while not (output / "native-output.log").read_text().endswith("workflow outside completed\n"):
+            assert dt.datetime.now() < deadline
+            threading.Event().wait(.001)
+        return real_capture(process, studio, requests, name, started, output, expected)
+    monkeypatch.setattr(workflow, "capture_live_receipts", capture)
+    status = workflow.main()
+    assert dict(os.environ) == ambient
+    paths = list((tmp_path / ".observe/logging-workflow-proof").glob("*/result.json"))
+    results = [json.loads(p.read_text()) for p in paths]
+    return status, state, paths, results
+
+
+def test_unflagged_checker_keeps_one_normal_launch_and_existing_evidence(monkeypatch, tmp_path):
+    status, state, paths, results = mock_identity_run(monkeypatch, tmp_path, profiles=False)
+    assert status == 0 and len(state["launches"]) == len(results) == 1
+    result = results[0]
+    assert result["status"] == "passed" and len(result["joins"]) == 4
+    assert "identity_profile" not in result and result["shutdown_drain_proven"] is False
+    assert (paths[0].parent / "receiver-traces.json").is_file()
+    assert (paths[0].parent / "native-output-at-receipt.log").is_file()
+
+
+def test_opt_in_profiles_reach_actual_child_and_retain_independent_raw_results(monkeypatch, tmp_path):
+    status, state, paths, results = mock_identity_run(monkeypatch, tmp_path, profiles=True)
+    assert status == 0 and len(state["launches"]) == len(results) == 3
+    assert "OTEL_SERVICE_NAME" not in state["launches"][1]
+    assert state["launches"][2]["OTEL_SERVICE_NAME"] == "operator-explicit-fixture-nonce"
+    assert len({r["proof_directory"] for r in results}) == 3
+    tagged = {r["identity_profile"]: r for r in results if "identity_profile" in r}
+    assert set(tagged) == {"resource-only", "explicit-override"}
+    for result in results:
+        assert result["status"] == "passed" and len(result["joins"]) == 4
+        assert result["source_before"] == result["source_after"]
+    for result in tagged.values():
+        assert result["expected_resource"]["service.version"] == "operator-version-fixture-nonce"
+        assert result["launch_resource_inputs"] == {k: v for k, v in state["launches"][1 if result["identity_profile"] == "resource-only" else 2].items() if k in {"OTEL_SERVICE_NAME", "OTEL_RESOURCE_ATTRIBUTES"}}
+        assert "no absent/default identity, metrics Resource, encoding or header proof" in result["scope"]
+
+
+@pytest.mark.parametrize("mutant", ["hardcoded", "lost-version", "lost-attribute", "stale"])
+def test_profile_fault_keeps_failed_raw_evidence_and_cannot_be_erased_by_later_pass(monkeypatch, tmp_path, mutant):
+    status, state, paths, results = mock_identity_run(monkeypatch, tmp_path, profiles=True, mutant=mutant)
+    assert status == 1 and len(state["launches"]) == len(results) == 3
+    failed = next(r for r in results if r.get("identity_profile") == "resource-only")
+    assert failed["status"] == "failed" and failed["error"]
+    assert failed["source_before"] == failed["source_after"]
+    raw = Path(failed["proof_directory"])
+    for name in ("receiver-logs.json", "receiver-traces.json", "requests.json", "native-output.log"):
+        assert (raw / name).is_file()
+    assert next(r for r in results if r.get("identity_profile") == "explicit-override")["status"] == "passed"
+
+
+def test_third_explicit_override_launch_rejects_reversed_precedence_without_erasing_first_passes(monkeypatch, tmp_path):
+    status, state, paths, results = mock_identity_run(monkeypatch, tmp_path, profiles=True, mutant="reversed-precedence")
+    assert status == 1 and len(state["launches"]) == len(results) == 3
+    failed = next(r for r in results if r.get("identity_profile") == "explicit-override")
+    assert failed["status"] == "failed" and "application server span" in failed["error"]
+    assert failed["launch_resource_inputs"]["OTEL_SERVICE_NAME"] == "operator-explicit-fixture-nonce"
+    assert "service.name=operator-resource-explicit-override-fixture-nonce" in failed["launch_resource_inputs"]["OTEL_RESOURCE_ATTRIBUTES"]
+    assert failed["expected_resource"]["service.name"] == "operator-explicit-fixture-nonce"
+    assert all(r["status"] == "passed" for r in results if r is not failed)
+    raw = Path(failed["proof_directory"])
+    logs = json.loads((raw / "receiver-logs.json").read_text())
+    assert logs == []  # Wrong-name receipts cannot be selected as the operator winner.
+    traces = json.loads((raw / "receiver-traces.json").read_text())
+    assert any(s.get("kind") == "SERVER" and s["resource"]["serviceName"] ==
+               "operator-resource-explicit-override-fixture-nonce"
+               for trace in traces.values() for s in trace["spans"])
+    assert failed["source_before"] == failed["source_after"]
+    for name in ("receiver-logs.json", "receiver-traces.json", "requests.json", "native-output.log"):
+        assert (raw / name).is_file()

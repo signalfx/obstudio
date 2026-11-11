@@ -927,8 +927,15 @@ the selected shutdown policy and not accidentally interrupt active final logging
 or drain. Prove required event ordering and final-record receipt on that same
 configured lifecycle path. Keep exporter completion, flush waiting, cancellation
 and receiver acknowledgement distinct. Route SDK/exporter diagnostics through a
-supported independent handler or suppression path; assess actual diagnostic
-cadence separately from successful limit enforcement.
+supported independent handler or suppression path. When adding a root OTel
+bridge, follow the actual
+`logging.Logger.callHandlers` route: a found handler can disable `lastResort`
+even when its filter rejects the record. Excluding SDK records from the bridge
+does not supply native output; handlers on application/framework sibling
+loggers do not serve that SDK namespace. Retain an eligible existing native
+route or supported suppression policy rather than forcing a new handler or
+diagnostic emission. Assess actual diagnostic cadence separately from
+successful limit enforcement.
 
 ---
 

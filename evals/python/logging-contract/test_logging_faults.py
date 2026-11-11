@@ -4,6 +4,8 @@ from contextlib import contextmanager
 import io
 import json
 import logging
+import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -127,9 +129,11 @@ def test_overload_has_bounded_batches_and_observable_local_loss():
 class RaisingExporter(LogRecordExporter):
     def __init__(self):
         self.calls = 0
+        self.bodies = []
 
     def export(self, batch):
         self.calls += 1
+        self.bodies.extend(item.log_record.body for item in batch)
         raise RuntimeError("synthetic receiver unavailable")
 
     def shutdown(self):
@@ -137,6 +141,35 @@ class RaisingExporter(LogRecordExporter):
 
     def force_flush(self, timeout_millis=30000):
         return True
+
+
+def _sdk_diagnostic_route_trial(mode):
+    # A child interpreter keeps SDK filters and global logging state isolated.
+    root = logging.getLogger()
+    diagnostic_logger = logging.getLogger("opentelemetry.sdk._shared_internal")
+    assert not root.handlers
+    assert not diagnostic_logger.handlers and diagnostic_logger.propagate
+    exporter = RaisingExporter()
+    with logging_path(exporter, batch=True) as (logger, provider, sink):
+        bridge = next(handler for handler in logger.handlers if isinstance(handler, LoggingHandler))
+        if mode != "fallback":
+            bridge.addFilter(lambda record: not (
+                record.name == "opentelemetry" or record.name.startswith("opentelemetry.")
+            ))
+            root.addHandler(bridge)
+        if mode == "native":
+            diagnostic_logger.addHandler(logging.StreamHandler())
+            diagnostic_logger.propagate = False
+        elif mode == "suppressed":
+            diagnostic_logger.setLevel(logging.CRITICAL)
+        enabled = diagnostic_logger.isEnabledFor(logging.ERROR)
+        logger.error("first failure")
+        assert provider.force_flush(timeout_millis=2000)
+        logger.info("application continued")
+        assert provider.force_flush(timeout_millis=2000)
+        native = sink.getvalue().splitlines()
+    return {"calls": exporter.calls, "bodies": exporter.bodies,
+            "native": native, "diagnostic_error_enabled": enabled}
 
 
 def test_sdk_failure_diagnostics_are_visible_outside_application_bridge():
@@ -158,3 +191,25 @@ def test_sdk_failure_diagnostics_are_visible_outside_application_bridge():
             assert sink.getvalue().splitlines() == ["first failure", "application continued"]
     finally:
         diagnostic_logger.handlers, diagnostic_logger.level, diagnostic_logger.propagate = previous
+
+    script = (
+        "import json,runpy,sys; "
+        "trial=runpy.run_path(sys.argv[1])['_sdk_diagnostic_route_trial']; "
+        "print(json.dumps(trial(sys.argv[2])))"
+    )
+    for mode in ("fallback", "filtered", "native", "suppressed"):
+        result = subprocess.run(
+            [sys.executable, "-I", "-B", "-c", script, __file__, mode],
+            capture_output=True, text=True, timeout=10,
+        )
+        assert result.returncode == 0, result.stderr
+        observation = json.loads(result.stdout)
+        assert observation["calls"] == 2
+        assert observation["bodies"] == ["first failure", "application continued"]
+        assert observation["native"] == ["first failure", "application continued"]
+        assert observation["diagnostic_error_enabled"] is (mode != "suppressed")
+        diagnostic_count = result.stderr.count("Exception while exporting")
+        if mode in {"fallback", "native"}:
+            assert 1 <= diagnostic_count <= 2, result.stderr
+        else:
+            assert diagnostic_count == 0, result.stderr
