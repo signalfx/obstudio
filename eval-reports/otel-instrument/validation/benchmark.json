@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-instrument",
-    "run_id": "20261110T215145540375Z",
+    "run_id": "20261110T215304874936Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-6-luna",
     "judge_model": "",
@@ -986,7 +986,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "c85c6a02419943f9843e2c6bbaa3290250ce8c341e98f1d3ce45b8a3e95e3cfa",
+    "digest": "ff563796c8e9c9647e794d0607709339cd6ebbe25b9878726076a3e416548018",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -1444,7 +1444,7 @@
       "evals/node/express-basic/eval/qual/dependency-log-compatibility.json": "f61ffc160044e14d2173d6bcb9dd3e036efb42342c56c76be99ef312a6aac1ae",
       "evals/node/express-basic/package.json": "9a6b2e4619c27d59d7911017d38caf37cecc4c5dc0a443b7eabd54ce0c554ae9",
       "evals/node/express-basic/eval/qual/instrument.json": "46fab66154d62f2637d1b6d0afd7cd4b8a8956334be5295215083ae1797bb38f",
-      "evals/node/express-basic/eval/runtime/App.Dockerfile": "5e44b534e2e8d8c4a7dfe088043d91bd96a606ae1e826566b0010d2ad984c07a",
+      "evals/node/express-basic/eval/runtime/App.Dockerfile": "cac76a24c017203e01b27d690874de14253e5c1b11645c69454c1b9300d5df28",
       "evals/node/express-basic/eval/runtime/docker-compose.yml": "e4b1d38fb8f621610c4509146b8b37bdb23e4e67595fcd9b213fc028c262c455",
       "evals/node/express-basic/eval/runtime/instrument.json": "0d75513d55d5e0b55e4545e7ed3e27a319d3e48f54a3f969a0e9db425e71ee8f",
       "evals/node/express-basic/eval/runtime/run-traffic.sh": "82f57ed333cc123b26bfa32ad90045c6f205882c9f257f51c4cfa3d37a94951b",
