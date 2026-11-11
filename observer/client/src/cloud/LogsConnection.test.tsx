@@ -56,7 +56,7 @@ it.each(["browser", "IDE"] as const)("opens HEC endpoint help with the keyboard 
   const tokenHelp = screen.getByRole("link", { name: "Find your HEC token" });
   const guideURL = "https://help.splunk.com/en/splunk-cloud-platform/get-data-in/get-started-with-getting-data-in/10.2.2510/get-data-with-http-event-collector/set-up-and-use-http-event-collector-in-splunk-web";
   const endpointURL = `${guideURL}#id_4626b983_5022_4b94_b071_22646bce88c3--en__Send_data_to_HTTP_Event_Collector_on_Splunk_Cloud_Platform:~:text=Send%20data%20to%20HTTP%20Event%20Collector%20on%20Splunk%20Cloud%20Platform`;
-  const tokenURL = `${guideURL}#id_0e3d0bc3_3f87_463b_8e76_55e23dcee03d--en__Create_an_Event_Collector_token_on_Splunk_Cloud_Platform:~:text=Create%20an%20Event%20Collector%20token%20on%20Splunk%20Cloud%20Platform`;
+  const tokenURL = `${guideURL}#create-an-event-collector-token-on-splunk-cloud-platform-0:~:text=Create%20an%20Event%20Collector%20token%20on%20Splunk%20Cloud%20Platform`;
   expect(help.getAttribute("href")).toBe(host === "IDE" ? "#" : endpointURL);
   expect(help.getAttribute("target")).toBe(host === "IDE" ? null : "_blank");
   expect(help.getAttribute("rel")).toBe(host === "IDE" ? null : "noopener noreferrer");

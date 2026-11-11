@@ -551,7 +551,7 @@ test('HEC help opens distinct fixed documentation sections through the IDE host'
 	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf-8');
 	for (const [action, name, url, section, anchor] of [
 		['open-hec-endpoint-help', 'hecEndpointHelpURL', hecEndpointHelpURL, 'Send data to HTTP Event Collector on Splunk Cloud Platform', 'id_4626b983_5022_4b94_b071_22646bce88c3--en__Send_data_to_HTTP_Event_Collector_on_Splunk_Cloud_Platform'],
-		['open-hec-token-help', 'hecTokenHelpURL', hecTokenHelpURL, 'Create an Event Collector token on Splunk Cloud Platform', 'id_0e3d0bc3_3f87_463b_8e76_55e23dcee03d--en__Create_an_Event_Collector_token_on_Splunk_Cloud_Platform'],
+		['open-hec-token-help', 'hecTokenHelpURL', hecTokenHelpURL, 'Create an Event Collector token on Splunk Cloud Platform', 'create-an-event-collector-token-on-splunk-cloud-platform-0'],
 	]) {
 		const target = new URL(url);
 		assert.equal(target.origin, 'https://help.splunk.com');
