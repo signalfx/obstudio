@@ -468,6 +468,13 @@ func (h standardLogHandler) WithGroup(name string) slog.Handler {
 	h.groups = append(append([]string(nil), h.groups...), name)
 	return h
 }
+
+func nativeSDKErrorHandler(current *log.Logger) otel.ErrorHandler {
+	native := log.New(current.Writer(), current.Prefix(), current.Flags())
+	return otel.ErrorHandlerFunc(func(error) {
+		native.Print("OpenTelemetry SDK operation failed")
+	})
+}
 ```
 
 The [PeriodicReader API](https://pkg.go.dev/go.opentelemetry.io/otel/sdk/metric#NewPeriodicReader)
@@ -487,6 +494,10 @@ func main() {
 		context.Background(), os.Interrupt, syscall.SIGTERM,
 	)
 	defer stop()
+
+	// This example assumes preflight found no existing SDK error-handler owner.
+	// Reuse an existing safe custom/strict handler instead of replacing it.
+	otel.SetErrorHandler(nativeSDKErrorHandler(log.Default()))
 
 	// This service uses log.Default(). Snapshot its writer, prefix, and flags
 	// before slog.SetDefault rewires it. Native slog apps pass their existing
@@ -529,6 +540,19 @@ actual handler rather than this adapter. Do not pass Go's untouched built-in
 standard logger, so calling that captured default handler can recurse. For a
 project-owned `*slog.Logger`, apply the same fan-out at its construction site
 instead of changing the process default.
+
+Resolve SDK diagnostic routes before installing a global bridge. Internal SDK
+logging and errors reported through `otel.Handle` have different owners; the
+default public error handler uses the standard logger and can therefore reenter
+this fan-out. The example's `nativeSDKErrorHandler` freezes the original writer,
+prefix and flags before provider startup and emits a fixed, value-free message
+outside that bridge. It is for new application-owned SDK setup: inspect and
+retain an existing custom or strict error handler rather than replacing it.
+[`GetErrorHandler`](https://pkg.go.dev/go.opentelemetry.io/otel#GetErrorHandler)
+exists, but a previously returned default delegator can be redirected by the
+first registration; it is not a historical native-handler snapshot to restore.
+Resolve actual registration/delegation in the selected version and isolate tests
+that change process-wide handlers.
 
 Use context-aware logging inside traced work so `otelslog` can correlate the
 record:
@@ -876,8 +900,12 @@ which waits and requests actually observe it before calling a value a ceiling.
 Prove final-log receipt through the existing launcher and lifecycle owner by
 decoding the actual record at the claimed boundary. A request count or successful
 shutdown return cannot identify its content. Preserve final-record, protocol
-acknowledgement and backend-persistence distinctions. Keep SDK diagnostics on the
-existing safe independent path; isolate any test that changes global handlers.
+acknowledgement and backend-persistence distinctions. Resolve internal diagnostic
+logging separately from the public SDK error-handler route through its actual
+consumer. A default standard-logger route can feed errors back into a global log
+bridge. Preserve an existing safe owner; for new application-owned setup, use an
+independent native route before provider/bridge activation. Verify bounded fault
+output and no diagnostic reexport; isolate tests that change global handlers.
 
 ---
 

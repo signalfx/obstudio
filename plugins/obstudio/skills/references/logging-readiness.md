@@ -41,10 +41,10 @@ every normal application audit, instrumentation or verification report.
 
 1. **Contract:** extract each applicable primary-source clause and its distinct
    conditions, strength, maturity and actual owner. Distinguish the specification's
-   status from the installed or proposed component/API's stated stability; a stable
-   data model does not establish language SDK or bridge maturity. Use the relevant
-   source statement, or retain unknown/not-inspected without inventing a beta label
-   or upgrade requirement. Keep SDK, receiver and library duties distinct from
+   status from each selected installed/proposed SDK, API and bridge's stated
+   stability; a stable data model does not establish component maturity. Retain
+   a source-backed status or explicit unknown/not-inspected disposition for those
+   components, without inventing a beta label or upgrade requirement. Keep SDK, receiver and library duties distinct from
    application wiring and retain precise delegated capability dispositions.
 2. **Capability:** resolve mechanisms necessary to selected application/operator
    invariants and every actual capability claim. Follow relevant parser, default,
@@ -60,10 +60,11 @@ every normal application audit, instrumentation or verification report.
 
 Keep `required_fix` to the smallest authorized application change. Put delegated
 defaults and optional capability facts in evidence with their owner/disposition;
-do not turn them into new application configuration promises. Independently
-selectable findings must be deliverable with their transitive prerequisites.
-Bind shared integration checks to the finding owning the whole path, rather
-than making foundation acceptance require a repair owned by its dependent.
+do not turn them into new application configuration promises. Each independently
+selectable finding's acceptance must be executable using its own repair and
+transitive prerequisites. Check the changes each assertion needs, not only its
+scenario's listed IDs: a dependent's repair cannot establish its prerequisite's
+acceptance. Bind shared whole-path integration checks to their actual owner.
 
 Derive a named configuration inventory independently from application-owned or
 new overrides, supplied selected settings, and dependencies necessary to the
@@ -128,33 +129,27 @@ outcome. A Boolean control for one flag does not allocate another flag or
 numeric/enum branches. Future runtime status can be Not run while source
 behavior is already known.
 
-Read concrete repair proposals back against the public API and effective startup
-configuration. For a selected control, name its authority/owner and trace the
-winning explicit option, environment/loader value and native policy through any
-activation gate. Distinguish preserving a setting's bytes from preserving its
-effect. An intentional higher-precedence choice can be valid; state which
-settings become inactive and why that choice satisfies the authorized policy.
-When native-output policy and operator controls conflict, resolve the authority
-or retain the concrete conflict and conditional repair; do not claim both
-effective behaviors. Allocate assertions for the selected effects, while
-keeping inactive delegated facts source-only rather than testing unreachable
-parser permutations. Check argument names/units, construction and runner
-CLI/environment precedence against retained source; keep unresolved mechanisms unverified
-instead of prescribing a source-contradicted call or launch profile.
-Separate an API's documented contract from implemented enforcement. Trace each
-selected capability both into its helper/delegate and back through returned
-values, decisions or errors to the callers that update state, aggregate outcomes,
-retry or issue diagnostics. Resolve the terminal effect, not just the helper's
-local action. Bound an absence claim to its inspected component, conditions and
-paths: no warning in one helper does not establish a silent record pipeline.
-Distinguish a conditional diagnostic call from its configured level/routing and
-observed output; source capability is not runtime visibility. Preserve actual
-precedence, forwarding and normalization. For timeout/cancellation claims, locate
-deadline creation, propagation and consumption relative to retries. Retain any
-documentation/implementation conflict and owner rather than treating a comment
-as proof. A permitted public-boundary probe resolves only its tested scope,
-not application execution or unselected sibling conformance.
+For every exact API, default, absence or enforcement claim, retain the selected
+subject, declaring symbol and consuming implementation with an addressable source
+slice. An interface contract alone does not establish a concrete implementation's
+parameters or behavior; one reader/helper does not establish another's fallback,
+sentinel or diagnostic route. Follow delegates and returned values through callers
+that update state, retry, aggregate results or issue diagnostics. Keep each
+negative claim bounded to the components, conditions and paths actually inspected.
 
+Reconcile repairs against effective startup and the selected authority: argument
+names/units, explicit options, active loader and runner CLI/environment precedence, activation,
+forwarding and normalization. Preserving bytes is not preserving their effect.
+An intentional higher-precedence choice can be valid; name inactive settings and
+why that authority satisfies policy. Resolve conflicting native-output/operator
+requirements or retain the concrete conflict and conditional repair. Allocate
+assertions for selected effects, without testing unreachable delegated parsers.
+For deadlines, locate creation, propagation and consumption relative to retries.
+Distinguish documented contract, implementation enforcement, diagnostic level/
+routing and observed runtime output; retain conflicts with their actual owner.
+Accessible source contradictions cannot become correct by being labeled Not run.
+A public-boundary probe proves its tested scope, not application execution or
+unselected sibling conformance.
 Use the relevant source boundary rather than stopping at the options class:
 
 | Claimed capability | Source to reconcile |
@@ -209,10 +204,9 @@ plan that disabled-SDK/retained-propagation conjunction; disabled export alone
 does not prove it. Preserve the actual SDK limitation and owner when its startup
 also bypasses propagator configuration, rather than inventing app wiring proof.
 In application-owned initialization, keep selected propagation setup outside
-the branch that skips SDK signal providers/bridges. Test carrier extraction
-through that same disabled initialization path; checking provider registration
-alone cannot establish retained propagation. Preserve an existing configured
-propagator and its selected carrier format.
+the branch that skips SDK signal providers/bridges. Preserve existing configured
+propagators and carrier formats; use the same-path control below rather than
+inferring propagation from provider registration.
 For supported environment Boolean settings, only case-insensitive `true` means
 true; `1` and `yes` do not disable the SDK. Other values resolve false, with a
 warning recommended for invalid nonempty values. Let the actual config owner
@@ -227,16 +221,22 @@ operator identity even when `OTEL_SERVICE_NAME` is absent. Do not add a higher-
 precedence Make, shell, CLI, `.env`, launch profile, image or JVM fallback that
 replaces it. Resolve resource values with the installed SDK's supported detector/merge, apply new
 application defaults underneath supplied values, and inspect the actual merge
-order. Verify the normal launcher as well as the helper with resource-only
-identity, explicit service-name override and absent-identity controls.
-Build each control's actual child environment explicitly, removing conflicting
-inherited identity keys rather than only updating resource attributes. Check key
-presence and active loader/profile inputs before launch, then assert the received
-SDK Resource; a helper result or a claimed environment variant is insufficient.
-Resource-only and absent-identity controls must also account for values reloaded
-by an active `.env` or launch profile; clearing the parent environment alone can
-leave a hidden service-name override. Use an isolated configuration/project copy
-for those controls rather than deleting operator-owned settings.
+order. These local preservation controls exercise the supported selected owner:
+
+| Control | Input and required observation |
+|---|---|
+| Resource-only identity | Supply `service.name` through the Resource configuration with `OTEL_SERVICE_NAME` and conflicting loader/profile overrides absent; assert that identity in received SDK Resource through the normal launcher. |
+| Explicit identity override | Supply the selected higher-priority identity and a different lower-priority value; assert the actual documented winner through normal startup. |
+| Absent identity | Remove supplied identity from the actual child environment and active loader/profile; assert the supported default without changing unrelated supplied Resource attributes. |
+| Disabled SDK, retained propagation | Through the same disabled initialization, prove effective no-op SDK signals, the selected app-owned provider/bridge activation policy, preserved native output, and actual carrier operations for the configured propagator's selected directions and fields. A separate enabled-path helper test cannot establish this conjunction. |
+
+These are identity/activation controls, not an exhaustive SDK input suite. Build
+each child environment explicitly and check key presence and active configuration
+before launch. Clearing the parent environment alone does not remove values
+reloaded by `.env` or launch profiles. Use an isolated project/configuration copy;
+do not delete operator-owned settings. Helper results alone cannot prove normal-
+launch identity, and a compound service-name-plus-Resource trial cannot replace
+resource-only or absent-identity cases.
 These preservation checks are local workflow; SDK configuration defines each
 setting's precedence, and an active file loader retains its own contract. Include resource
 encodings accepted by that installed configuration owner, such as whitespace
@@ -548,14 +548,23 @@ does not prove the bridge handles every value, or authorize replacing it.
 For selected semantic events, keep EventName free of per-occurrence IDs; put
 permitted varying values in attributes. Reuse applicable semantic attributes;
 new application keys should use a nonconflicting application/company namespace,
-and new `otel.*` keys require specification approval. Where call-site fields are
+and new `otel.*` keys require specification approval. New names MUST be valid
+Unicode; lowercase, dot namespaces and snake_case components are naming SHOULDs.
+An established ecosystem concatenated form SHOULD take precedence over underscores;
+an individual API/SDK symbol's spelling alone is not that evidence. Preserve
+existing semantic conventions and consumers; these recommendations do not require renaming native
+messages, established keys or dependency-owned mappings. Where call-site fields are
 selected, check the installed bridge's convention version and current `code.*`
 keys before changing deprecated mappings; do not upgrade or rewrite its SDK.
 Keep scope identity consistent rather than attaching conflicting scope attributes
 to the same Logger identity. Optional development `log.iostream`,
 `log.record.original` and `log.record.uid` are not mandatory on every record.
-If present, bound and sanitize original content before constructing it; two
-distinguishable records must not share a UID. A trace ID is not a per-record UID.
+When `log.iostream` is supplied, the applicable known `stdout` or `stderr` value
+MUST be used; a different stream MAY use a custom value. The registry permits
+`log.record.original` when the original was string-like AND Body does not already
+contain that value; this conditional MAY is not a converse prohibition. Bound
+and sanitize original content before constructing it. Two distinguishable records
+MUST NOT share a supplied UID. A trace ID is not a per-record UID.
 
 For a newly selected event definition, document when it occurs, its name,
 occurrence timestamp, default severity and permitted attributes, including
@@ -564,8 +573,12 @@ every span attribute; failure outcomes use applicable `error.type` conventions.
 A named event represents a timestamped occurrence, a span a duration, and span
 attributes properties of the whole operation. Ordinary diagnostic messages
 remain ordinary logs; events can occur outside a trace without inventing a span.
-On a supported new event path, use the canonical EventName field rather than
-the deprecated `event.name` attribute. Resolve existing bridge/version migration
+For a semantic-event definition you author, the Development conventions MUST NOT
+prescribe ObservedTimestamp or SeverityText; a Body definition is permitted only
+for a string display message. These are definition-author restrictions, not a
+ban on SDK-populated observation/severity fields or structured ordinary LogRecord
+Body. On a supported new event path, use the canonical EventName field rather
+than the deprecated `event.name` attribute. Resolve existing bridge/version migration
 policy before changing an older mapping; do not upgrade solely for this example.
 
 ## LOG-CONTEXT -- Correlate without inventing or leaking context
@@ -852,6 +865,13 @@ For each selected stop control, save a compact plan:
 effective application handler/finalizer; permitted outcome; budget/source`.
 Name how that path and order will be observed through normal startup; stopping
 a launcher or cleaning up a child alone does not prove application drain.
+A drain claim needs a genuine pending-record witness when the selected lifecycle
+owner enters provider drain, possibly after the stop request and finalizer logging,
+and that record's receipt attributable to shutdown before process exit. A pre-stop
+emit may already have exported; holding a receiver response may show only an
+in-flight export. Resolve queue/interval or equivalent supported evidence and
+the actual shutdown/export order. Reuse an existing real application operation/
+log where possible; do not add production logging solely for a test.
 Assert the final record's own selector/predicate, body/severity/count/time,
 Resource and associated or legitimately absent context, and receipt/exit order.
 Check per-body/identity multiplicities, both trace and span IDs (or their required
@@ -987,6 +1007,10 @@ unknown acceptance or no observed acknowledgement cannot claim log
 `otlp_accepted`; retain a known completed client error as completed even when
 its accepted record count remains unknown.
 
+The [OTLP exporter retry contract](https://opentelemetry.io/docs/specs/otel/protocol/exporter/#retry)
+requires transient-error handling with exponential backoff and jitter (MUST).
+Assess the existing exporter's transport-specific eligibility and actual policy;
+this is not a new application retry loop or numeric tuning prescription.
 The standard OTLP exporter timeout covers a whole batch export, including all
 attempts and retry waits; it must not restart for each attempt, and an earlier
 caller deadline takes precedence. Keep that specification contract separate
@@ -1248,20 +1272,15 @@ nonmatching namespaces and skipped files need independent inspection. The helper
 writes no reports, resolves no dynamic names and evaluates no coverage or runtime.
 An equivalent complete source-derived inventory remains valid.
 
-Compare required configuration names to saved cases for actual selected
-operator/environment readers and precise input-behavior claims, including their
-necessary flags and fallback keys. For fixed typed options, reconcile the applied
-value, units, native API, startup consumption and operator preservation instead
-of unrelated malformed SDK input permutations. Resolve effective values/errors/
-diagnostics and source strength at the claimed scope. Ordinary delegated defaults
-may retain compact versioned source/ownership dispositions; lexical discovery
-alone neither selects them nor proves support. Keep an unresolved necessary
-reader, wiring or source-access boundary explicit; a future instruction cannot
-close accessible facts needed for an exact claim. Named controls across related
-scenarios may jointly cover a selected profile when each setting, assertion and
-required execution boundary is addressable; no duplicate scenario is required.
-A helper-only or different-boundary pass cannot prove normal-launch consumption,
-operator preservation or a combined runtime claim.
+Apply **Source and applicability** to the saved claims and configuration cases:
+read their retained slices against the exact subject and terminal consumer, then
+check applied values, authority and their own assertions. Include the identity/
+disabled-init controls when supported and selected. Keep missing source access,
+wiring and proof distinct; lexical discovery neither selects unused defaults nor
+establishes runtime behavior. Shared parameterized controls are valid when every
+condition and execution boundary is addressable. Reuse the independent-finding
+acceptance closure above; helper-only or different-path results cannot close a
+normal-launch or same-path conjunction.
 For an existing canonical audit, the read-only report helper can enumerate the
 promises directly, including every `expected_telemetry[].attributes` member:
 
