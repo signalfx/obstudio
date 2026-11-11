@@ -82,7 +82,12 @@ new overrides, supplied selected settings, and dependencies necessary to the
 claimed logging behavior. Include relevant Resource, propagation/sampling,
 bridge/provider activation, filtering/SDK-disabled, limits and lifecycle paths.
 For a promised optional mode, identify its actual named activation setting or
-source-proven default; an instruction to enable the mode is not its wiring.
+source-proven default and bind the selected mode to its telemetry/preservation
+oracle at the claimed boundary. Scope a baseline profile's names, units, fields
+and aliases to that profile when another operator-selected profile is promised.
+Use the existing SDK reader; unchanged source-only mode/default facts do not
+select every unused input permutation. An instruction to enable the mode is not
+its wiring.
 Inspect key/option declarations and actual readers; a declaration alone does not
 prove consumption. Key entries by owner/reader as well as setting name, since
 consumers can apply different defaults and diagnostics. A queried startup key
@@ -909,7 +914,13 @@ For each selected stop control, save a compact plan:
 `request kind → recipient/process or process group → launcher forwarding →
 effective application handler/finalizer; permitted outcome; budget/source`.
 Name how that path and order will be observed through normal startup; stopping
-a launcher or cleaning up a child alone does not prove application drain.
+a launcher or cleaning up a child alone does not prove application drain. For a
+selected claim that teardown prevents or bounds a later callback, follow its
+owner, dispatch/cleanup registrations, retained references and actual closed
+state through invocation and terminal effect. Detaching one dispatch route does
+not establish unregistration or cancellation elsewhere. A callback that still
+runs may be harmless under an idempotent closed owner; prove the selected effect
+and budget rather than requiring callback absence.
 A drain claim needs a genuine pending-record witness when the selected lifecycle
 owner enters provider drain, possibly after the stop request and finalizer logging.
 Name its effective queue/schedule/batch conditions and observation; a pre-stop
@@ -1191,11 +1202,17 @@ and an internal logging facade can have different consumers and policies; a
 setter for one does not establish routing for the other. Retain an adequate
 default or suppressed route with its actual conditions. Do not infer a leak,
 mandate a replacement or claim custom sanitization for an uninspected route.
-For a selected diagnostic count or absence claim, verify that the capture/counting
-predicate detects the actual relevant emitted form and binds its raw matches to
-the measured trial window. An unmatched format or unobserved channel cannot prove
-a zero-diagnostic bound. Source-supported suppression remains valid without
-forcing a diagnostic to be emitted.
+For a selected diagnostic count or absence claim, calibrate the capture/counting
+predicate against the actual relevant emitted form and retain its matched raw
+observation and trial window. Keep that observation route in place through the
+selected work's terminal outcome, including controlled release/cleanup after a
+caller wait expires, before restoring test-owned sinks or handlers. A completed
+wait is not necessarily completed work. If the bounded observation ends first,
+retain the outstanding effect as unknown rather than count it as suppressed;
+finish owned bounded cleanup without moving its result into another trial.
+Bind the client outcome and diagnostic observation to that same case. An
+unmatched form or unobserved channel cannot establish zero. Source-supported
+suppression remains valid without forcing a diagnostic to be emitted.
 Under the [common attribute-limit rules](https://opentelemetry.io/docs/specs/otel/common/#attribute-limits),
 an SDK MAY emit a diagnostic for truncation, discard or replacement. Such
 diagnostics MUST NOT occur more than once per affected record. Separately, the
@@ -1300,6 +1317,17 @@ three independent inputs: selected source/policy obligations, the complete saved
 repair contract, and actual assertions/raw outcomes. Neither helper output nor a
 valid schema evaluates that reconciliation. An equivalent complete inspection is
 valid; no additional canonical report or schema fields are required.
+
+For complex selected claims, an available and authorized independent read-only
+context can perform this readback over bounded saved contracts, retained
+source/policy and raw observations. Give it the obligations and artifacts rather
+than the author's conclusions or prior grades, and preserve the requested
+provider, model/effort and permissions without adding an external service. It
+reports concrete mismatches and proof limits, not approval. Verify its findings,
+repair within this skill's authority and rerun affected checks; otherwise retain
+unresolved gaps. When delegation is unavailable or unwarranted, perform the same
+readback yourself. A reviewer response is no execution evidence and does not
+replace requested verification or independent review.
 
 For an existing audit, capture the read-only saved-contract view's stdout to
 caller-owned evidence and inspect bounded entity groups without truncating their
