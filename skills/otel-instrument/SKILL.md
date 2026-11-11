@@ -1135,7 +1135,13 @@ active file path and added or changed variable names without exposing secrets.
   the launch environment before importing or constructing the instrumentor.
   Accept `http.server.duration` only when the installed SDK truly emits the
   alternate name and record that exact runtime evidence; never claim both names.
-- For local, Docker, and eval-style runtime checks, configure metric export to flush quickly. When constructing a metric reader manually, use the language equivalent of `OTEL_METRIC_EXPORT_INTERVAL` with a safe local default of `1000` ms and `OTEL_METRIC_EXPORT_TIMEOUT` with a safe local default of `500` ms instead of relying on SDK defaults.
+- For short local, Docker, and eval runtime checks, prove metric receipt before
+  exit using supported launch configuration or an explicit collection/flush step.
+  A local verification preset may use `OTEL_METRIC_EXPORT_INTERVAL=1000` and
+  `OTEL_METRIC_EXPORT_TIMEOUT=500` (milliseconds); these are local timing choices,
+  not OTel requirements or production defaults. Preserve effective operator
+  values and delegate parsing to the selected SDK when supported. A manual
+  reader does not by itself require custom parsers or explicit options.
 - Strictly adhere to OTel [semantic conventions](https://opentelemetry.io/docs/specs/semconv/) for span and metric naming and attributes for domains where such semantic conventions are defined.
 - For domains where OTel semantic conventions exist, use semantic-convention
   names and attributes. Start with required spans, metrics, and attributes; add
@@ -1742,7 +1748,10 @@ Go:
   outer `otelhttp.NewHandler`, then prove at least one parameterized route uses
   its low-cardinality route pattern rather than a constant `server` span name.
   Also prove the combined wrappers do not emit duplicate server spans.
-- Configure `sdkmetric.NewPeriodicReader` with an interval derived from `OTEL_METRIC_EXPORT_INTERVAL`, defaulting to `1000` ms, and a timeout derived from `OTEL_METRIC_EXPORT_TIMEOUT`, defaulting to `500` ms, for local runtime checks.
+- Follow the Go guide's metric-reader ownership rules. Use the selected SDK's
+  supported environment settings for local timing; explicit reader options
+  override those values and need an actual application policy and acceptance
+  check. Prove receipt/flush rather than introducing duplicate timing parsers.
 - Add `go.opentelemetry.io/otel/sdk/log`,
   `go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp`, and exactly
   one official `go.opentelemetry.io/contrib/bridges` package matching the

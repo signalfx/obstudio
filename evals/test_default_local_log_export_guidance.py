@@ -127,7 +127,7 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
         "same process during active final logging/drain", "observable order", "not a particular tool-call order",
         "resolve and report their effective values or unlimited behavior",
         "future boundary test does not substitute for accessible configuration facts",
-        "source binding preserves the requirement, not an assertion",
+        "source binding preserves a requirement, not proof",
         "Capability and conditional acceptance branches",
         "positive, zero, negative, fractional, malformed",
         "Start from the promises and clauses",

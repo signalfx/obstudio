@@ -311,6 +311,8 @@ event/API edge, owner and next source/probe observation that would decide it.
 A generic dependency name or an instruction to find a hook is not that receipt.
 Keep this in existing evidence/scenario fields. This prioritizes investigation;
 complete equivalent source evidence remains valid regardless of tool-call order.
+Match distinct error branches to their actual producers; a handled rejection and
+an uncaught failure on the same endpoint need not use the same logging path.
 Then reconcile source clauses, actual capabilities and acceptance separately
 within the shared scope, preserving SDK defaults and operator policy. Emit only
 concrete app-owned gaps and required future proof; a missing override is not a
@@ -1642,12 +1644,13 @@ JSON requirements:
   step; audit owns selection planning, while `$otel-instrument` invokes
   verification internally after implementation.
 - Every finding dependency must reference another finding ID and point from the
-  work toward its prerequisite. Check each selectable finding's transitive
-  closure against its bound acceptance: every necessary repair must be included,
-  including context transfer required by a final-record join. Regroup contracts
-  or prerequisites when necessary without introducing cycles or dropping the
-  selected invariant. Every verification scenario reference must exist in
-  `verification.scenarios`.
+  work toward its prerequisite. Give foundational setup only the acceptance it
+  can deliver with those prerequisites; bind request/worker/log integration
+  checks to the finding that owns the complete path. A repair owned only by a
+  dependent finding is unavailable when the foundation alone is selected.
+  Regroup contracts or prerequisites without cycles or dropping required
+  context transfer, final-record joins or other selected invariants. Every
+  verification scenario reference must exist in `verification.scenarios`.
 - Put bulky command output under `.observe/evidence/` and cite it from JSON.
 
 After writing `.observe/otel-audit.json`, run `finalize-audit`. This command

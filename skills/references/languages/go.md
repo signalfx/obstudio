@@ -208,9 +208,7 @@ import (
 	"log"
 	"log/slog"
 	"os"
-	"strconv"
 	"strings"
-	"time"
 
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
@@ -283,11 +281,7 @@ func initOTel(
 	}
 
 	mp := sdkmetric.NewMeterProvider(
-		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(
-			metricExporter,
-			sdkmetric.WithInterval(metricExportInterval()),
-			sdkmetric.WithTimeout(metricExportTimeout()),
-		)),
+		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(metricExporter)),
 		sdkmetric.WithResource(res),
 	)
 
@@ -474,32 +468,16 @@ func (h standardLogHandler) WithGroup(name string) slog.Handler {
 	h.groups = append(append([]string(nil), h.groups...), name)
 	return h
 }
-
-func metricExportInterval() time.Duration {
-	if v := os.Getenv("OTEL_METRIC_EXPORT_INTERVAL"); v != "" {
-		millis, err := strconv.Atoi(v)
-		if err == nil && millis > 0 {
-			return time.Duration(millis) * time.Millisecond
-		}
-	}
-	return time.Second
-}
-
-func metricExportTimeout() time.Duration {
-	if v := os.Getenv("OTEL_METRIC_EXPORT_TIMEOUT"); v != "" {
-		millis, err := strconv.Atoi(v)
-		if err == nil && millis > 0 {
-			return time.Duration(millis) * time.Millisecond
-		}
-	}
-	return 500 * time.Millisecond
-}
 ```
 
-The explicit `sdkmetric.WithInterval` and `sdkmetric.WithTimeout` are required
-for local and eval runs. Do not rely on metric reader defaults; they can be too
-slow for short-lived runtime checks, causing valid HTTP metrics to never reach
-the collector before the process stops.
+The [PeriodicReader API](https://pkg.go.dev/go.opentelemetry.io/otel/sdk/metric#NewPeriodicReader)
+supports `OTEL_METRIC_EXPORT_INTERVAL` and `OTEL_METRIC_EXPORT_TIMEOUT` in the
+SDK; confirm their actual readers in the selected version. The example delegates
+their parsing and defaults to that owner. For a short runtime check, use supported
+launch settings or an explicit collection/flush step and prove metric receipt
+before exit. Add `WithInterval`/`WithTimeout` only for a justified application
+policy: those options override SDK environment values, so reconcile operator
+precedence and test the actual applied values rather than adding duplicate parsers.
 
 ### Using in main()
 
@@ -788,12 +766,11 @@ OTEL_BSP_SCHEDULE_DELAY=100 \
 go run .
 ```
 
-When creating `sdkmetric.NewPeriodicReader`, pass
-`sdkmetric.WithInterval(metricExportInterval())` and
-`sdkmetric.WithTimeout(metricExportTimeout())`, where the helper functions read
-`OTEL_METRIC_EXPORT_INTERVAL` and `OTEL_METRIC_EXPORT_TIMEOUT`. This makes HTTP
-metrics from `otelhttp`, including `http.server.request.duration` or the older
-`http.server.duration` name, export promptly to Splunk Observability Studio.
+The launch settings above are consumed by a supporting SDK's PeriodicReader;
+do not copy them into application-owned parsing helpers. Verify the effective
+schedule/timeout and actual receipt of HTTP metrics from `otelhttp`. A successful
+process exit alone does not prove export, and a collection interval does not
+establish the full provider shutdown deadline.
 
 For Docker or Compose, use the checked-in local Splunk Observability Studio service address (for
 example `http://observer:4318/v1/logs`) instead of loopback in both the
@@ -924,9 +901,11 @@ existing safe independent path; isolate any test that changes global handlers.
 - **One log bridge**: use only the official bridge matching the detected logger
   and prove one OTel record per call. Keep context-aware calls such as
   `slog.InfoContext` so active trace/span IDs reach the log record.
-- **Metric export interval and timeout**: Always set `sdkmetric.WithInterval`
-  and `sdkmetric.WithTimeout` on `sdkmetric.NewPeriodicReader`. Environment
-  variables alone are not enough when constructing the reader manually.
+- **Metric reader configuration**: Resolve the selected SDK's environment/default
+  readers before adding explicit options. Preserve effective operator settings;
+  an application option takes precedence and needs its own justification and
+  acceptance checks. Bound verification with supported configuration or flush,
+  rather than introducing custom parsers solely for a short test.
 - **Shutdown order**: shut down the LoggerProvider, TracerProvider, and
   MeterProvider so their batch processors flush before process exit. Attempt
   every shutdown even when an earlier one returns an error.

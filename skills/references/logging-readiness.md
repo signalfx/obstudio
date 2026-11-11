@@ -58,6 +58,13 @@ every normal application audit, instrumentation or verification report.
    `required-controls` helper inventories audit promises only; its output
    excludes source-clause and acceptance controls. Add those independently.
 
+Keep `required_fix` to the smallest authorized application change. Put delegated
+defaults and optional capability facts in evidence with their owner/disposition;
+do not turn them into new application configuration promises. Independently
+selectable findings must be deliverable with their transitive prerequisites.
+Bind shared integration checks to the finding owning the whole path, rather
+than making foundation acceptance require a repair owned by its dependent.
+
 Derive a named configuration inventory independently from application-owned or
 new overrides, supplied selected settings, and dependencies necessary to the
 claimed logging behavior. Include relevant Resource, propagation/sampling,
@@ -110,7 +117,9 @@ and winning source → named assertion`. Give each claimed higher-priority absen
 empty and invalid state with a valid nondefault lower-priority value, and both
 absent, an addressable case; one generic-only example cannot represent them all.
 A shared parameterized assertion is sufficient when its named cases and expected
-results are explicit. Derive application fallbacks and delegated SDK defaults
+results are explicit. Exercise each caller's actual fallback values; a helper
+tested with different defaults does not prove application initialization.
+Derive application fallbacks and delegated SDK defaults
 from their actual owners rather than assuming universal inheritance. A delegated source-only fact remains source evidence, not an invented runtime test requirement. Resolve negative, zero, fractional,
 malformed/overflow and enum/Boolean cases only where those inputs reach that
 reader or the corresponding behavior is claimed; fixed typed options do not
@@ -275,9 +284,12 @@ fixed-message or application-logger allowlist. A framework record observed in
 the normal pipeline cannot be excluded from its privacy assessment merely
 because the original call-site inventory listed only application messages.
 Keep separately routed SDK self-diagnostics distinct from those framework records.
-Start each selected error-path investigation at its source trigger and inspect
-the resolved dependency's logging call before choosing a repair. In the existing
-finding/scenario, retain `trigger → resolved producer/symbol and version → native
+Start from every selected negative trigger covered by a privacy/content assertion.
+Resolve its actual outcome and handled or escaping error branch, then inspect
+the resolved dependency's logging call before selecting an action or a
+source-supported no-action disposition. Reuse a producer trail across triggers
+only when its source branch and covered outputs support that parameterization.
+In the existing finding/scenario, retain `trigger → resolved producer/symbol and version → native
 event/message parameters or throwable → supported policy-boundary action → later
 renderers → policy-covered outputs`. Resolve whether the action transforms,
 replaces or only denies a record; denial alone cannot preserve a required
@@ -343,65 +355,35 @@ of its referenced contract. Keep this traversal scoped to the selected path.
 Separate upstream requirements, optional/development capabilities and the
 repository's local destination/privacy policy. If current sources are unavailable,
 name the snapshot and leave unsupported conclusions unverified.
-For selected gaps, operator policy and precise capability/conformance claims,
-reconcile the necessary primary and imported clauses against the matrix's actual
-bindings. A parent topic or downloaded file alone does not establish a claimed
-child clause. Unchanged delegated SDK/default facts may use compact versioned
-source and ownership dispositions without a ledger for every sibling clause.
-An exhaustive clause-to-skill inventory remains a skill-maintenance deliverable
-when requested.
+Apply **Source and applicability** above to the selected path's record/time/
+severity/value semantics, context/propagation, Resource/scope, initialization,
+filtering, privacy, limits, delivery, diagnostics and lifecycle. Keep a compact
+source-to-evidence matrix in existing schema fields; do not add JSON keys or
+artifact types. For a selected normative/conformance claim, bind necessary primary
+and imported clauses exactly: a parent topic or downloaded file is not a
+child-clause binding. This layout makes those selected bindings addressable:
+Record source/config/default evidence, disposition, finding/scenario IDs where
+needed and the actual proof boundary for each required row.
 
-Keep a compact source-to-evidence matrix for selected gaps, operator policy and
-source-supported capability claims in the existing report/evidence fields;
-follow the canonical schemas and do not invent JSON keys or artifact types.
-Assess the selected path's record/time/severity/structured values, context and
-propagation, resource/scope identity, initialization/duplicate prevention,
-filtering/opt-out, exception/privacy, limits, delivery, diagnostics and lifecycle.
-Reconcile any other clause necessary to those selected behaviors or claims.
-For each required row, record source/config/default evidence, disposition,
-finding/scenario IDs where needed and actual proof boundary. Unchanged delegated
-SDK defaults may use compact versioned source/ownership/limitation evidence;
-mentioning one SDK duty does not select a ledger of every sibling clause.
-A default does not prove runtime behavior, and an unsupported or unknown
-capability cannot close a critical selected invariant.
-
-For a precise normative/conformance claim, use an exact source-clause binding
-rather than a topic summary as its stable key. The following layout supports
-those bindings; compact delegated-default facts need no exhaustive clause rows:
-
-| Source and exact clause binding | Strength, conditions and applicability | Owner | Current capability/evidence | Finding/control and actual proof |
+| Source and exact clause binding | Strength, conditions, applicability and specification/component maturity | Owner | Current capability/evidence | Finding/control and actual proof |
 |---|---|---|---|---|
 | Retained excerpt with hash/lines, or precise clause text with source/date | Preserve each distinct duty, permission and qualifier | Actual component | Supported/default/unsupported/unverified with current evidence | Selected mapping, executed boundary or concrete future check |
 
-A grouped excerpt can retain several clauses when their individual dispositions
-remain addressable. Keep that binding intact while updating implementation and
-proof columns. A shorter summary may aid reading, but cannot replace a selected normative
-clause or its conditions. Without an audit, build the selected bindings in the
-normal direct instrumentation report, retaining compact versioned facts for
-unchanged delegated defaults; no fabricated audit or extra artifact is needed.
-The source binding preserves the requirement, not an assertion that a mapped
-control exercises it. For selected application/operator promises and actual
-capability claims, match each distinct condition, input branch, field and
-operation to an applicable assertion. A related property's control is not
-coverage. Other applicable upstream duties may retain precise owner/default,
-unsupported or unverified dispositions without exhaustive application conformance
-tests. Such a disposition cannot establish an unproven runtime guarantee or close
-a critical selected invariant. Retain concrete conditional checks for those
-invariants instead of a blanket future label attached to unrelated scenarios.
+A grouped retained excerpt (file/hash plus lines or an addressable snippet) can
+bind several clauses when each owner, disposition, condition and strength remains
+addressable. Shorter summaries and generic "see audit" links cannot replace those
+bindings. Instrumentation/verification should reuse unchanged bindings by exact
+immutable audit evidence row, then reconcile current dependency capability and
+executed receipts separately. Re-extract when source/applicability changes;
+never inherit installed capability or runtime success from the audit. Without an
+audit, use the normal direct instrumentation report, not a fabricated audit or
+extra artifact.
 
-To avoid duplicating or weakening source text, a matrix row may bind its
-normative clauses to a precisely bounded retained excerpt (file/hash plus lines
-or an addressable snippet), with its own explicit owner and disposition. A
-precise reference preserves the excerpt's conditions and strengths; a generic
-page citation or "see audit" does not map the clauses. Instrumentation/verification
-may reuse those exact normative bindings from the immutable audit by identifying
-the specific evidence rows, while reconciling capability and observed results
-against current dependencies and commands. Never inherit old runtime success or
-an installed capability merely by referencing the audit.
-Prefer carrying unchanged normative bindings forward by those exact immutable
-audit evidence rows, then annotating current capability and receipt evidence
-separately. Re-summarizing a complete audit clause into a shorter topic phrase
-can lose its conditions; re-extract it only when its source/applicability changes.
+A source binding preserves a requirement, not proof that its mapped control
+exercises it. Match selected promises and claims to assertions for their distinct
+conditions, input branches, fields and operations. A related control or delegated
+disposition cannot close a critical invariant; retain its concrete missing check
+or conditional resolution rather than a blanket future label.
 
 Preserve each applicable clause's condition, action, strength and owner when
 condensing source text. Recommendations, permissions and failure fallbacks do
@@ -512,6 +494,8 @@ coexist with incomplete related scenario coverage: do not downgrade a directly
 proven claim merely because an attached ancillary probe is focused or incomplete.
 State that narrower item claim and the ancillary boundaries in existing evidence;
 do not present their combined observations as all proven at the strongest mode.
+Derive failures from each control's own contract too: another control's gap is not
+this control's failure unless it is a necessary prerequisite.
 Later stages retain those bound IDs and distinguish observations in existing
 fields; do not promote a focused error seam to full runtime in a parent row.
 If a frozen row's controls have different observed boundaries, name those
@@ -868,18 +852,22 @@ For each selected stop control, save a compact plan:
 effective application handler/finalizer; permitted outcome; budget/source`.
 Name how that path and order will be observed through normal startup; stopping
 a launcher or cleaning up a child alone does not prove application drain.
-Reference the final record's own selector/predicate, body/severity/count/time,
-Resource and associated or legitimately absent context, and its receipt/exit
-order. Reuse a shared predicate or global scan when its saved input includes
-this exact final record and phase, with that operation's expected context and
-time interval; retain that witness. A predicate run only on another trial or
-earlier record cannot supply these checks.
-If repeated stops are selected, name the second request and deliver it to the
-same process during active final logging/drain. Assert the selected policy's
-outcome and budget: uninterrupted-drain policy requires non-interruption and
-once-only finalization; allowed forced termination is a separate control and
-cannot establish graceful drain or imply final-record receipt. Keep independently
-observed receipts accurate. Repeated/forced semantics remain N/A when unselected.
+Assert the final record's own selector/predicate, body/severity/count/time,
+Resource and associated or legitimately absent context, and receipt/exit order.
+Check per-body/identity multiplicities, both trace and span IDs (or their required
+absence), and this stop cycle's time interval. An aggregate count can hide one
+missing record plus a duplicate. A shared predicate or global scan is valid when
+it actually evaluates those fields on this final record and phase; another
+trial or earlier record cannot supply them.
+If repeated stops are selected, resolve effective handler registration after the
+first request, including listener removal and default fallback; a finalizer guard
+alone does not establish the next request's path. Name the selected second request
+and recipient and deliver it to the same process during active final logging/drain.
+Assert the selected policy's outcome and budget: uninterrupted-drain policy requires
+non-interruption and once-only finalization; allowed forced termination is a separate
+control and cannot establish graceful drain or imply final-record receipt. Keep
+independently observed receipts accurate without imposing unselected request
+combinations. Repeated/forced semantics remain N/A when unselected.
 Where implemented, [development SDK log metrics](https://opentelemetry.io/docs/specs/semconv/otel/sdk-metrics/) can supply
 creation, queue-pressure, processed and exported counts. Record each instrument's
 stage and retry/rejection semantics; created/processed is not receiver acceptance.
@@ -1296,20 +1284,13 @@ not just existing scenarios; a scenario-to-owner list cannot expose an omitted
 promise. A parameterized table may carry the matches. Retain each unmatched
 member as unresolved with its concrete missing control/resolution, and reconcile
 all referenced finding/scenario IDs against the final allocated IDs.
-Use the required controls from the bound contract as the starting set, initialize
-unmatched results Not proven, and join each to its named assertion and actual
-output before deriving scenario/item verdicts. A default-Working builder plus
-exceptions is not evidence for assertions that never ran; assess actual claims,
-not helper syntax alone. Preserve directly proven item scope separately from
-incomplete related scenario coverage.
-For selected normative obligations or precise conformance claims, carry unchanged
-clauses by exact immutable audit evidence-row bindings or check their conditions/
-strengths against retained source. Unchanged delegated defaults may retain compact
-versioned source/ownership/limitation facts without a sibling-clause ledger.
-Annotate current capability and executed receipts separately; do not weaken
-selected clauses, inherit old runtime success or label executed proof future-only.
-The exhaustive clause-to-skill inventory belongs to requested skill maintenance,
-rather than each normal application report.
+Apply LOG-SPEC-CLOSURE's per-control verdict and immutable source-binding rules:
+initialize unmatched controls Not proven, then join each to its named assertion and actual
+output. Preserve directly proven item scope beside incomplete
+related scenarios. Reconcile current capability and executed receipts separately;
+never inherit runtime success, weaken a selected clause or label executed proof
+future-only. Source and applicability above defines delegated facts and the
+separate skill-maintenance inventory; no additional per-service ledger is needed.
 
 Before finalizing, compare the saved scenarios against these obligations and
 the selected source/policy. An omitted obligation leaves that handoff partial;
