@@ -193,7 +193,7 @@
     "test": "vscode-test"
   },
   "overrides": {
-    "serialize-javascript": "7.0.7",
+    "serialize-javascript": "7.1.4",
     "@typescript-eslint/typescript-estree": {
       "minimatch": "11.0.5"
     },
