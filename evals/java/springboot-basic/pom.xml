@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.5.15</version>
+        <version>4.0.9</version>
         <relativePath/>
     </parent>
 
@@ -20,14 +20,12 @@
     <properties>
         <java.version>21</java.version>
         <log4j2.version>2.25.5</log4j2.version>
-        <jackson-bom.version>2.21.8</jackson-bom.version>
-        <tomcat.version>10.1.59</tomcat.version>
     </properties>
 
     <dependencies>
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
+            <artifactId>spring-boot-starter-webmvc</artifactId>
         </dependency>
     </dependencies>
 
