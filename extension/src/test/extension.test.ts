@@ -546,6 +546,20 @@ test('Splunk Observability Studio-mutating Cloud actions serialize with lifecycl
 	);
 });
 
+test('HEC help opens distinct fixed documentation sections through the IDE host', () => {
+	const { hecEndpointHelpURL, hecTokenHelpURL } = require('../../../shared/hec-help.cjs') as { hecEndpointHelpURL: string; hecTokenHelpURL: string };
+	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf-8');
+	for (const [action, name, url, section, anchor] of [
+		['open-hec-endpoint-help', 'hecEndpointHelpURL', hecEndpointHelpURL, 'Send data to HTTP Event Collector on Splunk Cloud Platform', 'id_4626b983_5022_4b94_b071_22646bce88c3--en__Send_data_to_HTTP_Event_Collector_on_Splunk_Cloud_Platform'],
+		['open-hec-token-help', 'hecTokenHelpURL', hecTokenHelpURL, 'Create an Event Collector token on Splunk Enterprise', 'cff6ff0d_3c63_4019_82d8_4c93fbe1cc9f--en__Create_an_Event_Collector_token_on_Splunk_Enterprise'],
+	]) {
+		const target = new URL(url);
+		assert.equal(target.origin, 'https://help.splunk.com');
+		assert.equal(decodeURIComponent(target.hash), `#${anchor}:~:text=${section}`);
+		assert.match(source, new RegExp(`case '${action}':\\s+await openCloudExternalUrl\\(${name}\\);\\s+return \\{\\};`));
+	}
+});
+
 test('Free Edition actions use the generic IDE host transport and fixed Splunk Observability Studio routes', () => {
 	const extensionSourcePath = path.join(extensionRoot, 'src', 'extension.ts');
 	const source = fs.readFileSync(extensionSourcePath, 'utf-8');

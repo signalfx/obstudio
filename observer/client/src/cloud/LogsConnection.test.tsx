@@ -54,11 +54,13 @@ it.each(["browser", "IDE"] as const)("opens HEC endpoint help with the keyboard 
   await user.type(screen.getByLabelText("HEC token"), "draft-token");
   const help = screen.getByRole("link", { name: "Find your HEC endpoint" });
   const tokenHelp = screen.getByRole("link", { name: "Find your HEC token" });
-  const docsURL = "https://help.splunk.com/en/data-management/collect-http-event-data/use-hec-in-splunk-enterprise/set-up-and-use-http-event-collector-in-splunk-web";
-  expect(help.getAttribute("href")).toBe(host === "IDE" ? "#" : docsURL);
+  const guideURL = "https://help.splunk.com/en/splunk-cloud-platform/get-data-in/get-started-with-getting-data-in/10.2.2510/get-data-with-http-event-collector/set-up-and-use-http-event-collector-in-splunk-web";
+  const endpointURL = `${guideURL}#id_4626b983_5022_4b94_b071_22646bce88c3--en__Send_data_to_HTTP_Event_Collector_on_Splunk_Cloud_Platform:~:text=Send%20data%20to%20HTTP%20Event%20Collector%20on%20Splunk%20Cloud%20Platform`;
+  const tokenURL = `${guideURL}#cff6ff0d_3c63_4019_82d8_4c93fbe1cc9f--en__Create_an_Event_Collector_token_on_Splunk_Enterprise:~:text=Create%20an%20Event%20Collector%20token%20on%20Splunk%20Enterprise`;
+  expect(help.getAttribute("href")).toBe(host === "IDE" ? "#" : endpointURL);
   expect(help.getAttribute("target")).toBe(host === "IDE" ? null : "_blank");
   expect(help.getAttribute("rel")).toBe(host === "IDE" ? null : "noopener noreferrer");
-  expect(tokenHelp.getAttribute("href")).toBe(host === "IDE" ? "#" : docsURL);
+  expect(tokenHelp.getAttribute("href")).toBe(host === "IDE" ? "#" : tokenURL);
   expect(endpoint.getAttribute("aria-describedby")).toBe("cloud-logs-endpoint-help");
   expect(screen.getByText("Enter the full HEC ingestion URL, including /services/collector/event.")).toBeTruthy();
   if (host === "browser") {

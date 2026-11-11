@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { hecEndpointHelpURL, hecTokenHelpURL } from "../../../../shared/hec-help.cjs";
 import { configureSplunkLogs, disconnectSplunkLogs, fetchSplunkLogsStatus, refreshSplunkLogs, setSplunkLogsEnabled, SplunkExportBrowserActionError } from "../api/client";
 import { ObserverHostCloudRequestError } from "../host/transport";
 import type { SplunkLogsStatus } from "../api/types";
@@ -542,7 +543,7 @@ export function LogsConnection({
           <fieldset disabled={!status || busy || mutationsDisabled}>
             <div className="cloud-field destination-field">
               <div className="destination-label-row"><label className="cloud-field__label" htmlFor="cloud-logs-endpoint">HEC endpoint</label>
-                <a href={bridge ? "#" : hecHelpURL} target={bridge ? undefined : "_blank"} rel={bridge ? undefined : "noopener noreferrer"}
+                <a href={bridge ? "#" : hecEndpointHelpURL} target={bridge ? undefined : "_blank"} rel={bridge ? undefined : "noopener noreferrer"}
                   onClick={(event) => openExternal(event, "open-hec-endpoint-help")}>Find your HEC endpoint</a>
               </div>
               <input id="cloud-logs-endpoint" type="url" autoComplete="off" spellCheck={false}
@@ -553,7 +554,7 @@ export function LogsConnection({
             </div>
             <div className="cloud-field destination-field">
               <div className="destination-label-row"><label className="cloud-field__label" htmlFor="cloud-logs-token">HEC token</label>
-                <a href={bridge ? "#" : hecHelpURL} target={bridge ? undefined : "_blank"} rel={bridge ? undefined : "noopener noreferrer"}
+                <a href={bridge ? "#" : hecTokenHelpURL} target={bridge ? undefined : "_blank"} rel={bridge ? undefined : "noopener noreferrer"}
                   onClick={(event) => openExternal(event, "open-hec-token-help")}>Find your HEC token</a>
               </div>
               <div className="destination-token">
@@ -637,7 +638,6 @@ export function LogsConnection({
 }
 
 const splunkPlatformTrialURL = "https://www.splunk.com/en_us/download/splunk-cloud.html";
-const hecHelpURL = "https://help.splunk.com/en/data-management/collect-http-event-data/use-hec-in-splunk-enterprise/set-up-and-use-http-event-collector-in-splunk-web";
 
 export function isLogsRejected(status: SplunkLogsStatus | null): boolean {
   return Boolean(status?.lastExportError && (status.lastHTTPStatus === 401 || status.lastHTTPStatus === 403 || status.lastHECCode === 4));
