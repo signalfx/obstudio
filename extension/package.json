@@ -205,7 +205,8 @@
       "minimatch": "11.0.5"
     },
     "mocha": {
-      "minimatch": "11.0.5"
+      "minimatch": "11.0.5",
+      "diff": "8.0.3"
     },
     "test-exclude": {
       "minimatch": "11.0.5"
