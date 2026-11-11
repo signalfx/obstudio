@@ -17,7 +17,7 @@ from run_logging_workflow import bind_model_metadata
 
 
 @pytest.fixture(scope="module")
-def report_helper_and_sample():
+def report_fixture_module():
     import importlib.util
 
     source = Path(__file__).resolve().parents[1] / "skills/references/tests/observe_report_fixtures.py"
@@ -25,7 +25,12 @@ def report_helper_and_sample():
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return module.MODULE, module.sample_report
+    return module
+
+
+@pytest.fixture(scope="module")
+def report_helper_and_sample(report_fixture_module):
+    return report_fixture_module.MODULE, report_fixture_module.sample_report
 
 
 def test_control_inventory_keeps_each_promised_item_and_field(report_helper_and_sample):
@@ -96,6 +101,7 @@ def test_control_inventory_does_not_mutate_or_claim_coverage(report_helper_and_s
     assert report == before
     assert inventory["audit_sha256"] == helper.audit_digest(helper.normalize_audit_report(report))
     assert inventory["inventory_scope"] == "audit_expected_telemetry"
+    assert inventory == helper.audit_control_inventory(report, view="telemetry")
     assert inventory["source_clause_controls_included"] is False
     assert inventory["acceptance_controls_included"] is False
     assert inventory["coverage_evaluated"] is False
@@ -212,6 +218,134 @@ def test_control_inventory_cli_reads_audit_without_writing_reports(tmp_path, rep
     assert not failure.stdout and "FAIL:" in failure.stderr
     assert audit.read_bytes() == original
     assert list(tmp_path.iterdir()) == [audit]
+
+
+def test_control_contracts_complete_contract_preserves_distinct_promises_and_boundaries(report_fixture_module):
+    factories = report_fixture_module
+    helper = factories.MODULE
+    report = factories.sample_report()
+    finding = report["findings"][1]
+    finding["required_fix"] = "Preserve the selected input and emit a bounded safe diagnostic."
+    finding["acceptance_criteria"] = ["Check activation.", "Check diagnostic output separately."]
+    finding["constraints"] = ["Keep original writer ownership and Unicode: λ."]
+    scenario = report["verification"]["scenarios"][0]
+    scenario.update(trigger="Use the actual initializer; inspect native output.",
+                    acceptance_criteria="Assert enabled outcome. Diagnostic oracle still missing.",
+                    proof_level="focused call-site")
+    original = copy.deepcopy(report)
+    normalized = helper.normalize_audit_report(report)
+    view = helper.audit_control_inventory(report, ["OTEL-002"], view="contracts")
+    assert report == original
+    assert [row["finding"] for row in view["findings"]] == normalized["findings"]
+    assert [row["scenario"] for row in view["scenarios"]] == normalized["verification"]["scenarios"]
+    assert [row["environment"] for row in view["environments"]] == normalized["verification"]["environments"]
+    assert view["finding_ids"] == ["OTEL-002"]
+    assert view["prerequisite_context_ids"] == ["OTEL-001"]
+    assert view["scenarios"][0]["declared_by_included_finding_ids"] == ["OTEL-001", "OTEL-002"]
+    assert view["scenarios"][0]["source_pointer"] == "/verification/scenarios/0"
+    assert view["audit_sha256"] == helper.audit_digest(normalized)
+    for key in ("selection_evaluated", "finding_references_evaluated", "source_clause_completeness_evaluated", "coverage_evaluated", "runtime_evaluated"):
+        assert view[key] is False
+    assert "overall_pass" not in view and "missing_assertions" not in view
+
+
+@pytest.mark.parametrize("state", ["done", "deferred", "manual decision", "external follow-up"])
+def test_control_contracts_prerequisite_context_does_not_approve_or_skip_nonexecutables(state, report_fixture_module):
+    factories = report_fixture_module
+    helper = factories.MODULE
+    report = factories.sample_report()
+    dependency = report["findings"][0]
+    if state == "manual decision":
+        factories.make_manual_decision(dependency)
+    elif state == "external follow-up":
+        factories.make_external_follow_up(dependency)
+    else:
+        dependency["status"] = state
+    normalized = helper.normalize_audit_report(report)
+    view = helper.audit_control_inventory(report, ["OTEL-002"], view="contracts")
+    assert view["finding_ids"] == ["OTEL-002"]
+    assert view["prerequisite_context_ids"] == ["OTEL-001"]
+    assert view["findings"][0]["finding"] == normalized["findings"][0]
+    assert view["selection_evaluated"] is False
+
+
+def test_control_contracts_unique_shared_records_follow_canonical_order(report_fixture_module):
+    factories = report_fixture_module
+    helper = factories.MODULE
+    report = factories.sample_report()
+    view = helper.audit_control_inventory(report, ["OTEL-002", "OTEL-001"], view="contracts")
+    assert view["finding_ids"] == ["OTEL-001", "OTEL-002"]
+    assert view["prerequisite_context_ids"] == []
+    assert len(view["scenarios"]) == len(view["environments"]) == 1
+    assert [row["source_pointer"] for row in view["findings"]] == ["/findings/0", "/findings/1"]
+
+
+def test_control_contracts_transitive_context_and_unbound_records_are_kept_distinct(report_fixture_module):
+    factories = report_fixture_module
+    helper = factories.MODULE
+    report = factories.sample_splunk_agent_observability_report()
+    report["findings"][2]["dependencies"] = ["OTEL-002"]
+    environment = copy.deepcopy(report["verification"]["environments"][0])
+    environment["id"] = "unused.environment"
+    report["verification"]["environments"].append(environment)
+    scenario = copy.deepcopy(report["verification"]["scenarios"][0])
+    scenario.update(id="unused.scenario", environments=[environment["id"]])
+    report["verification"]["scenarios"].append(scenario)
+    view = helper.audit_control_inventory(report, ["AO-002"], view="contracts")
+    assert view["finding_ids"] == ["AO-002"]
+    assert view["prerequisite_context_ids"] == ["OTEL-001", "OTEL-002", "AO-001"]
+    assert [row["finding"]["id"] for row in view["findings"]] == ["OTEL-001", "OTEL-002", "AO-001", "AO-002"]
+    assert all(row["scenario"]["id"] != "unused.scenario" for row in view["scenarios"])
+    assert all(row["environment"]["id"] != "unused.environment" for row in view["environments"])
+
+
+def test_control_contracts_shared_evidence_retains_promises_outside_finding_fields(report_fixture_module):
+    factories = report_fixture_module
+    helper = factories.MODULE
+    report = factories.sample_report()
+    report["evidence"].append({"check": "Selected invalid input",
+                               "finding": "Invalid input leaves telemetry enabled and produces a bounded safe diagnostic.",
+                               "source": "actual reader and diagnostic call site"})
+    scenario = report["verification"]["scenarios"][0]
+    scenario.update(trigger="Use the Audit Evidence invalid-input contract.",
+                    acceptance_criteria="Assert telemetry is enabled.")
+    normalized = helper.normalize_audit_report(report)
+    view = helper.audit_control_inventory(report, ["OTEL-002"], view="contracts")
+    assert view["shared_evidence_context"]["evidence"] == normalized["evidence"]
+    assert view["shared_evidence_context"]["source_pointer"] == "/evidence"
+    assert view["shared_evidence_context"]["finding_ownership_inferred"] is False
+    assert view["scenarios"][0]["scenario"]["acceptance_criteria"] == "Assert telemetry is enabled."
+    assert "recommendation" in view["unprojected_report_fields"]
+    assert view["coverage_evaluated"] is False
+
+
+def test_control_contracts_invalid_view_or_roots_remain_errors(report_fixture_module):
+    factories = report_fixture_module
+    helper = factories.MODULE
+    for ids in ([], ["OTEL-999"], ["OTEL-001", "OTEL-001"]):
+        with pytest.raises(helper.ReportError):
+            helper.audit_control_inventory(factories.sample_report(), ids, view="contracts")
+    with pytest.raises(helper.ReportError):
+        helper.audit_control_inventory(factories.sample_report(), view="approval")
+
+
+def test_control_contracts_cli_is_stdout_only_and_legacy_default_is_unchanged(tmp_path, report_fixture_module):
+    factories = report_fixture_module
+    helper = factories.MODULE
+    path = tmp_path / "otel-audit.json"
+    path.write_text(json.dumps(factories.sample_report()))
+    original = path.read_bytes()
+    command = [sys.executable, "-I", str(Path(helper.__file__)), "required-controls", str(path), "--ids", "OTEL-002"]
+    contracts = subprocess.run(command + ["--view", "contracts"], capture_output=True, text=True)
+    assert contracts.returncode == 0, contracts.stderr
+    assert json.loads(contracts.stdout)["prerequisite_context_ids"] == ["OTEL-001"]
+    default = subprocess.run(command, capture_output=True, text=True)
+    assert default.returncode == 0, default.stderr
+    assert json.loads(default.stdout) == factories.MODULE.audit_control_inventory(factories.sample_report(), ["OTEL-002"])
+    invalid = subprocess.run(command + ["--view", "approval"], capture_output=True, text=True)
+    assert invalid.returncode != 0 and not invalid.stdout
+    assert path.read_bytes() == original and list(tmp_path.iterdir()) == [path]
+
 
 
 @pytest.mark.parametrize("configuration,expected", [

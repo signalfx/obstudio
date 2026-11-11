@@ -1067,8 +1067,11 @@ def normalize_audit_report(data: dict[str, Any]) -> dict[str, Any]:
 
 def audit_control_inventory(
     data: dict[str, Any], requested_ids: list[str] | None = None,
+    *, view: str = "telemetry",
 ) -> dict[str, Any]:
     """Enumerate declared promises without judging their acceptance or execution."""
+    if view not in {"telemetry", "contracts"}:
+        fail("required-controls view must be telemetry or contracts")
     report = normalize_audit_report(data)
     known_ids = {finding["id"] for finding in report["findings"]}
     if requested_ids is None:
@@ -1084,6 +1087,8 @@ def audit_control_inventory(
         if unknown_ids:
             fail("unknown finding IDs: " + ", ".join(sorted(unknown_ids)))
     findings = [finding for finding in report["findings"] if finding["id"] in selected_ids]
+    if view == "contracts":
+        return _audit_contract_projection(report, selected_ids)
     promises = []
     for finding in findings:
         for index, item in enumerate(finding["expected_telemetry"]):
@@ -1148,6 +1153,72 @@ def audit_control_inventory(
         "coverage_evaluated": False,
         "runtime_evaluated": False,
         "promises": promises,
+    }
+
+
+def _audit_contract_projection(report: dict[str, Any], root_ids: set[str]) -> dict[str, Any]:
+    """Expose saved contracts and structural prerequisites, without approving work."""
+    by_id = {finding["id"]: finding for finding in report["findings"]}
+    included = set(root_ids)
+    pending = list(root_ids)
+    while pending:
+        for dependency in by_id[pending.pop()]["dependencies"]:
+            if dependency not in included:
+                included.add(dependency)
+                pending.append(dependency)
+    scenarios = {
+        scenario_id
+        for finding in report["findings"] if finding["id"] in included
+        for scenario_id in finding["verification_scenarios"]
+    }
+    environments = {
+        environment_id
+        for scenario in report["verification"]["scenarios"] if scenario["id"] in scenarios
+        for environment_id in scenario["environments"]
+    }
+    return {
+        "audit_sha256": audit_digest(report),
+        "inventory_scope": "saved_normalized_audit_contracts",
+        "finding_ids": [finding["id"] for finding in report["findings"] if finding["id"] in root_ids],
+        "prerequisite_context_ids": [
+            finding["id"] for finding in report["findings"]
+            if finding["id"] in included - root_ids
+        ],
+        "findings": [
+            {"source_pointer": f"/findings/{index}", "finding": finding}
+            for index, finding in enumerate(report["findings"]) if finding["id"] in included
+        ],
+        "scenarios": [
+            {
+                "source_pointer": f"/verification/scenarios/{index}",
+                "declared_by_included_finding_ids": [
+                    finding["id"] for finding in report["findings"]
+                    if finding["id"] in included and scenario["id"] in finding["verification_scenarios"]
+                ],
+                "scenario": scenario,
+            }
+            for index, scenario in enumerate(report["verification"]["scenarios"])
+            if scenario["id"] in scenarios
+        ],
+        "environments": [
+            {"source_pointer": f"/verification/environments/{index}", "environment": environment}
+            for index, environment in enumerate(report["verification"]["environments"])
+            if environment["id"] in environments
+        ],
+        "shared_evidence_context": {
+            "source_pointer": "/evidence",
+            "evidence": report["evidence"],
+            "finding_ownership_inferred": False,
+        },
+        "unprojected_report_fields": [
+            name for name in report if name not in {"findings", "verification", "evidence"}
+        ],
+        "source_clause_completeness_evaluated": False,
+        "acceptance_controls_included": True,
+        "finding_references_evaluated": False,
+        "selection_evaluated": False,
+        "coverage_evaluated": False,
+        "runtime_evaluated": False,
     }
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import importlib.util
 import json
 import os
 import re
@@ -64,6 +65,29 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
     )
     assert help_result.returncode == 0, help_result.stderr
     assert "--ids" in help_result.stdout
+    assert "--view" in help_result.stdout and "contracts" in help_result.stdout
+    spec = importlib.util.spec_from_file_location(
+        "isolated_contract_report_fixtures", SKILLS / "references/tests/observe_report_fixtures.py",
+    )
+    assert spec is not None and spec.loader is not None
+    fixtures = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fixtures)
+    audit = tmp_path / "otel-audit.json"
+    audit.write_text(json.dumps(fixtures.sample_report()), encoding="utf-8")
+    original = audit.read_bytes()
+    contract_result = subprocess.run(
+        [sys.executable, "-I", str(staged / "scripts/observe_report.py"), "required-controls", str(audit),
+         "--ids", "OTEL-002", "--view", "contracts"],
+        capture_output=True, text=True,
+    )
+    assert contract_result.returncode == 0, contract_result.stderr
+    contracts = json.loads(contract_result.stdout)
+    assert contracts["finding_ids"] == ["OTEL-002"]
+    assert contracts["prerequisite_context_ids"] == ["OTEL-001"]
+    assert contracts["shared_evidence_context"]["finding_ownership_inferred"] is False
+    assert contracts["acceptance_controls_included"] is True
+    assert contracts["coverage_evaluated"] is contracts["runtime_evaluated"] is False
+    assert audit.read_bytes() == original
     source_help = subprocess.run(
         [sys.executable, "-I", str(staged / "scripts/observe_report.py"), "source-settings", "--help"],
         capture_output=True, text=True,
@@ -114,7 +138,7 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
         "partial_success", "N-R", "after decompression", "when possible and practical",
         "not_explorer_visible", "not_proven", "at most", "original sink",
         "CLI/environment precedence", "case-insensitive host", "original input",
-        "### Report readback", "named assertion and actual",
+        "### Report readback", "named assertion and its own raw",
     ):
         assert term in common
     assert "Flask" not in common and "BatchLogRecordProcessor" not in common
@@ -130,13 +154,13 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
         "source binding preserves a requirement, not proof",
         "Capability and conditional acceptance branches",
         "positive, zero, negative, fractional, malformed",
-        "Start from the promises and clauses",
-        "final allocated IDs",
+        "start independently from every selected procedural",
+        "Reconcile all IDs to the final allocation",
         "Record creation/update path and the final normalization helper",
         "Count the top-level value at depth 1",
         "byte arrays MUST be truncated counting each byte as one",
         "required-controls .observe/otel-audit.json",
-        "evaluates neither coverage nor runtime",
+        "evaluates no coverage or runtime",
         "Distinguish documented contract, implementation enforcement",
         "For deadlines, locate creation, propagation and consumption relative to retries",
         "Use three related worklists",
@@ -152,10 +176,17 @@ def test_logging_language_references_reachable_in_isolated_skill_workspace(
         "No unverified external capability closes a critical application",
         "explicit setting-name → case/default/outcome map",
         "unmatched_attribute_literals",
-        "neither is a semantic coverage verdict",
+        "neither establishes an assertion",
         "Configuration validation warnings",
         "MUST synchronize calls",
         "disabled-SDK/retained-propagation conjunction",
+        "--view contracts",
+        "Promise to assertion",
+        "Assertion to available path",
+        "source pointers do not prove repair/producer sufficiency",
+        "Without an audit, perform the same inspection",
+        "actual relevant emitted form",
+        "outside-context control, not omitted transfer",
     ):
         assert term in common_words
     assert "https://opentelemetry.io/docs/specs/otel/configuration/common/" in common

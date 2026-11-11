@@ -557,7 +557,7 @@ def cmd_required_controls(args: argparse.Namespace) -> int:
     requested_ids = None
     if args.ids is not None:
         requested_ids = [item.strip() for item in args.ids.split(",") if item.strip()]
-    inventory = audit_control_inventory(load_json(args.audit_json), requested_ids)
+    inventory = audit_control_inventory(load_json(args.audit_json), requested_ids, view=args.view)
     print(json.dumps(inventory, indent=2))
     return 0
 
@@ -1408,6 +1408,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     required_controls.add_argument("audit_json", type=Path)
     required_controls.add_argument("--ids", help="comma-separated finding IDs; defaults to all")
+    required_controls.add_argument("--view", choices=("telemetry", "contracts"), default="telemetry",
+                                   help="telemetry hints (default), or full saved contracts and prerequisite context; no semantic verdict")
     required_controls.set_defaults(func=cmd_required_controls)
 
     source_settings = subparsers.add_parser(

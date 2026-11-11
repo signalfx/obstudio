@@ -721,8 +721,11 @@ scope application reuse as not applicable and separately select a focused helper
 bridge capability probe; do not add production worker behavior merely for proof.
 Any focused reuse already promised remains required at its bound boundary.
 A selected missing-propagation control must actually omit capture/transfer on
-that handoff path while retaining the other relevant inputs, not merely emit an
-outside-context record directly. Its expected loss demonstrates the unsafe path,
+that handoff path while retaining the other relevant inputs. In paired positive
+and negative trials, observe the caller's valid context at dispatch and change
+only the selected transfer mechanism. Submitting after that context ends is an
+outside-context control, not omitted transfer from a contextual handoff.
+Its expected loss demonstrates the unsafe path,
 not acceptable production configuration. Exercise error/cancellation cleanup only
 where owned behavior supports it, or keep a separately selected SDK probe focused.
 Do not add business cancellation behavior; ending a span or detaching context is
@@ -942,14 +945,17 @@ Where implemented, [development SDK log metrics](https://opentelemetry.io/docs/s
 creation, queue-pressure, processed and exported counts. Record each instrument's
 stage and retry/rejection semantics; created/processed is not receiver acceptance.
 Do not add duplicate application metrics or assume unavailable instruments exist.
-For a selected application-owned extension callback, bind a compact operation
-contract in existing evidence: applicable source clause and conditions/strength,
-actual owner, callback actions/assumptions, and assertion or exact limitation.
-A selected processor `OnEmit` runs synchronously on the emitting thread and SHOULD NOT block or throw;
-synchronous alone does not establish those recommendations. For directly
-registered processors, record mutations MUST reach subsequent processors.
-Keep SDK dispatch/visibility duties distinct from the app callback's behavior,
-and reconcile these selected conditions before calling its plan complete.
+For a selected application-owned extension callback, read its actual primary
+operation subsection and bind its distinct conditions in existing evidence.
+Separate the application callback's actions from the SDK guarantees it consumes;
+retain each owner, condition, strength, installed capability and assertion or exact
+limitation. For example, selected processor `OnEmit` runs synchronously on the
+emitting thread and SHOULD NOT block or throw. For directly registered processors,
+record mutations MUST reach subsequent processors: that conditional SDK visibility
+guarantee is distinct from an application plan to mutate synchronously. Bind both,
+reusing an adequate downstream privacy/record assertion rather than requiring a
+separate SDK conformance suite. A downloaded whole specification or topic link is
+not the operation's clause binding.
 Do not expand this into every unselected SDK operation. For selected asynchronous
 processing, retain a supported snapshot/clone rather than mutating an unsafe
 shared ReadWriteLogRecord after `OnEmit`, and verify concurrent isolation.
@@ -1179,6 +1185,17 @@ work under an exporter fault. Existing safe routing is coverage, not a reason
 to add another error handler.
 Name the actual routing/suppression mechanism in the repair and handoff, not
 only a desired zero-recursion outcome.
+Resolve each selected diagnostic claim from its originating operation through
+the actual terminal owner, enablement and sink. A public error-handler callback
+and an internal logging facade can have different consumers and policies; a
+setter for one does not establish routing for the other. Retain an adequate
+default or suppressed route with its actual conditions. Do not infer a leak,
+mandate a replacement or claim custom sanitization for an uninspected route.
+For a selected diagnostic count or absence claim, verify that the capture/counting
+predicate detects the actual relevant emitted form and binds its raw matches to
+the measured trial window. An unmatched format or unobserved channel cannot prove
+a zero-diagnostic bound. Source-supported suppression remains valid without
+forcing a diagnostic to be emitted.
 Under the [common attribute-limit rules](https://opentelemetry.io/docs/specs/otel/common/#attribute-limits),
 an SDK MAY emit a diagnostic for truncation, discard or replacement. Such
 diagnostics MUST NOT occur more than once per affected record. Separately, the
@@ -1278,120 +1295,138 @@ ownership without selecting a protocol conformance suite merely by using OTLP:
 
 ### Report readback
 
-The `required-controls` inventory also returns `unmatched_attribute_literals` and
-case-sensitive substring matches against each finding's bound scenario acceptance
-text. Review these omission hints before finalizing. A miss can have a legitimate
-semantic alias/conditional explanation, and a hit can occur in a denial or other
-non-assertion: neither is a semantic coverage verdict. Resolve each promise to its
-actual assertion or missing proof; do not add field names merely to satisfy text
-matching. A conditionally supplied Resource field needs its supplied-value
-preservation assertion or justified applicability, without inventing metadata.
-The helper also returns `unknown_finding_id_literals` with report locations for
-unallocated numeric `OTEL-*` tokens and slash shorthand across the entire
-canonical report, even when inventorying a selection. It retains the original
-literal. These are lexical hints: a historical/external
-reference can be intentional, and a known ID can still identify the wrong owner.
-Resolve text mappings against the actual final findings and controls; the helper
-does not evaluate reference meaning or repair canonical bindings.
-Controls from selected source obligations and precise claims remain independently
-required; these hints neither enumerate them nor expand scenario paragraphs into
-tests. Unselected sibling SDK clauses do not become application controls merely
-because the source inventory contains them.
+Read this section before generating or finalizing logging plans/results. Reconcile
+three independent inputs: selected source/policy obligations, the complete saved
+repair contract, and actual assertions/raw outcomes. Neither helper output nor a
+valid schema evaluates that reconciliation. An equivalent complete inspection is
+valid; no additional canonical report or schema fields are required.
 
-Read this section immediately before generating/finalizing logging results.
-The read-only `source-settings` helper can discover `OTEL_*` and `otel.*` name
-spellings in selected implementation files/directories, with file hashes and
-line locations. For a draft report, it surfaces names with no exact spelling or
-unverified separator-normalization hint in that report. Choose sources by the
-selected behavior and claims. Include installed or proposed SDK/bridge/bootstrap
-sources needed to resolve them as well as application files; scanning only an
-uninstrumented application cannot inventory SDK configuration. Do not use the
-report itself as the source inventory.
+For an existing audit, capture the read-only saved-contract view's stdout to
+caller-owned evidence and inspect bounded entity groups without truncating their
+fields. The helper itself writes no files:
+
+```sh
+python3 -I "<directory-containing-loaded-SKILL.md>/../references/scripts/observe_report.py" required-controls .observe/otel-audit.json --view contracts
+```
+
+`--ids` restricts roots to the already chosen scope. The view also displays
+transitive **declared prerequisite context**, including completed, decision and
+external records. That context is not approved work or an executable selection.
+Full finding objects retain procedural `required_fix`, acceptance, constraints,
+telemetry and bindings; unique scenario/environment objects retain actual triggers,
+assertions, row proof levels and runner configuration. Structural reverse bindings
+and source pointers do not prove repair/producer sufficiency. Shared top-level
+`evidence` is unscoped context, with no inferred finding ownership. Follow its
+references and relevant fields listed as unprojected; the view does not discover
+omitted primary clauses, judge source capability or certify all report claims.
+
+Without an audit, perform the same inspection in the direct instrumentation
+scope, existing Markdown plan/result/source tables and raw evidence. Do not
+fabricate an audit/selection, parse direct Markdown as canonical audit JSON, or
+borrow an old report's runtime success.
+
+Perform both directions against the **saved** contract:
+
+1. **Promise to assertion:** start independently from every selected procedural,
+   telemetry, acceptance and source/policy obligation, including claims imported
+   through evidence. Expand list members, input variants, operations and event
+   orders into addressable controls. Bind each expected input/outcome to its
+   actual asserting operation and feasible proof boundary. Shared parameterization
+   is sufficient when all members and oracles are explicit; naming a diagnostic,
+   setting or control group is not its assertion. Preserve conditionally supplied
+   metadata without inventing values. Inspect the actual selected primary slice
+   and terminal implementation consumer, not just a topic, declaration or report
+   mention. Keep app actions and delegated SDK guarantees distinct.
+   Derive exact normative prose from its checked binding and compare the final
+   condition/action direction and qualifiers to the primary slice; the converse
+   of a conditional requirement is not implied.
+2. **Assertion to available path:** for every saved scenario/control, identify the
+   repairs, actual producers, configuration authority and prerequisites it needs.
+   Check their availability for each independently selectable owner. Classify
+   each assertion before grouping compatible row proof levels; prose cannot give
+   a scalar row two boundaries. Reconcile all IDs to the final allocation. Only
+   new drafts may regroup before finalization; preserve established audit and
+   selection IDs/obligations. Helper-only or different-path results cannot close a
+   normal-launch or same-path conjunction.
+
+For execution claims, join that contract to each named assertion and its own raw
+output, then read back the **final generated report**:
+
+Resolve and read each local executed-evidence artifact; planned future paths are
+not execution proof. Keep `trace_ids` from that scenario's own operation/receipt,
+or empty when unproven.
+
+- Verify the intended input actually reached the selected reader after runner,
+  loader and child-process overrides. Retain effective values, authority and
+  current source/component dispositions; a previous "not installed/executed"
+  baseline cannot describe a newly tested dependency. Future status does not
+  resolve an accessible source contradiction.
+  When policy requires the identified receiver, reconcile the effective transport,
+  authority/port and applicable signal path with that detected/approved receiver
+  or owned fixture. A loopback host alone proves locality, not receiver identity.
+  Preserve supported endpoint resolution and authorized alternative receivers;
+  do not introduce a universal fixed endpoint recipe.
+- Verify the assertion observes the promised field/outcome through the required
+  path and lifecycle phase. The owned async log must join its received real SDK
+  span in one scenario; separate "async" and "real span" matches are insufficient.
+  Configuration preservation, a substitute SDK fixture, a probe-only replacement
+  diagnostic handler or unrelated passing producer cannot establish the application
+  conjunction. Passing normalization does not prove diagnostic cadence.
+- Derive per-control status, proof mode, visibility, direct-assertion flags and
+  remaining work from those outcomes. Check grouped trials individually; an
+  unconditional report assignment or one healthy branch cannot supply another
+  fault's visibility. Expected negative tests may pass without acknowledged log
+  acceptance. Preserve directly proven item scope beside incomplete related
+  scenarios; do not inherit stronger proof from them or call executed evidence
+  future-only.
+
+Initialize unmatched controls Not proven and retain the concrete missing
+assertion, capability check or conditional resolution. Keep missing source
+access, wiring and runtime proof distinct. Unknown/optional SDK capabilities need
+an exact future source/API check and conditional test, not an unselected
+application feature. Do not withdraw a selected obligation to make a report pass.
+
+The default `--view telemetry` remains optional lexical discovery. Its
+`unmatched_attribute_literals` use case-sensitive acceptance-text substring
+matches: aliases may miss, denials may hit, and neither establishes an assertion.
+Do not add words merely to satisfy them. `unknown_finding_id_literals` checks
+numeric `OTEL-*` tokens and slash shorthand across the entire report, even for a
+selection, retaining original literals/locations. A historical reference may be
+intentional; a known ID may name the wrong owner. Resolve meaning yourself; the
+helper repairs no bindings and evaluates no coverage or runtime.
+
+The separate read-only `source-settings` helper inventories configuration-name
+spellings in selected implementation roots, with hashes, locations and retained
+`source_roots` even when no candidates are found:
 
 ```sh
 python3 -I "<directory-containing-loaded-SKILL.md>/../references/scripts/observe_report.py" source-settings --source <implementation-path> --report <saved-report>
 ```
 
-Repeat `--source` for other selected roots. Retained `source_roots` show the
-requested scan scope even when no candidates are found. Use the calling stage's existing
-JSON or Markdown report. This is lexical discovery: declarations/comments are
-candidates, normalized spellings are not verified aliases, and a report mention
-can be a denial rather than an assertion. Resolve actual consumption, separate
-readers and effective behavior yourself. Computed names, native public options,
-nonmatching namespaces and skipped files need independent inspection. The helper
-writes no reports, resolves no dynamic names and evaluates no coverage or runtime.
-An equivalent complete source-derived inventory remains valid.
+Repeat `--source` for other selected roots, including installed/proposed
+SDK/bridge/bootstrap consumers needed by the claims. Use the calling stage's
+existing JSON or Markdown report; never inventory source from that report itself.
+Declarations/comments, unverified separator normalization and report mentions are
+only hints. Resolve computed/nonmatching names, skipped files, public options,
+actual readers, effective fallback/units and separate consumers independently.
+Equivalent complete source-derived inspection is valid. This does not select
+unused SDK defaults or prove runtime behavior. Keep supported selected identity
+and disabled-init controls, including each configured propagation component's
+actual carrier operations.
 
-Apply **Source and applicability** to the saved claims and configuration cases:
-read their retained slices against the exact subject and terminal consumer, then
-check applied values, authority and their own assertions. Include the identity/
-disabled-init controls when supported and selected. Keep missing source access,
-wiring and proof distinct; lexical discovery neither selects unused defaults nor
-establishes runtime behavior. Shared parameterized controls are valid when every
-condition and execution boundary is addressable. Reuse the independent-finding
-acceptance closure above; helper-only or different-path results cannot close a
-normal-launch or same-path conjunction.
-For an existing canonical audit, the read-only report helper can enumerate the
-promises directly, including every `expected_telemetry[].attributes` member:
+Keep trial storage distinct on the actual filesystem, with stable case IDs or
+separate directories and original input metadata. Capitalization or two paths to
+one overwritten file do not prove distinct trials on a case-insensitive host.
+Bind every result to its own source, command, dependency and evidence. Plan-only
+restrictions prohibit executing setup, not retaining future dependency preparation
+and unique-storage steps.
 
-```sh
-python3 -I "<directory-containing-loaded-SKILL.md>/../references/scripts/observe_report.py" required-controls .observe/otel-audit.json
-```
-
-Use `--ids` only to restrict that inventory to an already chosen scope; it does
-not approve a selection or add dependencies. Its candidate scenario IDs do not
-assert that those scenarios test each field. Match the inventory's owning item,
-field and operation to real acceptance assertions yourself. The command writes
-no report and evaluates neither coverage nor runtime. An equivalent complete
-reconciliation is valid. With no audit, derive the same set from the direct
-instrumentation scope/report; never manufacture an audit to use this command.
-Build the required set independently from the final findings' promised
-operations/fields and applicable source/policy conditions. Compare it to the
-assertions actually saved in the scenarios, using owning operation, field,
-condition and proof scope as the match key. Start from the promises and clauses,
-not just existing scenarios; a scenario-to-owner list cannot expose an omitted
-promise. A parameterized table may carry the matches. Retain each unmatched
-member as unresolved with its concrete missing control/resolution, and reconcile
-all referenced finding/scenario IDs against the final allocated IDs.
-Apply LOG-SPEC-CLOSURE's per-control verdict and immutable source-binding rules:
-initialize unmatched controls Not proven, then join each to its named assertion and actual
-output. Preserve directly proven item scope beside incomplete
-related scenarios. Reconcile current capability and executed receipts separately;
-never inherit runtime success, weaken a selected clause or label executed proof
-future-only. Source and applicability above defines delegated facts and the
-separate skill-maintenance inventory; no additional per-service ledger is needed.
-
-Before finalizing, compare the saved scenarios against these obligations and
-the selected source/policy. An omitted obligation leaves that handoff partial;
-unexecuted acceptance never becomes a passing runtime result.
-Preserve the concrete obligations when shortening a report. Share scenarios by
-ID and let the authoritative structured report own their detail, with a compact
-Markdown summary where that artifact is permitted; do not duplicate the full
-plan in both formats or delete settings, expected outcomes, dependency setup,
-evidence bindings or fault assertions to meet a prose budget. Read back the
-saved handoff and reconcile every applicable acceptance row before claiming
-completeness. For unknown/optional SDK capabilities, give a concrete future
-source/API-resolution step and conditional test, preserving the unverified
-state; do not force an unselected development feature into application code.
-Readback must check the conjunction: the owned async log itself joins its
-received real SDK span in one scenario. Finding "async" and "real span" in
-different scenarios is not that proof.
-Before publishing the saved reports, resolve every local execution-evidence
-reference and read the actual artifact. Planned future paths are not executed
-evidence. Associate `trace_ids` with that scenario's own operation/receipt, or
-leave the field empty when no such trace is proven; never copy the first IDs
-from an unrelated runtime trial into every row. Refresh current capability and
-proof dispositions after installation/probes while leaving the audit immutable.
-A copied "not installed/executed" baseline row does not describe a newly tested
-exporter, and passing value truncation does not prove discard-diagnostic cadence.
-Keep trial storage distinct on the actual filesystem. Do not rely only on
-capitalization to distinguish cases on a case-insensitive host. Use a distinct stable case ID or separate run directory,
-retain the original input in its metadata, and check that each referenced result
-belongs to the claimed trial. Two paths to the same overwritten file do not
-prove two input variants. This is local evidence integrity, not an OTel naming rule.
-Finally compare status, proof mode, visibility, direct assertions and linked
-controls for each scenario/item; schema validity alone does not reconcile them.
-Plan-only restrictions prohibit executing setup, not specifying it: retain the
-future dependency-preparation and unique-storage steps explicitly in the saved
-handoff. Do not replace a named setting/public option or bridge with outcome
-assertions alone.
+Keep the authoritative structured report's detail and an allowed compact Markdown
+summary without duplicating the full plan. Shortening cannot delete settings,
+expected outcomes, source bindings, prerequisites or fault assertions. A concrete
+repair still names the project's supported mechanism, scope, units and effective
+configuration; outcome wishes alone are insufficient. Record checked versions in
+task evidence rather than prescribing one constructor, timeout or release.
+Preserve encoding/drain time within the selected whole-operation budget, prove a
+stall where selected, and distinguish exporter attempts, processor waits and
+caller deadlines: stopping a wait may not cancel delivery.
