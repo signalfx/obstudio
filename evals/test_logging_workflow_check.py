@@ -730,7 +730,7 @@ def test_host_profile_inputs_and_expected_values_are_explicit_independent_copies
     before = dict(base)
     profiles = workflow.identity_profiles(base)
     assert base == before
-    assert [p[0] for p in profiles] == ["resource-only", "explicit-override"]
+    assert [p[0] for p in profiles] == ["resource-only", "explicit-override", "resource-whitespace"]
     _, resource_child, resource_expected = profiles[0]
     assert "OTEL_SERVICE_NAME" not in resource_child
     assert resource_expected == {"service.name": "operator-resource-resource-only-unique",
@@ -826,8 +826,15 @@ def mock_identity_run(monkeypatch, tmp_path, *, profiles, mutant=None):
             assert kwargs["cwd"] == tmp_path and kwargs["start_new_session"] is True
             child = dict(kwargs["env"])
             state["launches"].append(child)
-            # Fixture-only model for the plain input pairs; no SDK/parser conformance claim.
-            attrs = dict(piece.split("=", 1) for piece in child["OTEL_RESOURCE_ATTRIBUTES"].split(","))
+            # Fixture-only source-supported model of the three plain key/value pairs.
+            # This does not execute an SDK or establish parser conformance.
+            raw = child["OTEL_RESOURCE_ATTRIBUTES"]
+            if mutant == "whitespace-broken-fallback" and len(state["launches"]) == 4:
+                # A generated startup substring fallback misses the supported spaces.
+                if "service.name=" not in raw:
+                    raw += ",service.name=broken-launch-default"
+            attrs = {key.strip(): value.strip() for piece in raw.split(",")
+                     for key, value in [piece.split("=", 1)]}
             name = child.get("OTEL_SERVICE_NAME") or attrs.get("service.name")
             data = list(identity_receipts(name, version=attrs.get("service.version", "baseline-v"), retained=attrs.get("obstudio.eval.preserved", "baseline-kept")))
             if mutant and len(state["launches"]) == 2:
@@ -889,25 +896,30 @@ def test_unflagged_checker_keeps_one_normal_launch_and_existing_evidence(monkeyp
 
 def test_opt_in_profiles_reach_actual_child_and_retain_independent_raw_results(monkeypatch, tmp_path):
     status, state, paths, results = mock_identity_run(monkeypatch, tmp_path, profiles=True)
-    assert status == 0 and len(state["launches"]) == len(results) == 3
+    assert status == 0 and len(state["launches"]) == len(results) == 4
     assert "OTEL_SERVICE_NAME" not in state["launches"][1]
     assert state["launches"][2]["OTEL_SERVICE_NAME"] == "operator-explicit-fixture-nonce"
-    assert len({r["proof_directory"] for r in results}) == 3
+    assert len({r["proof_directory"] for r in results}) == 4
     tagged = {r["identity_profile"]: r for r in results if "identity_profile" in r}
-    assert set(tagged) == {"resource-only", "explicit-override"}
+    assert set(tagged) == {"resource-only", "explicit-override", "resource-whitespace"}
     for result in results:
         assert result["status"] == "passed" and len(result["joins"]) == 4
         assert result["source_before"] == result["source_after"]
     for result in tagged.values():
         assert result["expected_resource"]["service.version"] == "operator-version-fixture-nonce"
-        assert result["launch_resource_inputs"] == {k: v for k, v in state["launches"][1 if result["identity_profile"] == "resource-only" else 2].items() if k in {"OTEL_SERVICE_NAME", "OTEL_RESOURCE_ATTRIBUTES"}}
-        assert "no absent/default identity, metrics Resource, encoding or header proof" in result["scope"]
+        index = {"resource-only": 1, "explicit-override": 2, "resource-whitespace": 3}[result["identity_profile"]]
+        assert result["launch_resource_inputs"] == {k: v for k, v in state["launches"][index].items() if k in {"OTEL_SERVICE_NAME", "OTEL_RESOURCE_ATTRIBUTES"}}
+        if result["identity_profile"] == "resource-whitespace":
+            assert "space-padded Resource entry/key/value inputs" in result["scope"]
+            assert "no absent/default identity, metrics Resource, percent-encoding or header proof" in result["scope"]
+        else:
+            assert "no absent/default identity, metrics Resource, encoding or header proof" in result["scope"]
 
 
 @pytest.mark.parametrize("mutant", ["hardcoded", "lost-version", "lost-attribute", "stale"])
 def test_profile_fault_keeps_failed_raw_evidence_and_cannot_be_erased_by_later_pass(monkeypatch, tmp_path, mutant):
     status, state, paths, results = mock_identity_run(monkeypatch, tmp_path, profiles=True, mutant=mutant)
-    assert status == 1 and len(state["launches"]) == len(results) == 3
+    assert status == 1 and len(state["launches"]) == len(results) == 4
     failed = next(r for r in results if r.get("identity_profile") == "resource-only")
     assert failed["status"] == "failed" and failed["error"]
     assert failed["source_before"] == failed["source_after"]
@@ -919,7 +931,7 @@ def test_profile_fault_keeps_failed_raw_evidence_and_cannot_be_erased_by_later_p
 
 def test_third_explicit_override_launch_rejects_reversed_precedence_without_erasing_first_passes(monkeypatch, tmp_path):
     status, state, paths, results = mock_identity_run(monkeypatch, tmp_path, profiles=True, mutant="reversed-precedence")
-    assert status == 1 and len(state["launches"]) == len(results) == 3
+    assert status == 1 and len(state["launches"]) == len(results) == 4
     failed = next(r for r in results if r.get("identity_profile") == "explicit-override")
     assert failed["status"] == "failed" and "application server span" in failed["error"]
     assert failed["launch_resource_inputs"]["OTEL_SERVICE_NAME"] == "operator-explicit-fixture-nonce"
@@ -934,5 +946,44 @@ def test_third_explicit_override_launch_rejects_reversed_precedence_without_eras
                "operator-resource-explicit-override-fixture-nonce"
                for trace in traces.values() for s in trace["spans"])
     assert failed["source_before"] == failed["source_after"]
+    for name in ("receiver-logs.json", "receiver-traces.json", "requests.json", "native-output.log"):
+        assert (raw / name).is_file()
+
+
+def test_fourth_whitespace_profile_keeps_raw_spaces_and_independent_expected_values(monkeypatch, tmp_path):
+    status, state, paths, results = mock_identity_run(monkeypatch, tmp_path, profiles=True)
+    assert status == 0 and len(state["launches"]) == len(results) == 4
+    row = next(r for r in results if r.get("identity_profile") == "resource-whitespace")
+    assert "OTEL_SERVICE_NAME" not in state["launches"][3]
+    assert row["launch_resource_inputs"]["OTEL_RESOURCE_ATTRIBUTES"] == (
+        " service.name = operator-resource-resource-whitespace-fixture-nonce , "
+        "service.version = operator-version-fixture-nonce , obstudio.eval.preserved = kept-fixture-nonce ")
+    assert row["expected_resource"] == {"service.name": "operator-resource-resource-whitespace-fixture-nonce",
+        "service.version": "operator-version-fixture-nonce", "obstudio.eval.preserved": "kept-fixture-nonce"}
+    assert sum(len(r["joins"]) for r in results) == 16
+    assert all(r["status"] == "passed" and r["source_before"] == r["source_after"] for r in results)
+    raw = Path(row["proof_directory"])
+    logs = json.loads((raw / "receiver-logs.json").read_text())
+    assert len(logs) == 5
+    for record in logs:
+        assert all(record["resource"]["attributes"][k] == v for k, v in row["expected_resource"].items())
+
+
+def test_fourth_whitespace_launch_rejects_substring_fallback_despite_three_plain_passes(monkeypatch, tmp_path):
+    status, state, paths, results = mock_identity_run(monkeypatch, tmp_path, profiles=True,
+                                            mutant="whitespace-broken-fallback")
+    assert status == 1 and len(state["launches"]) == len(results) == 4
+    failed = next(r for r in results if r.get("identity_profile") == "resource-whitespace")
+    assert failed["status"] == "failed" and "application server span" in failed["error"]
+    assert all(r["status"] == "passed" for r in results if r is not failed)
+    assert failed["source_before"] == failed["source_after"]
+    raw = Path(failed["proof_directory"])
+    assert json.loads((raw / "receiver-logs.json").read_text()) == []
+    traces = json.loads((raw / "receiver-traces.json").read_text())
+    assert any(s.get("kind") == "SERVER" and s["resource"]["serviceName"] == "broken-launch-default"
+               for trace in traces.values() for s in trace["spans"])
+    assert failed["launch_resource_inputs"]["OTEL_RESOURCE_ATTRIBUTES"].startswith(" service.name = ")
+    assert "OTEL_SERVICE_NAME" not in failed["launch_resource_inputs"]
+    assert failed["expected_resource"]["service.name"].startswith("operator-resource-resource-whitespace-")
     for name in ("receiver-logs.json", "receiver-traces.json", "requests.json", "native-output.log"):
         assert (raw / name).is_file()

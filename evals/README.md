@@ -108,15 +108,17 @@ receipt tests. A regression models eviction on exit to enforce this ordering.
 The checker resolves expected service identity with the SDK environment detector:
 resource-only `service.name` is supported, an explicit `OTEL_SERVICE_NAME` takes
 its normal precedence, and missing expected identity fails clearly before launch.
-The workflow runner additionally enables `--operator-identity-profiles`: two
-fresh launches with host-supplied plain Resource values check Resource-only
-identity and an explicit service name overriding a conflicting Resource name.
+The workflow runner and configured fixture test targets additionally enable
+`--operator-identity-profiles`: three fresh launches with host-supplied Resource
+values check Resource-only identity, an explicit service name overriding a
+conflicting Resource name, and whitespace around Resource keys and values
+accepted by the selected SDKs.
 The checker independently defines expected name, version and an unrelated
 attribute, then checks them on received application logs and their owning/server
 spans. Each launch retains its inputs, expectations and raw evidence; a later
 passing profile cannot erase a failure. The option leaves the original launch
-in place and allows 540 seconds for the three-launch check. These cases do not
-prove absent/default identity, encoded inputs, metrics Resources or headers.
+in place and allows 720 seconds for the four-launch check. These cases do not
+prove absent/default identity, percent-encoded inputs, metrics Resources or headers.
 This host runtime proof supplements the regular per-skill rubric commands;
 a standalone verify task on an uninstrumented fixture is only a precondition
 check. It is not positive runtime verification.

@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 from opentelemetry import trace
 from opentelemetry.instrumentation.logging.handler import LoggingHandler
-from opentelemetry.sdk._logs import LoggerProvider, LogRecordLimits
+from opentelemetry.sdk._logs import LoggerProvider, LogRecordLimits, LogRecordProcessor
 from opentelemetry.sdk._logs.export import (
     BatchLogRecordProcessor,
     InMemoryLogRecordExporter,
@@ -120,6 +120,44 @@ class LoggingContract(unittest.TestCase):
         self.assertTrue(all(len(v) == 32 for v in result.attributes.values()))
         self.assertEqual(self.exporter.get_finished_logs()[-1].dropped_attributes, 12)
         self.assertEqual(len(result.body), 400, "attribute limits must not be mistaken for a Body bound")
+
+        class SanitizeAttributes(LogRecordProcessor):
+            before = None
+
+            def on_emit(self, record):
+                attributes = record.log_record.attributes
+                self.before = (len(attributes), record.dropped_attributes)
+                for key in tuple(attributes):
+                    del attributes[key]
+                attributes["safe.category"] = "v" * 100
+
+            def shutdown(self):
+                pass
+
+            def force_flush(self, timeout_millis=30000):
+                return True
+
+        exporter = InMemoryLogRecordExporter()
+        sanitizer = SanitizeAttributes()
+        provider = LoggerProvider(
+            resource=self.provider.resource, shutdown_on_exit=False,
+            log_record_limits=LogRecordLimits(
+                max_log_record_attributes=8, max_log_record_attribute_length=32,
+            ),
+        )
+        provider.add_log_record_processor(sanitizer)
+        provider.add_log_record_processor(SimpleLogRecordProcessor(exporter))
+        try:
+            provider.get_logger("sanitized-limits").emit(
+                body="safe category", attributes={f"k{i}": "v" * 100 for i in range(20)},
+            )
+            sanitized = exporter.get_finished_logs()[0]
+            self.assertEqual(sanitizer.before, (8, 12))
+            self.assertEqual(sanitized.log_record.attributes, {"safe.category": "v" * 32})
+            self.assertEqual(sanitized.dropped_attributes, 12)
+            self.assertEqual(sanitized.log_record.body, "safe category")
+        finally:
+            provider.shutdown()
 
     def test_log_specific_environment_precedence(self):
         environment = {

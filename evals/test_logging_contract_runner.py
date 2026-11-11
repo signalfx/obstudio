@@ -1,12 +1,76 @@
 import json
 import os
 from pathlib import Path
+import shutil
+import subprocess
 import sys
 import time
 
 import pytest
 
 import run_logging_contract as runner
+
+
+FIXTURE_CHECKS = {
+    "go/chi-basic": ["go", "test", "./..."],
+    "java/springboot-basic": ["mvn", "-q", "test"],
+    "python/flask-basic": ["uv", "run", "python", "-m", "py_compile", "app.py"],
+    "node/express-basic": ["node", "--check", "app.js"],
+}
+
+
+@pytest.mark.parametrize("case", FIXTURE_CHECKS)
+@pytest.mark.parametrize("target,configured", [
+    ("logging-workflow-check", True), ("test", True), ("test", False),
+])
+def test_public_make_targets_forward_identity_profiles(tmp_path, case, target, configured):
+    service = tmp_path / "service with spaces"
+    service.mkdir()
+    shutil.copyfile(Path(__file__).parent / case / "Makefile", service / "Makefile")
+    verifier = tmp_path / "recording verifier with spaces.py"
+    verifier.write_text(
+        "import json,os,sys\nfrom pathlib import Path\n"
+        "with Path(os.environ['VERIFIER_CALLS']).open('a') as out:\n"
+        " out.write(json.dumps({'argv':sys.argv[1:],'cwd':os.getcwd()})+'\\n')\n"
+    )
+    tools = tmp_path / "fake tools"
+    tools.mkdir()
+    for name in ("go", "mvn", "uv", "node"):
+        executable = tools / name
+        executable.write_text(
+            "#!" + sys.executable + "\nimport json,os,sys\nfrom pathlib import Path\n"
+            "with Path(os.environ['TOOL_CALLS']).open('a') as out:\n"
+            " out.write(json.dumps([Path(sys.argv[0]).name,*sys.argv[1:]])+'\\n')\n"
+        )
+        executable.chmod(0o700)
+    env = dict(os.environ)
+    for name in ("MAKEFLAGS", "MFLAGS", "MAKELEVEL", "GNUMAKEFLAGS",
+                 "LOGGING_WORKFLOW_VERIFIER", "LOGGING_WORKFLOW_PYTHON"):
+        env.pop(name, None)
+    env.update(
+        PATH=str(tools) + os.pathsep + env.get("PATH", os.defpath),
+        PYTHONDONTWRITEBYTECODE="1", LOGGING_WORKFLOW_PYTHON=sys.executable,
+        VERIFIER_CALLS=str(tmp_path / "verifier.jsonl"),
+        TOOL_CALLS=str(tmp_path / "tools.jsonl"),
+    )
+    if configured:
+        env["LOGGING_WORKFLOW_VERIFIER"] = str(verifier)
+    result = subprocess.run(
+        ["make", target], cwd=service, env=env, text=True, capture_output=True, timeout=10,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    calls_path, tools_path = Path(env["VERIFIER_CALLS"]), Path(env["TOOL_CALLS"])
+    calls = [json.loads(line) for line in calls_path.read_text().splitlines()] if calls_path.exists() else []
+    tool_calls = [json.loads(line) for line in tools_path.read_text().splitlines()] if tools_path.exists() else []
+    assert tool_calls == ([FIXTURE_CHECKS[case]] if target == "test" else [])
+    if configured:
+        assert calls == [{
+            "argv": ["--start-command-json", '["make","dev"]', "--operator-identity-profiles"],
+            "cwd": str(service),
+        }]
+    else:
+        assert calls == []
+        assert "Host logging workflow check not configured" in result.stdout
 
 
 def junit(directory, tag="", name="one"):

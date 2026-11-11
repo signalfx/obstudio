@@ -243,7 +243,7 @@ def capture_live_receipts(process, studio, requests, service_name, started, outp
 def identity_profiles(environment: dict[str, str]) -> list[tuple[str, dict[str, str], dict[str, str]]]:
     token = secrets.token_hex(8)
     profiles = []
-    for profile in ("resource-only", "explicit-override"):
+    for profile in ("resource-only", "explicit-override", "resource-whitespace"):
         child = dict(environment)
         lower_name = f"operator-resource-{profile}-{token}"
         expected = {
@@ -253,6 +253,10 @@ def identity_profiles(environment: dict[str, str]) -> list[tuple[str, dict[str, 
         }
         child.pop("OTEL_SERVICE_NAME", None)
         child["OTEL_RESOURCE_ATTRIBUTES"] = ",".join(f"{key}={value}" for key, value in expected.items())
+        if profile == "resource-whitespace":
+            child["OTEL_RESOURCE_ATTRIBUTES"] = " " + " , ".join(
+                f"{key} = {value}" for key, value in expected.items()
+            ) + " "
         if profile == "explicit-override":
             expected["service.name"] = f"operator-explicit-{token}"
             child["OTEL_SERVICE_NAME"] = expected["service.name"]
@@ -283,7 +287,10 @@ def run_check(command: list[str], service: Path, environment: dict[str, str], *,
             key: environment[key] for key in ("OTEL_SERVICE_NAME", "OTEL_RESOURCE_ATTRIBUTES")
             if key in environment
         }
-        result["scope"] += " Selected plain operator Resource attributes are asserted on these logs/spans; no absent/default identity, metrics Resource, encoding or header proof."
+        if profile_id == "resource-whitespace":
+            result["scope"] += " Selected space-padded Resource entry/key/value inputs are asserted on these logs/spans; no absent/default identity, metrics Resource, percent-encoding or header proof."
+        else:
+            result["scope"] += " Selected plain operator Resource attributes are asserted on these logs/spans; no absent/default identity, metrics Resource, encoding or header proof."
     process = None
     drained = threading.Event()
     pump = None
@@ -358,7 +365,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--start-command-json", required=True)
     parser.add_argument("--operator-identity-profiles", action="store_true",
-                        help="Also check two host-owned plain operator identity profiles through normal startup")
+                        help="Also check three host-owned operator identity profiles through normal startup")
     args = parser.parse_args()
     command = json.loads(args.start_command_json)
     if not isinstance(command, list) or not command or not all(isinstance(v, str) and v for v in command):

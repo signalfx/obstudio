@@ -238,12 +238,12 @@ func initOTel(
 		propagation.Baggage{},
 	))
 	res, err := resource.New(ctx,
-		resource.WithFromEnv(),
 		resource.WithTelemetrySDK(),
 		resource.WithProcess(),
 		resource.WithOS(),
 		resource.WithContainer(),
 		resource.WithHost(),
+		resource.WithFromEnv(),
 	)
 	if err != nil {
 		return nil, err

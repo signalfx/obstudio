@@ -905,10 +905,19 @@ avoid allocating an unsafe size merely to probe the limit.
 
 For limits, replay the original payload and test its boundaries. Derive expected
 retained values and drops from actual input, accounting for bridge-added fields
-and reviewed processors. Direct SDK and native-bridge controls prove different
-paths; keep either missing control unproven. Attribute limits do not define Body
-or exception-capture policy. Use native enablement only to avoid expensive work;
-lazy formatting does not defer argument-producing expressions already evaluated.
+and reviewed processors.
+
+Where the selected Python SDK keeps limits and accumulated drops on a mutable
+attribute container, replacing it with a plain mapping can erase earlier drop
+accounting. Use that owner's supported mutation or snapshot mechanism while
+preserving its limits and existing drop state. Check the downstream count as
+well as sanitized values; do not synthesize counters or assume another
+SDK/version has the same container semantics.
+
+Direct SDK and native-bridge controls prove different paths; keep either missing
+control unproven. Attribute limits do not define Body or exception-capture
+policy. Use native enablement only to avoid expensive work; lazy formatting does
+not defer argument-producing expressions already evaluated.
 
 ### Launcher and lifecycle
 

@@ -262,7 +262,7 @@ def run(args: argparse.Namespace) -> int:
                 command = [sys.executable, str(repo / "evals/logging_workflow_check.py"),
                            "--start-command-json", '["make","dev"]', "--operator-identity-profiles"]
                 stage["independent_runtime_command"] = command
-                stage["independent_runtime_timeout_seconds"] = 540
+                stage["independent_runtime_timeout_seconds"] = 720
                 with (output / f"{role}-independent-runtime.log").open("w") as log:
                     check = subprocess.Popen(command, cwd=workspace / "service", stdout=log,
                                              stderr=subprocess.STDOUT, start_new_session=True)

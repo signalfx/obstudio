@@ -130,7 +130,7 @@ def workflow(tmp_path, monkeypatch):
             state["runtime_commands"].append(args[0])
             self.returncode = state["runtime"]
         def wait(self, timeout):
-            assert timeout == 540
+            assert timeout == 720
             return self.returncode
         def poll(self):
             return self.returncode
@@ -193,7 +193,7 @@ def test_all_roles_are_bare_feedback_free_and_archives_byte_exact(workflow):
     assert workflow.state["runtime_commands"] == [expected_command, expected_command]
     for stage in summary["stages"][1:]:
         assert stage["independent_runtime_command"] == expected_command
-        assert stage["independent_runtime_timeout_seconds"] == 540
+        assert stage["independent_runtime_timeout_seconds"] == 720
     assert_archives(workflow)
 
 
