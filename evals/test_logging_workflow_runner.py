@@ -6,6 +6,8 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import shutil
+import subprocess
 import sys
 from types import SimpleNamespace
 
@@ -262,6 +264,28 @@ def test_each_actor_receives_fresh_response_path_with_previous_archive_preserved
     assert code == 0 and summary["status"] == "passed"
     for role in ["audit", "instrument", "verify"]:
         assert (workflow.output / role / "last_message.md").read_text() == f"actor {role}"
+
+
+def test_documented_helper_caches_do_not_change_shipped_bundle_identity(tmp_path):
+    workspace = tmp_path / "workspace"
+    scripts = workspace / ".agents/skills/references/scripts"
+    shutil.copytree(ROOT / "skills/references/scripts", scripts, ignore=DRIVER.skill_workspace_ignore)
+    application = workspace / "service/app.py"
+    application.parent.mkdir()
+    application.write_text('setting = "OTEL_TEST_SETTING"\n')
+    before = DRIVER.bundle_hashes(workspace)
+    result = subprocess.run(
+        [sys.executable, "-I", str(scripts / "observe_report.py"), "source-settings", "--source", str(application)],
+        capture_output=True, text=True, timeout=10,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["candidates"][0]["name"] == "OTEL_TEST_SETTING"
+    assert list(scripts.rglob("*.pyc")), "Isolated Python ignores the environment-only bytecode flag"
+    assert DRIVER.bundle_hashes(workspace) == before
+    source = scripts / "observe_report_core.py"
+    source.write_bytes(source.read_bytes() + b"\n")
+    assert DRIVER.bundle_hashes(workspace) != before
 
 
 def test_interrupted_actor_records_terminal_failure_and_cleans_receiver(workflow):

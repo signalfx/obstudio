@@ -18,7 +18,7 @@ import tomllib
 import urllib.request
 
 from pytest_codex_evals.backends import CodexBackend
-from pytest_codex_evals.eval_files import skill_workspace_ignore
+from pytest_codex_evals.eval_files import skill_workspace_ignore, staged_skill_source_files
 from pytest_codex_evals.graders import grade_side
 from pytest_codex_evals.graders.rubric import run_rubric_grade
 from pytest_codex_evals.plugin import case_from_definition, load_eval_definition
@@ -39,7 +39,7 @@ def save(path: Path, value: dict) -> None:
 def bundle_hashes(workspace: Path) -> dict[str, str]:
     root = workspace / ".agents/skills"
     return {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
-            for path in sorted(root.rglob("*")) if path.is_file()}
+            for path in staged_skill_source_files(root)}
 
 
 def audit_hash(workspace: Path) -> str | None:
