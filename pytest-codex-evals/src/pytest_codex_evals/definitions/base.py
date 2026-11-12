@@ -209,6 +209,7 @@ class SideResult(BaseModel):
     grade: GradeResult
     rubric_grade_path: str | None = None
     rubric_trace_path: str | None = None
+    strict_rubric_output: bool = False
     command_count: int = 0
     duration_seconds: float = 0.0
     agent_duration_seconds: float = 0.0

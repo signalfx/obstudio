@@ -26,6 +26,43 @@ import run_logging_workflow as DRIVER
 REPORT = load(ROOT / "skills/references/tests/observe_report_fixtures.py", "workflow_report_fixture")
 from pytest_codex_evals.backends import AgentResult
 from pytest_codex_evals.definitions import GradeCheckResult, GradeResult
+from pytest_codex_evals.graders.rubric import rubric_prompt, run_rubric_grade
+
+
+@pytest.mark.parametrize("language", sorted(DRIVER.SERVICES))
+@pytest.mark.parametrize("role", ["audit", "instrument", "verify"])
+def test_every_logging_definition_uses_strict_judging_for_each_trial(tmp_path, language, role):
+    path = tmp_path / "rubric_grade.json"
+    checks = [{"id": f"rubric-{i}", "pass": True, "notes": "Mock verdict.",
+               "evidence": "Mock artifact:1; validator wiring only."} for i in range(1, 15)]
+
+    def judge(**kwargs):
+        assert kwargs["model"] == "gpt-6.1-sol"
+        return AgentResult(0, tmp_path / "trace.jsonl", path, tmp_path / "stderr.txt")
+
+    backend = SimpleNamespace(run_judge=judge)
+    for trial in range(1, 4):
+        case = DRIVER.case_for(ROOT, language, role, trial)
+        assert case.strict_rubric_output is True
+        assert case.task == f"$otel-{role} ./service" and case.eval_inputs == []
+        assert len(case.rubric) == 14 and case.judge_prompt is None
+        rendered = rubric_prompt(case)
+        sections = ["## 1. Task and scope", "## 2. Evidence map",
+                    "## 3. Rubric", "## 4. Output protocol"]
+        assert [rendered.index(section) for section in sections] == sorted(
+            rendered.index(section) for section in sections)
+        assert f"Actor task: {case.task}\n" in rendered
+        assert len(case.judge_inputs) == 3
+        assert "\n".join(f"{i}. {item}" for i, item in enumerate(case.judge_inputs, 1)) in rendered
+
+        raw = json.dumps({"overall_pass": True, "score": 93, "checks": checks[:-1]})
+        path.write_text(raw)
+        with pytest.raises(ValueError, match="exactly 14 checks"):
+            run_rubric_grade(case=case, side_dir=tmp_path, model="gpt-6.1-sol", backend=backend)
+        assert path.read_text() == raw
+
+        path.write_text(json.dumps({"overall_pass": True, "score": 93, "checks": checks}))
+        assert run_rubric_grade(case=case, side_dir=tmp_path, model="gpt-6.1-sol", backend=backend) == path
 
 
 @pytest.fixture

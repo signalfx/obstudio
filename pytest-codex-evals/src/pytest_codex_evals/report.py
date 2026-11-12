@@ -19,6 +19,7 @@ from .eval_files import (
     fixture_eval_input_sources,
     iter_eval_files,
     regular_source_file,
+    rubric_base_source,
     runtime_definition_asset_files,
     runtime_repository_source_files,
     shared_runtime_source_files,
@@ -369,6 +370,9 @@ def source_input_digests(
                 raise ValueError(f"eval definition must be an object: {path}")
             if definition.get("skill") == skill:
                 paths.append(path)
+                base = rubric_base_source(path, definition)
+                if base is not None:
+                    paths.append(base)
                 paths.extend(staged_fixture_source_files(layout.fixture_dir))
                 prompts = definition.get("prompts", [])
                 if not isinstance(prompts, list):
@@ -506,6 +510,9 @@ def selected_eval_source_files(
         )
 
     paths = [definition_source, *staged_fixture_source_files(resolved_fixture)]
+    base = rubric_base_source(definition_source, definition)
+    if base is not None:
+        paths.append(base)
     paths.extend(native_invocation_source_files(repo_root, skill, matching_prompts[0].get("task")))
     paths.extend(
         source
@@ -2140,7 +2147,9 @@ def load_rubric_grade(side: SideResult) -> dict[str, Any] | None:
     data = json.loads(path.read_text(encoding="utf-8"))
     checks = data.get("checks") or []
     passed = sum(1 for check in checks if bool(check.get("pass")))
-    score = normalize_rubric_score(data.get("score"), passed, len(checks))
+    score = data.get("score")
+    if not side.strict_rubric_output:
+        score = normalize_rubric_score(score, passed, len(checks))
     normalized = {
         "overall_pass": data.get("overall_pass"),
         "score": score,

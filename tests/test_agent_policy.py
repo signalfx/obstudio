@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 import tempfile
 import unittest
@@ -934,6 +935,43 @@ make -C evals --directory=. verify
             '{"id":"renamed-second","task":"Second task."}],"rubric":["new"]}\n',
         )
         self.assertEqual(check_repository(self.root, "main"), [])
+
+    def test_shared_rubric_changes_are_compared_as_resolved_requirements(self) -> None:
+        path = "evals/go/example/eval/qual/audit.json"
+        base_path = "evals/rubrics/common.json"
+        common = {"rubric": ["Common rule."], "judge_inputs": [], "strict_rubric_output": True}
+        leaf = {"skill": "example", "prompts": [{"id": "direct", "task": "Task."}],
+                "rubric_base": "../../../../rubrics/common.json",
+                "rubric_additions": {"rubric-1": "Selected obligation."}}
+        self._write(path, json.dumps(leaf))
+        self._write(base_path, json.dumps(common))
+        self._init_git()
+        self._write("skills/example/SKILL.md", "---\nname: example\n---\nChanged behavior.\n")
+        self._write(base_path, json.dumps(common, indent=4))
+        errors = check_repository(self.root, "main")
+        self.assertTrue(any("effectively equivalent to the base tree" in error for error in errors))
+        common["rubric"][0] = "New required behavior."
+        self._write(base_path, json.dumps(common))
+        self.assertEqual(check_repository(self.root, "main"), [])
+
+    def test_extracting_inline_rubric_to_shared_base_is_not_semantic_coverage(self) -> None:
+        path = "evals/go/example/eval/qual/audit.json"
+        common = {"rubric": ["Common rule."], "judge_inputs": [], "strict_rubric_output": True}
+        fields = {"skill": "example", "prompts": [{"id": "direct", "task": "Task."}]}
+        self._write(path, json.dumps({**fields, **common}))
+        self._init_git()
+        self._write("skills/example/SKILL.md", "---\nname: example\n---\nChanged behavior.\n")
+        self._write("evals/rubrics/common.json", json.dumps(common))
+        self._write(path, json.dumps({**fields, "rubric_base": "../../../../rubrics/common.json"}))
+        errors = check_repository(self.root, "main")
+        self.assertTrue(any("effectively equivalent to the base tree" in error for error in errors))
+
+    def test_invalid_shared_rubric_cannot_supply_skill_coverage(self) -> None:
+        path = Path("evals/go/example/eval/qual/audit.json")
+        self._write(path.as_posix(), json.dumps({"skill": "example", "rubric_base": "../../../../../outside.json"}))
+        errors = []
+        _check_skill_eval_diff(self.root, [("M", Path("skills/example/SKILL.md")), ("M", path)], errors)
+        self.assertTrue(any("cannot resolve rubric base" in error for error in errors))
 
     def test_complete_skill_removal_cleans_up_evals_without_a_rubric_run(self) -> None:
         self._write(".gitignore", "__pycache__/\n")

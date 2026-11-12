@@ -498,18 +498,19 @@ def test_source_binding_tracks_launch_and_code_but_not_generated_proof(tmp_path)
 
 
 def test_logging_tasks_are_direct_skill_invocations_with_visible_operator_policy(tmp_path):
+    from pytest_codex_evals.plugin import load_eval_definition
     from pytest_codex_evals.runner import prepare_side_workspace
     from run_logging_workflow import case_for
 
     definitions = list(Path(__file__).parent.glob("*/*/eval/qual/logging-*-contract.json"))
     assert len(definitions) == 12
     for path in definitions:
-        data = json.loads(path.read_text())
-        assert len(data["rubric"]) == 14
-        assert len(data["prompts"]) == 3
-        for prompt in data["prompts"]:
-            assert prompt["task"] == "$" + data["skill"] + " ./service"
-            assert prompt["eval_inputs"] == []
+        data = load_eval_definition(path)
+        assert len(data.rubric) == 14
+        assert len(data.prompts) == 3
+        for prompt in data.prompts:
+            assert prompt.task == "$" + data.skill + " ./service"
+            assert prompt.eval_inputs == []
 
     root = Path(__file__).resolve().parents[1]
     for role in ("audit", "instrument", "verify"):
@@ -520,8 +521,7 @@ def test_logging_tasks_are_direct_skill_invocations_with_visible_operator_policy
         assert readme.read_bytes() == (case.fixture_dir / "README.md").read_bytes()
         assert "must not interrupt that work" in readme.read_text()
         assert "application policy, not an OpenTelemetry signal-handler" in readme.read_text()
-        definition = json.loads((case.fixture_dir / f"eval/qual/logging-{role}-contract.json").read_text())
-        lifecycle = definition["rubric"][9]
+        lifecycle = case.rubric[9]
         assert "documented Graceful-stop contract in README.md" in lifecycle
         assert "not an OTel signal-handler requirement" in lifecycle
         assert "repeated-SystemExit" not in lifecycle

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from jsonschema.exceptions import ValidationError as JSONSchemaValidationError
 
 from pytest_codex_evals.ab import side_prompt
 from pytest_codex_evals.config import load_settings
@@ -33,7 +34,7 @@ from pytest_codex_evals.definitions import (
     TokenUsage,
     ValidationResult,
 )
-from pytest_codex_evals.graders.rubric import rubric_prompt
+from pytest_codex_evals.graders.rubric import rubric_prompt, run_rubric_grade
 from pytest_codex_evals.backends import (
     AgentResult,
     ClaudeBackend,
@@ -69,6 +70,7 @@ from pytest_codex_evals.report import (
     kind_report_metadata,
     report_metadata,
     legacy_shared_reference_consumers,
+    load_rubric_grade,
     normalize_rubric_score,
     render_reports_for_run_root,
     source_input_digests,
@@ -80,6 +82,7 @@ from pytest_codex_evals.report import (
 )
 from pytest_codex_evals.plugin import (
     case_from_definition,
+    load_eval_definition,
     validate_live_result,
     validation_result,
 )
@@ -182,7 +185,8 @@ def test_prompt_eval_inputs_require_safe_fixture_relative_paths():
             PromptVariant(id="direct", task="Run.", eval_inputs=[unsafe])
 
 
-def test_case_preserves_prompt_eval_inputs(tmp_path: Path):
+@pytest.mark.parametrize("strict_output", [False, True])
+def test_case_preserves_prompt_eval_inputs(tmp_path: Path, strict_output: bool):
     prompt = PromptVariant(
         id="direct",
         task="Run.",
@@ -195,6 +199,7 @@ def test_case_preserves_prompt_eval_inputs(tmp_path: Path):
         service="sample",
         prompts=[prompt],
         rubric=["Grade quality."],
+        strict_rubric_output=strict_output,
         fixture_dir=tmp_path,
     )
 
@@ -205,6 +210,7 @@ def test_case_preserves_prompt_eval_inputs(tmp_path: Path):
     )
 
     assert case.eval_inputs == ["eval/inputs/otel-audit.json"]
+    assert case.strict_rubric_output is strict_output
 
 
 def test_prepare_side_workspace_stages_only_explicit_eval_inputs(
@@ -414,6 +420,87 @@ def test_native_loading_source_change_invalidates_only_direct_task_reports(tmp_p
     after = source_input_digests(tmp_path, "sample-skill", "rubric", skill, **kwargs)
     assert (before != after) is direct
     assert ("editable-harness/graders/shared.py" in before) is direct
+
+
+@pytest.mark.parametrize("selected", [False, True])
+def test_shared_rubric_extends_without_replacement_and_binds_source(tmp_path, selected):
+    skill = tmp_path / "skills/sample-skill"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text("name: sample-skill\n")
+    fixture = tmp_path / "evals/python/example"
+    directory = fixture / "eval/qual"
+    directory.mkdir(parents=True)
+    base = tmp_path / "evals/common.json"
+    common = {"rubric": ["Common first.", "Common second."],
+              "judge_inputs": ["Read answer.md."], "strict_rubric_output": True}
+    base.write_text(json.dumps(common))
+    path = directory / "shared.json"
+    leaf = {"skill": "sample-skill", "prompts": [{"id": "direct", "task": "$sample-skill ./service", "eval_inputs": []}],
+            "rubric_base": "../../../../common.json", "rubric_additions": {"rubric-2": "Selected second obligation."}}
+    path.write_text(json.dumps(leaf))
+    definition = load_eval_definition(path)
+    assert definition.rubric == ["Common first.", "Common second.\n\nSelected second obligation."]
+    assert definition.judge_inputs == common["judge_inputs"] and definition.strict_rubric_output
+    assert "rubric_base" not in definition.model_dump()
+    case = case_from_definition(definition, definition.prompts[0], path)
+    workspace = tmp_path / "actor"
+    prepare_side_workspace(tmp_path, case, "with_skill", workspace)
+    assert not (workspace / "service/eval").exists()
+    assert not (workspace / "common.json").exists()
+
+    kwargs = {"definition_path": path, "fixture_dir": fixture, "prompt_id": "direct", "eval_inputs": []} if selected else {}
+    before = source_input_digests(tmp_path, "sample-skill", "rubric", skill, **kwargs)
+    assert "evals/common.json" in before
+    common["rubric"][0] = "Changed common obligation."
+    base.write_text(json.dumps(common))
+    after = source_input_digests(tmp_path, "sample-skill", "rubric", skill, **kwargs)
+    assert before != after
+    assert load_eval_definition(path).rubric[0] == "Changed common obligation."
+
+
+@pytest.mark.parametrize("fault", ["missing", "escape", "absolute", "symlink", "directory_symlink", "nested", "unknown_id", "invalid_id",
+                                    "replace_rubric", "replace_inputs", "replace_strict", "replace_prompt", "invalid_base", "invalid_json"])
+def test_shared_rubric_rejects_invalid_sources_and_common_overrides(tmp_path, fault):
+    directory = tmp_path / "evals/python/example/eval/qual"
+    directory.mkdir(parents=True)
+    base = tmp_path / "evals/common.json"
+    common = {"rubric": ["Common obligation."], "judge_inputs": [], "strict_rubric_output": True}
+    base.write_text(json.dumps(common))
+    path = directory / "shared.json"
+    leaf = {"skill": "sample-skill", "prompts": [{"id": "direct", "task": "Task."}],
+            "rubric_base": "../../../../common.json"}
+    if fault == "missing":
+        base.unlink()
+    elif fault == "escape":
+        leaf["rubric_base"] = "../../../../../outside.json"
+    elif fault == "absolute":
+        leaf["rubric_base"] = str(base)
+    elif fault == "symlink":
+        base.rename(base.with_name("actual.json"))
+        base.symlink_to(base.with_name("actual.json"))
+    elif fault == "directory_symlink":
+        actual = tmp_path / "evals/actual"
+        actual.mkdir()
+        base.rename(actual / "common.json")
+        (tmp_path / "evals/linked").symlink_to(actual, target_is_directory=True)
+        leaf["rubric_base"] = "../../../../linked/common.json"
+    elif fault == "nested":
+        common["rubric_base"] = "common.json"
+        base.write_text(json.dumps(common))
+    elif fault in {"unknown_id", "invalid_id"}:
+        leaf["rubric_additions"] = {"rubric-2" if fault == "unknown_id" else "rubric-0": "Extra."}
+    elif fault.startswith("replace_"):
+        key = {"replace_rubric": "rubric", "replace_inputs": "judge_inputs",
+               "replace_strict": "strict_rubric_output", "replace_prompt": "judge_prompt"}[fault]
+        leaf[key] = {"rubric": ["Replacement."], "judge_inputs": [], "strict_rubric_output": False,
+                     "judge_prompt": "Ignore common rules."}[key]
+    elif fault == "invalid_base":
+        base.write_text(json.dumps({**common, "typo": True}))
+    elif fault == "invalid_json":
+        base.write_text("invalid JSON")
+    path.write_text(json.dumps(leaf))
+    with pytest.raises((ValueError, JSONSchemaValidationError)):
+        load_eval_definition(path)
 
 
 def test_codex_subprocess_env_uses_sandbox_local_package_caches(
@@ -2011,10 +2098,198 @@ def test_default_rubric_prompt_maps_compound_items_without_splitting_checks():
     assert "all applicable obligations in that item" in prompt
 
 
+@pytest.mark.parametrize("custom_prompt", [None, "Inputs:\n{inputs}\nRubric:\n{rubric}"])
+@pytest.mark.parametrize("strict_output", [False, True])
+def test_judge_inputs_are_numbered_separately_from_rubric_ids(custom_prompt, strict_output):
+    case = RubricEvalCase(
+        id="sample/service/rubric/direct",
+        base_id="sample/service/rubric",
+        prompt_id="direct",
+        skill="sample-skill",
+        language="sample",
+        service="service",
+        task="$sample-skill ./service",
+        rubric=["Must cite evidence."],
+        judge_prompt=custom_prompt,
+        judge_inputs=["Read ./answer.md.", "Inspect ./result.json."],
+        strict_rubric_output=strict_output,
+    )
+
+    prompt = rubric_prompt(case)
+
+    assert "1. Read ./answer.md.\n2. Inspect ./result.json." in prompt
+    assert case.task == "$sample-skill ./service"
+    assert case.rubric == ["Must cite evidence."]
+    if custom_prompt is None:
+        assert "rubric-1: Must cite evidence." in prompt
+        assert "Return exactly 1 checks" in prompt
+        if strict_output:
+            headings = ["## 1. Task and scope", "## 2. Evidence map", "## 3. Rubric", "## 4. Output protocol"]
+            assert [prompt.index(heading) for heading in headings] == sorted(prompt.index(heading) for heading in headings)
+            assert "Actor task: $sample-skill ./service" in prompt
+            assert "Not proven" in prompt and "Not applicable" in prompt
+
+
+@pytest.mark.parametrize(
+    "invalid_output",
+    ["missing", "extra", "duplicate", "unexpected", "reordered", "overall", "false_pass", "notes", "evidence", "process_failed"],
+)
+def test_strict_judge_rejects_schema_valid_inconsistent_grades(tmp_path, invalid_output):
+    case = RubricEvalCase(
+        id="sample/service/rubric/direct",
+        base_id="sample/service/rubric",
+        prompt_id="direct",
+        skill="sample-skill",
+        language="sample",
+        service="service",
+        task="Assess the saved answer.",
+        rubric=["Correct answer.", "Source-supported explanation."],
+        strict_rubric_output=True,
+    )
+    checks = [
+        {"id": f"rubric-{index}", "pass": True, "notes": "Requirement met.", "evidence": "answer.md:1"}
+        for index in (1, 2)
+    ]
+    overall = True
+    if invalid_output == "missing":
+        checks.pop()
+    elif invalid_output == "extra":
+        checks.append({"id": "rubric-3", "pass": True, "notes": "Extra check.", "evidence": "answer.md:2"})
+    elif invalid_output == "duplicate":
+        checks[1]["id"] = "rubric-1"
+    elif invalid_output == "unexpected":
+        checks[1]["id"] = "rubric-3"
+    elif invalid_output == "reordered":
+        checks.reverse()
+    elif invalid_output == "overall":
+        overall = False
+    elif invalid_output == "false_pass":
+        checks[1]["pass"] = False
+    elif invalid_output == "process_failed":
+        pass
+    else:
+        checks[1][invalid_output] = " \n"
+
+    class Judge:
+        def run_judge(self, **kwargs):
+            output = tmp_path / "rubric_grade.json"
+            output.write_text(json.dumps({"overall_pass": overall, "score": 100, "checks": checks}))
+            return AgentResult(2 if invalid_output == "process_failed" else 0,
+                               tmp_path / "trace.jsonl", output, tmp_path / "stderr.txt")
+
+    with pytest.raises(ValueError):
+        run_rubric_grade(case=case, side_dir=tmp_path, model="test", backend=Judge())
+
+
+@pytest.mark.parametrize("custom_prompt", [None, "Grade {task} using {rubric}."])
+def test_strict_judge_accepts_bound_checks_with_default_or_custom_prompt(tmp_path, custom_prompt):
+    case = RubricEvalCase(
+        id="sample/service/rubric/direct", base_id="sample/service/rubric", prompt_id="direct",
+        skill="sample-skill", language="sample", service="service", task="Assess the answer.",
+        rubric=["Correct answer."], judge_prompt=custom_prompt, strict_rubric_output=True,
+    )
+
+    result = run_rubric_grade(case=case, side_dir=tmp_path, model="test", backend=RecordingBackend())
+
+    assert json.loads(result.read_text())["checks"][0]["id"] == "rubric-1"
+
+
+@pytest.mark.parametrize("custom_contract", ["legacy-default", "custom-prompt", "custom-schema"])
+def test_existing_judge_output_contracts_remain_unchanged(tmp_path, custom_contract):
+    case = RubricEvalCase(
+        id="sample/service/rubric/direct", base_id="sample/service/rubric", prompt_id="direct",
+        skill="sample-skill", language="sample", service="service", task="Assess the answer.",
+        rubric=["Correct answer."],
+        judge_prompt="Grade {task}." if custom_contract == "custom-prompt" else None,
+    )
+
+    class Judge:
+        def run_judge(self, **kwargs):
+            output = tmp_path / "rubric_grade.json"
+            output.write_text(json.dumps({"overall_pass": True, "score": 80, "checks": [
+                {"id": "quality", "pass": True, "notes": "", "evidence": ""},
+            ]}))
+            return AgentResult(0, tmp_path / "trace.jsonl", output, tmp_path / "stderr.txt")
+
+    schema = None
+    if custom_contract == "custom-schema":
+        schema = tmp_path / "custom.schema.json"
+        schema.write_text(json.dumps({"type": "object", "required": ["overall_pass", "score", "checks"]}))
+
+    result = run_rubric_grade(case=case, side_dir=tmp_path, model="test", backend=Judge(), schema_path=schema)
+
+    assert json.loads(result.read_text())["checks"][0]["id"] == "quality"
+    if custom_contract == "legacy-default":
+        assert "read-only grader" not in rubric_prompt(case)
+
+
+def test_strict_judge_rejects_custom_schema_before_inference(tmp_path):
+    case = RubricEvalCase(
+        id="sample/service/rubric/direct", base_id="sample/service/rubric", prompt_id="direct",
+        skill="sample-skill", language="sample", service="service", task="Assess the answer.",
+        rubric=["Correct answer."], strict_rubric_output=True,
+    )
+    backend = RecordingBackend()
+
+    with pytest.raises(ValueError, match="requires the built-in rubric output schema"):
+        run_rubric_grade(case=case, side_dir=tmp_path, model="test", backend=backend,
+                         schema_path=tmp_path / "custom.schema.json")
+
+    assert backend.judge_timeouts == []
+
+
+@pytest.mark.parametrize("strict_output", [False, True])
+@pytest.mark.parametrize("valid_grade", [False, True])
+def test_live_result_requires_valid_grade_only_for_opted_in_rubric_runs(tmp_path, strict_output, valid_grade):
+    guards = GradeResult(checks=[
+        GradeCheckResult(id=name, description=name, passed=True, category="sanity")
+        for name in ("final-message-present", "skills-loaded", "skill-instructions-read")
+    ])
+    side = side_result("with_skill", guards)
+    if valid_grade:
+        grade_path = tmp_path / "rubric_grade.json"
+        grade_path.write_text(json.dumps({"overall_pass": True, "score": 100, "checks": [
+            {"id": "rubric-1", "pass": True, "notes": "Requirement met.", "evidence": "answer.md:1"},
+        ]}))
+        side.rubric_grade_path = str(grade_path)
+    else:
+        side.errors = ["rubric grading failed: inconsistent checks"]
+    result = case_result(side, None)
+
+    if strict_output and not valid_grade:
+        with pytest.raises(AssertionError, match="with_skill rubric grading failed: .*inconsistent checks"):
+            validate_live_result(result, require_valid_rubric=True)
+    else:
+        validate_live_result(result, require_valid_rubric=strict_output)
+
+
 def test_report_normalizes_count_shaped_rubric_score():
     assert normalize_rubric_score(6, passed=6, total=6) == 100
     assert normalize_rubric_score(5, passed=5, total=6) == 83
     assert normalize_rubric_score(88, passed=5, total=6) == 88
+
+
+@pytest.mark.parametrize("strict_output, expected_score", [(False, 71), (True, 10)])
+def test_strict_grade_preserves_raw_quality_score_without_legacy_count_conversion(tmp_path, strict_output, expected_score):
+    raw = json.dumps({
+        "overall_pass": False,
+        "score": 10,
+        "checks": [{"id": f"rubric-{index}", "pass": index <= 10,
+                    "notes": "Observed result.", "evidence": "answer.md:1"}
+                   for index in range(1, 15)],
+    })
+    path = tmp_path / "rubric_grade.json"
+    path.write_text(raw)
+    side = side_result("with_skill", GradeResult())
+    side = side.model_copy(update={"strict_rubric_output": strict_output})
+    side.rubric_grade_path = str(path)
+    restored = SideResult.model_validate_json(side.model_dump_json())
+
+    loaded = load_rubric_grade(restored)
+
+    assert loaded["score"] == expected_score
+    assert (loaded["passed"], loaded["total"]) == (10, 14)
+    assert path.read_text() == raw
 
 
 def test_session_result_writer_writes_raw_json_without_markdown(tmp_path: Path):
@@ -4498,7 +4773,8 @@ def test_runtime_environment_overrides_are_isolated(monkeypatch, tmp_path: Path)
     assert env["COMPOSE_PROJECT_NAME"] == "project"
 
 
-def test_run_case_passes_configured_agent_and_judge_timeouts(tmp_path: Path):
+@pytest.mark.parametrize("strict_output", [False, True])
+def test_run_case_passes_configured_agent_and_judge_timeouts(tmp_path: Path, strict_output: bool):
     fixture_dir = tmp_path / "fixture"
     fixture_dir.mkdir()
     skill_dir = tmp_path / "skills" / "sample-skill"
@@ -4514,6 +4790,7 @@ def test_run_case_passes_configured_agent_and_judge_timeouts(tmp_path: Path):
         task="Evaluate the answer.",
         fixture_dir=fixture_dir,
         rubric=["Must pass."],
+        strict_rubric_output=strict_output,
     )
     backend = RecordingBackend()
 
@@ -4534,6 +4811,7 @@ def test_run_case_passes_configured_agent_and_judge_timeouts(tmp_path: Path):
     assert backend.agent_timeouts == [2400]
     assert backend.judge_timeouts == [1200]
     assert result.with_skill is not None
+    assert result.with_skill.strict_rubric_output is strict_output
     assert result.with_skill.agent_tokens == 1
     assert result.with_skill.rubric_tokens == 1
     assert result.with_skill.tokens == 2
@@ -4548,6 +4826,7 @@ def test_run_case_passes_configured_agent_and_judge_timeouts(tmp_path: Path):
     )
     assert summary["agent_usage"]["provider_total_tokens"] == 1
     assert summary["rubric_usage"]["provider_total_tokens"] == 1
+    assert summary["strict_rubric_output"] is strict_output
 
 
 def write_loaded_skill(root: Path, skill: str) -> Path:

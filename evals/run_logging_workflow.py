@@ -122,7 +122,7 @@ def bind_model_metadata(trace: Path, codex_home: Path, workspace: Path) -> dict:
 def archive_stage(workspace: Path, destination: Path) -> None:
     destination.mkdir()
     for name in ("trace.jsonl", "last_message.md", "stderr.txt", "grade.json", "rubric_grade.json",
-                 "rubric_trace.jsonl", "rubric_stderr.txt"):
+                 "rubric_trace.jsonl", "rubric_stderr.txt", "rubric_prompt.txt"):
         path = workspace / name
         if path.exists():
             shutil.copy2(path, destination / name)
@@ -131,7 +131,7 @@ def archive_stage(workspace: Path, destination: Path) -> None:
 
 
 GRADER_FEEDBACK_ARTIFACTS = (
-    "grade.json", "rubric_grade.json", "rubric_trace.jsonl", "rubric_stderr.txt",
+    "grade.json", "rubric_grade.json", "rubric_trace.jsonl", "rubric_stderr.txt", "rubric_prompt.txt",
 )
 
 

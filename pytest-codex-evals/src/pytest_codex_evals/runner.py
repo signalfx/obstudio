@@ -199,6 +199,7 @@ def run_side(
         grade=grade,
         rubric_grade_path=str(artifact_rubric_path) if rubric_path else None,
         rubric_trace_path=str(artifact_rubric_trace_path) if rubric_path else None,
+        strict_rubric_output=isinstance(case, RubricEvalCase) and case.strict_rubric_output,
         command_count=len(trace.commands),
         duration_seconds=round(time.monotonic() - side_start, 3),
         agent_duration_seconds=round(agent_duration_seconds, 3),

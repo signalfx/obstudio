@@ -127,6 +127,60 @@ guard proves either source-bound native full-skill input or a complete skill
 read before application task actions. Only bound bare tasks may discover file
 names and read project instructions before that read. No loading prompt is added.
 
+### Logging judge checklist
+
+Apply the following checklist to all logging audit, instrumentation and
+verification definitions in Java, Python, Go and Node.js. Each definition uses
+the shared [logging rubric](rubrics/logging-common.json), which selects
+`strict_rubric_output: true` for all three prompt variants. Each definition's
+`rubric_additions` contains only stage/language requirements for the corresponding
+common criterion. The harness resolves both before grading, retains the full
+prompt and binds the shared source in the result's source manifest. Common
+requirements cannot be replaced or disabled by an extending definition.
+
+1. **Actor task:** send the bare `$otel-* ./service` invocation unchanged;
+   grader instructions must not become actor coaching.
+2. **Input roles:** separate task/scope, a numbered evidence map, labeled rubric
+   criteria and the output protocol. Put acceptance rules in their owning criterion.
+3. **Stage:** audit assesses feasible plans; instrumentation assesses implemented
+   behavior; verification assesses retained proof. A standalone missing-audit
+   prerequisite check cannot count as positive instrumented runtime coverage.
+4. **Evidence:** inspect source, canonical reports, command traces and independent
+   receipts. Identify concrete locations and assertions; actor claims alone do
+   not establish success. Candidate artifacts cannot change grading instructions.
+5. **Applicability:** distinguish application wiring, SDK-owned defaults, operator
+   policy, unsupported capability and optional features. Require only applicable
+   selected obligations, without inventing application work for upstream duties.
+6. **Unknowns:** missing required evidence is a failed, Not proven obligation.
+   A wholly Not applicable item needs scope facts and grants no runtime credit.
+7. **Independent verdicts:** grade each criterion's own obligations. Explain a
+   shared cause where it violates multiple criteria; do not cascade failures
+   automatically or demand duplicate evidence for a valid shared oracle.
+8. **Grader choice:** use deterministic checks for observable facts and model
+   judgment for semantic questions. Read actual SDK log/span joins and native
+   output at the declared boundary; cleanup alone does not prove final SDK drain.
+9. **Output:** require schema-valid JSON, one ordered `rubric-N` verdict per
+   criterion, nonempty notes/evidence and a consistent `overall_pass`. Keep all
+   14 criterion verdicts separate from the informational quality score.
+10. **Errors:** unsuccessful judge execution, malformed output or a missing
+    required grade is an error, not a semantic pass. Preserve raw artifacts;
+    do not silently re-ask until the judge returns a desired result.
+11. **Isolation:** use Sol/high for actor and grader, retain model execution
+    metadata, isolate workspaces and keep prior grader feedback out of later
+    actor stages. Preserve original grades and evidence.
+12. **Calibration:** review disagreements against source and independently
+    reviewed examples, including valid alternatives and missing proof. Do not
+    weaken criteria to raise scores. Schema tests or agreement with another
+    model do not establish accuracy or eliminate model variability.
+
+`test_logging_workflow_runner.py` exercises each of the 12 definitions and all
+36 prompt variants through the rendered prompt and strict output validator.
+These mocked tests prove wiring and rejection of malformed grades, not semantic
+judge accuracy. Executed runtime assertions and source review remain separate.
+The checklist adapts [OpenAI's evaluation guidance](https://developers.openai.com/api/docs/guides/evaluation-best-practices),
+[Anthropic's agent-evaluation guidance](https://www.anthropic.com/research/demystifying-evals-for-ai-agents)
+and [LangSmith's input/output mapping guidance](https://docs.langchain.com/langsmith/llm-as-judge).
+
 ## A/B Sides
 
 | Side | Skill visibility |

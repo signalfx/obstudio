@@ -71,7 +71,7 @@ provided. The `skill` value is matched to the directory name passed with
 Role-specific schemas are strict:
 
 - `eval/sanity/*.json`: `skill`, `prompts`, optional `checks`.
-- `eval/qual/*.json`: `skill`, `prompts`, required `rubric`, optional `judge_prompt` and `judge_inputs`.
+- `eval/qual/*.json`: `skill`, `prompts`, either an inline `rubric` or a `rubric_base`, plus supported grading options.
 - `eval/runtime/*.json`: `skill`, `prompts`, required runtime `checks`.
 
 ### 0.2 runtime-expectation migration
@@ -86,6 +86,62 @@ empty `endpoints` list remains valid when `service_logs` is non-empty.
 use `{case_id}`, `{prompt_id}`, `{task}`, `{rubric}`, and `{inputs}` template
 fields. Use `judge_inputs` to tell the judge what artifacts matter for that
 skill; the default prompt does not assume every eval has service files.
+The rendered inputs are numbered independently of the `rubric-N` verdict IDs.
+Keep each input focused on one evidence source and its proof boundary. Put
+acceptance requirements and interpretation in their owning rubric item, and
+output rules in the grader protocol. The actor still receives its original task.
+
+Use `rubric_base` to share common grading requirements across definitions. It
+references a JSON file relative to the definition, within the same eval root.
+That file contains `rubric`, `judge_inputs` and `strict_rubric_output`.
+`rubric_additions` appends case-specific text to existing criterion IDs:
+
+```json
+{
+  "skill": "sample-skill",
+  "prompts": [{ "id": "direct", "task": "$sample-skill ./service" }],
+  "rubric_base": "../../../../rubrics/common.json",
+  "rubric_additions": { "rubric-2": "Also assess the selected case-specific obligation." }
+}
+```
+
+An extending definition cannot replace the common rubric, evidence inputs,
+strictness or judge prompt. Unknown criterion IDs, missing/invalid base files,
+symlinks, paths outside the eval root and nested inheritance are rejected.
+Resolution retains criterion order/count; additions cannot remove common text.
+Source manifests include the shared file for both selected and aggregate runs,
+so a shared-rule change invalidates affected results. Repo policy compares the
+resolved requirements; moving unchanged text into a base is not new semantic
+eval coverage. Existing inline definitions keep working.
+
+Set `strict_rubric_output: true` in a rubric definition to opt into a checked
+criterion-level output contract. With the built-in output schema, the harness
+requires exactly one ordered `rubric-N` verdict per criterion, an `overall_pass`
+equal to the conjunction of those verdicts, and nonempty `notes` and `evidence`.
+Invalid output or unsuccessful judge execution is a grader error; its raw
+artifact is retained. When rubric grading is enabled, an opted-in live case
+requires a valid grade instead of silently passing with a missing grade. An
+explicit `--no-rubric` still skips grading. This check does
+not establish that cited evidence is real or that the semantic verdict is correct.
+Strict runs also retain the complete resolved prompt in `rubric_prompt.txt`.
+The strict prompt separates task, numbered evidence map, rubric and output
+protocol. It asks for concise, artifact-grounded explanations,
+explicit missing proof and scope-supported inapplicability. Candidate artifacts
+are evidence, not instructions for the judge. A custom `judge_prompt` remains
+responsible for stating that contract when strict output is selected. Strict
+output rejects a custom output schema before inference; existing definitions
+default to `false` and retain their existing output-validation behavior.
+
+The output schema and percentage-style `score` remain compatible. Strict runs
+retain that raw quality score when reports are loaded; legacy runs keep their
+existing count-to-percentage normalization. Assess
+criterion pass counts and required executable checks separately from that
+informational quality score. Validate grader reliability against independently
+reviewed examples, including missing evidence and valid alternative solutions;
+schema checks or another model's agreement alone are not human calibration.
+See the [OpenAI evaluation guidance](https://developers.openai.com/api/docs/guides/evaluation-best-practices),
+[Anthropic agent-evaluation guidance](https://www.anthropic.com/research/demystifying-evals-for-ai-agents),
+and [LangSmith evaluator guidance](https://docs.langchain.com/langsmith/llm-as-judge).
 
 An exact `$skill-name` or `$skill-name ./service` task is sent unchanged to
 the actor. For a direct Codex invocation, the loading guard accepts the complete
