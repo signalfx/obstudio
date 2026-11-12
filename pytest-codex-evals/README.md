@@ -91,8 +91,13 @@ An exact `$skill-name` or `$skill-name ./service` task is sent unchanged to
 the actor. For a direct Codex invocation, the loading guard accepts the complete
 skill input injected before assistant actions only when its executed thread,
 workspace, skill path and content match the staged source. Missing, altered or
-late input fails the guard. Other task wording retains the existing explicit
-file-loading wrapper and first-read check.
+late injected content cannot supply that proof. Bare CLI tasks can instead
+use recognized `pwd`, `ls`, `rg --files` and project-instruction `cat` commands
+before a complete, source-matching skill read. Application reads, edits and execution before that
+read fail the guard. Bootstrap permission requires the executed task, thread
+and workspace to match; it does not credit missing or truncated skill content.
+Other task wording retains the existing explicit loading wrapper and first-read
+check.
 
 Sanity checks can assert final text, files, trace command evidence, or
 run local commands in the produced `service/` workspace. Command checks use an

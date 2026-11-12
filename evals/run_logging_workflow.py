@@ -160,7 +160,7 @@ def validate_audit_handoff(repo: Path, workspace: Path) -> None:
     report = json.loads((workspace / "service/.observe/otel-audit.json").read_text())
     normalized = module.normalize_audit_report(report)
     if normalized["meta"]["status"] == "Blocked":
-        raise RuntimeError("Blocked audit cannot authorize diagnostic continuation")
+        raise RuntimeError("Blocked audit cannot authorize workflow continuation")
 
 
 class CheckedJudgeBackend:
@@ -303,7 +303,7 @@ def run(args: argparse.Namespace) -> int:
                                  and stage["audit_sha256_before"] == stage["audit_sha256_after"] == audit_hash(workspace))
                             and (role == "audit" or stage["independent_runtime_exit_code"] == 0)
                             and (role == "instrument" or stage["source_before"] == stage["source_after"]))
-            if fatal_passed and summary["collect_semantic_failures"]:
+            if fatal_passed:
                 try:
                     validate_audit_handoff(repo, workspace)
                 except Exception as error:

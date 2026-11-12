@@ -226,14 +226,17 @@ def main(argv: list[str] | None = None) -> int:
                     seconds=round(time.monotonic() - started, 3),
                     timed_out=completed.timed_out,
                 )
+                validation_errors = []
                 try:
                     row.update(parse_results(language, completed.output, report_dir))
                 except (ValueError, ET.ParseError, OSError) as error:
-                    row["validation_error"] = str(error)
+                    validation_errors.append(str(error))
                 if fixture_sources(fixture) != sources:
-                    row["validation_error"] = "Fixture source changed after preflight; rerun against one frozen revision"
+                    validation_errors.append("Fixture source changed after preflight; rerun against one frozen revision")
                 if shared_sources(root) != metadata["shared_sources"]:
-                    row["validation_error"] = "Shared runner/receiver source changed during the run"
+                    validation_errors.append("Shared runner/receiver source changed during the run")
+                if validation_errors:
+                    row["validation_error"] = "; ".join(validation_errors)
                 expected = row["expected_tests"]
                 row["passed"] = (
                     completed.exit_code == 0 and not completed.timed_out

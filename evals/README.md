@@ -123,7 +123,9 @@ This host runtime proof supplements the regular per-skill rubric commands;
 a standalone verify task on an uninstrumented fixture is only a precondition
 check. It is not positive runtime verification.
 Regular per-skill rubric runs also send these tasks unchanged; the loading
-guard binds Codex's native full-skill input rather than adding a loading prompt.
+guard proves either source-bound native full-skill input or a complete skill
+read before application task actions. Only bound bare tasks may discover file
+names and read project instructions before that read. No loading prompt is added.
 
 ## A/B Sides
 

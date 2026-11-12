@@ -214,6 +214,19 @@ def test_default_stops_on_semantic_failure(workflow):
     assert_archives(workflow)
 
 
+@pytest.mark.parametrize("fault", ["missing_audit", "invalid_audit", "blocked_audit"])
+def test_default_rejects_unusable_audit_at_the_audit_stage(workflow, fault):
+    workflow.state["fault"] = fault
+    code, summary = workflow.run()
+    assert code == 1 and workflow.calls == ["audit"]
+    assert len(summary["stages"]) == 1
+    stage = summary["stages"][0]
+    assert stage["status"] == "failed" and stage["failure_kind"] == "fatal"
+    assert stage["audit_handoff_error"]
+    assert not stage.get("diagnostic_continuation", False)
+    assert workflow.state["runtime_commands"] == []
+
+
 def test_failed_actor_is_archived_without_runtime_or_grading(workflow):
     workflow.state["fault"] = "actor_exit"
     code, summary = workflow.run(collect=True)

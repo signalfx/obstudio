@@ -343,6 +343,28 @@ def test_changed_shared_receiver_source_invalidates_trial(tmp_path, monkeypatch)
     assert "Shared" in row["validation_error"]
 
 
+def test_parse_and_both_source_failures_remain_visible_together(tmp_path, monkeypatch):
+    monkeypatch.setitem(runner.EXPECTED_TEST_COUNTS, "java", 1)
+    fixture = iter([{"fixture.java": "before"}, {"fixture.java": "after"}])
+    shared = iter([{"receiver": "before"}, {"receiver": "after"}])
+    monkeypatch.setattr(runner, "fixture_sources", lambda _: next(fixture))
+    monkeypatch.setattr(runner, "shared_sources", lambda _: next(shared))
+
+    def execute(command, cwd, env, timeout):
+        if "test" in command:
+            junit(java_report(command))
+            (java_report(command) / "TEST-fixture.xml").write_text("<broken")
+        return runner.CommandResult(0, "ready")
+
+    monkeypatch.setattr(runner, "run_command", execute)
+    assert runner.main(["--output", str(tmp_path), "--languages", "java", "--trials", "1"]) == 1
+    row = json.loads((tmp_path / "results.json").read_text())[0]
+    assert row["passed"] is False
+    assert "unclosed token" in row["validation_error"]
+    assert "Fixture source changed" in row["validation_error"]
+    assert "Shared runner/receiver source changed" in row["validation_error"]
+
+
 def test_receiver_setup_failure_has_structured_error_without_false_success(tmp_path, monkeypatch):
     def unavailable(output):
         raise OSError("loopback receiver unavailable")
