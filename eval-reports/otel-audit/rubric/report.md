@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | otel-audit |
-| Run ID | 20261112T013449574286Z |
+| Run ID | 20261112T061304851814Z |
 | Agent model | gpt-6.1-sol |
 | Judge model | gpt-6.1-sol |
 | Rubric enabled | True |
@@ -18,26 +18,27 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/flask-basic/qual/logging-audit-contract | python/flask-basic | 1 | 86% (12/14), avg score 92 | 4.1M | 19.9m | - | - | - |
+| with_skill | java/springboot-basic/qual/logging-audit-contract | java/springboot-basic | 1 | 79% (11/14), avg score 85 | 4.0M | 16.6m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/flask-basic/qual/logging-audit-contract | python/flask-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 4075399 | 3917824 | 0 | 24505 | 4111 | unknown | 4099904 |
+| with_skill | java/springboot-basic/qual/logging-audit-contract | java/springboot-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 3929316 | 3773568 | 0 | 26183 | 5020 | unknown | 3955499 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | python/flask-basic/qual/logging-audit-contract | python/flask-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 1523152 | 1404032 | 0 | 9163 | 4917 | unknown | 1532315 |
+| with_skill | java/springboot-basic/qual/logging-audit-contract | java/springboot-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 2368841 | 2229760 | 0 | 11789 | 6441 | unknown | 2380630 |
 
 ## Rubric Failures
 
 | Mode | Service | Side | Prompt | Result | Evidence |
 |---|---|---|---|---|---|
-| with_skill | python/flask-basic | with_skill | logging-trial-1 | rubric:rubric-2 FAIL | OTEL-002.expected_telemetry includes canonical context for 'runtime request completed'; logs.records checks its body, severity, counts and Resource, while logs.async.join and logs.context.exact target app.py:38-43. |
-| with_skill | python/flask-basic | with_skill | logging-trial-1 | rubric:rubric-5 FAIL | logs.async.join independently observes each workflow log-call context; http.create_task.success asserts the POST span but never joins 'runtime request completed' to it. |
+| with_skill | java/springboot-basic | with_skill | logging-trial-1 | rubric:rubric-2 FAIL | saved-contracts.json matches the final findings, scenarios and shared evidence; OTEL-001 constraints promise artifact-derived version, while runtime.identity leaves default identity to future documentation. |
+| with_skill | java/springboot-basic | with_skill | logging-trial-1 | rubric:rubric-10 FAIL | logging.shutdown; runtime.shutdown; DELIVERY evidence; sdk-auto-builder.java:644-656 stops at sdk.close(). |
+| with_skill | java/springboot-basic | with_skill | logging-trial-1 | rubric:rubric-13 FAIL | runtime.identity says to document the actual detector; logging.identity inherits that profile; OTEL-001 promises artifact-derived service.version, while pom.xml supplies 0.0.1-SNAPSHOT. |
 
 ## Result JSON
 
