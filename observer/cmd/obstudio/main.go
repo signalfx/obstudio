@@ -741,6 +741,13 @@ func buildSharedObserverState(host, port string, publicMCPURLs ...string) shared
 	}
 }
 
+func enabledStringOrDisabled(oneOrZero string) string {
+	if strings.TrimSpace(oneOrZero) == "1" {
+		return "Enabled"
+	}
+	return "Disabled"
+}
+
 func renderStartupBanner(mainAddr, otlpHTTPAddr, otlpGRPCAddr string) string {
 	return fmt.Sprintf(
 		"\nSplunk Observability Studio (collector)\n"+
@@ -751,13 +758,17 @@ func renderStartupBanner(mainAddr, otlpHTTPAddr, otlpGRPCAddr string) string {
 			"  Agent setup:         obstudio install --target=<agent>[,<agent>...]\n"+
 			"\nEnvironment Variables\n"+
 			"  OBSTUDIO_REGISTRATION_AND_AUTH_PROTOCOL: %s\n"+
-			"  OBSTUDIO_O11Y_OAUTH_REGISTRATION_URL: %s\n\n",
+			"  OBSTUDIO_O11Y_OAUTH_REGISTRATION_URL: %s\n"+
+			"  OBSTUDIO_CONFIG_MANAGER: %s\n"+
+			"  OBSTUDIO_O11Y_OAUTH_RANDOM_CLIENT_NAME: %s\n\n",
 		observerBrowserURL(mainAddr),
 		otlpHTTPAddr,
 		otlpGRPCAddr,
 		mainAddr,
 		strings.TrimSpace(os.Getenv("OBSTUDIO_REGISTRATION_AND_AUTH_PROTOCOL")),
 		strings.TrimSpace(os.Getenv("OBSTUDIO_O11Y_OAUTH_REGISTRATION_URL")),
+		enabledStringOrDisabled(strings.TrimSpace(os.Getenv("OBSTUDIO_CONFIG_MANAGER"))),
+		enabledStringOrDisabled(strings.TrimSpace(os.Getenv("OBSTUDIO_O11Y_OAUTH_RANDOM_CLIENT_NAME"))),
 	)
 }
 
