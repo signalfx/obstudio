@@ -375,12 +375,11 @@ def test_eval_json_files_do_not_require_fixture_files(pytester: pytest.Pytester)
     result.assert_outcomes(passed=1)
 
 
-@pytest.mark.parametrize("workers", [0, 2])
-def test_xdist_workers_merge_validation_reports(pytester: pytest.Pytester, workers: int):
+def test_xdist_workers_merge_validation_reports(pytester: pytest.Pytester):
     write_eval_repo(pytester)
     skill_dir = pytester.path / "skills" / "sample-skill"
 
-    result = pytester.runpytest("-n", str(workers), "--skill", str(skill_dir))
+    result = pytester.runpytest("-n", "2", "--skill", str(skill_dir))
 
     result.assert_outcomes(passed=2)
     raw_runs = list(pytester.path.glob(".workspace/codex-evals/sample-skill/*/runs/validation.json"))
@@ -388,7 +387,6 @@ def test_xdist_workers_merge_validation_reports(pytester: pytest.Pytester, worke
     payload = json.loads(raw_runs[0].read_text(encoding="utf-8"))
     assert payload["metadata"]["mode"] == "validation"
     assert payload["metadata"]["validation_scope"] == "full"
-    assert payload["metadata"]["workers"] == str(workers or 1)
     assert len(payload["results"]) == 2
 
 

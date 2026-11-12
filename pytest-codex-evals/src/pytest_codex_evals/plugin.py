@@ -494,8 +494,7 @@ def session_run(config: pytest.Config, repo_root: Path, skill: str, mode: str, k
 
 def run_metadata(config: pytest.Config, repo_root: Path, skill: str, mode: str) -> dict[str, Any]:
     path = config_path(config)
-    worker_input = getattr(config, "workerinput", {})
-    workers = worker_input.get("workercount") or getattr(config.option, "numprocesses", None) or 1
+    workers = getattr(config.option, "numprocesses", None) or 1
     backend = get_backend(config)
     grading_enabled = mode != "validation" and rubric_enabled(config)
     return {
