@@ -12,11 +12,16 @@ import signal
 import secrets
 import socket
 import subprocess
+import sys
 import tempfile
 import threading
 import time
 import urllib.parse
 import urllib.request
+
+
+if sys.flags.optimize:
+    raise RuntimeError("Logging workflow requires Python assertions; rerun without -O or PYTHONOPTIMIZE")
 
 
 OUTSIDE = "workflow outside completed"

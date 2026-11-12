@@ -114,7 +114,9 @@ def _native_skill_input(
                 if not isinstance(payload, dict):
                     return False, False
                 if event.get("type") == "session_meta":
-                    bound = payload.get("id") == threads[0] and Path(payload.get("cwd", "")).resolve() == run_dir.resolve()
+                    cwd = payload.get("cwd")
+                    bound = (payload.get("id") == threads[0] and isinstance(cwd, str) and bool(cwd.strip())
+                             and Path(cwd).resolve() == run_dir.resolve())
                 if event.get("type") != "response_item":
                     continue
                 # Only inspect supplied user input, never assistant reasoning.

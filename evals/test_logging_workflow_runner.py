@@ -30,6 +30,26 @@ from pytest_codex_evals.definitions import GradeCheckResult, GradeResult
 from pytest_codex_evals.graders.rubric import rubric_prompt, run_rubric_grade
 
 
+@pytest.mark.parametrize("script", ["logging_workflow_check.py", "run_logging_workflow.py"])
+@pytest.mark.parametrize("flags,optimize", [([], None), (["-O"], None), (["-OO"], None), ([], "1"), ([], "2")])
+def test_logging_workflow_requires_python_assertions(script, flags, optimize):
+    environment = dict(os.environ)
+    environment.pop("PYTHONOPTIMIZE", None)
+    if optimize is not None:
+        environment["PYTHONOPTIMIZE"] = optimize
+
+    result = subprocess.run([sys.executable, *flags, str(ROOT / "evals" / script), "--help"],
+                            env=environment, capture_output=True, text=True, timeout=10)
+
+    if flags or optimize is not None:
+        assert result.returncode != 0
+        assert "Logging workflow requires Python assertions" in result.stderr
+        assert "usage:" not in result.stdout
+    else:
+        assert result.returncode == 0
+        assert "usage:" in result.stdout
+
+
 def test_logging_subclause_labels_preserve_parent_identity_and_order():
     common = json.loads((ROOT / "evals/rubrics/logging-common.json").read_text())
     assert len(common["rubric"]) == 14

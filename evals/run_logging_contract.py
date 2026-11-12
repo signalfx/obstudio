@@ -92,8 +92,12 @@ def parse_results(language: str, output: str, report_dir: Path) -> dict[str, int
                 event.get("Action") == action and "Test" in event and "/" not in event["Test"]
                 for event in events
             )
-        counts["failed_tests"] = sum(event.get("Action") == "fail" and "Test" in event for event in events)
-        counts["skipped_tests"] = sum(event.get("Action") == "skip" and "Test" in event for event in events)
+        # Count affected parents while keeping a skipped child visible to the trial gate.
+        for key, action in (("failed_tests", "fail"), ("skipped_tests", "skip")):
+            counts[key] = len({
+                (event.get("Package"), event["Test"].split("/", 1)[0])
+                for event in events if event.get("Action") == action and "Test" in event
+            })
         return counts
     counts = {}
     outcomes = (

@@ -126,6 +126,22 @@ def test_go_subtest_failure_or_skip_remains_visible(tmp_path, action, key):
     assert result[key] == 1
 
 
+@pytest.mark.parametrize("action,key", [("fail", "failed_tests"), ("skip", "skipped_tests")])
+def test_go_nonpassing_counts_use_top_level_owners_across_packages(tmp_path, action, key):
+    events = [
+        {"Action": event_action, "Test": name, "Package": package}
+        for package in ("fixture/one", "fixture/two")
+        for name in ("TestOne", "TestOne/left", "TestOne/right")
+        for event_action in ("run", action)
+    ]
+    events.append({"Action": action, "Package": "fixture/one"})
+
+    result = runner.parse_results("go", "\n".join(json.dumps(event) for event in events), tmp_path)
+
+    assert result["executed_tests"] == result[key] == 2
+    assert result["passed_tests"] == 0
+
+
 def test_node_requires_all_outcome_counts(tmp_path):
     with pytest.raises(ValueError, match="Missing Node TAP"):
         runner.parse_results("node", "# pass 1\n", tmp_path)

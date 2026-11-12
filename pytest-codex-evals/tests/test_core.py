@@ -1500,7 +1500,8 @@ def test_with_skill_guard_fails_when_agent_does_not_read_instructions(tmp_path: 
     assert "Complete source before task actions was not proven" in instruction_check.evidence
 
 
-@pytest.mark.parametrize("fault", [None, "wrong-body", "wrong-path", "wrong-thread", "wrong-cwd", "late", "wrapped", "malformed"])
+@pytest.mark.parametrize("fault", [None, "wrong-body", "wrong-path", "wrong-thread", "wrong-cwd",
+                                 "missing-cwd", "empty-cwd", "null-cwd", "late", "wrapped", "malformed"])
 def test_direct_skill_guard_binds_complete_native_input_and_isolates_bad_sessions(tmp_path, monkeypatch, fault):
     target = write_loaded_skill(tmp_path, "otel-audit").resolve()
     home = tmp_path / "isolated-home"
@@ -1515,6 +1516,12 @@ def test_direct_skill_guard_binds_complete_native_input_and_isolates_bad_session
     events = [{"type": "session_meta", "payload": {"id": "other" if fault == "wrong-thread" else "native-thread",
                "cwd": str(tmp_path / "other") if fault == "wrong-cwd" else str(tmp_path)}},
               message("Use $otel-audit after another instruction" if fault == "wrapped" else "$otel-audit ./service")]
+    if fault in {"missing-cwd", "empty-cwd", "null-cwd"}:
+        monkeypatch.chdir(tmp_path)
+        if fault == "missing-cwd":
+            events[0]["payload"].pop("cwd")
+        else:
+            events[0]["payload"]["cwd"] = "" if fault == "empty-cwd" else None
     if fault == "late":
         events.append({"type": "response_item", "payload": {"type": "message", "role": "assistant", "content": []}})
     events.append(message(injected))
