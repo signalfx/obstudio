@@ -67,6 +67,8 @@ def workflow(tmp_path, monkeypatch):
                 assert (exec_dir / "service/main.go").read_text() == "instrumented source\n"
                 assert (exec_dir / "service/.observe/actor-instrument.md").is_file()
             calls.append(role)
+            if state.get("require_fresh_output"):
+                assert not (exec_dir / "last_message.md").exists()
             observed = exec_dir / "service/.observe"
             observed.mkdir(exist_ok=True)
             if role == "audit":
@@ -94,10 +96,16 @@ def workflow(tmp_path, monkeypatch):
                     (observed / "otel-audit.json").write_text('{"kind":"otel-audit"}')
                 if fault == "actor_exception":
                     raise TimeoutError("mock actor timed out")
+                if fault == "actor_interrupt":
+                    raise KeyboardInterrupt
             if role == "instrument" and fault == "audit_binding":
                 (observed / "otel-audit.json").write_text(json.dumps(REPORT.sample_report()) + "\n")
             for name in ("trace.jsonl", "last_message.md", "stderr.txt"):
+                if name == "last_message.md" and state.get("missing_final_role") == role:
+                    continue
                 (exec_dir / name).write_text(f"actor {role}")
+            if state.get("empty_final_role") == role:
+                (exec_dir / "last_message.md").write_text("")
             return AgentResult(7 if fault == "actor_exit" else 0,
                                exec_dir / "trace.jsonl", exec_dir / "last_message.md", exec_dir / "stderr.txt")
 
@@ -204,6 +212,65 @@ def test_default_stops_on_semantic_failure(workflow):
     assert summary["stages"][0]["status"] == "failed"
     assert summary["diagnostic_only"] is False
     assert_archives(workflow)
+
+
+def test_failed_actor_is_archived_without_runtime_or_grading(workflow):
+    workflow.state["fault"] = "actor_exit"
+    code, summary = workflow.run(collect=True)
+    assert code == 1 and workflow.calls == ["audit"]
+    assert workflow.state["runtime_commands"] == [] and workflow.expected == {}
+    stage = summary["stages"][0]
+    assert stage["status"] == "failed" and stage["failure_kind"] == "fatal"
+    assert stage["agent_exit_code"] == 7
+    assert (workflow.output / "audit/last_message.md").read_text() == "actor audit"
+
+
+@pytest.mark.parametrize("missing", [True, False])
+def test_success_exit_without_current_final_cannot_reuse_prior_stage(workflow, missing):
+    workflow.state["missing_final_role" if missing else "empty_final_role"] = "verify"
+    code, summary = workflow.run(collect=True)
+    assert code == 1 and workflow.calls == ["audit", "instrument", "verify"]
+    assert list(workflow.expected) == ["audit", "instrument"]
+    assert len(workflow.state["runtime_commands"]) == 1
+    assert (workflow.output / "instrument/last_message.md").read_text() == "actor instrument"
+    stage = summary["stages"][-1]
+    assert stage["status"] == "failed" and stage["failure_kind"] == "fatal"
+    assert stage["agent_exit_code"] == 0
+    archived = workflow.output / "verify/last_message.md"
+    if missing:
+        assert not archived.exists()
+    else:
+        assert archived.read_text() == ""
+
+
+def test_each_actor_receives_fresh_response_path_with_previous_archive_preserved(workflow):
+    workflow.state["require_fresh_output"] = True
+    code, summary = workflow.run()
+    assert code == 0 and summary["status"] == "passed"
+    for role in ["audit", "instrument", "verify"]:
+        assert (workflow.output / role / "last_message.md").read_text() == f"actor {role}"
+
+
+def test_interrupted_actor_records_terminal_failure_and_cleans_receiver(workflow):
+    workflow.state["fault"] = "actor_interrupt"
+    code, summary = workflow.run(collect=True)
+    assert code == 1 and summary["status"] == "failed"
+    assert summary["stages"][0]["status"] == "failed"
+    assert summary["stages"][0]["failure_kind"] == "fatal"
+    assert summary["receiver_cleanup_graceful"] is True
+    assert not workflow.expected and not workflow.state["runtime_commands"]
+
+
+def test_unverified_prior_response_is_preserved_and_blocks_next_actor(workflow, monkeypatch):
+    archive = workflow.driver.archive_stage
+    def corrupt_response(workspace, destination):
+        archive(workspace, destination)
+        (destination / "last_message.md").write_text("not the actor response")
+    monkeypatch.setattr(workflow.driver, "archive_stage", corrupt_response)
+    code, summary = workflow.run()
+    assert code == 1 and workflow.calls == ["audit"]
+    assert "not safely archived" in summary["error"]
+    assert (workflow.workspace / "last_message.md").read_text() == "actor audit"
 
 
 def test_opt_in_continues_semantic_failure_without_rewriting_grades_or_credit(workflow):

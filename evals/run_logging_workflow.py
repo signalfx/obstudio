@@ -240,6 +240,14 @@ def run(args: argparse.Namespace) -> int:
         prepare_dependencies(args.language, workspace, output)
         receiver = start_receiver(args.studio_binary.resolve(), output, ports)
         for role in ("audit", "instrument", "verify"):
+            response = workspace / "last_message.md"
+            if response.exists():
+                if not summary["stages"]:
+                    raise RuntimeError("Unexpected actor response before the first stage")
+                previous = output / summary["stages"][-1]["role"] / response.name
+                if not previous.is_file() or previous.read_bytes() != response.read_bytes():
+                    raise RuntimeError("Previous actor response is not safely archived")
+                response.unlink()
             case = case_for(repo, args.language, role, args.trial)
             stage = {"role": role, "task": case.task, "status": "running", "source_before": source_hashes(workspace / "service")}
             stage["audit_sha256_before"] = audit_hash(workspace)
@@ -249,10 +257,15 @@ def run(args: argparse.Namespace) -> int:
             result = backend.run_agent(prompt=case.task, exec_dir=workspace, model="gpt-6.1-sol", timeout=args.agent_timeout)
             stage["agent_seconds"] = time.monotonic() - started
             stage["agent_exit_code"] = result.returncode
-            stage["task_model"] = bind_model_metadata(result.trace_path, args.codex_home.resolve(), workspace)
             stage["source_after"] = source_hashes(workspace / "service")
             stage["audit_sha256_after"] = audit_hash(workspace)
             stage["skill_bundle_unchanged"] = bundle_hashes(workspace) == original_bundle
+            if (result.returncode != 0 or not result.final_message_path.is_file()
+                    or not result.final_message_path.read_text().strip()):
+                stage.update(status="failed", failure_kind="fatal")
+                archive_stage(workspace, output / role)
+                raise RuntimeError(f"{role} actor failed or produced no current final response")
+            stage["task_model"] = bind_model_metadata(result.trace_path, args.codex_home.resolve(), workspace)
             trace = backend.parse_trace(result.trace_path)
             grade = grade_side(case=case, run_dir=workspace, final_message=result.final_message_path.read_text(),
                                trace=trace, side="with_skill", repo_root=repo)
@@ -314,7 +327,9 @@ def run(args: argparse.Namespace) -> int:
             summary.update(status="failed", error="Semantic rubric failure; later stages are diagnostic only")
         else:
             summary["status"] = "passed"
-    except Exception as error:
+    except (Exception, KeyboardInterrupt) as error:
+        if summary["stages"] and summary["stages"][-1]["status"] == "running":
+            summary["stages"][-1].update(status="failed", failure_kind="fatal")
         summary.update(status="failed", error=type(error).__name__ + ": " + str(error))
     finally:
         if receiver is not None:

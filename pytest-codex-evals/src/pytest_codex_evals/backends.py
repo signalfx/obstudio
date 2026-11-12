@@ -5,6 +5,7 @@ import os
 import re
 import subprocess
 import threading
+import time
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -71,6 +72,7 @@ def run_streamed_command(
 ) -> StreamedCommandResult:
     stdout_chunks: list[str] = []
     stderr_chunks: list[str] = []
+    deadline = time.monotonic() + timeout
     process = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
@@ -93,15 +95,18 @@ def run_streamed_command(
     stdout_thread.start()
     stderr_thread.start()
     try:
-        returncode = process.wait(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        process.kill()
-        process.wait()
-        stdout_thread.join(timeout=5)
-        stderr_thread.join(timeout=5)
+        returncode = process.wait(timeout=max(0, deadline - time.monotonic()))
+        for reader in (stdout_thread, stderr_thread):
+            reader.join(timeout=max(0, deadline - time.monotonic()))
+        if stdout_thread.is_alive() or stderr_thread.is_alive():
+            raise subprocess.TimeoutExpired(cmd, timeout)
+    except BaseException:
+        if process.poll() is None:
+            process.kill()
+        process.wait(timeout=5)
+        stdout_thread.join(timeout=0.2)
+        stderr_thread.join(timeout=0.2)
         raise
-    stdout_thread.join()
-    stderr_thread.join()
     return StreamedCommandResult(
         returncode=returncode,
         stdout="".join(stdout_chunks),
