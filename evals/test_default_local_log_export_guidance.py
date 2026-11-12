@@ -445,7 +445,8 @@ def test_python_signal_headers_reach_official_exporter_without_override(
 @pytest.mark.parametrize("headers", [None, "  "])
 @pytest.mark.parametrize("configuration,accepted", [
     ({}, True),
-    ({"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:55444/collector/v1/traces"}, True),
+    ({"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:55444/collector"}, True),
+    ({"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:55444/collector/v1/traces"}, False),
     ({"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:55318/other",
       "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://localhost:55444/collector/v1/logs"}, True),
     ({"OTEL_EXPORTER_OTLP_ENDPOINT": "http://[::1",
@@ -487,6 +488,32 @@ def test_python_local_logs_preserve_normal_nondefault_receiver(
             assert helpers["_local_log_exporter"]() is None
         assert calls == []
     assert dict(os.environ) == before
+
+
+@pytest.mark.parametrize("path", [
+    "", "/collector", "/collector/", "/collector//",
+    "/collector/v1/traces", "/collector/v1/metrics", "/collector/v1/logs",
+])
+def test_python_generic_endpoint_preserves_otlp_http_base_path(monkeypatch, path) -> None:
+    for name in tuple(os.environ):
+        if name.startswith("OTEL_"):
+            monkeypatch.delenv(name)
+    base = "http://localhost:55444" + path
+    expected = base + ("" if base.endswith("/") else "/") + "v1/logs"
+    calls = []
+    exporter = object()
+
+    def create_exporter(**kwargs):
+        calls.append(kwargs)
+        return exporter
+
+    helpers = _python_local_log_helpers(
+        create_exporter,
+        approved_endpoint=expected,
+    )
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", base)
+    assert helpers["_local_log_exporter"]() is exporter
+    assert calls == [{"endpoint": expected}]
 
 
 def test_audit_selects_missing_supported_local_logs_by_default() -> None:
@@ -623,19 +650,6 @@ def test_language_guides_reject_generic_cloud_header_inheritance() -> None:
     java = _normalized(LANGUAGES / "java.md")
     assert "Move a direct-cloud `OTEL_EXPORTER_OTLP_ENDPOINT`" in java
     assert "trace- and metric-specific endpoint/header settings" in java
-
-
-def test_language_guides_inherit_compatible_generic_nondefault_receiver() -> None:
-    python = _read(LANGUAGES / "python.md")
-    node = _read(LANGUAGES / "node.md")
-    java = _read(LANGUAGES / "java.md")
-
-    assert 'generic._replace(path=path.rstrip("/") + "/v1/logs")' in python
-    assert 'urlunsplit(resolved)' in python
-    assert "If a generic receiver supplied the local URL during\npreflight" in node
-    assert "localLogsEndpointFromGeneric" not in node
-    assert 'elif [ -n "$generic_endpoint" ]; then' in java
-    assert 'local_logs_endpoint=$local_http_endpoint/v1/logs' in java
 
 
 def test_complete_go_setup_has_no_unreferenced_imports() -> None:
@@ -1011,8 +1025,9 @@ def test_python_cli_log_conflicts_preserve_app_trace_metric_and_profile(
     ({}, "http://127.0.0.1:4318/v1/logs", "http/protobuf"),
     ({"OTEL_EXPORTER_OTLP_LOGS_HEADERS": "X-Local=synthetic%20local,X-Route=a%2Fb"}, "http://127.0.0.1:4318/v1/logs", "http/protobuf"),
     ({"OTEL_EXPORTER_OTLP_HEADERS": "  ", "OTEL_EXPORTER_OTLP_LOGS_HEADERS": "\t \r\n"}, "http://127.0.0.1:4318/v1/logs", "http/protobuf"),
-    ({"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:55318/collector/v1/traces"}, "http://localhost:55318/collector/v1/logs", "http/protobuf"),
-    (_PYTHON_CLI_TRACE_METRIC_SETTINGS, "http://127.0.0.1:55318/collector/v1/logs", "http/protobuf"),
+    ({"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:55318/collector/v1/traces"}, "http://localhost:55318/collector/v1/traces/v1/logs", "http/protobuf"),
+    ({"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:55318/collector//"}, "http://localhost:55318/collector//v1/logs", "http/protobuf"),
+    (_PYTHON_CLI_TRACE_METRIC_SETTINGS, "http://127.0.0.1:55318/collector/v1/traces/v1/logs", "http/protobuf"),
     ({"OTEL_EXPORTER_OTLP_ENDPOINT": "http://otel-collector:55318/collector"}, "http://otel-collector:55318/collector/v1/logs", "http/protobuf"),
     ({"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://[::1]:55444/v1/logs"}, "http://[::1]:55444/v1/logs", "http/protobuf"),
     ({"OTEL_EXPORTER_OTLP_ENDPOINT": "https://trace.invalid", "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://localhost:55444/v1/logs"}, "http://localhost:55444/v1/logs", "http/protobuf"),
@@ -1084,7 +1099,7 @@ printf 'LOGS=%s\n' "${OTEL_EXPORTER_OTLP_LOGS_ENDPOINT-<unset>}"
           "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://127.0.0.1:55444/v1/logs"},
          "http://127.0.0.1:55444/v1/logs"),
         ({"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:55318/collector/v1/traces"},
-         "http://127.0.0.1:55318/collector/v1/logs"),
+         "http://127.0.0.1:55318/collector/v1/traces/v1/logs"),
     ]
     for config, approved in cases:
         # Model the preflight adaptation of the checked-in literal, not a
@@ -1361,7 +1376,7 @@ def test_java_launcher_accepts_local_generic_endpoint_and_empty_exporter(
     assert "JAVA_CALLED=1" in nondefault_http.stdout
     assert (
         "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT="
-        "http://telemetry-collector:55318/collector/v1/logs\n"
+        "http://telemetry-collector:55318/collector/v1/traces/v1/logs\n"
         in nondefault_http.stdout
     )
 
@@ -1522,7 +1537,8 @@ def test_node_shutdown_drains_before_flushing_telemetry(tmp_path: Path) -> None:
         lifecycle = lifecycle.replace(typed, javascript)
 
     def run_signal_case(
-        name: str, stop_and_drain: str, *, fast_timeout: bool = False
+        name: str, stop_and_drain: str, *, fast_timeout: bool = False,
+        repeat_signal: str | None = None,
     ) -> subprocess.CompletedProcess[str]:
         script = tmp_path / f"{name}.js"
         case_lifecycle = lifecycle.replace("10_000", "50") if fast_timeout else lifecycle
@@ -1532,7 +1548,9 @@ def test_node_shutdown_drains_before_flushing_telemetry(tmp_path: Path) -> None:
             f"{case_lifecycle}\n"
             f"installGracefulSignalHandlers({stop_and_drain});\n"
             "setInterval(() => {}, 1_000);\n"
-            "setImmediate(() => process.kill(process.pid, 'SIGTERM'));\n",
+            "setImmediate(() => process.kill(process.pid, 'SIGTERM'));\n"
+            + (f"setTimeout(() => process.kill(process.pid, '{repeat_signal}'), 30);\n"
+               if repeat_signal else ""),
             encoding="utf-8",
         )
         return subprocess.run(
@@ -1562,6 +1580,17 @@ def test_node_shutdown_drains_before_flushing_telemetry(tmp_path: Path) -> None:
     )
     assert stalled.returncode == 143
     assert stalled.stdout == ""
+
+    for signal in ("SIGTERM", "SIGINT"):
+        repeated = run_signal_case(
+            "repeated-" + signal,
+            "async () => { fs.writeSync(1, 'DRAINING\\n'); "
+            "await new Promise(resolve => setTimeout(resolve, 100)); "
+            "fs.writeSync(1, 'DRAINED\\n'); }",
+            repeat_signal=signal,
+        )
+        assert repeated.returncode == 0, repeated.stderr
+        assert repeated.stdout == "DRAINING\nDRAINED\nFLUSHED\n"
 
 
 def test_node_non_otlp_exporters_never_add_obstudio_console_bridge() -> None:

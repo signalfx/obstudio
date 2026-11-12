@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-instrument",
-    "run_id": "20261112T013318170565Z",
+    "run_id": "20261112T042711001857Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-6-luna",
     "judge_model": "",
@@ -136,22 +136,6 @@
       "sanity_check_count": 0,
       "rubric_check_count": 0,
       "runtime_check_count": 1
-    },
-    {
-      "id": "go/kvstore/qual/dependency-log-compatibility",
-      "case": "go/kvstore",
-      "language": "go",
-      "service": "kvstore",
-      "prompt_count": 1,
-      "prompts": [
-        "dependency-log-compatibility-plan"
-      ],
-      "definition_path": "evals/go/kvstore/eval/qual/dependency-log-compatibility.json",
-      "eval_dir": "evals/go/kvstore",
-      "skill_path": "skills/otel-instrument",
-      "sanity_check_count": 0,
-      "rubric_check_count": 6,
-      "runtime_check_count": 0
     },
     {
       "id": "go/kvstore/qual/incident-readiness",
@@ -320,22 +304,6 @@
       "runtime_check_count": 0
     },
     {
-      "id": "java/springboot-basic/qual/logging-compatible-plan",
-      "case": "java/springboot-basic",
-      "language": "java",
-      "service": "springboot-basic",
-      "prompt_count": 1,
-      "prompts": [
-        "java-compatible-log-plan"
-      ],
-      "definition_path": "evals/java/springboot-basic/eval/qual/logging-compatible-plan.json",
-      "eval_dir": "evals/java/springboot-basic",
-      "skill_path": "skills/otel-instrument",
-      "sanity_check_count": 0,
-      "rubric_check_count": 6,
-      "runtime_check_count": 0
-    },
-    {
       "id": "java/springboot-basic/qual/logging-instrument-contract",
       "case": "java/springboot-basic",
       "language": "java",
@@ -351,22 +319,6 @@
       "skill_path": "skills/otel-instrument",
       "sanity_check_count": 0,
       "rubric_check_count": 14,
-      "runtime_check_count": 0
-    },
-    {
-      "id": "node/express-basic/qual/dependency-log-compatibility",
-      "case": "node/express-basic",
-      "language": "node",
-      "service": "express-basic",
-      "prompt_count": 1,
-      "prompts": [
-        "dependency-log-compatibility"
-      ],
-      "definition_path": "evals/node/express-basic/eval/qual/dependency-log-compatibility.json",
-      "eval_dir": "evals/node/express-basic",
-      "skill_path": "skills/otel-instrument",
-      "sanity_check_count": 0,
-      "rubric_check_count": 6,
       "runtime_check_count": 0
     },
     {
@@ -883,22 +835,6 @@
       "runtime_check_count": 0
     },
     {
-      "id": "python/flask-basic/qual/local-log-launcher-policy",
-      "case": "python/flask-basic",
-      "language": "python",
-      "service": "flask-basic",
-      "prompt_count": 1,
-      "prompts": [
-        "python-local-log-launcher-policy"
-      ],
-      "definition_path": "evals/python/flask-basic/eval/qual/local-log-launcher-policy.json",
-      "eval_dir": "evals/python/flask-basic",
-      "skill_path": "skills/otel-instrument",
-      "sanity_check_count": 0,
-      "rubric_check_count": 6,
-      "runtime_check_count": 0
-    },
-    {
       "id": "python/flask-basic/qual/logging-instrument-contract",
       "case": "python/flask-basic",
       "language": "python",
@@ -1049,16 +985,16 @@
     }
   ],
   "summary": {
-    "eval_count": 62,
-    "case_count": 96,
-    "prompt_count": 96,
+    "eval_count": 58,
+    "case_count": 92,
+    "prompt_count": 92,
     "sanity_check_count": 0,
-    "rubric_check_count": 680,
+    "rubric_check_count": 656,
     "runtime_check_count": 9
   },
   "source": {
     "digest_version": 4,
-    "digest": "12f031a918ab1a44dcb3a8de583a3f401775853b29c56d9217ea5b760e2c00e4",
+    "digest": "e883980c1629041e268ac273eb9728f47841a110ced0917f38cd8646f5cab57d",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -1093,11 +1029,11 @@
       "skills/references/genai-readiness.md": "b06758e80805b09ab485d81c3cc6284acf5e2d18c2af1c0359644f61b80deff4",
       "skills/references/incident-readiness.md": "787fb441106abcb148f541befd403e5f7889a2234c6cbe590d0c6bce48a3b59a",
       "skills/references/languages/go.md": "26f847c42e372c0e8029d505336ff242e9bf168c320f5b0869b335a0f9d18009",
-      "skills/references/languages/java.md": "d5abd6a461f40c91c5fb359f35c768e0a2ed71fc42136c82f8968c75f29753d5",
-      "skills/references/languages/node.md": "a4fc45042f92649d53cfe351b4f0e597764a543798f98f96b63e2fa9c48093c2",
-      "skills/references/languages/python.md": "eddeab60e6501d2055b929abeeb403222842a7c25d19fdb768ae03191d2a5045",
+      "skills/references/languages/java.md": "906206a95dbc7306dc8c4e6bcf0823793b89d4d7a6a407f5c914aad46fe1a0d7",
+      "skills/references/languages/node.md": "14495ab0c8c7822068421d82dff7534c0e540012fb002d1bdc68e71146fa43e8",
+      "skills/references/languages/python.md": "6e70ca66c09dbe60319c4889fa543624b1f051bd5839e3647f81ff490886724a",
       "skills/references/ledger-template.md": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc",
-      "skills/references/local-otlp-receiver.md": "6f58148de9ef2fd3e617ddc2622ee09ba785b202100b91261a727af6e3dc7cec",
+      "skills/references/local-otlp-receiver.md": "c8da4654fc54350a29fa55d23c171cacb848d28430f9768dd359014be42fd3b7",
       "skills/references/logging-readiness.md": "228736faa7920a882e02449639bc8cd29b1f6496440fe1d56cb649c5baefe277",
       "skills/references/report-flow-contract.md": "d00ca857d4a875dcdb8a699cbf82eda612f42a4f88152ff7a83b4a74eb1b4d0f",
       "skills/references/scripts/observe_report.py": "55d4bae1c517de9ecaf4aa48f4896dfcb96ca8b91032ae2d527cf0f929dbf7e7",
@@ -1114,7 +1050,7 @@
       "skills/references/tests/test_observe_report_selection.py": "c2a441002d8392b9ea5cfdb52cee7e0b75000542334c2a3eb3bc8cff48a0d7c7",
       "evals/go/chi-basic/eval/qual/instrument-decision-gated.json": "1604ebf6626a7ebc97406d3bc8299a7bf44003d6f2eb6f9bda6f89b408d934df",
       "evals/go/chi-basic/eval/qual/instrument.json": "fc36dddc0501df8c89eaee182822df2e5fee21d17e6c37c3d8d6dd312d7561f1",
-      "evals/go/chi-basic/eval/qual/logging-instrument-contract.json": "15eedab8f86ffe72c4f15dfccf8bbd7e84b60b1c851f146fe489c658ab4a3f06",
+      "evals/go/chi-basic/eval/qual/logging-instrument-contract.json": "b9e86fc2974384e66bae985575eb9eb9197371291d09808495c475d2417a5f95",
       "pytest-codex-evals/src/pytest_codex_evals/ab.py": "a100dcc1e6c99ea54fc619c0a80b1ebf863529cff5c18ac42da59f80de65b952",
       "pytest-codex-evals/src/pytest_codex_evals/graders/shared.py": "f56238f0ea3a0dd52184391b3b76f5214a9bf354293bf68854bcffa175d357ba",
       "pytest-codex-evals/src/pytest_codex_evals/report.py": "82d78295d07cce02b6fb4a976c9ce3852b262a2fe63e99256c6ac034985b7cd4",
@@ -1443,15 +1379,13 @@
       "evals/go/kvstore/Makefile": "557b16aa60d316634e43c3650f02c06305ddcc006e07ded16bee7452cabe9fa7",
       "evals/go/kvstore/README.md": "c2a26d0c47d09fd3a3c1c0bce2bea508429a58df8788048724619621dcb15ac2",
       "evals/go/kvstore/cmd/kvstore-server/main.go": "1596386f423b0b52f043025469fa182d95db9bc4ddeb0c6f1c64e1c6c85c4524",
-      "evals/go/kvstore/eval/inputs/go-dependency-log-policy-cases.json": "5c08e9ad028ca5100c14a45245e61e2d63e75685bd13a042f83cc8d8c7645018",
-      "evals/go/kvstore/eval/qual/dependency-log-compatibility.json": "250197223fb69d262cfcd2cadeac66775d3efb13ad922754bf47071a4fc8c04f",
+      "evals/go/kvstore/eval/qual/incident-readiness.json": "9951aa3266bb0d23a23cecae29511ea33703bea50d904564dbaad0e48996fa3a",
       "evals/go/kvstore/go.mod": "c1c4cd5d7467d1ac3c999f0a424f6b7d38bfa368f826f77ff5b1d1836c935d3e",
       "evals/go/kvstore/kvstore/http.go": "697458d084a0ed413c78c75f7dfcbd3fa13d13704a78e9d7dd609cf817bd9f5c",
       "evals/go/kvstore/kvstore/http_test.go": "a12102b9726850b60830d36f924446b2c0044b893319e6d184d1daf25355ac3d",
       "evals/go/kvstore/kvstore/store.go": "eb8c09d0220e8816f3f6bb8a6fae9c86c44823048065ed12cf56cf9f6e6b98fd",
       "evals/go/kvstore/kvstore/store_test.go": "23532aff7f33ce9ce0937e10b915c0b3e136b6382c98c16aada5fcf711b0c96b",
       "evals/go/kvstore/spec.md": "4eb0f6f554cb707e1a3290b6b76a1f5e74af5100d2938fb2734e079798d29c7a",
-      "evals/go/kvstore/eval/qual/incident-readiness.json": "9951aa3266bb0d23a23cecae29511ea33703bea50d904564dbaad0e48996fa3a",
       "evals/go/kvstore/eval/qual/instrument.json": "cdd020b41bd3c44616d3d2e183b946363cdb5c5db83c2a62821f3944f04b7e1d",
       "evals/go/kvstore/eval/runtime/App.Dockerfile": "a5fd8ddcda7b4d4aa9345c8b1f906ed8455a7e6b542731dd41ffad176f573d43",
       "evals/go/kvstore/eval/runtime/docker-compose.yml": "59c1611b85c4eb8becc363a29be591f1946503a82ce33d98dc9a41a4cd9453d2",
@@ -1522,17 +1456,13 @@
       "evals/java/springboot-basic/src/main/java/com/example/tasks/TaskController.java": "ccace7793ab0b02f7b20d3ae8c0698451f45734ad6a25f5147c9f0fff71fdbfa",
       "evals/java/springboot-basic/src/main/java/com/example/tasks/TasksApplication.java": "0db42555e6ac0ec5d3c352d526ed0b5bdbb5cf6a0087ed2fe68b4ec62b0bab0b",
       "evals/java/springboot-basic/src/main/resources/application.properties": "b90fa8737a65764df11a6814c6481fc53c6f092da294e73c3887d684c2a48f7b",
-      "evals/java/springboot-basic/eval/inputs/java-compatible-logging-candidates.json": "6bee5f8959ff583cfa8b03922f5afbc59175a7f8aedf880241a13ce0b5c1d9c6",
-      "evals/java/springboot-basic/eval/qual/logging-compatible-plan.json": "2a82993aadd1a7859203250a38f5d8e757fb5459093b61a1d2bcab1917911144",
-      "evals/java/springboot-basic/eval/qual/logging-instrument-contract.json": "930c219a3ab5279745e2255103697877af76a3aa10e4f455b7ab5e9aa521a4cb",
+      "evals/java/springboot-basic/eval/qual/logging-instrument-contract.json": "3099a81b58103bb6c265fa7fd47e5b87b25b9d8a4021847284ddb8b75e23d8c7",
       "evals/node/express-basic/Makefile": "c24bae6d3256346ae0378c3115e50b21d3c1cd6a688c4a8f72bf2ab62e1bd83b",
       "evals/node/express-basic/README.md": "6e17e9f1e65f52a9268ed19a4e4c7d449efdf4789c404232c98bf04777702688",
       "evals/node/express-basic/app.js": "7dc0b120a9cb78d104c8c5de73f45cc07e44cf1648421d7849daa159326ceaef",
-      "evals/node/express-basic/eval/inputs/node-dependency-log-compatibility.json": "70258b66c554ec94a86b6b95999cf6925801600d4919e204acfdffa6794a9a06",
-      "evals/node/express-basic/eval/qual/dependency-log-compatibility.json": "f61ffc160044e14d2173d6bcb9dd3e036efb42342c56c76be99ef312a6aac1ae",
-      "evals/node/express-basic/package.json": "9a6b2e4619c27d59d7911017d38caf37cecc4c5dc0a443b7eabd54ce0c554ae9",
       "evals/node/express-basic/eval/qual/instrument.json": "46fab66154d62f2637d1b6d0afd7cd4b8a8956334be5295215083ae1797bb38f",
-      "evals/node/express-basic/eval/qual/logging-instrument-contract.json": "d8f5066eb123e7c052535b0e8a04cf14e826103c373fa7d2c70f75eee2911b87",
+      "evals/node/express-basic/package.json": "9a6b2e4619c27d59d7911017d38caf37cecc4c5dc0a443b7eabd54ce0c554ae9",
+      "evals/node/express-basic/eval/qual/logging-instrument-contract.json": "88d294f95c3620f5d25a89ecb0b784b3ca24adf9b318e380f3f4553e0972520b",
       "evals/node/express-basic/eval/runtime/App.Dockerfile": "cac76a24c017203e01b27d690874de14253e5c1b11645c69454c1b9300d5df28",
       "evals/node/express-basic/eval/runtime/docker-compose.yml": "e4b1d38fb8f621610c4509146b8b37bdb23e4e67595fcd9b213fc028c262c455",
       "evals/node/express-basic/eval/runtime/instrument.json": "0d75513d55d5e0b55e4545e7ed3e27a319d3e48f54a3f969a0e9db425e71ee8f",
@@ -1652,9 +1582,7 @@
       "evals/python/flask-basic/eval/inputs/dotenv-legacy-example.env": "04cecca0eb4967bf4bfcdaa9b76aadecdd04e6069a4600470dfe3bcbc6b021e8",
       "evals/python/flask-basic/eval/inputs/dotenv-ao-boundary.py": "8e85904cfc9fd1ff3956702e1c4f3969172cb0296fde1dd379dcab540a9e9d54",
       "evals/python/flask-basic/eval/qual/instrument.json": "ab95eaf1e80a5f8567f1e0e5a18a6a19d39bd5af1d787eeca20b416bb0f4e6a8",
-      "evals/python/flask-basic/eval/inputs/python-cli-launcher-policy-cases.json": "63dad2814d1e6b0c9020c898c32ab743079ec77e896633bd5b5bb69ce706c27a",
-      "evals/python/flask-basic/eval/qual/local-log-launcher-policy.json": "e5ae5bf6f37b840d917e352d4dcfacec9e0d676988d381a498656923cc3ec0bd",
-      "evals/python/flask-basic/eval/qual/logging-instrument-contract.json": "34cb6f563e9e3fd13c960c3efa6ba152bff3dbd3af6540181bc53adad5156b31",
+      "evals/python/flask-basic/eval/qual/logging-instrument-contract.json": "6a97a44c6ee8329e7e413f743b408feb98b4a2805547734ad4560fef42520d9e",
       "evals/python/flask-basic/eval/runtime/App.Dockerfile": "d0fe3f537e8365ac5c554006235e38b164269aa9a47d3b0d5d7da0cdf77847fa",
       "evals/python/flask-basic/eval/runtime/docker-compose.yml": "70b52f92235ebd98e61c89d9b47ea02aa63bae97263b812b9fd307162aada72b",
       "evals/python/flask-basic/eval/runtime/instrument.json": "c771d69ff92406b905e82cea6fbaee4d5720dd38038bb7423dab589bcdaf78b9",
@@ -1809,15 +1737,6 @@
         "eval_inputs": []
       },
       {
-        "definition_path": "evals/go/kvstore/eval/qual/dependency-log-compatibility.json",
-        "fixture_dir": "evals/go/kvstore",
-        "prompt_id": "dependency-log-compatibility-plan",
-        "eval_kind": "rubric",
-        "eval_inputs": [
-          "eval/inputs/go-dependency-log-policy-cases.json"
-        ]
-      },
-      {
         "definition_path": "evals/go/kvstore/eval/qual/incident-readiness.json",
         "fixture_dir": "evals/go/kvstore",
         "prompt_id": "mttd",
@@ -1935,15 +1854,6 @@
         "eval_inputs": []
       },
       {
-        "definition_path": "evals/java/springboot-basic/eval/qual/logging-compatible-plan.json",
-        "fixture_dir": "evals/java/springboot-basic",
-        "prompt_id": "java-compatible-log-plan",
-        "eval_kind": "rubric",
-        "eval_inputs": [
-          "eval/inputs/java-compatible-logging-candidates.json"
-        ]
-      },
-      {
         "definition_path": "evals/java/springboot-basic/eval/qual/logging-instrument-contract.json",
         "fixture_dir": "evals/java/springboot-basic",
         "prompt_id": "logging-trial-1",
@@ -1963,15 +1873,6 @@
         "prompt_id": "logging-trial-3",
         "eval_kind": "rubric",
         "eval_inputs": []
-      },
-      {
-        "definition_path": "evals/node/express-basic/eval/qual/dependency-log-compatibility.json",
-        "fixture_dir": "evals/node/express-basic",
-        "prompt_id": "dependency-log-compatibility",
-        "eval_kind": "rubric",
-        "eval_inputs": [
-          "eval/inputs/node-dependency-log-compatibility.json"
-        ]
       },
       {
         "definition_path": "evals/node/express-basic/eval/qual/instrument.json",
@@ -2441,15 +2342,6 @@
         "prompt_id": "runtime-preserving",
         "eval_kind": "rubric",
         "eval_inputs": []
-      },
-      {
-        "definition_path": "evals/python/flask-basic/eval/qual/local-log-launcher-policy.json",
-        "fixture_dir": "evals/python/flask-basic",
-        "prompt_id": "python-local-log-launcher-policy",
-        "eval_kind": "rubric",
-        "eval_inputs": [
-          "eval/inputs/python-cli-launcher-policy-cases.json"
-        ]
       },
       {
         "definition_path": "evals/python/flask-basic/eval/qual/logging-instrument-contract.json",

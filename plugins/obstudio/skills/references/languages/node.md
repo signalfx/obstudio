@@ -299,7 +299,7 @@ export function installGracefulSignalHandlers(
   let signalShutdownStarted = false;
   const handleSignal = (forcedExitCode: number): void => {
     if (signalShutdownStarted) {
-      process.exit(forcedExitCode);
+      return;
     }
     signalShutdownStarted = true;
     const forcedExit = setTimeout(() => process.exit(forcedExitCode), 10_000);
@@ -323,8 +323,8 @@ export function installGracefulSignalHandlers(
     })();
   };
 
-  process.once('SIGTERM', () => handleSignal(143));
-  process.once('SIGINT', () => handleSignal(130));
+  process.on('SIGTERM', () => handleSignal(143));
+  process.on('SIGINT', () => handleSignal(130));
 }
 ```
 
@@ -337,10 +337,11 @@ stack on an older Node runtime, do not change the toolchain or invent a bridge;
 report `unsupported-stack` with the required Node version. Integrate
 `shutdownOnce()` into the app's existing graceful shutdown sequence after it
 stops accepting work and emits final application logs, then let that owner
-terminate the process. That existing owner must also arm a bounded timeout
-before draining and force a nonzero exit on timeout or a second signal;
-`process.exitCode` alone cannot stop a hung drain or exporter. Do not install
-another signal owner in that case. When the application has no graceful owner,
+terminate the process. Preserve that owner's stop budget and repeated-signal
+policy; telemetry does not authorize a different exit policy.
+`process.exitCode` alone cannot stop a hung drain or exporter when bounded
+termination is required. Do not install another signal owner in that case.
+When the application has no graceful owner,
 use the complete `installGracefulSignalHandlers` implementation above with its
 actual stop-and-drain primitive after creating the server or worker:
 
@@ -360,10 +361,13 @@ server. The handler always attempts telemetry shutdown after that callback
 settles, even when draining reports an error. Its bounded timeout prevents a
 stalled drain or exporter from leaving the process alive indefinitely; a
 successful drain and flush exits `0`, a drain/export failure exits `1`, and a
-timeout or second signal uses the conventional nonzero signal exit code.
-Do not replace this handler with a bare `server.close` callback: it must arm
-the timer before drain, attempt `shutdownOnce()` after final logs, and force
-process exit when the timer expires or a second signal arrives.
+timeout uses the conventional nonzero signal exit code. Repeated signals share
+the pending shutdown without interrupting final logs, starting another drain or
+resetting its budget. The shown ten-second budget is an example; use the
+application's selected budget. If operator policy instead requires a forced
+second-stop exit, implement and test that explicit policy in its lifecycle owner.
+Do not replace the ordered drain and `shutdownOnce()` calls with a bare
+`server.close` callback.
 
 During instrumentation preflight, resolve the complete local `/v1/logs` URL and
 replace `PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT` with that exact value,

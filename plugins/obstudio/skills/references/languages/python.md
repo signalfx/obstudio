@@ -199,12 +199,10 @@ try:
             generic = local_endpoint(generic_endpoint, generic_protocol)
         if generic is not None and logs_protocol == generic_protocol:
             if logs_protocol == "http/protobuf":
-                path = generic.path.rstrip("/")
-                for suffix in ("/v1/traces", "/v1/metrics", "/v1/logs"):
-                    if path.endswith(suffix):
-                        path = path[:-len(suffix)]
-                        break
-                generic = generic._replace(path=path.rstrip("/") + "/v1/logs")
+                path = generic.path
+                if not path.endswith("/"):
+                    path += "/"
+                generic = generic._replace(path=path + "v1/logs")
             resolved = generic
         else:
             resolved = local_endpoint(approved_logs_endpoint, logs_protocol, signal=True)
@@ -401,13 +399,10 @@ def _skip_local_logs(reason):
 
 def _http_logs_endpoint_from_base(endpoint):
     parsed = urlsplit(endpoint)
-    path = parsed.path.rstrip("/")
-    for signal_path in ("/v1/traces", "/v1/metrics", "/v1/logs"):
-        if path.endswith(signal_path):
-            path = path[: -len(signal_path)]
-            break
-    path = f"{path.rstrip('/')}/v1/logs"
-    return urlunsplit(parsed._replace(path=path))
+    path = parsed.path
+    if not path.endswith("/"):
+        path += "/"
+    return urlunsplit(parsed._replace(path=path + "v1/logs"))
 
 
 def _use_default_local_log_export():
@@ -939,9 +934,11 @@ structured values.
 ### Configuration and limits
 
 Resolve public options, signatures, units and configuration precedence from the
-installed provider/exporter path. Distinguish signal-specific settings from
-generic fallbacks and source-proven defaults. Test the effective selected policy
-with relevant operator overrides present; preserve independent settings.
+installed provider/exporter path. Bind a selected local-receiver policy to the
+complete URL approved during preflight; neither loopback locality nor the current
+generic endpoint grants approval. A signal-specific endpoint wins independently
+of a differing unused generic endpoint. Test the selected policy with relevant
+operator overrides present while preserving independent settings.
 
 Distinguish an eagerly evaluated default argument from the value ultimately
 selected by a configuration lookup. Trace sentinels and helper results through

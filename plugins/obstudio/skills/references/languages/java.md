@@ -345,16 +345,10 @@ case "$logs_protocol" in
         http://?*) ;;
         *) fail "move a non-local generic OTLP endpoint to trace/metric signal variables" ;;
       esac
-      local_http_endpoint=$generic_endpoint
-      while [ "${local_http_endpoint%/}" != "$local_http_endpoint" ]; do
-        local_http_endpoint=${local_http_endpoint%/}
-      done
-      case "$local_http_endpoint" in
-        */v1/traces) local_http_endpoint=${local_http_endpoint%/v1/traces} ;;
-        */v1/metrics) local_http_endpoint=${local_http_endpoint%/v1/metrics} ;;
-        */v1/logs) local_http_endpoint=${local_http_endpoint%/v1/logs} ;;
+      case "$generic_endpoint" in
+        */) local_logs_endpoint=${generic_endpoint}v1/logs ;;
+        *) local_logs_endpoint=$generic_endpoint/v1/logs ;;
       esac
-      local_logs_endpoint=$local_http_endpoint/v1/logs
     else
       local_logs_endpoint=$fallback_local_http_endpoint/v1/logs
     fi ;;
