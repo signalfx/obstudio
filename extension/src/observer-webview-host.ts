@@ -352,6 +352,7 @@ function isObserverHostCloudRequestPayload(action: CloudBridgeAction, value: unk
 		case 'open-free-edition':
 		case 'open-free-edition-terms':
 		case 'open-ingest-token-help':
+		case 'open-hec-endpoint-help':
 		case 'open-hec-token-help':
 		case 'open-splunk-platform-trial':
 		case 'open-observability-cloud':

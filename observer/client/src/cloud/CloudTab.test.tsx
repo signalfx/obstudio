@@ -3486,10 +3486,11 @@ describe("CloudTab", () => {
 
     render(<CloudTab />);
     await screen.findByLabelText("Realm");
-    fillO11yOAuthFields();
     expect(await screen.findByText("Sign-in failed: previous failure")).toBeTruthy();
+    fillO11yOAuthFields();
 
     fireEvent.click(screen.getByRole("button", { name: "Authenticate" }));
+    expect(loginStarted).toBe(true);
     // Longer than the poll interval: a stale poll would have cleared the busy state.
     await new Promise((resolve) => setTimeout(resolve, 1_800));
     expect(sessionReadsDuringStart).toBe(0);

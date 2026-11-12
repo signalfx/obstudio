@@ -10,6 +10,7 @@ import * as path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import * as vscode from 'vscode';
 import { credentialStorageHelp } from '../../shared/credential-storage-help.cjs';
+import { hecEndpointHelpURL, hecTokenHelpURL } from '../../shared/hec-help.cjs';
 import {
 	createAgentIntegrationConfigFingerprint,
 	codexObstudioHasNoAuthorization,
@@ -2500,8 +2501,11 @@ async function performCloudBridgeActionExclusive(
 		case 'open-splunk-platform-trial':
 			await openCloudExternalUrl('https://www.splunk.com/en_us/download/splunk-cloud.html');
 			return {};
+		case 'open-hec-endpoint-help':
+			await openCloudExternalUrl(hecEndpointHelpURL);
+			return {};
 		case 'open-hec-token-help':
-			await openCloudExternalUrl('https://help.splunk.com/en/data-management/collect-http-event-data/use-hec-in-splunk-enterprise/set-up-and-use-http-event-collector-in-splunk-web');
+			await openCloudExternalUrl(hecTokenHelpURL);
 			return {};
 		case 'open-observability-cloud':
 		case 'open-observability-metrics':
