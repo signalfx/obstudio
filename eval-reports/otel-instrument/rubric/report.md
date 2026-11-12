@@ -7,7 +7,7 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | otel-instrument |
-| Run ID | 20261111T215146697393Z |
+| Run ID | 20261112T015447024501Z |
 | Agent model | gpt-6.1-sol |
 | Judge model | gpt-6.1-sol |
 | Rubric enabled | True |
@@ -18,29 +18,32 @@
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | go/chi-basic/qual/logging-instrument-contract | go/chi-basic | 1 | 64% (9/14), avg score 76 | 4.2M | 18.8m | - | - | - |
+| with_skill | python/flask-basic/qual/logging-instrument-contract | python/flask-basic | 1 | 43% (6/14), avg score 76 | 4.7M | 19.9m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | go/chi-basic/qual/logging-instrument-contract | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 4199262 | 4054656 | 0 | 39753 | 10364 | unknown | 4239015 |
+| with_skill | python/flask-basic/qual/logging-instrument-contract | python/flask-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 4614019 | 4468736 | 0 | 38191 | 9597 | unknown | 4652210 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | go/chi-basic/qual/logging-instrument-contract | go/chi-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 2140122 | 1978880 | 0 | 9331 | 4153 | unknown | 2149453 |
+| with_skill | python/flask-basic/qual/logging-instrument-contract | python/flask-basic | with_skill | codex | cumulative | measured | 1/1 recognized | 2876385 | 2722688 | 0 | 12366 | 6763 | unknown | 2888751 |
 
 ## Rubric Failures
 
 | Mode | Service | Side | Prompt | Result | Evidence |
 |---|---|---|---|---|---|
-| with_skill | go/chi-basic | with_skill | logging-trial-1 | rubric:rubric-2 FAIL | otel-instrumentation.md lists four host profiles, all with supplied identity. TestResourcePrecedence/default exercises only the resource helper. TestLogPolicyAndActivation's disabled cases check logger preservation and shutdown, while TestPropagationPeerFlagsAndBaggage constructs its own propagator. |
-| with_skill | go/chi-basic | with_skill | logging-trial-1 | rubric:rubric-10 FAIL | Every final host result explicitly reports shutdown_drain_proven=false. otel-instrumentation.md:165–171 defers the queued-record trial; no retained trial contains a pending-record witness and its shutdown receipt/client outcome. |
-| with_skill | go/chi-basic | with_skill | logging-trial-1 | rubric:rubric-11 FAIL | verify_log_modes.py tests none, nonlocal endpoint, unsupported protocol, generic headers and SDK-disabled modes. These suppress pipeline construction; the reports explicitly retain transport-fault and diagnostic-volume behavior as unproven. |
-| with_skill | go/chi-basic | with_skill | logging-trial-1 | rubric:rubric-13 FAIL | Host resource-only, explicit-override and whitespace profiles preserve service.name, service.version and obstudio.eval.preserved. TestRuntimeHTTP explicitly supplies runtime-http-test, and all policy launches supply identities. Only TestResourcePrecedence/default checks go-chi-basic. |
-| with_skill | go/chi-basic | with_skill | logging-trial-1 | rubric:rubric-14 FAIL | telemetry.go:60 uses raw EqualFold comparison. Disabled-case tests cover only true and TrUe; the report explicitly says other spellings are untested. No retained assertions cover 1, t, T or padded true, or disposition the recommended invalid-value diagnostic. |
+| with_skill | python/flask-basic | with_skill | logging-trial-1 | rubric:rubric-2 FAIL | service/.observe/otel-instrumentation.md:75; service/tests/test_telemetry.py:58; service/tests/runtime_check.py:88. All four final host profiles supply identity, and no absent-identity launch is allocated in the saved handoff. |
+| with_skill | python/flask-basic | with_skill | logging-trial-1 | rubric:rubric-8 FAIL | service/tests/test_telemetry.py:130; service/tests/runtime_check.py:116-121,196; service/otel_setup.py:49. The retained investigation covers Werkzeug's logging bootstrap, without a matching Flask.log_exception/access-renderer trail and parameterized privacy witnesses. |
+| with_skill | python/flask-basic | with_skill | logging-trial-1 | rubric:rubric-9 FAIL | service/otel_setup.py:68-71; service/.observe/otel-instrumentation.md:114; service/tests/test_telemetry.py:137-140. No retained test asserts downstream dropped_attributes or droppedAttributesCount preservation. |
+| with_skill | python/flask-basic | with_skill | logging-trial-1 | rubric:rubric-10 FAIL | service/tests/shutdown_check.py:75-101; service/.observe/stop-xm2296d5/result.json. The host checker explicitly records shutdown_drain_proven=false. Expected explorer eviction is not treated as a wiring failure. |
+| with_skill | python/flask-basic | with_skill | logging-trial-1 | rubric:rubric-11 FAIL | service/tests/test_telemetry.py:226-263 records request data and returns a synthetic HTTP 400, but does not capture LogRecordExportResult.FAILURE or the terminal client outcome. |
+| with_skill | python/flask-basic | with_skill | logging-trial-1 | rubric:rubric-12 FAIL | trace.jsonl item_6 shows original make dev with explicit --reload. The final Makefile sets RELOAD ?= 0 and emits --no-reload. Final source hashes and all four final host receipts match current source. |
+| with_skill | python/flask-basic | with_skill | logging-trial-1 | rubric:rubric-13 FAIL | Final host profiles run-5fyeij5r, run-y0ujagxz, and run-4_5awap6; service/tests/test_telemetry.py:58; service/Makefile. Every retained normal launch supplies OTEL_SERVICE_NAME or resource service.name. |
+| with_skill | python/flask-basic | with_skill | logging-trial-1 | rubric:rubric-14 FAIL | service/.observe/otel-instrumentation.md:101-117; service/otel_setup.py:64-71,115-116. The matrix discusses ReadWriteLogRecord mutation but does not allocate these selected processor obligations. |
 
 ## Result JSON
 
