@@ -549,6 +549,8 @@ def configure_opentelemetry():
     return install_logging_bridge, shutdown
 ```
 
+### Local log preflight approval
+
 This new-process example defaults only an absent or explicit `otlp` log
 exporter with an absent or detected-local endpoint to Splunk Observability Studio. Adapt
 the standard `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` launch setting to the receiver
@@ -615,6 +617,11 @@ Use the detected application's actual startup owners in this order:
    stream, format and level; a generic instruction to initialize handlers is not
    a repair mechanism. Preserve multiplicity. Creating an application logger or
    attaching a filter does not initialize a sibling producer's lazy native sink.
+   Public standard-library logging configuration is valid when it preserves that
+   detected producer's destination, format, level and multiplicity. Inspecting
+   dependency internals can explain lazy behavior; calling an underscored
+   initializer solely for its lazy setup side effects does not establish a
+   supported bootstrap mechanism.
 3. Call the returned `install_logging_bridge()` only after those sinks are
    established and before the selected records are emitted. Some producers test
    ancestor handlers by level alone: a root OTel handler can suppress their
@@ -867,11 +874,13 @@ endpoint on local Splunk Observability Studio. Never copy a Splunk ingest URL, r
 generic cloud header, cloud exporter, or forwarding flag into the log pipeline.
 For the absent/`otlp` branch, classify a non-local explicit logs endpoint during
 instrumentation preflight, preserve it as operator configuration, report the
-boundary conflict, and require the operator to resolve it. Also
-reject any generic OTLP header on the local branch even when signal-specific
-logs headers exist; move the generic credentials to trace/metric variables and
-remove the generic setting. Splunk Observability Studio cloud forwarding remains traces and
-metrics only.
+boundary conflict, and require the operator to resolve it. Reject any generic
+OTLP header on the local branch even when signal-specific logs headers exist.
+Resolve moving generic credentials to trace/metric variables and removing the
+generic setting through operator-approved configuration during preflight.
+Application startup must not pop or rewrite those settings to activate local
+logs. Splunk Observability Studio cloud forwarding remains traces and metrics
+only.
 
 Verify one sanitized record at each required severity both outside and inside
 an active span. Assert its body/category, severity, shared `service.name`,
@@ -903,6 +912,13 @@ logger, bridge and runtime. Resolve the existing provider and configuration
 owner; preserve native handlers, operator settings and verified propagation.
 Setup recipes elsewhere in this guide are conditional examples, not requirements
 to adopt their framework, packages or API shape.
+For selected bootstrap or local-log work, retrieve the complete
+[bootstrap ordering](#loading-the-sdk),
+[preflight approval](#local-log-preflight-approval) and
+[local log credential boundary](#local-splunk-observability-studio-application-logs-and-cloud-boundary)
+sections separately. A truncated whole-guide read does not supply a missing
+linked section. Apply these ownership and policy decisions to the selected
+path while keeping setup recipes conditional.
 
 ### Context and asynchronous work
 

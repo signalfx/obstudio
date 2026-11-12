@@ -283,6 +283,45 @@ done
     }
 
 
+def test_python_logging_readback_routes_are_bounded_and_complete() -> None:
+    canonical = _read(LANGUAGES / "python.md")
+    mirrored = _read(ROOT / "plugins/obstudio/skills/references/languages/python.md")
+    assert mirrored == canonical
+    headings = list(re.finditer(r"^(#{2,3}) (.+)$", canonical, re.MULTILINE))
+    sections = {}
+    for index, heading in enumerate(headings):
+        level = len(heading[1])
+        end = next((other.start() for other in headings[index + 1:]
+                    if len(other[1]) <= level), len(canonical))
+        slug = re.sub(r"[^a-z0-9 -]", "", heading[2].lower()).replace(" ", "-")
+        assert slug not in sections
+        sections[slug] = canonical[heading.start():end]
+    readiness = sections["logging-readiness-checks"]
+    routed = set(re.findall(r"\]\(#([^)]*)\)", readiness))
+    expected = {
+        "loading-the-sdk",
+        "local-log-preflight-approval",
+        "local-splunk-observability-studio-application-logs-and-cloud-boundary",
+    }
+    assert expected <= routed
+    for target in expected:
+        section = sections[target]
+        # Links expose complete small sections instead of the entire guide.
+        assert len(section.splitlines()) <= 100
+        assert len(section.encode("utf-8")) <= 9000
+        assert section.count("```") % 2 == 0
+    bootstrap = sections["loading-the-sdk"]
+    assert re.findall(r"^([1-4])\. ", bootstrap, re.MULTILINE) == ["1", "2", "3", "4"]
+    assert "**Option 1**" in bootstrap and "**Option 2**" in bootstrap
+    approval = sections["local-log-preflight-approval"]
+    assert "PREFLIGHT_APPROVED_LOCAL_OTLP_LOGS_ENDPOINT" in approval
+    assert "logging configuration has established its original sinks" in approval
+    assert "export_interval_millis" in approval
+    boundary = sections["local-splunk-observability-studio-application-logs-and-cloud-boundary"]
+    assert "operator-approved configuration during preflight" in boundary
+    assert "This runtime check also detects duplicate handlers" in boundary
+
+
 def test_python_log_boundary_conflict_never_aborts_application_startup() -> None:
     guide = LANGUAGES / "python.md"
     setup = _fenced_code_after(guide, "**File**: `otel_setup.py`", "python")
