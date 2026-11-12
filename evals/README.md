@@ -138,6 +138,14 @@ common criterion. The harness resolves both before grading, retains the full
 prompt and binds the shared source in the result's source manifest. Common
 requirements cannot be replaced or disabled by an extending definition.
 
+The larger common criteria use descriptive subclause labels, such as
+`2.B Contract assembly into addressable oracles` and `10.E Final-record drain
+proof`. These are addresses within their parent criterion, not extra verdicts
+or independently scored requirements. Notes can cite a label to locate the
+specific obligation behind a verdict. Existing applicability, ownership and
+evidence conditions still govern the complete criterion. Changing labels
+changes the shared source fingerprint; historical grades remain unchanged.
+
 1. **Actor task:** send the bare `$otel-* ./service` invocation unchanged;
    grader instructions must not become actor coaching.
 2. **Input roles:** separate task/scope, a numbered evidence map, labeled rubric

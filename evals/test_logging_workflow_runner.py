@@ -6,6 +6,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -27,6 +28,19 @@ REPORT = load(ROOT / "skills/references/tests/observe_report_fixtures.py", "work
 from pytest_codex_evals.backends import AgentResult
 from pytest_codex_evals.definitions import GradeCheckResult, GradeResult
 from pytest_codex_evals.graders.rubric import rubric_prompt, run_rubric_grade
+
+
+def test_logging_subclause_labels_preserve_parent_identity_and_order():
+    common = json.loads((ROOT / "evals/rubrics/logging-common.json").read_text())
+    assert len(common["rubric"]) == 14
+    labeled = set()
+    for parent, text in enumerate(common["rubric"], 1):
+        labels = re.findall(r"^\((\d+)\.([A-Z]) [^\n()]+\)\n", text, re.MULTILINE)
+        if labels:
+            labeled.add(parent)
+            assert all(int(number) == parent for number, _ in labels)
+            assert [letter for _, letter in labels] == [chr(ord("A") + i) for i in range(len(labels))]
+    assert labeled == {2, 9, 10, 11, 14}
 
 
 @pytest.mark.parametrize("language", sorted(DRIVER.SERVICES))
@@ -54,6 +68,7 @@ def test_every_logging_definition_uses_strict_judging_for_each_trial(tmp_path, l
         assert f"Actor task: {case.task}\n" in rendered
         assert len(case.judge_inputs) == 3
         assert "\n".join(f"{i}. {item}" for i, item in enumerate(case.judge_inputs, 1)) in rendered
+        assert {int(number) for number in re.findall(r"^\((\d+)\.[A-Z] ", rendered, re.MULTILINE)} == {2, 9, 10, 11, 14}
 
         raw = json.dumps({"overall_pass": True, "score": 93, "checks": checks[:-1]})
         path.write_text(raw)
