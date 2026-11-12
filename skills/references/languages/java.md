@@ -136,12 +136,16 @@ which existing appenders remain active before editing.
   it win unchanged. If it is source-proven non-local or direct-cloud, report
   the boundary conflict before applying this pattern. Do not validate the
   endpoint on `none` or another non-OTLP exporter branch.
-- Never let logs inherit a generic direct-cloud endpoint or header. Move a
-  direct-cloud `OTEL_EXPORTER_OTLP_ENDPOINT` and
+- Never let logs inherit a generic direct-cloud endpoint or header. As an
+  explicit reviewed preflight/configuration change, move a direct-cloud
+  `OTEL_EXPORTER_OTLP_ENDPOINT` and
   `OTEL_EXPORTER_OTLP_HEADERS` to trace- and metric-specific endpoint/header
   settings, then remove the generic cloud settings from the startup surface.
-  Keep the logs endpoint local and do not copy a realm, ingest URL, access
-  token, auth header, exporter, or forwarding flag into log configuration.
+  Do not perform this credential migration conditionally during application
+  startup; until it is complete, disable only the added local log path and
+  preserve operator settings and application startup. Keep the logs endpoint
+  local and do not copy a realm, ingest URL, access token, auth header, exporter,
+  or forwarding flag into log configuration.
   Reject a generic header from the local log path even when signal-specific
   logs headers are present, because the SDK may merge both. Splunk Observability Studio cloud
   forwarding remains traces and metrics only.
@@ -186,7 +190,11 @@ echo "${OTEL_JAVAAGENT_SHA256}  opentelemetry-javaagent.jar" | shasum -a 256 -c 
 
 Prefer the existing JVM startup path. Check in one guarded launcher and use it
 from the host, service manager, and container so deployment-time overrides
-cannot skip the log ownership checks. Save this as `otel-entrypoint.sh`:
+cannot skip the log ownership checks. During preflight, persist the independently
+approved protocol and complete logs URL in the two literals below; the shown
+pair is only the no-discovery fallback. Use the detected nondefault port or
+container/service address when approved. Do not derive this approval from the
+current runtime endpoint being checked. Save this as `otel-entrypoint.sh`:
 
 ```bash
 #!/bin/sh
@@ -194,6 +202,17 @@ set -eu
 set -f
 
 fail() { printf '%s\n' "$*" >&2; exit 1; }
+
+# Preflight-owned approval, not values copied from the current operator environment.
+approved_logs_protocol=http/protobuf
+approved_logs_endpoint=http://127.0.0.1:4318/v1/logs
+skip_local_logs() {
+  printf '%s\n' 'Local OTLP logs inactive: resolve receiver, protocol or generic-header conflict during preflight.' >&2
+  # This launcher targets the inspected OpenJDK option order. Keep all existing
+  # options and append only the added log path's disable at the winning surface.
+  export _JAVA_OPTIONS="${_JAVA_OPTIONS:+$_JAVA_OPTIONS }-Dotel.logs.exporter=none"
+  exec java "$@"
+}
 
 # Java system properties override environment variables. Scan the standard JVM
 # option sources in their effective OpenJDK order; later existing -D values
@@ -204,6 +223,8 @@ logs_endpoint=${OTEL_EXPORTER_OTLP_LOGS_ENDPOINT:-}
 generic_protocol=${OTEL_EXPORTER_OTLP_PROTOCOL:-}
 generic_endpoint=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
 generic_headers=${OTEL_EXPORTER_OTLP_HEADERS:-}
+agent_file_selected=0
+[ -z "${OTEL_JAVAAGENT_CONFIGURATION_FILE:-}" ] || agent_file_selected=1
 logs_exporter_d=0
 logs_protocol_d=0
 logs_endpoint_d=0
@@ -225,6 +246,8 @@ read_otel_property() {
   otel_property_value=${otel_property_value#\'}
   otel_property_value=${otel_property_value%\'}
   case "$otel_property_name" in
+    -Dotel.javaagent.configuration-file)
+      [ -z "$otel_property_value" ] || agent_file_selected=1 ;;
     -Dotel.logs.exporter)
       logs_exporter=$otel_property_value; logs_exporter_d=1 ;;
     -Dotel.exporter.otlp.logs.protocol)
@@ -326,53 +349,48 @@ if [ "$logs_exporter" != otlp ]; then
   exec java "$@"
 fi
 
+# This template does not parse operator-owned agent properties files. Defaults
+# must not override a file-selected opt-out, endpoint, protocol or credential.
+[ "$agent_file_selected" -eq 0 ] ||
+  fail "resolve Java agent configuration-file ownership during preflight"
+
 if [ -z "$logs_protocol" ]; then
-  [ "$logs_protocol_d" -eq 0 ] || fail "remove the empty OTLP logs protocol property"
-  logs_protocol=${generic_protocol:-http/protobuf}
+  [ "$logs_protocol_d" -eq 0 ] || skip_local_logs "$@"
+  logs_protocol=${generic_protocol:-$approved_logs_protocol}
   add_logs_protocol=1
 fi
-fallback_local_http_endpoint=http://127.0.0.1:4318
-fallback_local_grpc_endpoint=http://127.0.0.1:4317
-case "$logs_protocol" in
-  http/protobuf)
-    if [ -n "$logs_endpoint" ]; then
-      local_logs_endpoint=$logs_endpoint
-    elif [ -n "$generic_endpoint" ]; then
-      # Preflight has classified this as the intended local/collector-owned
-      # receiver. Accept an arbitrary checked-in HTTP service hostname, but
-      # fail closed for HTTPS/direct-cloud endpoints.
-      case "$generic_endpoint" in
-        http://?*) ;;
-        *) fail "move a non-local generic OTLP endpoint to trace/metric signal variables" ;;
-      esac
+case "$approved_logs_protocol" in
+  http/protobuf|grpc) ;;
+  *) skip_local_logs "$@" ;;
+esac
+[ -n "$approved_logs_endpoint" ] || skip_local_logs "$@"
+if [ -n "$logs_endpoint" ]; then
+  local_logs_endpoint=$logs_endpoint
+elif [ -n "$generic_endpoint" ]; then
+  # This simple shell template cannot resolve path versus query/fragment.
+  case "$generic_endpoint" in
+    *\?*|*\#*) skip_local_logs "$@" ;;
+  esac
+  case "$logs_protocol" in
+    http/protobuf)
+      # A generic base retains its entire path, including signal-like suffixes.
       case "$generic_endpoint" in
         */) local_logs_endpoint=${generic_endpoint}v1/logs ;;
         *) local_logs_endpoint=$generic_endpoint/v1/logs ;;
-      esac
-    else
-      local_logs_endpoint=$fallback_local_http_endpoint/v1/logs
-    fi ;;
-  grpc)
-    if [ -n "$logs_endpoint" ]; then
-      local_logs_endpoint=$logs_endpoint
-    elif [ -n "$generic_endpoint" ]; then
-      case "$generic_endpoint" in
-        http://?*) ;;
-        *) fail "move a non-local generic OTLP endpoint to trace/metric signal variables" ;;
-      esac
-      local_logs_endpoint=$generic_endpoint
-    else
-      local_logs_endpoint=$fallback_local_grpc_endpoint
-    fi ;;
-  *) fail "unsupported OTLP logs protocol" ;;
-esac
+      esac ;;
+    grpc) local_logs_endpoint=$generic_endpoint ;;
+    *) skip_local_logs "$@" ;;
+  esac
+else
+  local_logs_endpoint=$approved_logs_endpoint
+fi
+[ "$logs_protocol" = "$approved_logs_protocol" ] &&
+  [ "$local_logs_endpoint" = "$approved_logs_endpoint" ] || skip_local_logs "$@"
+[ -z "$generic_headers" ] || skip_local_logs "$@"
 if [ -z "$logs_endpoint" ]; then
-  [ "$logs_endpoint_d" -eq 0 ] || fail "remove the empty OTLP logs endpoint property"
+  [ "$logs_endpoint_d" -eq 0 ] || skip_local_logs "$@"
   logs_endpoint=$local_logs_endpoint
   add_logs_endpoint=1
-fi
-if [ -n "$generic_headers" ]; then
-  fail "move generic OTLP headers to trace/metric signal variables and remove the generic value"
 fi
 
 [ "$add_logs_exporter" -eq 0 ] || export OTEL_LOGS_EXPORTER=$logs_exporter
@@ -388,7 +406,7 @@ Invoke the checked-in launcher with the project's existing Java arguments:
 ./otel-entrypoint.sh \
   -javaagent:./opentelemetry-javaagent.jar \
   -Dotel.service.name=my-service \
-  -Dotel.exporter.otlp.endpoint=http://localhost:4318 \
+  -Dotel.exporter.otlp.endpoint=http://127.0.0.1:4318 \
   -Dotel.exporter.otlp.protocol=http/protobuf \
   -Dotel.resource.attributes=deployment.environment.name=production \
   -jar my-app.jar
@@ -397,13 +415,18 @@ Invoke the checked-in launcher with the project's existing Java arguments:
 The launcher resolves each effective setting from the environment and standard
 JVM option sources, including `JAVA_TOOL_OPTIONS` and explicit launcher `-D`
 arguments. It never exports a missing environment default for a setting already
-present on a JVM property surface. `none` and every other explicit exporter run unchanged; only the
-absent/`otlp` branch receives local defaults through standard OTel environment
-variables. A signal-specific endpoint wins without comparison to a differing
-generic trace/metric endpoint. When the signal-specific endpoint is absent,
-the launcher accepts only a preflight-approved generic HTTP collector endpoint
-and rejects HTTPS/direct-cloud values. It always rejects an effective generic
-header. An empty
+present on a JVM property surface. `none` and every other explicit exporter run
+unchanged; only the absent/`otlp` branch receives local defaults through standard
+OTel environment variables. A signal-specific endpoint wins over an unused
+generic endpoint, but must match
+its independently approved protocol/complete URL. Otherwise, resolve the generic
+base using the selected transport and compare that result with approval. Known
+log-only endpoint, protocol or generic-header conflicts append the local log
+exporter's disable through the inspected OpenJDK `_JAVA_OPTIONS` precedence and
+still execute Java with the original arguments. Other operator settings, native
+sinks and trace/metric configuration remain unchanged; no runtime credential
+migration is performed. This mechanism is scoped to the added agent-owned log
+path and that established JVM option order. An empty
 `-Dotel.logs.exporter=` keeps its one existing key and follows the current
 agent's default OTLP behavior. Launcher scanning stops at the main class,
 source file, JAR, or module so application arguments cannot alter ownership.
@@ -414,7 +437,16 @@ environments. The guard rejects argument files, CR/LF/form-feed/vertical-tab
 and other control whitespace, and quoted or backslash-escaped JVM option
 environment values instead of guessing how OpenJDK will parse them. Move such
 reviewed options to explicit launcher arguments, where the calling shell
-preserves each value's boundary.
+preserves each value's boundary. A selected
+`OTEL_JAVAAGENT_CONFIGURATION_FILE` or `-Dotel.javaagent.configuration-file`
+is also a preflight blocker on the absent/`otlp` branch until its relevant
+ownership is resolved: do not override a file-selected opt-out or endpoint with
+new environment defaults. Explicit higher-priority `none`/other-exporter values
+still bypass local setup. This example does not parse that file. It also leaves
+generic URL query/fragment resolution unsupported: report that limitation during
+preflight and skip only added local logs if such a runtime generic value is
+consumed. An independently approved signal-specific URL remains unchanged and
+does not cause an unused generic query/fragment to be interpreted.
 
 ### If the Project Already Runs in Docker
 
@@ -423,6 +455,11 @@ Do not bake a fallback `OTEL_SERVICE_NAME` into a new image: it would override a
 runtime `service.name` supplied only in `OTEL_RESOURCE_ATTRIBUTES`. An explicitly
 selected service-name override remains valid. The host/JVM examples above show
 explicit values, not defaults to add over an operator's resource identity.
+
+Before `COPY`, adapt the checked-in launcher's approval literals during reviewed
+preflight/build configuration to this image's resolved service URL and protocol:
+`http://observer:4318/v1/logs` and `http/protobuf` in the example below. Do not
+copy the host fallback approval unchanged into this service-address deployment.
 
 ```dockerfile
 FROM eclipse-temurin:21-jre
@@ -447,8 +484,9 @@ CMD ["-javaagent:/opt/agent.jar", "-jar", "/opt/app.jar"]
 Docker environment, `JAVA_TOOL_OPTIONS`, and command overrides all pass through
 the same guard. `docker run -e OTEL_LOGS_EXPORTER=none ...` disables OTLP logs
 without removing existing appenders; a non-OTLP exporter remains operator-owned.
-Preflight classifies signal-specific endpoints, while a generic cloud header
-still fails before Java starts.
+The independently persisted approval classifies the effective signal endpoint.
+A known log-only endpoint/protocol/header conflict makes only the added local
+log path inactive; application startup and trace/metric configuration continue.
 
 ### JVM system-property precedence
 
@@ -460,11 +498,11 @@ environment defaults:
 ./otel-entrypoint.sh \
   -javaagent:./opentelemetry-javaagent.jar \
   -Dotel.service.name=my-service \
-  -Dotel.exporter.otlp.endpoint=http://localhost:4318 \
+  -Dotel.exporter.otlp.endpoint=http://127.0.0.1:4318 \
   -Dotel.exporter.otlp.protocol=http/protobuf \
   -Dotel.logs.exporter=otlp \
   -Dotel.exporter.otlp.logs.protocol=http/protobuf \
-  -Dotel.exporter.otlp.logs.endpoint=http://localhost:4318/v1/logs \
+  -Dotel.exporter.otlp.logs.endpoint=http://127.0.0.1:4318/v1/logs \
   -jar my-app.jar
 ```
 
@@ -648,12 +686,14 @@ Spring MVC auto-instrumentation sets ERROR on unhandled exceptions and 5xx respo
 Use Java agent environment variables or their dotted JVM-property equivalents.
 Resolve the local receiver before launch, preserve any non-default port, and
 keep an HTTP/protobuf logs endpoint paired with the complete `/v1/logs` path.
-The literal ports below are conventional fallbacks, not equality gates.
+The conventional port numbers below are not equality gates. The runtime guard
+compares with the independently resolved preflight approval, including any
+approved nondefault port or container/service address.
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | resolved local receiver; fallback `http://127.0.0.1:4318` | Common OTLP endpoint only when it is local or collector-owned; preserve a configured non-default port and never leave a direct-cloud value for logs to inherit |
-| `OTEL_EXPORTER_OTLP_HEADERS` | unset | Move cloud credentials to trace/metric signal headers and remove this generic value before enabling the agent-owned local log path, even when logs headers are set |
+| `OTEL_EXPORTER_OTLP_HEADERS` | unset | As an explicit reviewed preflight/configuration change, move cloud credentials to trace/metric signal headers and remove this generic value before enabling local logs; never rewrite credentials during startup. Until then, disable only the added local log path |
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` for the local baseline, after checking selected agent support | Common protocol when using port 4318 |
 | `OTEL_LOGS_EXPORTER` | `otlp` only when absent and the logs endpoint is absent or preflight-classified local | `none` disables agent log export; any other explicit value is preserved |
 | `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` | `http/protobuf` for the local baseline | Signal-specific log transport |
@@ -687,9 +727,11 @@ OTEL_BSP_SCHEDULE_DELAY=100 \
 java -javaagent:./opentelemetry-javaagent.jar -jar my-app.jar
 ```
 
-If an existing generic endpoint/header targets cloud ingest, first move those
-values to the trace- and metric-specific variables in the table and remove the
-generic cloud variables from the launch environment. A signal-specific local
+If an existing generic endpoint/header targets cloud ingest, migrate those
+values to the trace- and metric-specific variables and remove the generic cloud
+variables as an explicit reviewed preflight/configuration change. Do not add
+conditional credential migration to application startup; until reviewed, keep
+only the added local log path inactive. A signal-specific local
 logs endpoint alone does not prevent a generic cloud header from being
 inherited or merged, even when a signal-specific logs header is also present.
 Do not configure a logs cloud header or a cloud log-forwarding pipeline;

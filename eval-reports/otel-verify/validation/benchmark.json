@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-verify",
-    "run_id": "20261112T042711001863Z",
+    "run_id": "20261112T051640134426Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-6-luna",
     "judge_model": "",
@@ -408,7 +408,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "0eecbe45ec0ff2a80bdd9eed23283c806e0a6525f760b1810881d1c87510451b",
+    "digest": "0d7288aa48c03521b70bcbd1a83d6133405c658b914c821f3da49cea6223597f",
     "eval_kinds": [
       "rubric"
     ],
@@ -439,7 +439,7 @@
       "skills/references/genai-readiness.md": "b06758e80805b09ab485d81c3cc6284acf5e2d18c2af1c0359644f61b80deff4",
       "skills/references/incident-readiness.md": "787fb441106abcb148f541befd403e5f7889a2234c6cbe590d0c6bce48a3b59a",
       "skills/references/languages/go.md": "26f847c42e372c0e8029d505336ff242e9bf168c320f5b0869b335a0f9d18009",
-      "skills/references/languages/java.md": "906206a95dbc7306dc8c4e6bcf0823793b89d4d7a6a407f5c914aad46fe1a0d7",
+      "skills/references/languages/java.md": "2fb770f043bfa246b7023df3cb81e28cc12cd8c6794985f4b891cc88bfd0442c",
       "skills/references/languages/node.md": "14495ab0c8c7822068421d82dff7534c0e540012fb002d1bdc68e71146fa43e8",
       "skills/references/languages/python.md": "6e70ca66c09dbe60319c4889fa543624b1f051bd5839e3647f81ff490886724a",
       "skills/references/ledger-template.md": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc",
@@ -484,7 +484,7 @@
       "evals/go/native-genai-demo/telemetry.go": "1a6a265bbf7e72ab6b1a4cbfe5c99bfac66af61dd4bd9e1eddb4dfe392e0a22d",
       "evals/java/springboot-basic/Makefile": "3e924e168831761ec2dca0c0cc10b363b1d97144a90f111a6c5d772042bd777d",
       "evals/java/springboot-basic/README.md": "6e17e9f1e65f52a9268ed19a4e4c7d449efdf4789c404232c98bf04777702688",
-      "evals/java/springboot-basic/eval/qual/logging-verify-contract.json": "e635be4d2ee969741d9af4999e577fcf4b6250e254cf29cafa83a55240d03507",
+      "evals/java/springboot-basic/eval/qual/logging-verify-contract.json": "8f593bccf5ffefa8010921166f87461c2f4f4ae9a39841d516e556cd2a59abbd",
       "evals/java/springboot-basic/pom.xml": "0ae7ad95e63cb57d3ec8fb7f51b7ef2e9a5817c70034af8e82a105816114e351",
       "evals/java/springboot-basic/src/main/java/com/example/tasks/Task.java": "97437951adcb1592b1f4e48af10f799501858ed40949575f8278d9a644f80cfc",
       "evals/java/springboot-basic/src/main/java/com/example/tasks/TaskController.java": "ccace7793ab0b02f7b20d3ae8c0698451f45734ad6a25f5147c9f0fff71fdbfa",

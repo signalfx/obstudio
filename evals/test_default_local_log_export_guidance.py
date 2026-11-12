@@ -250,37 +250,44 @@ def test_dependency_install_examples_apply_checked_candidates() -> None:
                 assert "latest" not in spec, spec
 
 
-def _java_launcher(tmp_path: Path) -> tuple[Path, dict[str, str]]:
+def _java_launcher(
+    tmp_path: Path, *,
+    approved_endpoint="http://127.0.0.1:4318/v1/logs",
+    approved_protocol="http/protobuf",
+) -> tuple[Path, dict[str, str]]:
     launcher = tmp_path / "otel-entrypoint.sh"
-    _write_executable(
-        launcher,
-        _fenced_code_after(
-            LANGUAGES / "java.md",
-            "Save this as `otel-entrypoint.sh`:",
-            "bash",
-        ),
+    source = _fenced_code_after(
+        LANGUAGES / "java.md", "Save this as `otel-entrypoint.sh`:", "bash",
+    ).replace(
+        "approved_logs_endpoint=http://127.0.0.1:4318/v1/logs",
+        f"approved_logs_endpoint={shlex.quote(approved_endpoint)}",
+    ).replace(
+        "approved_logs_protocol=http/protobuf",
+        f"approved_logs_protocol={shlex.quote(approved_protocol)}",
     )
+    _write_executable(launcher, source)
     subprocess.run(["/bin/sh", "-n", launcher], check=True)
-
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
-    _write_executable(
-        fake_bin / "java",
-        """#!/bin/sh
-printf 'JAVA_CALLED=1\\n'
-printf 'OTEL_LOGS_EXPORTER=%s\\n' "${OTEL_LOGS_EXPORTER-<unset>}"
-printf 'OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=%s\\n' "${OTEL_EXPORTER_OTLP_LOGS_ENDPOINT-<unset>}"
-for arg in "$@"; do
-  printf 'ARG=%s\\n' "$arg"
-done
-""",
-    )
+    _write_executable(fake_bin / "java", f"#!{sys.executable}\n" + """
+import json, os, sys
+print('JAVA_CALLED=1')
+for key in ['OTEL_LOGS_EXPORTER', 'OTEL_EXPORTER_OTLP_LOGS_ENDPOINT']:
+    print(key+'='+os.environ.get(key, '<unset>'))
+for arg in sys.argv[1:]:
+    print('ARG='+arg)
+print('CONFIG='+json.dumps({key:value for key,value in os.environ.items()
+    if key.startswith('OTEL_') or key in ['JAVA_TOOL_OPTIONS','JDK_JAVA_OPTIONS','_JAVA_OPTIONS']}))
+""")
     return launcher, {
-        "PATH": str(fake_bin),
-        "JAVA_TOOL_OPTIONS": "",
-        "JDK_JAVA_OPTIONS": "",
-        "_JAVA_OPTIONS": "",
+        "PATH": str(fake_bin), "JAVA_TOOL_OPTIONS": "",
+        "JDK_JAVA_OPTIONS": "", "_JAVA_OPTIONS": "",
     }
+
+
+def _java_configuration(result: subprocess.CompletedProcess) -> dict[str, str]:
+    return json.loads(next(line.removeprefix("CONFIG=")
+                           for line in result.stdout.splitlines() if line.startswith("CONFIG=")))
 
 
 def test_python_logging_readback_routes_are_bounded_and_complete() -> None:
@@ -648,7 +655,8 @@ def test_language_guides_reject_generic_cloud_header_inheritance() -> None:
             )
 
     java = _normalized(LANGUAGES / "java.md")
-    assert "Move a direct-cloud `OTEL_EXPORTER_OTLP_ENDPOINT`" in java
+    assert "explicit reviewed preflight/configuration change" in java
+    assert "never rewrite credentials during startup" in java
     assert "trace- and metric-specific endpoint/header settings" in java
 
 
@@ -1296,9 +1304,10 @@ def test_java_launcher_ignores_properties_after_the_launch_target(
         text=True,
         capture_output=True,
     )
-    assert application_property.returncode == 1
-    assert "move a non-local generic OTLP endpoint" in application_property.stderr
-    assert "JAVA_CALLED=1" not in application_property.stdout
+    assert application_property.returncode == 0
+    assert "Local OTLP logs inactive" in application_property.stderr
+    assert "JAVA_CALLED=1" in application_property.stdout
+    assert _java_configuration(application_property)["_JAVA_OPTIONS"].endswith("-Dotel.logs.exporter=none")
 
     option_value = subprocess.run(
         [
@@ -1311,8 +1320,10 @@ def test_java_launcher_ignores_properties_after_the_launch_target(
         text=True,
         capture_output=True,
     )
-    assert option_value.returncode == 1
-    assert "move a non-local generic OTLP endpoint" in option_value.stderr
+    assert option_value.returncode == 0
+    assert "Local OTLP logs inactive" in option_value.stderr
+    assert "JAVA_CALLED=1" in option_value.stdout
+    assert _java_configuration(option_value)["_JAVA_OPTIONS"].endswith("-Dotel.logs.exporter=none")
 
     effective_property = subprocess.run(
         [
@@ -1333,7 +1344,10 @@ def test_java_launcher_ignores_properties_after_the_launch_target(
 def test_java_launcher_accepts_local_generic_endpoint_and_empty_exporter(
     tmp_path: Path,
 ) -> None:
-    launcher, base_env = _java_launcher(tmp_path)
+    grpc = tmp_path / "grpc"
+    grpc.mkdir()
+    launcher, base_env = _java_launcher(grpc, approved_protocol="grpc",
+                                       approved_endpoint="http://localhost:4317")
     mixed_protocol = subprocess.run(
         [
             launcher,
@@ -1356,6 +1370,9 @@ def test_java_launcher_accepts_local_generic_endpoint_and_empty_exporter(
         in mixed_protocol.stdout
     )
 
+    http = tmp_path / "http"
+    http.mkdir()
+    launcher, base_env = _java_launcher(http, approved_endpoint="http://telemetry-collector:55318/collector/v1/traces/v1/logs")
     nondefault_http = subprocess.run(
         [
             launcher,
@@ -1380,6 +1397,9 @@ def test_java_launcher_accepts_local_generic_endpoint_and_empty_exporter(
         in nondefault_http.stdout
     )
 
+    signal = tmp_path / "signal"
+    signal.mkdir()
+    launcher, base_env = _java_launcher(signal, approved_endpoint="http://arbitrary-observer:55444/v1/logs")
     signal_specific = subprocess.run(
         [launcher, "-version"],
         env={
@@ -1399,6 +1419,9 @@ def test_java_launcher_accepts_local_generic_endpoint_and_empty_exporter(
         in signal_specific.stdout
     )
 
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    launcher, base_env = _java_launcher(empty)
     empty_exporter = subprocess.run(
         [launcher, "-Dotel.logs.exporter=", "-jar", "app.jar"],
         env=base_env,
@@ -1413,6 +1436,129 @@ def test_java_launcher_accepts_local_generic_endpoint_and_empty_exporter(
         in empty_exporter.stdout
     )
     assert "ARG=-Dotel.exporter.otlp.logs.endpoint=" not in empty_exporter.stdout
+
+
+@pytest.mark.parametrize("conflict,arguments", [
+    ({"OTEL_EXPORTER_OTLP_ENDPOINT":"https://cloud.invalid"}, []),
+    ({"OTEL_EXPORTER_OTLP_ENDPOINT":"http://unapproved.invalid:4318"}, []),
+    ({"OTEL_EXPORTER_OTLP_ENDPOINT":"http://127.0.0.1:55319"}, []),
+    ({"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT":"http://127.0.0.1:55319/v1/logs"}, []),
+    ({"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT":"http://127.0.0.1:4318/not-logs"}, []),
+    ({"OTEL_EXPORTER_OTLP_LOGS_PROTOCOL":"unsupported"}, []),
+    ({"OTEL_EXPORTER_OTLP_HEADERS":"Authorization=synthetic-shared"}, []),
+    ({"OTEL_EXPORTER_OTLP_HEADERS":"Authorization=synthetic-shared",
+      "OTEL_EXPORTER_OTLP_LOGS_HEADERS":"X-Local=synthetic-local"}, []),
+    ({"JAVA_TOOL_OPTIONS":"-Dotel.exporter.otlp.logs.endpoint=http://127.0.0.1:55319/v1/logs"}, []),
+    ({"JDK_JAVA_OPTIONS":"-Dotel.exporter.otlp.headers=X-Generic=synthetic-jvm"}, []),
+    ({"_JAVA_OPTIONS":"-Duser.kept=true -Dotel.logs.exporter=otlp -Dotel.exporter.otlp.logs.protocol=unsupported"}, []),
+    ({}, ["-Dotel.exporter.otlp.logs.endpoint=http://127.0.0.1:55319/v1/logs"]),
+    ({}, ["-Dotel.exporter.otlp.logs.endpoint="]),
+    ({}, ["-Dotel.exporter.otlp.logs.protocol="]),
+])
+def test_java_launcher_log_conflicts_preserve_app_and_operator_configuration(
+    tmp_path: Path, conflict: dict[str, str], arguments: list[str],
+) -> None:
+    launcher, base_env = _java_launcher(tmp_path)
+    supplied = {"OTEL_LOGS_EXPORTER":"otlp",
+                "OTEL_EXPORTER_OTLP_ENDPOINT":"http://127.0.0.1:4318",
+                "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT":"https://trace.invalid/v1/traces",
+                "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT":"https://metric.invalid/v1/metrics",
+                "OTEL_EXPORTER_OTLP_TRACES_HEADERS":"X-Trace=synthetic-trace",
+                "OTEL_EXPORTER_OTLP_METRICS_HEADERS":"X-Metric=synthetic-metric",
+                "OTEL_SERVICE_NAME":"operator-java",
+                "OTEL_RESOURCE_ATTRIBUTES":" service.name = resource-name , safe.extra = kept ",
+                **conflict}
+    result = subprocess.run([launcher, *arguments, "com.example.Main", "two words"],
+                            env={**base_env, **supplied}, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    assert "JAVA_CALLED=1" in result.stdout
+    assert "ARG=two words\n" in result.stdout
+    assert "Local OTLP logs inactive" in result.stderr
+    assert "synthetic" not in result.stderr
+    actual = _java_configuration(result)
+    for key, value in supplied.items():
+        if key != "_JAVA_OPTIONS":
+            assert actual[key] == value
+    existing = supplied.get("_JAVA_OPTIONS", "")
+    assert actual["_JAVA_OPTIONS"] == (existing+" " if existing else "")+"-Dotel.logs.exporter=none"
+    for key in ["OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL"]:
+        if key not in supplied:
+            assert key not in actual
+
+
+@pytest.mark.parametrize("operator_exporter", ["none", "console"])
+def test_java_launcher_operator_exporters_bypass_local_approval(
+    tmp_path: Path, operator_exporter: str,
+) -> None:
+    launcher, base_env = _java_launcher(tmp_path)
+    supplied = {"OTEL_LOGS_EXPORTER":operator_exporter,
+                "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT":"not a local URL",
+                "OTEL_EXPORTER_OTLP_HEADERS":"X-Generic=synthetic-value",
+                "OTEL_JAVAAGENT_CONFIGURATION_FILE":"operator.properties"}
+    result = subprocess.run([launcher,"-version"],env={**base_env,**supplied},
+                            capture_output=True,text=True,check=True)
+    assert not result.stderr
+    actual = _java_configuration(result)
+    assert actual["_JAVA_OPTIONS"] == ""
+    assert all(actual[key] == value for key,value in supplied.items())
+
+
+def test_java_launcher_approved_signal_uses_effective_jvm_precedence(tmp_path: Path) -> None:
+    launcher, base_env = _java_launcher(tmp_path)
+    result = subprocess.run([launcher,"-Dotel.exporter.otlp.logs.endpoint=http://127.0.0.1:4318/v1/logs","-version"],
+        env={**base_env,"OTEL_EXPORTER_OTLP_ENDPOINT":"https://unused-generic.invalid?unused=1#fragment",
+             "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT":"http://127.0.0.1:55319/v1/logs",
+             "OTEL_EXPORTER_OTLP_LOGS_HEADERS":"X-Local=synthetic%20local"},
+        capture_output=True,text=True,check=True)
+    assert not result.stderr
+    actual=_java_configuration(result)
+    assert actual["_JAVA_OPTIONS"] == ""
+    assert actual["OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"] == "http://127.0.0.1:55319/v1/logs"
+    assert actual["OTEL_EXPORTER_OTLP_ENDPOINT"] == "https://unused-generic.invalid?unused=1#fragment"
+    assert actual["OTEL_EXPORTER_OTLP_LOGS_HEADERS"] == "X-Local=synthetic%20local"
+
+
+@pytest.mark.parametrize("selection", ["environment", "jvm-property"])
+def test_java_launcher_unresolved_agent_file_is_preflight_blocker(
+    tmp_path: Path, selection: str,
+) -> None:
+    launcher, base_env = _java_launcher(tmp_path)
+    config = tmp_path / "operator.properties"
+    config.write_text("otel.logs.exporter=none\n")
+    environment = dict(base_env)
+    arguments = []
+    if selection == "environment":
+        environment["OTEL_JAVAAGENT_CONFIGURATION_FILE"] = str(config)
+    else:
+        arguments.append("-Dotel.javaagent.configuration-file="+str(config))
+    result = subprocess.run([launcher,*arguments,"-version"], env=environment,
+                            capture_output=True,text=True)
+    assert result.returncode == 1
+    assert "configuration-file ownership during preflight" in result.stderr
+    assert "JAVA_CALLED=1" not in result.stdout
+    assert config.read_text() == "otel.logs.exporter=none\n"
+
+
+@pytest.mark.parametrize("generic,approved_signal", [
+    ("http://127.0.0.1:4318/collector?selector=example",
+     "http://127.0.0.1:4318/collector?selector=example/v1/logs"),
+    ("http://127.0.0.1:4318/collector#example",
+     "http://127.0.0.1:4318/collector#example/v1/logs"),
+])
+def test_java_launcher_does_not_append_path_inside_generic_query_or_fragment(
+    tmp_path: Path, generic: str, approved_signal: str,
+) -> None:
+    # Both are valid distinct input strings; concatenation would falsely equate
+    # the generic URL to approval by putting v1/logs inside query/fragment text.
+    launcher, base_env = _java_launcher(tmp_path, approved_endpoint=approved_signal)
+    result = subprocess.run([launcher,"-version"],
+        env={**base_env,"OTEL_EXPORTER_OTLP_ENDPOINT":generic},
+        capture_output=True,text=True,check=True)
+    assert "Local OTLP logs inactive" in result.stderr
+    actual=_java_configuration(result)
+    assert actual["OTEL_EXPORTER_OTLP_ENDPOINT"] == generic
+    assert actual["_JAVA_OPTIONS"].endswith("-Dotel.logs.exporter=none")
+    assert "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT" not in actual
 
 
 def test_java_launcher_rejects_argfiles_and_ambiguous_option_environments(

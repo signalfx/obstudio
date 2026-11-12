@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-audit",
-    "run_id": "20261112T042711001863Z",
+    "run_id": "20261112T051640134417Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-6-luna",
     "judge_model": "",
@@ -727,7 +727,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "1cf91e4714091bc7e7567682d82b81b81e2a775f8913924f599de1132ce50dfd",
+    "digest": "69d5ab54b74d458bc692944ee393fbe61861f0ae57e0d32607177405552cd727",
     "eval_kinds": [
       "rubric",
       "sanity"
@@ -750,7 +750,7 @@
       "skills/references/genai-readiness.md": "b06758e80805b09ab485d81c3cc6284acf5e2d18c2af1c0359644f61b80deff4",
       "skills/references/incident-readiness.md": "787fb441106abcb148f541befd403e5f7889a2234c6cbe590d0c6bce48a3b59a",
       "skills/references/languages/go.md": "26f847c42e372c0e8029d505336ff242e9bf168c320f5b0869b335a0f9d18009",
-      "skills/references/languages/java.md": "906206a95dbc7306dc8c4e6bcf0823793b89d4d7a6a407f5c914aad46fe1a0d7",
+      "skills/references/languages/java.md": "2fb770f043bfa246b7023df3cb81e28cc12cd8c6794985f4b891cc88bfd0442c",
       "skills/references/languages/node.md": "14495ab0c8c7822068421d82dff7534c0e540012fb002d1bdc68e71146fa43e8",
       "skills/references/languages/python.md": "6e70ca66c09dbe60319c4889fa543624b1f051bd5839e3647f81ff490886724a",
       "skills/references/ledger-template.md": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc",
@@ -854,7 +854,7 @@
       "evals/java/springboot-basic/src/main/java/com/example/tasks/TaskController.java": "ccace7793ab0b02f7b20d3ae8c0698451f45734ad6a25f5147c9f0fff71fdbfa",
       "evals/java/springboot-basic/src/main/java/com/example/tasks/TasksApplication.java": "0db42555e6ac0ec5d3c352d526ed0b5bdbb5cf6a0087ed2fe68b4ec62b0bab0b",
       "evals/java/springboot-basic/src/main/resources/application.properties": "b90fa8737a65764df11a6814c6481fc53c6f092da294e73c3887d684c2a48f7b",
-      "evals/java/springboot-basic/eval/qual/logging-audit-contract.json": "2f3cf42efb9961608580fd75fad9f4ed45640c892d7c0b317f9b9b61db7fc9f3",
+      "evals/java/springboot-basic/eval/qual/logging-audit-contract.json": "cfc5b1d8606bb99d268b95bcc548c18722743d2d548a28008857f9f116fc5245",
       "evals/node/express-basic/Makefile": "c24bae6d3256346ae0378c3115e50b21d3c1cd6a688c4a8f72bf2ab62e1bd83b",
       "evals/node/express-basic/README.md": "6e17e9f1e65f52a9268ed19a4e4c7d449efdf4789c404232c98bf04777702688",
       "evals/node/express-basic/app.js": "7dc0b120a9cb78d104c8c5de73f45cc07e44cf1648421d7849daa159326ceaef",
