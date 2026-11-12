@@ -11,6 +11,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
+import { hecEndpointHelpURL, hecTokenHelpURL } from "../../../../shared/hec-help.cjs";
 import { ObserverHostCloudRequestError } from "../host/transport";
 import { LogsConnection } from "./LogsConnection";
 import type { SplunkLogsStatus } from "../api/types";
@@ -54,13 +55,10 @@ it.each(["browser", "IDE"] as const)("opens HEC endpoint help with the keyboard 
   await user.type(screen.getByLabelText("HEC token"), "draft-token");
   const help = screen.getByRole("link", { name: "Find your HEC endpoint" });
   const tokenHelp = screen.getByRole("link", { name: "Find your HEC token" });
-  const guideURL = "https://help.splunk.com/en/splunk-cloud-platform/get-data-in/get-started-with-getting-data-in/10.2.2510/get-data-with-http-event-collector/set-up-and-use-http-event-collector-in-splunk-web";
-  const endpointURL = `${guideURL}#id_4626b983_5022_4b94_b071_22646bce88c3--en__Send_data_to_HTTP_Event_Collector_on_Splunk_Cloud_Platform:~:text=Send%20data%20to%20HTTP%20Event%20Collector%20on%20Splunk%20Cloud%20Platform`;
-  const tokenURL = `${guideURL}#create-an-event-collector-token-on-splunk-cloud-platform-0:~:text=Create%20an%20Event%20Collector%20token%20on%20Splunk%20Cloud%20Platform`;
-  expect(help.getAttribute("href")).toBe(host === "IDE" ? "#" : endpointURL);
+  expect(help.getAttribute("href")).toBe(host === "IDE" ? "#" : hecEndpointHelpURL);
   expect(help.getAttribute("target")).toBe(host === "IDE" ? null : "_blank");
   expect(help.getAttribute("rel")).toBe(host === "IDE" ? null : "noopener noreferrer");
-  expect(tokenHelp.getAttribute("href")).toBe(host === "IDE" ? "#" : tokenURL);
+  expect(tokenHelp.getAttribute("href")).toBe(host === "IDE" ? "#" : hecTokenHelpURL);
   expect(endpoint.getAttribute("aria-describedby")).toBe("cloud-logs-endpoint-help");
   expect(screen.getByText("Enter the full HEC ingestion URL, including /services/collector/event.")).toBeTruthy();
   if (host === "browser") {
@@ -693,8 +691,8 @@ function backend(initial = empty, host: "browser" | "IDE" = "browser", endpointH
           const error = action === "open-hec-endpoint-help" ? endpointHelpError : undefined;
           externalActions.push(action);
           window.dispatchEvent(new MessageEvent("message", { data: {
-            type: "obstudio.host.response", requestId: message.requestId, ok: !error,
-            ...(error ? { error } : { result: {} }),
+            type: "obstudio.host.response", requestId: message.requestId,
+            ...(error ? { ok: false, error } : { ok: true, result: {} }),
           } }));
           return;
         }
