@@ -1166,11 +1166,12 @@ def test_command_capture_deadline_covers_child_held_output(tmp_path: Path):
     )
     started = time.monotonic()
     try:
-        with pytest.raises(subprocess.TimeoutExpired):
+        with pytest.raises(subprocess.TimeoutExpired) as error:
             run_streamed_command([sys.executable, "-c", script],
                 stdout_path=tmp_path / "trace.jsonl", stderr_path=tmp_path / "stderr.txt", timeout=1)
         assert time.monotonic() - started < 3
         assert "parent completed" in (tmp_path / "trace.jsonl").read_text()
+        assert "parent completed" in error.value.output
     finally:
         if pid_path.exists():
             try:
@@ -1179,7 +1180,44 @@ def test_command_capture_deadline_covers_child_held_output(tmp_path: Path):
                 pass
 
 
-def test_command_interruption_kills_owned_process_and_preserves_interrupt(tmp_path: Path, monkeypatch):
+def test_completed_command_has_bounded_eof_drain_near_deadline(tmp_path: Path, monkeypatch):
+    class Process:
+        stdout = io.StringIO("complete output\n")
+        stderr = io.StringIO("")
+
+        def wait(self, timeout):
+            return 0
+
+        def poll(self):
+            return 0
+
+    class Reader:
+        def __init__(self, target, args, daemon):
+            self.target, self.args = target, args
+            self.finished = False
+
+        def start(self):
+            pass
+
+        def join(self, timeout):
+            if timeout >= 0.1 and not self.finished:
+                self.target(*self.args)
+                self.finished = True
+
+        def is_alive(self):
+            return not self.finished
+
+    clock = iter([0.0, 0.0])
+    monkeypatch.setattr("pytest_codex_evals.backends.time.monotonic", lambda: next(clock, 1.0))
+    monkeypatch.setattr("pytest_codex_evals.backends.subprocess.Popen", lambda *args, **kwargs: Process())
+    monkeypatch.setattr("pytest_codex_evals.backends.threading.Thread", Reader)
+    result = run_streamed_command(["completed-command"], stdout_path=tmp_path / "trace.jsonl",
+                                  stderr_path=tmp_path / "stderr.txt", timeout=1)
+    assert result.returncode == 0 and result.stdout == "complete output\n"
+
+
+@pytest.mark.parametrize("slow_reap", [False, True])
+def test_command_interruption_kills_owned_process_and_preserves_interrupt(tmp_path: Path, monkeypatch, slow_reap):
     class Process:
         stdout = io.StringIO("started\n")
         stderr = io.StringIO("")
@@ -1188,6 +1226,8 @@ def test_command_interruption_kills_owned_process_and_preserves_interrupt(tmp_pa
         def wait(self, timeout):
             if not self.killed:
                 raise KeyboardInterrupt
+            if slow_reap:
+                raise subprocess.TimeoutExpired("owned-command", timeout)
             return -9
 
         def poll(self):

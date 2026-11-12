@@ -96,16 +96,23 @@ def run_streamed_command(
     stderr_thread.start()
     try:
         returncode = process.wait(timeout=max(0, deadline - time.monotonic()))
+        drain_deadline = max(deadline, time.monotonic() + 0.2)
         for reader in (stdout_thread, stderr_thread):
-            reader.join(timeout=max(0, deadline - time.monotonic()))
+            reader.join(timeout=max(0, drain_deadline - time.monotonic()))
         if stdout_thread.is_alive() or stderr_thread.is_alive():
             raise subprocess.TimeoutExpired(cmd, timeout)
-    except BaseException:
+    except BaseException as error:
         if process.poll() is None:
             process.kill()
-        process.wait(timeout=5)
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass
         stdout_thread.join(timeout=0.2)
         stderr_thread.join(timeout=0.2)
+        if isinstance(error, subprocess.TimeoutExpired):
+            error.output = "".join(stdout_chunks)
+            error.stderr = "".join(stderr_chunks)
         raise
     return StreamedCommandResult(
         returncode=returncode,
