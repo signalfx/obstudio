@@ -324,7 +324,6 @@ def test_python_logging_readback_routes_are_bounded_and_complete() -> None:
     approval = sections["local-log-preflight-approval"]
     assert "PREFLIGHT_APPROVED_LOCAL_OTLP_LOGS_ENDPOINT" in approval
     assert "logging configuration has established its original sinks" in approval
-    assert "export_interval_millis" in approval
     boundary = sections["local-splunk-observability-studio-application-logs-and-cloud-boundary"]
     assert "operator-approved configuration during preflight" in boundary
     assert "This runtime check also detects duplicate handlers" in boundary
@@ -761,6 +760,199 @@ func main() {
         expected.update(headersPreserved=True, explicitHeaders=False,
                         endpoint="http://127.0.0.1:55444/v1/logs")
     assert json.loads(result.stdout) == expected
+
+
+def _node_sdk_owner_result(configuration):
+    setup = _fenced_code_after(
+        LANGUAGES / "node.md", "**File**: `instrumentation.ts`", "typescript"
+    )
+    source = "const PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT" + setup.split(
+        "const PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT", 1
+    )[1].split("let shutdownPromise", 1)[0]
+    source = source.replace("let sdk: NodeSDK;", "let sdk;").replace(
+        "function positiveSdkNumberFromEnv(name: string): number | undefined",
+        "function positiveSdkNumberFromEnv(name)",
+    )
+    # Calibrated to core 2.12.1 and sdk-node/sdk-logs 0.223.2 public owners.
+    stubs = r"""
+const warnings = [];
+const diag = { warn: (...args) => warnings.push(args) };
+function getStringFromEnv(name) {
+  const raw = process.env[name];
+  return raw == null || raw.trim() === '' ? undefined : raw;
+}
+function getNumberFromEnv(name) {
+  const raw = process.env[name];
+  if (raw == null || raw.trim() === '') return undefined;
+  const value = Number(raw);
+  if (isNaN(value)) { diag.warn(name); return undefined; }
+  return value;
+}
+function nativePositive(name) {
+  const value = getNumberFromEnv(name);
+  return value !== undefined && value <= 0 ? undefined : value;
+}
+function selected(name) {
+  return process.env[name]?.split(',').map(value => value.trim()).filter(Boolean) ?? ['otlp'];
+}
+function protocol(signal) {
+  return process.env['OTEL_EXPORTER_OTLP_' + signal + '_PROTOCOL'] ||
+    process.env.OTEL_EXPORTER_OTLP_PROTOCOL || 'http/protobuf';
+}
+function resourceFromAttributes(attributes) { return attributes; }
+class HttpInstrumentation {}
+class ExpressInstrumentation {}
+class ConsoleInstrumentation {}
+class OTLPLogExporter { constructor(options) { this.options = options; } }
+class BatchLogRecordProcessor {
+  constructor(options) {
+    this.values = {
+      batch: options.maxExportBatchSize ?? 512,
+      queue: options.maxQueueSize ?? 2048,
+      delay: options.scheduledDelayMillis ?? 1000,
+      timeout: options.exportTimeoutMillis ?? 30000,
+    };
+    this.values.batch = Math.min(this.values.batch, this.values.queue);
+  }
+}
+class OTLPTraceExporter { constructor() { this.protocol = 'http/json'; } }
+class OTLPMetricExporter { constructor() { this.protocol = 'http/json'; } }
+class PeriodicExportingMetricReader {
+  constructor(options) {
+    let interval = options.exportIntervalMillis ?? 60000;
+    let timeout = options.exportTimeoutMillis ?? 30000;
+    if (interval <= 0 || timeout <= 0) throw Error('nonpositive metric timing');
+    if (interval < timeout) {
+      if (options.exportIntervalMillis !== undefined && options.exportTimeoutMillis !== undefined)
+        throw Error('explicit timeout exceeds interval');
+      timeout = interval;
+    }
+    this.values = { interval, timeout, protocol: options.exporter.protocol };
+  }
+}
+const original = JSON.stringify(Object.fromEntries(Object.entries(process.env).filter(([key]) => key.startsWith('OTEL_'))));
+class NodeSDK {
+  constructor(options) {
+    this.options = options;
+    this.constructorLogs = process.env.OTEL_LOGS_EXPORTER ?? null;
+    const interval = nativePositive('OTEL_METRIC_EXPORT_INTERVAL') ?? 60000;
+    const timeout = Math.min(nativePositive('OTEL_METRIC_EXPORT_TIMEOUT') ?? 30000, interval);
+    this.metrics = options.metricReader ? [options.metricReader.values] :
+      selected('OTEL_METRICS_EXPORTER').filter(value => value !== 'none').map(value =>
+        ({ interval, timeout, protocol: value === 'otlp' ? protocol('METRICS') : value }));
+  }
+  start() {
+    globalThis.result = {
+      metrics: this.metrics,
+      traces: this.options.traceExporter ? [this.options.traceExporter.protocol] :
+        selected('OTEL_TRACES_EXPORTER').filter(value => value !== 'none').map(value =>
+          value === 'otlp' ? protocol('TRACES') : value),
+      batch: this.options.logRecordProcessors?.[0].values ?? null,
+      localLogs: !!this.options.logRecordProcessors,
+      constructorLogs: this.constructorLogs,
+      startLogs: process.env.OTEL_LOGS_EXPORTER ?? null,
+      nativeLogs: this.options.logRecordProcessors ? [] :
+        selected('OTEL_LOGS_EXPORTER').filter(value => ['otlp', 'console'].includes(value)),
+    };
+  }
+}
+"""
+    env = {key: value for key, value in os.environ.items() if not key.startswith("OTEL_")}
+    result = subprocess.run(
+        ["node", "-e", stubs + source + "console.log(JSON.stringify({...globalThis.result, environmentPreserved: original === JSON.stringify(Object.fromEntries(Object.entries(process.env).filter(([key]) => key.startsWith('OTEL_'))))}));"],
+        env={**env, **configuration}, text=True, capture_output=True, check=True,
+    )
+    return json.loads(result.stdout)
+
+
+@pytest.mark.parametrize("configuration,expected", [
+    ({}, [60000, 30000]),
+    ({"OTEL_METRIC_EXPORT_INTERVAL": "", "OTEL_METRIC_EXPORT_TIMEOUT": " "}, [60000, 30000]),
+    ({"OTEL_METRIC_EXPORT_INTERVAL": "invalid", "OTEL_METRIC_EXPORT_TIMEOUT": "invalid"}, [60000, 30000]),
+    ({"OTEL_METRIC_EXPORT_INTERVAL": "0", "OTEL_METRIC_EXPORT_TIMEOUT": "-1"}, [60000, 30000]),
+    ({"OTEL_METRIC_EXPORT_INTERVAL": "1000.5", "OTEL_METRIC_EXPORT_TIMEOUT": "500.25"}, [1000.5, 500.25]),
+    ({"OTEL_METRIC_EXPORT_INTERVAL": "1000"}, [1000, 1000]),
+    ({"OTEL_METRIC_EXPORT_INTERVAL": "1000", "OTEL_METRIC_EXPORT_TIMEOUT": "2000"}, [1000, 1000]),
+])
+def test_node_native_metric_environment_owner(configuration, expected):
+    result = _node_sdk_owner_result(configuration)
+    assert result["metrics"] == [{"interval": expected[0], "timeout": expected[1], "protocol": "http/protobuf"}]
+    assert result["environmentPreserved"]
+
+
+@pytest.mark.parametrize("configuration,traces,metrics", [
+    ({"OTEL_TRACES_EXPORTER": "none"}, [], ["http/protobuf"]),
+    ({"OTEL_METRICS_EXPORTER": "none"}, ["http/protobuf"], []),
+    ({"OTEL_TRACES_EXPORTER": "console", "OTEL_METRICS_EXPORTER": "console"}, ["console"], ["console"]),
+    ({"OTEL_EXPORTER_OTLP_PROTOCOL": "grpc"}, ["grpc"], ["grpc"]),
+    ({"OTEL_EXPORTER_OTLP_PROTOCOL": "grpc", "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL": "http/json", "OTEL_EXPORTER_OTLP_METRICS_PROTOCOL": "http/protobuf"}, ["http/json"], ["http/protobuf"]),
+])
+def test_node_native_signal_configuration_owner(configuration, traces, metrics):
+    result = _node_sdk_owner_result(configuration)
+    assert result["traces"] == traces
+    assert [value["protocol"] for value in result["metrics"]] == metrics
+
+
+@pytest.mark.parametrize("configuration,expected", [
+    ({}, {"batch": 512, "queue": 2048, "delay": 1000, "timeout": 30000}),
+    ({"OTEL_BLRP_MAX_QUEUE_SIZE": "4096", "OTEL_BLRP_MAX_EXPORT_BATCH_SIZE": "1024", "OTEL_BLRP_SCHEDULE_DELAY": "600000", "OTEL_BLRP_EXPORT_TIMEOUT": "1000"}, {"batch": 1024, "queue": 4096, "delay": 600000, "timeout": 1000}),
+    ({"OTEL_BLRP_MAX_QUEUE_SIZE": "8", "OTEL_BLRP_MAX_EXPORT_BATCH_SIZE": "16", "OTEL_BLRP_SCHEDULE_DELAY": "1000.5", "OTEL_BLRP_EXPORT_TIMEOUT": "500.25"}, {"batch": 8, "queue": 8, "delay": 1000.5, "timeout": 500.25}),
+    ({"OTEL_BLRP_MAX_QUEUE_SIZE": "invalid", "OTEL_BLRP_MAX_EXPORT_BATCH_SIZE": "0", "OTEL_BLRP_SCHEDULE_DELAY": "-1", "OTEL_BLRP_EXPORT_TIMEOUT": " "}, {"batch": 512, "queue": 2048, "delay": 1000, "timeout": 30000}),
+])
+def test_node_local_batch_configuration_owner(configuration, expected):
+    result = _node_sdk_owner_result(configuration)
+    assert result["batch"] == expected
+    assert result["environmentPreserved"]
+
+
+def test_node_native_logger_stage_and_unsupported_selector():
+    result = _node_sdk_owner_result({"OTEL_LOGS_EXPORTER": "otlp", "OTEL_EXPORTER_OTLP_HEADERS": "secret=value"})
+    assert result["constructorLogs"] == "otlp"
+    assert result["startLogs"] == "none"
+    assert result["nativeLogs"] == []
+    assert result["environmentPreserved"]
+    result = _node_sdk_owner_result({"OTEL_LOGS_EXPORTER": "OTLP"})
+    assert not result["localLogs"]
+    assert result["nativeLogs"] == []
+    assert result["startLogs"] == "OTLP"
+    assert result["environmentPreserved"]
+
+
+@pytest.mark.parametrize("configuration,local_logs", [
+    ({"OTEL_EXPORTER_OTLP_LOGS_PROTOCOL": "HTTP/PROTOBUF"}, False),
+    ({"OTEL_EXPORTER_OTLP_LOGS_PROTOCOL": " http/protobuf "}, True),
+    ({"OTEL_EXPORTER_OTLP_LOGS_PROTOCOL": "", "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf"}, True),
+    ({"OTEL_EXPORTER_OTLP_LOGS_PROTOCOL": "  ", "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf"}, True),
+    ({"OTEL_EXPORTER_OTLP_PROTOCOL": "  "}, True),
+    ({"OTEL_EXPORTER_OTLP_LOGS_PROTOCOL": "", "OTEL_EXPORTER_OTLP_PROTOCOL": "grpc"}, False),
+])
+def test_node_local_protocol_uses_sdk_string_owner(configuration, local_logs):
+    result = _node_sdk_owner_result(configuration)
+    assert result["localLogs"] is local_logs
+    assert result["environmentPreserved"]
+    if not local_logs:
+        assert result["startLogs"] == "none"
+
+
+@pytest.mark.parametrize("configuration,expected", [
+    ({}, ["1000", "500"]),
+    ({"OTEL_METRIC_EXPORT_INTERVAL": "", "OTEL_METRIC_EXPORT_TIMEOUT": ""}, ["", ""]),
+    ({"OTEL_METRIC_EXPORT_INTERVAL": "1000.5", "OTEL_METRIC_EXPORT_TIMEOUT": "500.25"}, ["1000.5", "500.25"]),
+    ({"OTEL_METRIC_EXPORT_INTERVAL": "invalid", "OTEL_METRIC_EXPORT_TIMEOUT": " "}, ["invalid", " "]),
+])
+def test_node_local_metric_profile_defaults_only_when_absent(configuration, expected):
+    section = _read(LANGUAGES / "node.md").split("For local development with Splunk Observability Studio,", 1)[1]
+    lines = []
+    for line in section.splitlines():
+        if line.startswith("    "):
+            lines.append(line[4:])
+        elif lines:
+            break
+    assert lines
+    command = "\n".join(lines) + '\nprintf "%s\\n%s\\n" "$OTEL_METRIC_EXPORT_INTERVAL" "$OTEL_METRIC_EXPORT_TIMEOUT"'
+    result = subprocess.run(["/bin/sh", "-c", command], env=configuration,
+                            text=True, capture_output=True, check=True)
+    assert result.stdout.splitlines() == expected
 
 
 def test_shell_wrappers_only_add_local_log_configuration_for_otlp() -> None:
@@ -1985,7 +2177,8 @@ def test_node_local_logs_require_preflight_match_and_fail_closed() -> None:
     assert "OTEL_EXPORTER_OTLP_ENDPOINT?.trim()" not in helper
     assert "process.env.OTEL_EXPORTER_OTLP_HEADERS?.trim()" in helper
     assert "process.env.OTEL_EXPORTER_OTLP_LOGS_HEADERS?.trim()" not in helper
-    assert "new BatchLogRecordProcessor({ exporter })" in helper
+    assert "new BatchLogRecordProcessor({" in helper
+    assert "scheduledDelayMillis: positiveSdkNumberFromEnv('OTEL_BLRP_SCHEDULE_DELAY')" in helper
     assert "logInstrumentations: [new ConsoleInstrumentation()]" in helper
     assert "} catch {" in helper
     assert "logRecordProcessors: undefined" in helper.split("} catch {", 1)[1]
@@ -2022,13 +2215,24 @@ def test_node_log_only_failures_keep_trace_metric_startup() -> None:
     source = "const PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT" + setup.split(
         "const PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT", 1
     )[1].split("let shutdownPromise", 1)[0]
-    source = source.replace("let sdk: NodeSDK;", "let sdk;")
+    source = source.replace("let sdk: NodeSDK;", "let sdk;").replace(
+        "function positiveSdkNumberFromEnv(name: string): number | undefined",
+        "function positiveSdkNumberFromEnv(name)",
+    )
     stubs = """
 const counts = { trace: 0, metric: 0 };
+const diag = { warn: () => {} };
+function getStringFromEnv(name) {
+  const raw = process.env[name];
+  return raw == null || raw.trim() === '' ? undefined : raw;
+}
+function getNumberFromEnv(name) {
+  const raw = process.env[name];
+  if (raw == null || raw.trim() === '') return undefined;
+  const value = Number(raw);
+  return isNaN(value) ? undefined : value;
+}
 function resourceFromAttributes(attributes) { return attributes; }
-class OTLPTraceExporter { constructor() { counts.trace++; } }
-class OTLPMetricExporter { constructor() { counts.metric++; } }
-class PeriodicExportingMetricReader { constructor() {} }
 class HttpInstrumentation {}
 class ExpressInstrumentation {}
 let logBoundary = null;
@@ -2057,6 +2261,8 @@ class NodeSDK {
       throw Error('secret');
     }
     this.options = options;
+    counts.trace++;
+    counts.metric++;
   }
   start() {
     globalThis.startResult = {
@@ -2451,3 +2657,132 @@ def test_runtime_observer_keeps_grpc_loopback_when_http_is_container_visible() -
         definition = json.loads(_read(compose_file.with_name("instrument.json")))
         for check in definition["checks"]:
             assert check["expect"]["clear_path"] is None
+
+
+@pytest.mark.parametrize("configuration,expected", [
+    ({}, (60000, 30000)),
+    ({"OTEL_METRIC_EXPORT_INTERVAL": "1000.5", "OTEL_METRIC_EXPORT_TIMEOUT": "500.25"}, (1000.5, 500.25)),
+    ({"OTEL_METRIC_EXPORT_INTERVAL": "", "OTEL_METRIC_EXPORT_TIMEOUT": ""}, (60000, 30000)),
+    ({"OTEL_METRIC_EXPORT_INTERVAL": "invalid", "OTEL_METRIC_EXPORT_TIMEOUT": "invalid"}, (60000, 30000)),
+])
+def test_python_reader_constructor_retains_sdk_timing_reader(monkeypatch, caplog, configuration, expected):
+    import io
+    from opentelemetry.sdk.metrics import export as metric_export
+    from opentelemetry.sdk.metrics._internal import export as sdk_export
+
+    class OwnedUnstartedThread:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+        def start(self):
+            pass
+        def join(self, timeout=None):
+            pass
+
+    # Keep the actual SDK constructor/parser; prevent only its test-local ticker.
+    monkeypatch.setattr(sdk_export, "Thread", OwnedUnstartedThread)
+    for key in ("OTEL_METRIC_EXPORT_INTERVAL", "OTEL_METRIC_EXPORT_TIMEOUT"):
+        monkeypatch.delenv(key, raising=False)
+    for key, value in configuration.items():
+        monkeypatch.setenv(key, value)
+    setup = _fenced_code_after(LANGUAGES / "python.md", "**File**: `otel_setup.py`", "python")
+    owner = next(node for node in ast.parse(setup).body
+                 if isinstance(node, ast.FunctionDef) and node.name == "configure_opentelemetry")
+    call = next(node for node in ast.walk(owner) if isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name) and node.func.id == "PeriodicExportingMetricReader")
+    output = io.StringIO()
+    exporter = metric_export.ConsoleMetricExporter(out=output)
+    namespace = {"PeriodicExportingMetricReader": metric_export.PeriodicExportingMetricReader,
+                 "OTLPMetricExporter": lambda: exporter, "os": os, "int": int}
+    reader = eval(compile(ast.Expression(body=call), "guide-reader", "eval"), namespace)
+    try:
+        assert (reader._export_interval_millis, reader._export_timeout_millis) == expected
+        assert output.getvalue() == ""
+        assert all(os.environ[key] == value for key, value in configuration.items())
+        if any(value in ("", "invalid") for value in configuration.values()):
+            assert len([record for record in caplog.records
+                        if record.name == sdk_export.__name__ and record.levelno == 30]) == 2
+    finally:
+        reader.shutdown()
+
+
+@pytest.mark.parametrize("configuration", [
+    {"OTEL_EXPORTER_OTLP_PROTOCOL": ""},
+    {"OTEL_EXPORTER_OTLP_LOGS_PROTOCOL": ""},
+    {"OTEL_EXPORTER_OTLP_PROTOCOL": "", "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL": ""},
+])
+def test_python_manual_empty_protocol_uses_http_default(monkeypatch, configuration):
+    for key in tuple(os.environ):
+        if key.startswith("OTEL_"):
+            monkeypatch.delenv(key)
+    for key, value in configuration.items():
+        monkeypatch.setenv(key, value)
+    calls = []
+    exporter = object()
+    def create_exporter(**kwargs):
+        calls.append(kwargs)
+        return exporter
+    helpers = _python_local_log_helpers(create_exporter)
+    before = dict(os.environ)
+    assert helpers["_local_log_exporter"]() is exporter
+    assert calls == [{"endpoint": "http://127.0.0.1:4318/v1/logs"}]
+    assert dict(os.environ) == before
+
+
+def test_python_decorated_span_records_escaping_error_once():
+    from types import SimpleNamespace
+    from opentelemetry import trace
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    provider = TracerProvider(shutdown_on_exit=False)
+    exporter = InMemorySpanExporter()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    tracer = provider.get_tracer("guide-test")
+    order = SimpleNamespace(total=12)
+    failure = RuntimeError("controlled failure")
+    def charge_payment(_order):
+        raise failure
+    namespace = {"tracer": tracer, "trace": trace, "Order": object,
+                 "db": SimpleNamespace(get_order=lambda _id: order), "charge_payment": charge_payment}
+    example = _fenced_code_after(LANGUAGES / "python.md", "## Custom Spans", "python")
+    function = next(node for node in ast.parse(example).body if isinstance(node, ast.FunctionDef))
+    exec(compile(ast.Module(body=[function], type_ignores=[]), "guide-custom-span", "exec"), namespace)
+    try:
+        with pytest.raises(RuntimeError) as raised:
+            namespace["process_order"]("controlled-order")
+        assert raised.value is failure
+        span, = exporter.get_finished_spans()
+        assert span.status.status_code == trace.StatusCode.ERROR
+        assert [event.name for event in span.events] == ["exception"]
+        assert not trace.get_current_span().get_span_context().is_valid
+    finally:
+        provider.shutdown()
+
+
+@pytest.mark.parametrize("configuration,expected", [
+    ({}, ["1000", "500"]),
+    ({"OTEL_METRIC_EXPORT_INTERVAL": "1000.5", "OTEL_METRIC_EXPORT_TIMEOUT": "500.25"}, ["1000.5", "500.25"]),
+    ({"OTEL_METRIC_EXPORT_INTERVAL": "", "OTEL_METRIC_EXPORT_TIMEOUT": ""}, ["", ""]),
+    ({"OTEL_METRIC_EXPORT_INTERVAL": "invalid", "OTEL_METRIC_EXPORT_TIMEOUT": "invalid"}, ["invalid", "invalid"]),
+])
+def test_python_local_metric_profile_defaults_only_when_absent(tmp_path, configuration, expected):
+    guide = _read(LANGUAGES / "python.md")
+    section = guide.split("For local development with Splunk Observability Studio,", 1)[1]
+    command_lines = []
+    for line in section.splitlines():
+        if line.startswith("    "):
+            command_lines.append(line[4:])
+        elif command_lines:
+            break
+    assert command_lines
+    command = "\n".join(command_lines)
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    _write_executable(fake_bin / "python", f"#!{sys.executable}\nimport os,json\n"
+                      "print(json.dumps([os.environ.get('OTEL_METRIC_EXPORT_INTERVAL'), "
+                      "os.environ.get('OTEL_METRIC_EXPORT_TIMEOUT')]))\n")
+    result = subprocess.run(["/bin/sh", "-c", command],
+                            env={"PATH": str(fake_bin), **configuration},
+                            text=True, capture_output=True, check=True)
+    assert json.loads(result.stdout) == expected

@@ -463,11 +463,11 @@ def _use_default_local_log_export():
 
 
 def _local_log_exporter():
-    generic_protocol = os.environ.get(
-        "OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf"
+    generic_protocol = (
+        os.environ.get("OTEL_EXPORTER_OTLP_PROTOCOL") or "http/protobuf"
     ).strip().lower()
-    protocol = os.environ.get(
-        "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL", generic_protocol
+    protocol = (
+        os.environ.get("OTEL_EXPORTER_OTLP_LOGS_PROTOCOL") or generic_protocol
     ).strip().lower()
     if protocol != "http/protobuf":
         return _skip_local_logs(
@@ -519,11 +519,7 @@ def configure_opentelemetry():
     tracer_provider = TracerProvider(resource=resource)
     tracer_provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
 
-    metric_reader = PeriodicExportingMetricReader(
-        OTLPMetricExporter(),
-        export_interval_millis=int(os.environ.get("OTEL_METRIC_EXPORT_INTERVAL", "1000")),
-        export_timeout_millis=int(os.environ.get("OTEL_METRIC_EXPORT_TIMEOUT", "500")),
-    )
+    metric_reader = PeriodicExportingMetricReader(OTLPMetricExporter())
     meter_provider = MeterProvider(resource=resource, metric_readers=[metric_reader])
 
     logger_provider = None
@@ -639,10 +635,12 @@ Flask/Django access logs, exception rendering, and structured logger wrappers.
 Apply the same project redaction policy to the final OTel record and prove
 sensitive values cannot be reintroduced later in the pipeline.
 
-The explicit `export_interval_millis` and `export_timeout_millis` are required
-for local and eval runs. Do not rely on metric reader defaults; they can be too
-slow for short-lived runtime checks, causing valid HTTP metrics to never reach
-the collector before the process stops.
+The selected SDK reads metric interval and timeout settings when the optional
+reader arguments are omitted. Keep its parsing and precedence for supplied
+operator values. The local launch profile below supplies a 1000 ms interval
+and 500 ms collection timeout only when absent; verify effective collection and
+received datapoints for short runs. Reader collection timeout, exporter HTTP
+timeout and the service's stop budget are separate bounds.
 
 ### Loading the SDK
 
@@ -752,15 +750,10 @@ tracer = trace.get_tracer("my-service.orders")
 def process_order(order_id: str) -> Order:
     span = trace.get_current_span()
     span.set_attribute("order.id", order_id)
-    try:
-        order = db.get_order(order_id)
-        span.set_attribute("order.total", order.total)
-        charge_payment(order)
-        return order
-    except Exception as exc:
-        span.record_exception(exc)
-        span.set_status(trace.StatusCode.ERROR, str(exc))
-        raise
+    order = db.get_order(order_id)
+    span.set_attribute("order.total", order.total)
+    charge_payment(order)
+    return order
 ```
 
 **Context manager form** (when you need the span reference immediately):
@@ -786,13 +779,14 @@ async def process_order(order_id: str) -> Order:
 
 Before adding a custom counter or histogram for an outcome that happens
 inside a request the ASGI/WSGI instrumentation already covers, check
-whether it belongs as an attribute on `http.server.request.duration`
-instead. When implementing a change, also follow the loaded instrumentation
+whether it belongs as an attribute on the effective HTTP duration histogram
+instead (`http.server.request.duration` in stable mode, or the selected legacy
+counterpart). Resolve its actual name, units and dimensions before reuse. When implementing a change, also follow the loaded instrumentation
 skill's Implementation Rules and Python Language-Specific Musts. The instrumentation
-already sets `http.response.status_code` on that metric for every request,
-and `error.type` for a 5xx (or otherwise invalid) status, with no extra code
--- a plain 4xx client-error response does not set `error.type` on a server
-span. Define a new instrument when the signal does not correlate 1:1 with a
+sets status and error dimensions through the selected semantic-convention
+mode: stable attributes include `http.response.status_code` and `error.type`
+for server failures; a legacy mode may use different names. A plain 4xx
+client-error response does not set `error.type` on a server span. Define a new instrument when the signal does not correlate 1:1 with a
 single request (a queue-depth gauge or background job outcome), or cannot
 be represented by those automatically emitted attributes -- for example a
 same-status-different-cause outcome (a 200 that is a logical failure, several
@@ -841,7 +835,14 @@ order_duration.record(elapsed_seconds, {"order.type": "standard"})
 
 ## Error Handling
 
-APM backends identify errors by `otel.status_code = ERROR`. Always set error status on exceptions:
+The supported `start_as_current_span` decorator/context manager records an
+escaping exception and sets ERROR by default. Do not add a duplicate event for
+that exception inside the same span. For a failed manually managed operation,
+follow the selected exception convention and data policy when recording its
+error. A handled or retried exception that allows the operation to complete
+successfully should not automatically mark that operation as an error. See the
+[recording-errors guidance](https://opentelemetry.io/docs/specs/semconv/general/recording-errors/)
+(Development status); preserve existing SDK/instrumentation signal behavior.
 
 ```python
 from opentelemetry.trace import StatusCode
@@ -884,17 +885,17 @@ receiver port when it differs from the conventional fallback:
     OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf \
     OTEL_LOGS_EXPORTER=otlp \
     OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:4318/v1/logs \
-    OTEL_METRIC_EXPORT_INTERVAL=1000 \
-    OTEL_METRIC_EXPORT_TIMEOUT=500 \
+    OTEL_METRIC_EXPORT_INTERVAL="${OTEL_METRIC_EXPORT_INTERVAL-1000}" \
+    OTEL_METRIC_EXPORT_TIMEOUT="${OTEL_METRIC_EXPORT_TIMEOUT-500}" \
     OTEL_BSP_SCHEDULE_DELAY=100 \
     python app.py
 
-When creating `PeriodicExportingMetricReader`, pass
-`export_interval_millis=int(os.environ.get("OTEL_METRIC_EXPORT_INTERVAL", "1000"))`
-and `export_timeout_millis=int(os.environ.get("OTEL_METRIC_EXPORT_TIMEOUT", "500"))`.
-This makes HTTP metrics from Flask/FastAPI instrumentation, including
-`http.server.request.duration` or the older `http.server.duration` name,
-export promptly to Splunk Observability Studio.
+Let `PeriodicExportingMetricReader` resolve its supported environment settings
+when optional constructor overrides are absent. The local profile chooses
+short-run defaults without replacing supplied values or narrowing the SDK's
+number parser. Resolve actual HTTP metric names and units from the selected
+instrumentation mode, then observe datapoint arrival; interval settings alone
+do not prove delivery or enforce the exporter's transport timeout.
 
 Resolve the effective endpoint/protocol per signal. The conventional gRPC
 fallback is `127.0.0.1:4317`; the conventional HTTP/protobuf fallback is
@@ -1075,10 +1076,11 @@ successful limit enforcement.
   enough. Do not add it when an existing OTel handler/provider already owns the
   same records, and do not combine it with a second framework bridge that
   exports those records.
-- **Metric export interval and timeout**: Always set
-  `export_interval_millis` and `export_timeout_millis` on
-  `PeriodicExportingMetricReader`. Environment variables alone are not enough
-  when constructing the reader manually.
+- **Metric export interval and timeout**: Resolve the selected reader's
+  optional constructor arguments and environment readers. Preserve supported
+  operator values; the local profile may supply short-run defaults when absent.
+  Verify the actual collection and export path, keeping reader, transport and
+  shutdown bounds separate.
 - **Observable gauge callback signature**: The callback receives a
   `CallbackOptions` argument and must **yield `Observation` objects**
   (from `opentelemetry.metrics`). A common mistake is writing

@@ -1210,7 +1210,8 @@ markers to the prioritized gap table. Use only `[SOURCE-COVERED]` and
   a discovered non-default port with them.
 - Tracer/Meter created in hot paths instead of at startup
 - High-cardinality attributes on metrics (user IDs, request IDs)
-- Missing `recordException` in error handling paths
+- Failed operations without a supported SDK/instrumentation error-recording owner;
+  reuse automatic exception/status handling before adding manual recording
 - Custom span names with variable segments (IDs, paths)
 - Use of community or third-party OTel wrappers when an official OpenTelemetry package exists (e.g. `go.opentelemetry.io/contrib`, `@opentelemetry/`*, `opentelemetry-*`)
 - A generic direct-cloud OTLP endpoint implicitly receiving application logs,
@@ -1851,7 +1852,8 @@ reviewer's immediate command.
 - Fewer than expected auto-instrumentation packages for the detected dependencies
 - SDK initialized but no auto-instrumentation packages installed
 - OTel packages in dependencies but no SDK init file found
-- Error handling code without span error status or recordException
+- Unobserved failed-operation outcomes after checking existing SDK/instrumentation
+  exception ownership, successful recovery, and the selected semantic convention
 
 ## Auto-Instrumentation Library Map
 

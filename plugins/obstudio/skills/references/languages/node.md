@@ -66,10 +66,8 @@ resulting installed graph/APIs. Preserve the resulting lockfile.
 ```bash
 npm install '@opentelemetry/sdk-node@<resolved-node-sdk-release>' \
   '@opentelemetry/api@<resolved-api-release>' \
-  '@opentelemetry/exporter-trace-otlp-http@<resolved-trace-exporter-release>' \
-  '@opentelemetry/exporter-metrics-otlp-http@<resolved-metric-exporter-release>' \
+  '@opentelemetry/core@<resolved-core-release>' \
   '@opentelemetry/exporter-logs-otlp-proto@<resolved-log-exporter-release>' \
-  '@opentelemetry/sdk-metrics@<resolved-metric-sdk-release>' \
   '@opentelemetry/sdk-logs@<resolved-log-sdk-release>' \
   '@opentelemetry/instrumentation-http@<resolved-http-bridge-release>' \
   '@opentelemetry/resources@<resolved-resources-release>' \
@@ -141,11 +139,10 @@ mutation.
 
 ```typescript
 import { NodeSDK } from '@opentelemetry/sdk-node';
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
-import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
+import { diag } from '@opentelemetry/api';
+import { getNumberFromEnv, getStringFromEnv } from '@opentelemetry/core';
 import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-proto';
 import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs';
-import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { HttpInstrumentation } from '@opentelemetry/instrumentation-http';
 import { ExpressInstrumentation } from '@opentelemetry/instrumentation-express';
@@ -163,8 +160,19 @@ function reportLocalLogSkip() {
   );
 }
 
+// Match the selected NodeSDK's positive BLRP environment reader. The public
+// processor constructor owns defaults and the batch-size/queue-size clamp.
+function positiveSdkNumberFromEnv(name: string): number | undefined {
+  const value = getNumberFromEnv(name);
+  if (value !== undefined && value <= 0) {
+    diag.warn(name + ' must be greater than zero; using the SDK default.');
+    return undefined;
+  }
+  return value;
+}
+
 function defaultLocalLogConfiguration() {
-  const configured = process.env.OTEL_LOGS_EXPORTER?.trim().toLowerCase();
+  const configured = process.env.OTEL_LOGS_EXPORTER?.trim();
   if (configured && configured !== 'otlp') {
     // `none` disables logs. Any other explicit exporter and its bridge belong
     // entirely to a proven operator-owned setup; do not add a Splunk Observability Studio bridge.
@@ -177,10 +185,9 @@ function defaultLocalLogConfiguration() {
 
   try {
     const protocol = (
-      process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL ||
-      process.env.OTEL_EXPORTER_OTLP_PROTOCOL ||
-      'http/protobuf'
-    ).trim().toLowerCase();
+      getStringFromEnv('OTEL_EXPORTER_OTLP_LOGS_PROTOCOL') ??
+      getStringFromEnv('OTEL_EXPORTER_OTLP_PROTOCOL')
+    )?.trim() || 'http/protobuf';
     if (protocol !== 'http/protobuf') {
       throw new Error('unsupported local logs protocol');
     }
@@ -201,7 +208,13 @@ function defaultLocalLogConfiguration() {
     const exporter = new OTLPLogExporter({
       url: PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT,
     });
-    const processor = new BatchLogRecordProcessor({ exporter });
+    const processor = new BatchLogRecordProcessor({
+      exporter,
+      maxQueueSize: positiveSdkNumberFromEnv('OTEL_BLRP_MAX_QUEUE_SIZE'),
+      maxExportBatchSize: positiveSdkNumberFromEnv('OTEL_BLRP_MAX_EXPORT_BATCH_SIZE'),
+      scheduledDelayMillis: positiveSdkNumberFromEnv('OTEL_BLRP_SCHEDULE_DELAY'),
+      exportTimeoutMillis: positiveSdkNumberFromEnv('OTEL_BLRP_EXPORT_TIMEOUT'),
+    });
     return {
       logRecordProcessors: [processor],
       logInstrumentations: [new ConsoleInstrumentation()],
@@ -227,12 +240,6 @@ function baseSdkOptions() {
   return {
     resource: resourceFromAttributes({
       'service.name': process.env.OTEL_SERVICE_NAME || 'my-service',
-    }),
-    traceExporter: new OTLPTraceExporter(),
-    metricReader: new PeriodicExportingMetricReader({
-      exporter: new OTLPMetricExporter(),
-      exportIntervalMillis: Number(process.env.OTEL_METRIC_EXPORT_INTERVAL || 1000),
-      exportTimeoutMillis: Number(process.env.OTEL_METRIC_EXPORT_TIMEOUT || 500),
     }),
     instrumentations: [
       new HttpInstrumentation(),
@@ -265,8 +272,8 @@ if (logRecordProcessors?.length) {
   sdk = new NodeSDK(base);
 }
 
-// Inspect the resolved SDK's automatic log-export behavior before using this
-// skipped-path guard. Preserve the operator's value after synchronous startup.
+// Use this guard only after proving that the selected NodeSDK reads automatic
+// logger configuration in start(), not its constructor. Restore after startup.
 if (suppressAutoLogs) process.env.OTEL_LOGS_EXPORTER = 'none';
 try {
   sdk.start();
@@ -446,12 +453,24 @@ do not combine Pino instrumentation sending with
 already uses one of those transports, keep it as the single owner and do not
 add instrumentation log sending.
 
-The explicit `exportIntervalMillis` and `exportTimeoutMillis` are required for
-local and eval runs. Do not rely on metric reader defaults; they can be too slow
-for short-lived runtime checks, causing valid HTTP metrics to never reach the
-collector before the process stops. Keep the timeout less than or equal to the
-interval; the Node SDK rejects configurations such as interval `1000` ms with
-the default timeout `30000` ms.
+Leave trace exporters and metric readers to the selected `NodeSDK` environment
+configuration unless an existing supported integration owns them. This preserves
+exporter selection, signal/generic protocol precedence, and SDK timing parsing,
+fallbacks and timeout clamping. The short-run profile below supplies timing
+defaults only when absent; these are application launch policy, not SDK defaults.
+
+The explicit local-log processor is needed to isolate logs-only constructor
+failures and bind the approved local URL. Verify its public options and the
+selected SDK's BLRP reader before using the small adapter above. Use this mapping
+only when native logger setup uses the public numeric getter plus positive-value
+validation for all four BLRP fields, and the processor constructor itself does
+not read the environment. The adapter preserves fractions and SDK fallback
+behavior without importing internal helpers.
+Unsupported exporter spellings remain unchanged for the native SDK to handle.
+Protocol selection uses the public SDK string reader and its signal/generic
+precedence, preserving case and trimming the selected protocol. The added local
+branch accepts only `http/protobuf`; unsupported spellings skip that branch with
+its diagnostic, even if the native SDK would warn and choose a fallback.
 
 ### Loading the SDK
 
@@ -610,19 +629,20 @@ not fixed-port equality checks.
 For local development with Splunk Observability Studio, replace the conventional
 fallback port below with the resolved receiver port when it differs:
 
-    OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
-    OTEL_LOGS_EXPORTER=otlp
-    OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:4318/v1/logs
-    OTEL_METRIC_EXPORT_INTERVAL=1000
-    OTEL_METRIC_EXPORT_TIMEOUT=500
-    OTEL_BSP_SCHEDULE_DELAY=100
+    export OTEL_EXPORTER_OTLP_ENDPOINT="${OTEL_EXPORTER_OTLP_ENDPOINT-http://127.0.0.1:4318}"
+    export OTEL_LOGS_EXPORTER="${OTEL_LOGS_EXPORTER-otlp}"
+    export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT="${OTEL_EXPORTER_OTLP_LOGS_ENDPOINT-http://127.0.0.1:4318/v1/logs}"
+    export OTEL_METRIC_EXPORT_INTERVAL="${OTEL_METRIC_EXPORT_INTERVAL-1000}"
+    export OTEL_METRIC_EXPORT_TIMEOUT="${OTEL_METRIC_EXPORT_TIMEOUT-500}"
+    export OTEL_BSP_SCHEDULE_DELAY="${OTEL_BSP_SCHEDULE_DELAY-100}"
 
-When creating `PeriodicExportingMetricReader`, pass
-`exportIntervalMillis: Number(process.env.OTEL_METRIC_EXPORT_INTERVAL || 1000)`
-and `exportTimeoutMillis: Number(process.env.OTEL_METRIC_EXPORT_TIMEOUT || 500)`.
-This makes HTTP metrics from `@opentelemetry/instrumentation-http`, including
-`http.server.request.duration` when stable HTTP semantic conventions are
-enabled, export promptly to Splunk Observability Studio.
+Export these absent-only defaults before the normal application entrypoint;
+preserve present values, including empty, fractional and invalid text, for the
+SDK's actual reader. The absent-only short-run defaults let native metric
+configuration export HTTP metrics promptly, including
+`http.server.request.duration` from `@opentelemetry/instrumentation-http` when
+stable HTTP semantic conventions are enabled. Explicit settings retain their
+SDK-defined behavior.
 
 ### Local Splunk Observability Studio application logs and cloud boundary
 
@@ -750,14 +770,12 @@ from a passing suite or configuration alone.
 - **One logging bridge**: choose Console, Pino, or Winston based on the actual
   logging calls. Do not add multiple bridges to the same record path, and do
   not pair instrumentation-managed sending with a second OTel transport.
-- **Metric reader option**: Use the `NodeSDK` option `metricReader` exactly as
-  shown above. Do not write `metricReaders` unless the installed SDK version
-  documents that option; older versions ignore it and fall back to env-based
-  reader setup.
-- **Metric export interval and timeout**: Always set `exportIntervalMillis` and
-  `exportTimeoutMillis` on `PeriodicExportingMetricReader`. Environment
-  variables alone are not enough when constructing the reader manually, and the
-  timeout must be less than or equal to the interval.
+- **Metric reader ownership**: Prefer the native `NodeSDK` environment path.
+  If an existing integration needs an explicit reader, use the public option
+  documented by that installed release (`metricReaders` or legacy `metricReader`)
+  and verify its constructor separately. A direct
+  `PeriodicExportingMetricReader` constructor may not read environment variables;
+  its defaults and timeout checks differ from the SDK environment wrapper.
 - **Avoid `@opentelemetry/auto-instrumentations-node`**: This meta-package
   installs every instrumentation. Only install what the project uses to
   minimize dependency surface.
