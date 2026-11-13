@@ -742,13 +742,14 @@ def test_receipt_guard_plan_and_direct_markdown_scopes_are_explicit(tmp_path):
 
 
 @pytest.mark.parametrize("collect",[False,True])
-def test_receipt_failure_is_semantic_preserves_raw_rubric_and_isolates_feedback(workflow,collect):
+def test_receipt_failure_is_gate_preserves_raw_rubric_and_isolates_feedback(workflow,collect):
     workflow.state["receipt_failures"] = {"instrument":"failed"}
     code, summary = workflow.run(collect=collect)
     assert code == 1
     assert workflow.calls == (["audit","instrument","verify"] if collect else ["audit","instrument"])
     stage = summary["stages"][1]
-    assert stage["failure_kind"] == "semantic"
+    assert stage["failure_kind"] == "gate"
+    assert stage["semantic_passed"] is True and stage["evidence_gate_passed"] is False
     assert stage["evidence_receipt_guard"]["status"] == "failed"
     assert stage["rubric"]["overall_pass"] is True
     assert len(stage["rubric"]["checks"]) == stage["rubric_contract"]["criterion_count"]
@@ -925,3 +926,19 @@ def test_direct_no_execution_exemption_does_not_authorize_failed_runtime(workflo
     assert stage["independent_runtime_exit_code"] == 9
     assert stage["rubric"]["overall_pass"] is True
     assert stage["failure_kind"] == "fatal"
+
+
+@pytest.mark.parametrize("collect", [False, True])
+def test_mixed_semantic_and_gate_failure_keeps_both_results_and_diagnostic_scope(workflow, collect):
+    workflow.state.update(semantic={"instrument"}, receipt_failures={"instrument": "failed"})
+    code, summary = workflow.run(collect=collect)
+    assert code == 1 and summary["status"] == "failed"
+    assert workflow.calls == (["audit", "instrument", "verify"] if collect else ["audit", "instrument"])
+    stage = summary["stages"][1]
+    assert stage["failure_kind"] == "gate"
+    assert stage["semantic_passed"] is False and stage["evidence_gate_passed"] is False
+    assert stage["rubric"]["overall_pass"] is False
+    assert stage["evidence_receipt_guard"]["status"] == "failed"
+    assert bool(stage.get("diagnostic_continuation")) is collect
+    assert summary["diagnostic_only"] is collect
+    assert_archives(workflow)

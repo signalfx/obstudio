@@ -406,11 +406,14 @@ def run(args: argparse.Namespace) -> int:
                     fatal_passed = False
                     stage["audit_handoff_error"] = type(error).__name__ + ": " + str(error)
             semantic_passed = (rubric_complete and rubric["overall_pass"]
-                               and all(check["pass"] for check in rubric["checks"])
-                               and stage["evidence_receipt_guard"]["status"] in {"valid", "N_A"})
-            passed = fatal_passed and semantic_passed
+                               and all(check["pass"] for check in rubric["checks"]))
+            evidence_gate_passed = stage["evidence_receipt_guard"]["status"] in {"valid", "N_A"}
+            passed = fatal_passed and semantic_passed and evidence_gate_passed
+            stage["semantic_passed"] = semantic_passed
+            stage["evidence_gate_passed"] = evidence_gate_passed
             stage["status"] = "passed" if passed else "failed"
-            stage["failure_kind"] = None if passed else "semantic" if fatal_passed else "fatal"
+            stage["failure_kind"] = (None if passed else "fatal" if not fatal_passed
+                                     else "gate" if not evidence_gate_passed else "semantic")
             archive_stage(workspace, output / role)
             isolate_stage_feedback(workspace, output / role)
             save(output / "summary.json", summary)
@@ -450,7 +453,7 @@ def main() -> int:
     parser.add_argument("--agent-timeout", type=int, default=3600)
     parser.add_argument("--judge-timeout", type=int, default=1200)
     parser.add_argument("--collect-semantic-failures", action="store_true",
-                        help="Collect later bare stages after semantic-only failure; workflow remains failed")
+                        help="Collect later bare stages after semantic or evidence-gate failure; workflow remains failed")
     return run(parser.parse_args())
 
 
