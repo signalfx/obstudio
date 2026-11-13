@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import json
+import io
+import os
+import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -1029,6 +1033,132 @@ def test_command_runner_records_output_without_terminal_echo(tmp_path: Path, cap
     assert stderr_path.read_text(encoding="utf-8") == "error line\n"
     assert captured.out == ""
     assert captured.err == ""
+
+
+def test_command_capture_deadline_covers_child_held_output(tmp_path: Path):
+    pid_path = tmp_path / "child.pid"
+    script = (
+        "import pathlib,subprocess,sys; "
+        "child=subprocess.Popen([sys.executable,'-c','import time; time.sleep(6)'],start_new_session=True); "
+        f"pathlib.Path({str(pid_path)!r}).write_text(str(child.pid)); "
+        "print('parent completed',flush=True); "
+        "print('parent stderr',file=sys.stderr,flush=True)"
+    )
+    started = time.monotonic()
+    try:
+        with pytest.raises(subprocess.TimeoutExpired) as error:
+            run_streamed_command([sys.executable, "-c", script],
+                stdout_path=tmp_path / "trace.jsonl", stderr_path=tmp_path / "stderr.txt", timeout=1)
+        assert time.monotonic() - started < 3
+        assert "parent completed" in (tmp_path / "trace.jsonl").read_text()
+        assert "parent completed" in error.value.output
+        assert "parent stderr" in error.value.stderr
+        assert "parent stderr" in (tmp_path / "stderr.txt").read_text()
+    finally:
+        if pid_path.exists():
+            try:
+                os.kill(int(pid_path.read_text()), signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+
+
+def test_completed_command_has_bounded_eof_drain_near_deadline(tmp_path: Path, monkeypatch):
+    class Process:
+        stdout = io.StringIO("complete output\n")
+        stderr = io.StringIO("")
+
+        def wait(self, timeout):
+            return 0
+
+        def poll(self):
+            return 0
+
+    class Reader:
+        def __init__(self, target, args, daemon):
+            self.target, self.args = target, args
+            self.finished = False
+
+        def start(self):
+            pass
+
+        def join(self, timeout):
+            if timeout >= 0.1 and not self.finished:
+                self.target(*self.args)
+                self.finished = True
+
+        def is_alive(self):
+            return not self.finished
+
+    clock = iter([0.0, 0.0])
+    monkeypatch.setattr("pytest_codex_evals.backends.time.monotonic", lambda: next(clock, 1.0))
+    monkeypatch.setattr("pytest_codex_evals.backends.subprocess.Popen", lambda *args, **kwargs: Process())
+    monkeypatch.setattr("pytest_codex_evals.backends.threading.Thread", Reader)
+    result = run_streamed_command(["completed-command"], stdout_path=tmp_path / "trace.jsonl",
+                                  stderr_path=tmp_path / "stderr.txt", timeout=1)
+    assert result.returncode == 0 and result.stdout == "complete output\n"
+
+
+@pytest.mark.parametrize("slow_reap", [False, True])
+def test_command_interruption_kills_owned_process_and_preserves_interrupt(tmp_path: Path, monkeypatch, slow_reap):
+    class Process:
+        stdout = io.StringIO("started\n")
+        stderr = io.StringIO("")
+        killed = False
+
+        def wait(self, timeout):
+            if not self.killed:
+                raise KeyboardInterrupt
+            if slow_reap:
+                raise subprocess.TimeoutExpired("owned-command", timeout)
+            return -9
+
+        def poll(self):
+            return -9 if self.killed else None
+
+        def kill(self):
+            self.killed = True
+
+    process = Process()
+    monkeypatch.setattr("pytest_codex_evals.backends.subprocess.Popen", lambda *args, **kwargs: process)
+    with pytest.raises(KeyboardInterrupt):
+        run_streamed_command(["owned-command"], stdout_path=tmp_path / "trace.jsonl",
+                             stderr_path=tmp_path / "stderr.txt", timeout=10)
+    assert process.killed
+    assert (tmp_path / "trace.jsonl").read_text() == "started\n"
+
+
+def test_command_deadline_kills_owned_process_and_preserves_partial_streams(tmp_path: Path, monkeypatch):
+    real_popen = subprocess.Popen
+    processes = []
+
+    def capture_process(*args, **kwargs):
+        process = real_popen(*args, **kwargs)
+        processes.append(process)
+        return process
+
+    monkeypatch.setattr("pytest_codex_evals.backends.subprocess.Popen", capture_process)
+    started = time.monotonic()
+    try:
+        with pytest.raises(subprocess.TimeoutExpired) as error:
+            run_streamed_command(
+                [sys.executable, "-c",
+                 "import sys,time; print('partial stdout',flush=True); "
+                 "print('partial stderr',file=sys.stderr,flush=True); time.sleep(30)"],
+                stdout_path=tmp_path / "trace.jsonl",
+                stderr_path=tmp_path / "stderr.txt",
+                timeout=1,
+            )
+        assert time.monotonic() - started < 3
+        assert "partial stdout" in error.value.output
+        assert "partial stderr" in error.value.stderr
+        assert (tmp_path / "trace.jsonl").read_text() == "partial stdout\n"
+        assert (tmp_path / "stderr.txt").read_text() == "partial stderr\n"
+        assert len(processes) == 1 and processes[0].poll() is not None
+    finally:
+        for process in processes:
+            if process.poll() is None:
+                process.kill()
+                process.wait(timeout=5)
 
 
 def test_config_loads_live_ab_and_judge_model(tmp_path: Path):
