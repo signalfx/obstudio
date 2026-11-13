@@ -32,6 +32,68 @@ from pytest_codex_evals.definitions import GradeCheckResult, GradeResult
 from pytest_codex_evals.graders.rubric import rubric_prompt, run_rubric_grade
 
 
+FIXTURE_CHECKS = {
+    "go/chi-basic": ["go", "test", "./..."],
+    "java/springboot-basic": ["mvn", "-q", "test"],
+    "python/flask-basic": ["uv", "run", "python", "-m", "py_compile", "app.py"],
+    "node/express-basic": ["node", "--check", "app.js"],
+}
+
+
+@pytest.mark.parametrize("case", FIXTURE_CHECKS)
+@pytest.mark.parametrize("target,configured", [
+    ("logging-workflow-check", True), ("test", True), ("test", False),
+])
+def test_public_make_targets_forward_identity_profiles(tmp_path, case, target, configured):
+    service = tmp_path / "service with spaces"
+    service.mkdir()
+    shutil.copyfile(Path(__file__).parent / case / "Makefile", service / "Makefile")
+    verifier = tmp_path / "recording verifier with spaces.py"
+    verifier.write_text(
+        "import json,os,sys\nfrom pathlib import Path\n"
+        "with Path(os.environ['VERIFIER_CALLS']).open('a') as out:\n"
+        " out.write(json.dumps({'argv':sys.argv[1:],'cwd':os.getcwd()})+'\\n')\n"
+    )
+    tools = tmp_path / "fake tools"
+    tools.mkdir()
+    for name in ("go", "mvn", "uv", "node"):
+        executable = tools / name
+        executable.write_text(
+            "#!" + sys.executable + "\nimport json,os,sys\nfrom pathlib import Path\n"
+            "with Path(os.environ['TOOL_CALLS']).open('a') as out:\n"
+            " out.write(json.dumps([Path(sys.argv[0]).name,*sys.argv[1:]])+'\\n')\n"
+        )
+        executable.chmod(0o700)
+    env = dict(os.environ)
+    for name in ("MAKEFLAGS", "MFLAGS", "MAKELEVEL", "GNUMAKEFLAGS",
+                 "LOGGING_WORKFLOW_VERIFIER", "LOGGING_WORKFLOW_PYTHON"):
+        env.pop(name, None)
+    env.update(
+        PATH=str(tools) + os.pathsep + env.get("PATH", os.defpath),
+        PYTHONDONTWRITEBYTECODE="1", LOGGING_WORKFLOW_PYTHON=sys.executable,
+        VERIFIER_CALLS=str(tmp_path / "verifier.jsonl"),
+        TOOL_CALLS=str(tmp_path / "tools.jsonl"),
+    )
+    if configured:
+        env["LOGGING_WORKFLOW_VERIFIER"] = str(verifier)
+    result = subprocess.run(
+        ["make", target], cwd=service, env=env, text=True, capture_output=True, timeout=10,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    calls_path, tools_path = Path(env["VERIFIER_CALLS"]), Path(env["TOOL_CALLS"])
+    calls = [json.loads(line) for line in calls_path.read_text().splitlines()] if calls_path.exists() else []
+    tool_calls = [json.loads(line) for line in tools_path.read_text().splitlines()] if tools_path.exists() else []
+    assert tool_calls == ([FIXTURE_CHECKS[case]] if target == "test" else [])
+    if configured:
+        assert calls == [{
+            "argv": ["--start-command-json", '["make","dev"]', "--operator-identity-profiles", "--bake-evidence"],
+            "cwd": str(service),
+        }]
+    else:
+        assert calls == []
+        assert "Host logging workflow check not configured" in result.stdout
+
+
 @pytest.mark.parametrize("script", ["logging_workflow_check.py", "run_logging_workflow.py"])
 @pytest.mark.parametrize("flags,optimize", [([], None), (["-O"], None), (["-OO"], None), ([], "1"), ([], "2")])
 def test_logging_workflow_requires_python_assertions(script, flags, optimize):
@@ -52,25 +114,21 @@ def test_logging_workflow_requires_python_assertions(script, flags, optimize):
         assert "usage:" in result.stdout
 
 
-def test_logging_subclause_labels_preserve_parent_identity_and_order():
+def test_logging_topics_have_separate_addressable_verdicts():
     common = json.loads((ROOT / "evals/rubrics/logging-common.json").read_text())
-    assert len(common["rubric"]) == 14
-    labeled = set()
-    for parent, text in enumerate(common["rubric"], 1):
-        labels = re.findall(r"^\((\d+)\.([A-Z]) [^\n()]+\)\n", text, re.MULTILINE)
-        if labels:
-            labeled.add(parent)
-            assert all(int(number) == parent for number, _ in labels)
-            assert [letter for _, letter in labels] == [chr(ord("A") + i) for i in range(len(labels))]
-    assert labeled == {2, 9, 10, 11, 14}
+    topics = []
+    for criterion in common["rubric"]:
+        label = re.match(r"\[([A-Z][A-Z0-9-]+)\]\s+\S", criterion)
+        assert label, "Each independent verdict needs a named topic"
+        topics.append(label.group(1))
+        assert not re.search(r"^\(\d+\.[A-Z] ", criterion, re.MULTILINE)
+    assert len(topics) == len(set(topics)), "Repeated topics would obscure independent failures"
 
 
 @pytest.mark.parametrize("language", sorted(DRIVER.SERVICES))
 @pytest.mark.parametrize("role", ["audit", "instrument", "verify"])
 def test_every_logging_definition_uses_strict_judging_for_each_trial(tmp_path, language, role):
     path = tmp_path / "rubric_grade.json"
-    checks = [{"id": f"rubric-{i}", "pass": True, "notes": "Mock verdict.",
-               "evidence": "Mock artifact:1; validator wiring only."} for i in range(1, 15)]
 
     def judge(**kwargs):
         assert kwargs["model"] == "gpt-6.1-sol"
@@ -79,28 +137,59 @@ def test_every_logging_definition_uses_strict_judging_for_each_trial(tmp_path, l
     backend = SimpleNamespace(run_judge=judge)
     for trial in range(1, 4):
         case = DRIVER.case_for(ROOT, language, role, trial)
+        count = len(case.rubric)
+        checks = [{"id": f"rubric-{i}", "pass": True, "notes": "Mock verdict.",
+                   "evidence": "Mock artifact:1; validator wiring only."} for i in range(1, count + 1)]
         assert case.strict_rubric_output is True
         assert case.task == f"$otel-{role} ./service" and case.eval_inputs == []
-        assert len(case.rubric) == 14 and case.judge_prompt is None
+        assert case.rubric and case.judge_prompt is None
         rendered = rubric_prompt(case)
         sections = ["## 1. Task and scope", "## 2. Evidence map",
                     "## 3. Rubric", "## 4. Output protocol"]
         assert [rendered.index(section) for section in sections] == sorted(
             rendered.index(section) for section in sections)
         assert f"Actor task: {case.task}\n" in rendered
-        assert len(case.judge_inputs) == 4
-        assert "evidence-receipt-check.json" in case.judge_inputs[-1]
+        assert case.judge_inputs
+        assert any("evidence-receipt-check.json" in item for item in case.judge_inputs)
         assert "\n".join(f"{i}. {item}" for i, item in enumerate(case.judge_inputs, 1)) in rendered
-        assert {int(number) for number in re.findall(r"^\((\d+)\.[A-Z] ", rendered, re.MULTILINE)} == {2, 9, 10, 11, 14}
 
         raw = json.dumps({"overall_pass": True, "score": 93, "checks": checks[:-1]})
         path.write_text(raw)
-        with pytest.raises(ValueError, match="exactly 14 checks"):
+        with pytest.raises(ValueError, match=f"exactly {count} checks"):
             run_rubric_grade(case=case, side_dir=tmp_path, model="gpt-6.1-sol", backend=backend)
         assert path.read_text() == raw
 
         path.write_text(json.dumps({"overall_pass": True, "score": 93, "checks": checks}))
         assert run_rubric_grade(case=case, side_dir=tmp_path, model="gpt-6.1-sol", backend=backend) == path
+
+
+@pytest.mark.parametrize("count", [1, 3, 14, 60])
+def test_workflow_grade_coverage_uses_the_selected_definition(count):
+    checks = [{"id": f"rubric-{i}", "pass": True} for i in range(1, count + 1)]
+    grade = {"overall_pass": True, "checks": checks}
+    assert DRIVER.valid_rubric(grade, count)
+    assert not DRIVER.valid_rubric(grade, count + 1)
+    assert not DRIVER.valid_rubric(grade, count - 1)
+    assert not DRIVER.valid_rubric(grade, True)
+
+
+@pytest.mark.parametrize("fault", ["missing", "duplicate", "reordered", "string_bool", "false_overall", "hidden_failure"])
+def test_workflow_grade_rejects_incomplete_or_inconsistent_independent_verdicts(fault):
+    checks = [{"id": f"rubric-{i}", "pass": True} for i in range(1, 4)]
+    grade = {"overall_pass": True, "checks": checks}
+    if fault == "missing":
+        checks.pop()
+    elif fault == "duplicate":
+        checks[1]["id"] = checks[0]["id"]
+    elif fault == "reordered":
+        checks.reverse()
+    elif fault == "string_bool":
+        checks[0]["pass"] = "false"
+    elif fault == "false_overall":
+        grade["overall_pass"] = False
+    else:
+        checks[1]["pass"] = False
+    assert not DRIVER.valid_rubric(grade, 3)
 
 
 @pytest.fixture
@@ -240,7 +329,8 @@ def workflow(tmp_path, monkeypatch):
         if state["fault"] == "judge_exception":
             raise RuntimeError("mock judge failed")
         checks = [{"id": f"rubric-{i}", "pass": role not in state["semantic"] or i != 2,
-                   "evidence": f"private-grade-{role}-{i}", "notes": "mock"} for i in range(1, 15)]
+                   "evidence": f"private-grade-{role}-{i}", "notes": "mock"}
+                  for i in range(1, len(driver.case_for(args.repo, args.language, role, args.trial).rubric) + 1)]
         value = {"overall_pass": role not in state["semantic"], "score": 91, "checks": checks}
         if state["fault"] == "malformed_rubric":
             checks.pop()
@@ -287,6 +377,13 @@ def test_all_roles_are_bare_feedback_free_and_archives_byte_exact(workflow):
     assert code == 0 and summary["status"] == "passed"
     assert workflow.calls == ["audit", "instrument", "verify"]
     assert summary["collect_semantic_failures"] is False and summary["diagnostic_only"] is False
+    for stage in summary["stages"]:
+        case = DRIVER.case_for(ROOT, "go", stage["role"], 1)
+        contract = json.dumps({"rubric": case.rubric, "judge_inputs": case.judge_inputs},
+                              sort_keys=True, separators=(",", ":")).encode()
+        assert stage["rubric_contract"] == {
+            "criterion_count": len(case.rubric), "sha256": hashlib.sha256(contract).hexdigest(),
+        }
     expected_command = [sys.executable, str(ROOT / "evals/logging_workflow_check.py"),
                         "--start-command-json", '["make","dev"]', "--operator-identity-profiles", "--bake-evidence"]
     assert workflow.state["runtime_commands"] == [expected_command, expected_command]
@@ -654,7 +751,8 @@ def test_receipt_failure_is_semantic_preserves_raw_rubric_and_isolates_feedback(
     assert stage["failure_kind"] == "semantic"
     assert stage["evidence_receipt_guard"]["status"] == "failed"
     assert stage["rubric"]["overall_pass"] is True
-    assert len(stage["rubric"]["checks"]) == 14 and all(c["pass"] for c in stage["rubric"]["checks"])
+    assert len(stage["rubric"]["checks"]) == stage["rubric_contract"]["criterion_count"]
+    assert all(c["pass"] for c in stage["rubric"]["checks"])
     assert stage["task_model"]["model"] == stage["rubric_model"]["model"] == "gpt-6.1-sol"
     assert bool(stage.get("diagnostic_continuation")) == collect
     assert summary["diagnostic_only"] == collect

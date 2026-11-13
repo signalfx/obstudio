@@ -138,13 +138,22 @@ common criterion. The harness resolves both before grading, retains the full
 prompt and binds the shared source in the result's source manifest. Common
 requirements cannot be replaced or disabled by an extending definition.
 
-The larger common criteria use descriptive subclause labels, such as
-`2.B Contract assembly into addressable oracles` and `10.E Final-record drain
-proof`. These are addresses within their parent criterion, not extra verdicts
-or independently scored requirements. Notes can cite a label to locate the
-specific obligation behind a verdict. Existing applicability, ownership and
-evidence conditions still govern the complete criterion. Changing labels
-changes the shared source fingerprint; historical grades remain unchanged.
+Each named common topic receives its own verdict. Contract coverage, evidence
+consistency, privacy, configuration and lifecycle decisions are not bundled
+into one catch-all check. Language additions belong to the topic they qualify;
+stage applicability and legitimate SDK-owned or optional behavior still apply.
+The workflow reads the expected count from the resolved definition and records
+its count and fingerprint. Splitting criteria changes the score denominator and
+weighting, so a new percentage is not directly comparable with the former
+14-criterion grades. Historical grades remain unchanged.
+
+The independent receipt gate checks declared scenario/control membership,
+derived statuses and final report hashes. The judge reads that result rather
+than recalculating it. The index does not extract arbitrary prose promises;
+whether the index covers the selected contract and whether its controls prove
+the promised behavior remain separate semantic questions. A mechanically valid
+receipt cannot close those gaps, and an all-pass rubric cannot override a
+failed required runtime or receipt gate.
 
 1. **Actor task:** send the bare `$otel-* ./service` invocation unchanged;
    grader instructions must not become actor coaching.
@@ -169,7 +178,7 @@ changes the shared source fingerprint; historical grades remain unchanged.
    output at the declared boundary; cleanup alone does not prove final SDK drain.
 9. **Output:** require schema-valid JSON, one ordered `rubric-N` verdict per
    criterion, nonempty notes/evidence and a consistent `overall_pass`. Keep all
-   14 criterion verdicts separate from the informational quality score.
+   configured criterion verdicts separate from the informational quality score.
 10. **Errors:** unsuccessful judge execution, malformed output or a missing
     required grade is an error, not a semantic pass. Preserve raw artifacts;
     do not silently re-ask until the judge returns a desired result.

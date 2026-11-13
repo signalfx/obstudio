@@ -504,9 +504,10 @@ def test_logging_tasks_are_direct_skill_invocations_with_visible_operator_policy
 
     definitions = list(Path(__file__).parent.glob("*/*/eval/qual/logging-*-contract.json"))
     assert len(definitions) == 12
+    common = json.loads((Path(__file__).parent / "rubrics/logging-common.json").read_text())
     for path in definitions:
         data = load_eval_definition(path)
-        assert len(data.rubric) == 14
+        assert len(data.rubric) == len(common["rubric"])
         assert len(data.prompts) == 3
         for prompt in data.prompts:
             assert prompt.task == "$" + data.skill + " ./service"
@@ -521,9 +522,9 @@ def test_logging_tasks_are_direct_skill_invocations_with_visible_operator_policy
         assert readme.read_bytes() == (case.fixture_dir / "README.md").read_bytes()
         assert "must not interrupt that work" in readme.read_text()
         assert "application policy, not an OpenTelemetry signal-handler" in readme.read_text()
-        lifecycle = case.rubric[9]
-        assert "documented Graceful-stop contract in README.md" in lifecycle
-        assert "not an OTel signal-handler requirement" in lifecycle
+        lifecycle = next(item for item in case.rubric if item.startswith("[REPEATED-STOP]"))
+        assert "README Graceful-stop policy" in lifecycle
+        assert "application policy, not a universal OTel signal requirement" in lifecycle
         assert "repeated-SystemExit" not in lifecycle
         assert not (workspace / "service/eval").exists()
 

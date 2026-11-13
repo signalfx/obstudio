@@ -263,13 +263,15 @@ class CheckedJudgeBackend:
         return result
 
 
-def valid_rubric(rubric: dict) -> bool:
+def valid_rubric(rubric: dict, criterion_count: int) -> bool:
     checks = rubric.get("checks")
-    return (type(rubric.get("overall_pass")) is bool and isinstance(checks, list)
-            and len(checks) == 14
+    return (type(criterion_count) is int and criterion_count > 0
+            and type(rubric.get("overall_pass")) is bool and isinstance(checks, list)
+            and len(checks) == criterion_count
             and all(isinstance(check, dict) and isinstance(check.get("id"), str)
                     and type(check.get("pass")) is bool for check in checks)
-            and {check["id"] for check in checks} == {f"rubric-{i}" for i in range(1, 15)})
+            and [check["id"] for check in checks] == [f"rubric-{i}" for i in range(1, criterion_count + 1)]
+            and rubric["overall_pass"] == all(check["pass"] for check in checks))
 
 
 def prepare_dependencies(language: str, workspace: Path, output: Path) -> None:
@@ -338,6 +340,11 @@ def run(args: argparse.Namespace) -> int:
                 response.unlink()
             case = case_for(repo, args.language, role, args.trial)
             stage = {"role": role, "task": case.task, "status": "running", "source_before": source_hashes(workspace / "service")}
+            stage["rubric_contract"] = {
+                "criterion_count": len(case.rubric),
+                "sha256": hashlib.sha256(json.dumps({"rubric": case.rubric, "judge_inputs": case.judge_inputs},
+                                                   sort_keys=True, separators=(",", ":")).encode()).hexdigest(),
+            }
             stage["audit_sha256_before"] = audit_hash(workspace)
             summary["stages"].append(stage)
             save(output / "summary.json", summary)
@@ -381,7 +388,7 @@ def run(args: argparse.Namespace) -> int:
             rubric = json.loads(rubric_path.read_text())
             stage["rubric"] = rubric
             stage["skill_bundle_unchanged"] = bundle_hashes(workspace) == original_bundle
-            rubric_complete = isinstance(rubric, dict) and valid_rubric(rubric)
+            rubric_complete = isinstance(rubric, dict) and valid_rubric(rubric, len(case.rubric))
             required_guards = {"final-message-present", "skills-loaded", "skill-instructions-read"}
             guards_passed = (required_guards <= {check.id for check in grade.checks}
                              and all(check.passed and not check.skipped for check in grade.checks))
