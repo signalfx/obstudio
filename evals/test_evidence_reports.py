@@ -15,7 +15,7 @@ from typing import Any
 from unittest import mock
 
 
-SCRIPT = Path(__file__).parents[2] / "references" / "scripts" / "observe_report.py"
+SCRIPT = Path(__file__).resolve().parents[1] / "skills" / "references" / "scripts" / "observe_report.py"
 SPEC = importlib.util.spec_from_file_location("observe_evidence_report", SCRIPT)
 assert SPEC is not None and SPEC.loader is not None
 MODULE = importlib.util.module_from_spec(SPEC)

@@ -879,12 +879,13 @@ not fixed-port equality checks.
 | `OTEL_BSP_SCHEDULE_DELAY` | `5000` | Span batch export delay (ms) |
 
 For local development with Splunk Observability Studio, substitute the resolved
-receiver port when it differs from the conventional fallback:
+receiver authority and port in both the approval and profile when they differ
+from the conventional fallback:
 
-    OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+    OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
     OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf \
     OTEL_LOGS_EXPORTER=otlp \
-    OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:4318/v1/logs \
+    OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://127.0.0.1:4318/v1/logs \
     OTEL_METRIC_EXPORT_INTERVAL="${OTEL_METRIC_EXPORT_INTERVAL-1000}" \
     OTEL_METRIC_EXPORT_TIMEOUT="${OTEL_METRIC_EXPORT_TIMEOUT-500}" \
     OTEL_BSP_SCHEDULE_DELAY=100 \

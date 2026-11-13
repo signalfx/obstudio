@@ -1,53 +1,39 @@
 # Logging workflow fixture
 
-`GET /logging-workflow/left` and `/logging-workflow/right` logs on the request path and on an owned worker/callback.
-A startup log has no request context. Existing task routes retain their behavior.
-`PORT` selects an isolated test listener; its normal default remains 8000.
+`make dev` starts the task API; `PORT` defaults to 8000.
+`GET /logging-workflow/left` and `/logging-workflow/right` emit a request log
+and an owned worker/callback log. A startup log runs outside request context.
+Existing task routes retain their behavior.
 
-When `LOGGING_WORKFLOW_VERIFIER` is provided, run the existing host smoke check
-through the normal configured project test target:
+`make test` runs project checks and, when `LOGGING_WORKFLOW_VERIFIER` is set,
+the host logging check. The checker owns startup through `make dev` and bounded
+cleanup, sends traced requests, captures original stdout/stderr and queries the
+isolated local Studio receiver. Evidence is saved under
+`.observe/logging-workflow-proof/`. Keep the checker unchanged and leave its
+assigned port free; repair application instrumentation when its assertions fail.
+No Docker or cloud account is required.
 
-```sh
-make test
-```
-
-The checker uses the actual foreground `make dev` startup surface. Preserve
-that surface when wiring instrumentation. A bounded Flask check can disable the
-development reloader. The check
-owns app startup and bounded shutdown,sends real traced requests,captures original
-stdout/stderr and queries the configured isolated local Studio receiver. It
-writes raw evidence and `result.json` under `.observe/logging-workflow-proof/`.
-Preserve the verifier;repair application instrumentation when it fails. Do not
-run another app on the provided port while invoking it. No Docker/cloud account
-is needed.
+A bounded check may disable the development reloader through the effective
+startup command; an environment value does not override an explicit CLI flag.
 
 ## Graceful-stop contract
 
-This service's operator policy requires repeated catchable stop requests to be
-idempotent during graceful finalization. Once final logging or provider drain
-starts, another such request must not interrupt that work or repeat final logs
-or provider shutdown. Finalization must remain within the configured stop
-budget. Deliberate forced termination is outside this graceful-stop guarantee.
-
-Acceptance must deliver a second stop request to the same process while final
-logging or provider drain is still active and retain the delivery and event
-order. Separate single-stop runs or a request after process exit do not prove
-this contract. This is application policy, not an OpenTelemetry signal-handler
-requirement.
+Repeated catchable stop requests must be idempotent during final logging and
+provider drain: do not interrupt or repeat finalization, and keep the existing
+stop budget. Forced termination is outside this policy. Acceptance sends the
+second request to the same process while finalization is active and retains
+delivery and event order. Separate single-stop runs do not prove this policy.
 
 ## Telemetry privacy contract
 
-This fixture's operator policy covers exported application logs and existing
-HTTP server spans. Sensitive request path/query values, raw exception messages
-and rendered stack traces (including local source paths) must not be exported.
-Use supported sanitization boundaries and retain useful bounded error categories,
-HTTP method/route/status, trace context, Resource identity and SDK limit/drop
-accounting. A logging-only sanitizer does not establish span privacy.
+Exported application logs and existing HTTP server spans must exclude sensitive
+request path/query values, raw exception messages and rendered stacks, including
+local source paths. Preserve bounded error categories, HTTP method/route/status,
+trace context, Resource identity and SDK limit/drop accounting through supported
+sanitization boundaries. A logs-only sanitizer does not establish span privacy.
 
-Acceptance includes an unmatched request containing sensitive path/query values
-and an escaping application error. Inspect the actual received server spans as
-well as the selected log outputs through normal startup. Do not add payload or
-header capture, create extra exception telemetry, suppress all errors, or change
-existing native sink/level/privacy policy to satisfy this export policy. These
-are fixture operator requirements, not universal OpenTelemetry prohibitions on
-exception messages or stack traces.
+Acceptance exercises an unmatched sensitive request and an escaping application
+error through normal startup, inspecting received server spans and selected log
+outputs. Preserve application responses and native sink/level/privacy policy;
+do not add payload/header capture, extra exception telemetry or blanket error
+suppression. These are fixture operator policies, not universal OTel rules.

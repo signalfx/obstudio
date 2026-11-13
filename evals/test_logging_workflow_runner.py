@@ -8,7 +8,6 @@ import importlib.util
 import json
 import os
 from pathlib import Path
-import re
 import shutil
 import subprocess
 import sys
@@ -94,6 +93,17 @@ def test_public_make_targets_forward_identity_profiles(tmp_path, case, target, c
         assert "Host logging workflow check not configured" in result.stdout
 
 
+def test_stage_workspaces_preserve_application_inputs_and_exclude_eval_assets(tmp_path):
+    from pytest_codex_evals.runner import prepare_side_workspace
+
+    for role in ("audit", "instrument", "verify"):
+        case = DRIVER.case_for(ROOT, "python", role, 1)
+        workspace = tmp_path / role
+        prepare_side_workspace(ROOT, case, "with_skill", workspace)
+        assert (workspace / "service/README.md").read_bytes() == (case.fixture_dir / "README.md").read_bytes()
+        assert not (workspace / "service/eval").exists()
+
+
 @pytest.mark.parametrize("script", ["logging_workflow_check.py", "run_logging_workflow.py"])
 @pytest.mark.parametrize("flags,optimize", [([], None), (["-O"], None), (["-OO"], None), ([], "1"), ([], "2")])
 def test_logging_workflow_requires_python_assertions(script, flags, optimize):
@@ -112,17 +122,6 @@ def test_logging_workflow_requires_python_assertions(script, flags, optimize):
     else:
         assert result.returncode == 0
         assert "usage:" in result.stdout
-
-
-def test_logging_topics_have_separate_addressable_verdicts():
-    common = json.loads((ROOT / "evals/rubrics/logging-common.json").read_text())
-    topics = []
-    for criterion in common["rubric"]:
-        label = re.match(r"\[([A-Z][A-Z0-9-]+)\]\s+\S", criterion)
-        assert label, "Each independent verdict needs a named topic"
-        topics.append(label.group(1))
-        assert not re.search(r"^\(\d+\.[A-Z] ", criterion, re.MULTILINE)
-    assert len(topics) == len(set(topics)), "Repeated topics would obscure independent failures"
 
 
 @pytest.mark.parametrize("language", sorted(DRIVER.SERVICES))

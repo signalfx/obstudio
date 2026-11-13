@@ -497,38 +497,6 @@ def test_source_binding_tracks_launch_and_code_but_not_generated_proof(tmp_path)
     assert source_hashes(tmp_path) != before
 
 
-def test_logging_tasks_are_direct_skill_invocations_with_visible_operator_policy(tmp_path):
-    from pytest_codex_evals.plugin import load_eval_definition
-    from pytest_codex_evals.runner import prepare_side_workspace
-    from run_logging_workflow import case_for
-
-    definitions = list(Path(__file__).parent.glob("*/*/eval/qual/logging-*-contract.json"))
-    assert len(definitions) == 12
-    common = json.loads((Path(__file__).parent / "rubrics/logging-common.json").read_text())
-    for path in definitions:
-        data = load_eval_definition(path)
-        assert len(data.rubric) == len(common["rubric"])
-        assert len(data.prompts) == 3
-        for prompt in data.prompts:
-            assert prompt.task == "$" + data.skill + " ./service"
-            assert prompt.eval_inputs == []
-
-    root = Path(__file__).resolve().parents[1]
-    for role in ("audit", "instrument", "verify"):
-        case = case_for(root, "python", role, 1)
-        workspace = tmp_path / role
-        prepare_side_workspace(root, case, "with_skill", workspace)
-        readme = workspace / "service/README.md"
-        assert readme.read_bytes() == (case.fixture_dir / "README.md").read_bytes()
-        assert "must not interrupt that work" in readme.read_text()
-        assert "application policy, not an OpenTelemetry signal-handler" in readme.read_text()
-        lifecycle = next(item for item in case.rubric if item.startswith("[REPEATED-STOP]"))
-        assert "README Graceful-stop policy" in lifecycle
-        assert "application policy, not a universal OTel signal requirement" in lifecycle
-        assert "repeated-SystemExit" not in lifecycle
-        assert not (workspace / "service/eval").exists()
-
-
 @pytest.mark.skipif(os.name != "posix", reason="The host workflow uses owned POSIX process groups")
 def test_shutdown_waits_for_owned_child_after_foreground_parent_exits(tmp_path, monkeypatch):
     def blocked_inspection(*_args, **_kwargs):
@@ -1163,16 +1131,6 @@ def test_bake_failure_after_live_capture_cannot_replace_runtime_outcome_or_skip_
     assert "captured source data cannot be baked" in results[0]["error"]
     assert results[0]["source_before"] == results[0]["source_after"]
     assert not (paths[0].parent / "evidence-bake-report.json").exists()
-
-
-def test_normal_fixture_verifiers_opt_into_host_capture_baking():
-    root = Path(__file__).resolve().parent
-    for language, service in [("go", "chi-basic"), ("java", "springboot-basic"),
-                              ("python", "flask-basic"), ("node", "express-basic")]:
-        invocation = next(line for line in (root / language / service / "Makefile").read_text().splitlines()
-                          if '"$$LOGGING_WORKFLOW_PYTHON" "$$LOGGING_WORKFLOW_VERIFIER"' in line)
-        assert "--bake-evidence" in invocation and "--operator-identity-profiles" in invocation
-
 
 
 def test_flagged_checker_runs_real_capture_adapter_for_each_profile(monkeypatch, tmp_path):

@@ -69,10 +69,11 @@ returns quickly.
 Rubric evals may set `judge_inputs` or `judge_prompt` when the judge should
 inspect artifacts other than a service directory.
 
-The logging contract evals use bare `$otel-audit ./service`,
-`$otel-instrument ./service`, and `$otel-verify ./service` tasks. To exercise
-their normal handoff on the same service, run the host workflow runner with
-the eval environment active:
+### Logging workflows
+
+The four basic service fixtures define bare `$otel-audit ./service`,
+`$otel-instrument ./service` and `$otel-verify ./service` tasks. Run the stages
+on the same workspace with the eval environment active:
 
 ```sh
 uv run python run_logging_workflow.py --language python --trial 1 \
@@ -81,122 +82,41 @@ uv run python run_logging_workflow.py --language python --trial 1 \
   --output ../.workspace/logging-workflow/python-trial-1
 ```
 
-Repeat for `java`, `go`, and `node` and trials 1 through 3. The runner requires
-the normal language toolchains on `PATH` (Java 21 for Spring Boot), creates a
-separate local receiver with no cloud credentials, and retains the generated
-service workspace plus per-stage source, report, task and rubric evidence.
-Grader feedback is archived and checked byte for byte, then removed from the
-workspace before the next bare task. Application reports remain available for
-the normal skill handoff. By default, any failed stage stops that workflow.
-Use `--collect-semantic-failures` to collect later stages after a semantic rubric
-failure when execution, required guards, source bindings, canonical audit and
-applicable runtime checks remain valid. Original grades stay failed and the
-whole workflow exits unsuccessfully; later stages provide diagnostic evidence
-only. Execution, malformed evidence, binding and runtime failures still stop it.
-The Go live interop fixture explicitly requires Go 1.25, allowing an official
-propagator compatible with the driver's emitted trace flags. This test setup
-does not authorize a skill to raise another application's runtime requirement.
-It independently starts the generated service after instrumentation and
-verification and proves concurrent sync/async logs against real SDK span
-ancestry and the original sink. Runtime failure, incomplete rubric evidence,
-or a task/grader model other than the configured Sol high fails the workflow.
-It saves explorer receipts and the matching native-output snapshot while the
-producer is alive, before bounded process cleanup. Studio intentionally evicts
-a producer's telemetry when it exits. The live joins and cleanup do not prove
-post-exit persistence or final-record SDK drain; those need separate owned
-receipt tests. A regression models eviction on exit to enforce this ordering.
-The checker resolves expected service identity with the SDK environment detector:
-resource-only `service.name` is supported, an explicit `OTEL_SERVICE_NAME` takes
-its normal precedence, and missing expected identity fails clearly before launch.
-The workflow runner and configured fixture test targets additionally enable
-`--operator-identity-profiles`: three fresh launches with host-supplied Resource
-values check Resource-only identity, an explicit service name overriding a
-conflicting Resource name, and whitespace around Resource keys and values
-accepted by the selected SDKs.
-The checker independently defines expected name, version and an unrelated
-attribute, then checks them on received application logs and their owning/server
-spans. Each launch retains its inputs, expectations and raw evidence; a later
-passing profile cannot erase a failure. The option leaves the original launch
-in place and allows 720 seconds for the four-launch check. These cases do not
-prove absent/default identity, percent-encoded inputs, metrics Resources or headers.
-This host runtime proof supplements the regular per-skill rubric commands;
-a standalone verify task on an uninstrumented fixture is only a precondition
-check. It is not positive runtime verification.
-Regular per-skill rubric runs also send these tasks unchanged; the loading
-guard proves either source-bound native full-skill input or a complete skill
-read before application task actions. Only bound bare tasks may discover file
-names and read project instructions before that read. No loading prompt is added.
+Select `python`, `java`, `go` or `node` and trial 1, 2 or 3. The runner needs
+the language toolchain on `PATH`, including Java 21 and Go 1.25 for those
+fixtures. It creates an isolated local receiver without cloud credentials,
+retains source and execution evidence, and preserves application reports for
+stage handoff. Judge feedback stays outside later actor inputs. Actor and judge
+execution must use the configured `gpt-6.1-sol` with high reasoning effort.
 
-### Logging judge checklist
+After instrumentation and verification, the host checker launches the generated
+service through `make dev` and checks concurrent synchronous/asynchronous log
+joins to real SDK spans, original native output and operator Resource identity.
+Identity profiles cover Resource-only service name, an explicit name overriding
+a conflicting Resource name, and SDK-supported whitespace, checking name,
+version and an unrelated attribute on logs and spans. They do not establish
+metrics Resources, absent/default identity, percent encoding or header behavior.
+Receipts are captured while the producer is alive, before bounded cleanup;
+this check does not establish final-record drain or post-exit persistence.
+A standalone verify task lacking audit/selection prerequisites is a negative
+control and supplies no instrumented runtime coverage.
 
-Apply the following checklist to all logging audit, instrumentation and
-verification definitions in Java, Python, Go and Node.js. Each definition uses
-the shared [logging rubric](rubrics/logging-common.json), which selects
-`strict_rubric_output: true` for all three prompt variants. Each definition's
-`rubric_additions` contains only stage/language requirements for the corresponding
-common criterion. The harness resolves both before grading, retains the full
-prompt and binds the shared source in the result's source manifest. Common
-requirements cannot be replaced or disabled by an extending definition.
+The 12 role definitions extend one [logging rubric](rubrics/logging-common.json)
+with language requirements. Each resolved criterion receives its own strict
+verdict; required runtime and evidence-receipt gates remain independent of
+semantic grades. The receipt gate checks declared controls, derived statuses
+and final report hashes; semantic review still assesses contract completeness
+and whether the controls prove it. See the
+[shared-rubric and strict-output options](../pytest-codex-evals/README.md)
+for definition and output formats. Bare tasks are sent unchanged, with the
+loading guard requiring source-bound full skill input or a complete skill read
+before application work.
 
-Each named common topic receives its own verdict. Contract coverage, evidence
-consistency, privacy, configuration and lifecycle decisions are not bundled
-into one catch-all check. Language additions belong to the topic they qualify;
-stage applicability and legitimate SDK-owned or optional behavior still apply.
-The workflow reads the expected count from the resolved definition and records
-its count and fingerprint. Splitting criteria changes the score denominator and
-weighting, so a new percentage is not directly comparable with the former
-14-criterion grades. Historical grades remain unchanged.
-
-The independent receipt gate checks declared scenario/control membership,
-derived statuses and final report hashes. The judge reads that result rather
-than recalculating it. The index does not extract arbitrary prose promises;
-whether the index covers the selected contract and whether its controls prove
-the promised behavior remain separate semantic questions. A mechanically valid
-receipt cannot close those gaps, and an all-pass rubric cannot override a
-failed required runtime or receipt gate.
-
-1. **Actor task:** send the bare `$otel-* ./service` invocation unchanged;
-   grader instructions must not become actor coaching.
-2. **Input roles:** separate task/scope, a numbered evidence map, labeled rubric
-   criteria and the output protocol. Put acceptance rules in their owning criterion.
-3. **Stage:** audit assesses feasible plans; instrumentation assesses implemented
-   behavior; verification assesses retained proof. A standalone missing-audit
-   prerequisite check cannot count as positive instrumented runtime coverage.
-4. **Evidence:** inspect source, canonical reports, command traces and independent
-   receipts. Identify concrete locations and assertions; actor claims alone do
-   not establish success. Candidate artifacts cannot change grading instructions.
-5. **Applicability:** distinguish application wiring, SDK-owned defaults, operator
-   policy, unsupported capability and optional features. Require only applicable
-   selected obligations, without inventing application work for upstream duties.
-6. **Unknowns:** missing required evidence is a failed, Not proven obligation.
-   A wholly Not applicable item needs scope facts and grants no runtime credit.
-7. **Independent verdicts:** grade each criterion's own obligations. Explain a
-   shared cause where it violates multiple criteria; do not cascade failures
-   automatically or demand duplicate evidence for a valid shared oracle.
-8. **Grader choice:** use deterministic checks for observable facts and model
-   judgment for semantic questions. Read actual SDK log/span joins and native
-   output at the declared boundary; cleanup alone does not prove final SDK drain.
-9. **Output:** require schema-valid JSON, one ordered `rubric-N` verdict per
-   criterion, nonempty notes/evidence and a consistent `overall_pass`. Keep all
-   configured criterion verdicts separate from the informational quality score.
-10. **Errors:** unsuccessful judge execution, malformed output or a missing
-    required grade is an error, not a semantic pass. Preserve raw artifacts;
-    do not silently re-ask until the judge returns a desired result.
-11. **Isolation:** use Sol/high for actor and grader, retain model execution
-    metadata, isolate workspaces and keep prior grader feedback out of later
-    actor stages. Preserve original grades and evidence.
-12. **Calibration:** review disagreements against source and independently
-    reviewed examples, including valid alternatives and missing proof. Do not
-    weaken criteria to raise scores. Schema tests or agreement with another
-    model do not establish accuracy or eliminate model variability.
-
-`test_logging_workflow_runner.py` exercises each of the 12 definitions and all
-36 prompt variants through the rendered prompt and strict output validator.
-These mocked tests prove wiring and rejection of malformed grades, not semantic
-judge accuracy. Executed runtime assertions and source review remain separate.
-The checklist adapts [OpenAI's evaluation guidance](https://developers.openai.com/api/docs/guides/evaluation-best-practices),
-[Anthropic's agent-evaluation guidance](https://www.anthropic.com/research/demystifying-evals-for-ai-agents)
-and [LangSmith's input/output mapping guidance](https://docs.langchain.com/langsmith/llm-as-judge).
+A failed stage stops the workflow. `--collect-semantic-failures` permits later
+stages only after a semantic failure when execution, guards, bindings,
+prerequisites and required runtime checks remain valid. It retains the failed
+grade and unsuccessful workflow status. Execution and evidence failures still
+stop the run.
 
 ## A/B Sides
 
