@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-verify",
-    "run_id": "20261110T214828070848Z",
+    "run_id": "20261113T095023888662Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-6-luna",
     "judge_model": "",
@@ -21,6 +21,24 @@
     "validation_scope": "full"
   },
   "evals": [
+    {
+      "id": "go/chi-basic/qual/logging-verify-contract",
+      "case": "go/chi-basic",
+      "language": "go",
+      "service": "chi-basic",
+      "prompt_count": 3,
+      "prompts": [
+        "logging-trial-1",
+        "logging-trial-2",
+        "logging-trial-3"
+      ],
+      "definition_path": "evals/go/chi-basic/eval/qual/logging-verify-contract.json",
+      "eval_dir": "evals/go/chi-basic",
+      "skill_path": "skills/otel-verify",
+      "sanity_check_count": 0,
+      "rubric_check_count": 61,
+      "runtime_check_count": 0
+    },
     {
       "id": "go/chi-basic/qual/verify",
       "case": "go/chi-basic",
@@ -51,6 +69,42 @@
       "skill_path": "skills/otel-verify",
       "sanity_check_count": 0,
       "rubric_check_count": 7,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "java/springboot-basic/qual/logging-verify-contract",
+      "case": "java/springboot-basic",
+      "language": "java",
+      "service": "springboot-basic",
+      "prompt_count": 3,
+      "prompts": [
+        "logging-trial-1",
+        "logging-trial-2",
+        "logging-trial-3"
+      ],
+      "definition_path": "evals/java/springboot-basic/eval/qual/logging-verify-contract.json",
+      "eval_dir": "evals/java/springboot-basic",
+      "skill_path": "skills/otel-verify",
+      "sanity_check_count": 0,
+      "rubric_check_count": 61,
+      "runtime_check_count": 0
+    },
+    {
+      "id": "node/express-basic/qual/logging-verify-contract",
+      "case": "node/express-basic",
+      "language": "node",
+      "service": "express-basic",
+      "prompt_count": 3,
+      "prompts": [
+        "logging-trial-1",
+        "logging-trial-2",
+        "logging-trial-3"
+      ],
+      "definition_path": "evals/node/express-basic/eval/qual/logging-verify-contract.json",
+      "eval_dir": "evals/node/express-basic",
+      "skill_path": "skills/otel-verify",
+      "sanity_check_count": 0,
+      "rubric_check_count": 61,
       "runtime_check_count": 0
     },
     {
@@ -278,6 +332,24 @@
       "runtime_check_count": 0
     },
     {
+      "id": "python/flask-basic/qual/logging-verify-contract",
+      "case": "python/flask-basic",
+      "language": "python",
+      "service": "flask-basic",
+      "prompt_count": 3,
+      "prompts": [
+        "logging-trial-1",
+        "logging-trial-2",
+        "logging-trial-3"
+      ],
+      "definition_path": "evals/python/flask-basic/eval/qual/logging-verify-contract.json",
+      "eval_dir": "evals/python/flask-basic",
+      "skill_path": "skills/otel-verify",
+      "sanity_check_count": 0,
+      "rubric_check_count": 61,
+      "runtime_check_count": 0
+    },
+    {
       "id": "python/model-directed-agent/qual/connection-modes-verify",
       "case": "python/model-directed-agent",
       "language": "python",
@@ -327,31 +399,32 @@
     }
   ],
   "summary": {
-    "eval_count": 19,
-    "case_count": 19,
-    "prompt_count": 19,
+    "eval_count": 23,
+    "case_count": 31,
+    "prompt_count": 31,
     "sanity_check_count": 0,
-    "rubric_check_count": 112,
+    "rubric_check_count": 844,
     "runtime_check_count": 0
   },
   "source": {
     "digest_version": 4,
-    "digest": "b88c3b6b7c16e17490d9516e34dbebd029c978dfc1635426b355d93cab0fc98f",
+    "digest": "02ff9fb4059727f0a3e1877a9d9787b1966ee662da8cce04980e28f3deaa3f14",
     "eval_kinds": [
       "rubric"
     ],
     "evaluator_semantics_version": 1,
     "files": {
       "evals/codex-evals.validation.toml": "503794fa37e80a742e98969f1d4bbdd17d1f9cfe7d6607c4012498c43905b53e",
-      "evals/go/chi-basic/eval/inputs/canonical-verify-evidence.txt": "b49c3c3b48f8cc4e834c5ce7646dea40e70271eab8904c7946d1145501321734",
-      "evals/go/chi-basic/eval/inputs/otel-audit.json": "983cff8a66b0933677d770a0ad4a21b5c28a9065c225d01a6f7d3b0eab6c548c",
-      "evals/go/chi-basic/eval/inputs/otel-instrumentation.json": "65f4d8106106c08f9e4702a12b9bb8d8068ab80746352b34278a4e948393e8d6",
-      "evals/go/chi-basic/eval/inputs/otel-selection.json": "57337390811c6e4d39ee4f6babd02712f1bb08dcfb04aa4e62b4eb77823f5155",
-      "evals/go/chi-basic/eval/inputs/otel-verify.json": "cbb0d5b28f5ec59e1195c619888ab759d9909e5d640f13ba1f8eb48e3392e1bb",
-      "evals/go/chi-basic/eval/qual/verify.json": "60698b3937fe05ecba48292cfcabf482fc7e2f6a5adf69b467bd76313008e96b",
-      "evals/go/chi-basic/go.mod": "2963ccc3e88e192ae7404763290907e6a14941d7f2c8bb0b1e65c247f11d57fb",
-      "evals/go/chi-basic/main.go": "98fc93b9ffcd0a996424992672480e110976bbe4d721a8e3a5fefe96fb57512d",
-      "skills/otel-verify/SKILL.md": "118d399def93429d47d58a55028150ef0ab129f8db1509187e2bf8adc3a0ac35",
+      "evals/go/chi-basic/Makefile": "1e53822fa0d1cf738f061685fad30cf9af1c8a48c7992e226e2737bb8079c7de",
+      "evals/go/chi-basic/README.md": "d45bc585c33f2b9e0e09b22bb7113322fc9be9d981c4e56d513be05905913984",
+      "evals/go/chi-basic/eval/qual/logging-verify-contract.json": "abd1ea3b90419b1b1536a38b2515dce620890601575755830a509f1802045686",
+      "evals/go/chi-basic/go.mod": "a04728649add55ede40a0b07ea949c4ab13c4ecc13d43eb2ccb1a400e6629a0c",
+      "evals/go/chi-basic/main.go": "bb8ca564254a9fc733166fccb1b60aacb3a2ee04d8fc5932a25b1a8cd31ba70b",
+      "evals/rubrics/logging-common.json": "044b66f2ea63776a2493293fde3eff197f325eab9bc20d153103575d8ef98e11",
+      "pytest-codex-evals/src/pytest_codex_evals/ab.py": "a100dcc1e6c99ea54fc619c0a80b1ebf863529cff5c18ac42da59f80de65b952",
+      "pytest-codex-evals/src/pytest_codex_evals/graders/shared.py": "d10e1c2da38792235c46e4d19d211974778697a02ee45a2bb27a69c8a27809eb",
+      "pytest-codex-evals/src/pytest_codex_evals/report.py": "006dca55085d774973b965419c12637fda150f761f0dc7e8c5dd1ff8816cb08f",
+      "skills/otel-verify/SKILL.md": "5beea56e0f149379763828c379c14a516a8dbfe90fd5cee5f9b8bb7a7077c3bf",
       "skills/otel-verify/references/app-code-test-authoring.md": "d535a0acb3d123ee01eb5b39c3247378b4900f4977672021022dd0fe3885f91f",
       "skills/otel-verify/references/explorer-witness.md": "ee76d5856b1c0858a6bcb22e4c9c4526ddf550f2ae3122ea01ea21d505b8931a",
       "skills/otel-verify/references/json-approval-handoff.md": "e8c258074665349efecdc5d7e9b25fd0ab6217e3cdc40ae21a434c2c5d11f763",
@@ -361,16 +434,21 @@
       "skills/otel-verify/scripts/validate_reader_report.py": "80f78e45f31ef7859215d085ec2b001a14805866bd92d4ad8d93684fc4027be0",
       "skills/otel-verify/tests/test_json_approval_flow.py": "8a02ff9baca8aae109789ef464cafe61f2babeae783889d8580f29f074e8b8f1",
       "skills/otel-verify/tests/test_validate_reader_report.py": "9d13265c741848d7b878a9dacaf86414e0fa85b8a802f4771a78e095939e95b7",
-      "skills/references/consumers.json": "ffb910be59c07a0a555b7e0cbedea36c183298e686b404bd3c28fafa9ec46f71",
+      "skills/references/consumers.json": "f0ea05c16628348545c7f4910a7179f254528d958dbde233a878c82f8098b67d",
       "skills/references/coverage-decision-tree.md": "f1b071d4d8365a98d0c21b1192a1f474d0b2944755a4b5cb51b3b5c102573ead",
       "skills/references/full-runtime-acceptance.md": "585f42079d71460bbf7c68e4320ceabab6fcc1ba7c711948806c78c9d46736c5",
       "skills/references/genai-readiness.md": "b06758e80805b09ab485d81c3cc6284acf5e2d18c2af1c0359644f61b80deff4",
       "skills/references/incident-readiness.md": "787fb441106abcb148f541befd403e5f7889a2234c6cbe590d0c6bce48a3b59a",
+      "skills/references/languages/go.md": "26f847c42e372c0e8029d505336ff242e9bf168c320f5b0869b335a0f9d18009",
+      "skills/references/languages/java.md": "96b86faea3fb833df00b530aaed3daf4f751167cb40623c7623ca7884c428d55",
+      "skills/references/languages/node.md": "ec31198ddb3a22e178ca37616ceaae22a29c5f86ef6402a992c7b2e6b65f43c4",
+      "skills/references/languages/python.md": "6ef5be0f54bd1d1eaae74157f1e6b0a1e096d7248041810f1703cc2154ec3111",
       "skills/references/ledger-template.md": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc",
-      "skills/references/local-otlp-receiver.md": "6f58148de9ef2fd3e617ddc2622ee09ba785b202100b91261a727af6e3dc7cec",
+      "skills/references/local-otlp-receiver.md": "c8da4654fc54350a29fa55d23c171cacb848d28430f9768dd359014be42fd3b7",
+      "skills/references/logging-readiness.md": "7715e7a96f0c2dd0e3e5c7a256d4e3fc16292f77789fd20c1a8f233854382070",
       "skills/references/report-flow-contract.md": "d00ca857d4a875dcdb8a699cbf82eda612f42a4f88152ff7a83b4a74eb1b4d0f",
-      "skills/references/scripts/observe_report.py": "3c1dc1386357e2cc9dc4f2d0f183cc8f4d0c7f45bb064de15196d071212be8cc",
-      "skills/references/scripts/observe_report_core.py": "88419036c5c1a1096361b10da730dc5bbae931f2c890d6dba2c7791cd78b96c4",
+      "skills/references/scripts/observe_report.py": "54deb13b407fc5b4f0ba91b2c054a12f9a87eea5cf53f7d0d93ddee165c2ce04",
+      "skills/references/scripts/observe_report_core.py": "a5b35de6d1183b121a7b81307a41b3db61d797b5d8823c7522433779e99a115c",
       "skills/references/scripts/observe_report_html.py": "88862e521c30897c8cc0f0ede33cdac92857cfdfb8d1ed846b85a1c74fa1be53",
       "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
       "skills/references/splunk-agent-observability.md": "819faa9e9f27d2b1b41c13980809801fa242c9b6309eb4eae854688a538f4bf4",
@@ -381,6 +459,12 @@
       "skills/references/tests/test_observe_report_flow.py": "a895ca4165a196ff8ab0ffb73a1c6dcf859d27cf59cd5f335ce4fe1c9ca7392e",
       "skills/references/tests/test_observe_report_html.py": "32183996d90eb073b9ece7bcd05613ea3552512af7f6f8acfc7171d45eaf2382",
       "skills/references/tests/test_observe_report_selection.py": "c2a441002d8392b9ea5cfdb52cee7e0b75000542334c2a3eb3bc8cff48a0d7c7",
+      "evals/go/chi-basic/eval/inputs/canonical-verify-evidence.txt": "b49c3c3b48f8cc4e834c5ce7646dea40e70271eab8904c7946d1145501321734",
+      "evals/go/chi-basic/eval/inputs/otel-audit.json": "983cff8a66b0933677d770a0ad4a21b5c28a9065c225d01a6f7d3b0eab6c548c",
+      "evals/go/chi-basic/eval/inputs/otel-instrumentation.json": "65f4d8106106c08f9e4702a12b9bb8d8068ab80746352b34278a4e948393e8d6",
+      "evals/go/chi-basic/eval/inputs/otel-selection.json": "57337390811c6e4d39ee4f6babd02712f1bb08dcfb04aa4e62b4eb77823f5155",
+      "evals/go/chi-basic/eval/inputs/otel-verify.json": "cbb0d5b28f5ec59e1195c619888ab759d9909e5d640f13ba1f8eb48e3392e1bb",
+      "evals/go/chi-basic/eval/qual/verify.json": "60698b3937fe05ecba48292cfcabf482fc7e2f6a5adf69b467bd76313008e96b",
       "evals/go/native-genai-demo/README.md": "0c368f3c02fe251d816cbe166981b59b29769064ad67b12a09d89cee48af1048",
       "evals/go/native-genai-demo/eval/inputs/candidate-provenance.json": "50cd7a5cd8b96642fb8925d176a1539d7531710cd8021692d75bdf5e57648865",
       "evals/go/native-genai-demo/eval/inputs/genai-profile-evidence.json": "aa816ae1e830e83a99289d326264d53e050cccd0c50648d49c3f2f8627ce7343",
@@ -399,6 +483,19 @@
       "evals/go/native-genai-demo/main.go": "7ff08c72f55f98255c93762056f8816f2a4351975365e2c03dfc3b1f39bee09f",
       "evals/go/native-genai-demo/main_test.go": "a0f03b2b02fb3611808b500c198dd96d1fe9eaeda4372ceed389998b8449c23e",
       "evals/go/native-genai-demo/telemetry.go": "1a6a265bbf7e72ab6b1a4cbfe5c99bfac66af61dd4bd9e1eddb4dfe392e0a22d",
+      "evals/java/springboot-basic/Makefile": "585f129a825d0f95858d4a179a9147012b0076c774467e727b7407fcbe539bf3",
+      "evals/java/springboot-basic/README.md": "6e17e9f1e65f52a9268ed19a4e4c7d449efdf4789c404232c98bf04777702688",
+      "evals/java/springboot-basic/eval/qual/logging-verify-contract.json": "3a1f0c0a30bd4b23542f906930ea53ca2d76399c2849383ded6816d9ad49f356",
+      "evals/java/springboot-basic/pom.xml": "0ae7ad95e63cb57d3ec8fb7f51b7ef2e9a5817c70034af8e82a105816114e351",
+      "evals/java/springboot-basic/src/main/java/com/example/tasks/Task.java": "97437951adcb1592b1f4e48af10f799501858ed40949575f8278d9a644f80cfc",
+      "evals/java/springboot-basic/src/main/java/com/example/tasks/TaskController.java": "ccace7793ab0b02f7b20d3ae8c0698451f45734ad6a25f5147c9f0fff71fdbfa",
+      "evals/java/springboot-basic/src/main/java/com/example/tasks/TasksApplication.java": "0db42555e6ac0ec5d3c352d526ed0b5bdbb5cf6a0087ed2fe68b4ec62b0bab0b",
+      "evals/java/springboot-basic/src/main/resources/application.properties": "b90fa8737a65764df11a6814c6481fc53c6f092da294e73c3887d684c2a48f7b",
+      "evals/node/express-basic/Makefile": "d4281caa3b0fb72004b2e1e52997647f5984fff575fd1f9f3752149b935ac206",
+      "evals/node/express-basic/README.md": "6e17e9f1e65f52a9268ed19a4e4c7d449efdf4789c404232c98bf04777702688",
+      "evals/node/express-basic/app.js": "7dc0b120a9cb78d104c8c5de73f45cc07e44cf1648421d7849daa159326ceaef",
+      "evals/node/express-basic/eval/qual/logging-verify-contract.json": "0960759f807723cbe9521b9e60c85b4cc9c634f6b175e8528abb84c058515874",
+      "evals/node/express-basic/package.json": "9a6b2e4619c27d59d7911017d38caf37cecc4c5dc0a443b7eabd54ce0c554ae9",
       "evals/python/ai-assistant-demo/Makefile": "3603e3404f82d150e09de40be763c2213a05185cd302c7d2426eee61f44260b1",
       "evals/python/ai-assistant-demo/README.md": "eebd4711ef5b6d9325e15d0488b43da6b3fde8bc48ffff91fa44841fd1dfaf0e",
       "evals/python/ai-assistant-demo/app.py": "fa5e1ef6707b71d0faec679ba88c81052382b85b42e895ee484454fbfd056f1e",
@@ -408,8 +505,8 @@
       "evals/python/ai-assistant-demo/pyproject.toml": "90be0bda1c6147fc324325b0f8a65a82499d65840df190a76b633c992e511f00",
       "evals/python/ai-assistant-demo/eval/inputs/ao-root-compatibility-evidence.json": "335ce70f9753091154b9fcc22c8fc3134ef266faa797b86e31141ef2665c44a6",
       "evals/python/ai-assistant-demo/eval/qual/ao-root-compatibility-verify.json": "1472eeaafeed62e1847629f2d0ff53591e554e10fea9119cfe62b7ac59a1a2b4",
-      "evals/python/ai-assistant-demo/eval/inputs/ao-target-handoff-validator-snapshot.json": "6e605a622e4b4f16658e3b62918a77a32f1481feec8eeb95f1055ac1bfe8e60d",
-      "evals/python/ai-assistant-demo/eval/inputs/finding-group-snapshot.json": "4d8ecff766c242dac8b4e48409681b6aa0b87487b62740128afe39ed2f41e5d6",
+      "evals/python/ai-assistant-demo/eval/inputs/ao-target-handoff-validator-snapshot.json": "1bca4ed7a050f34ce20c19d0d7a5f9d3a255a8d447ca6b586a504d4ed114761e",
+      "evals/python/ai-assistant-demo/eval/inputs/finding-group-snapshot.json": "8b6aa074d980c181198a5de04044e4941f99b808797917c27e43f864348755e6",
       "evals/python/ai-assistant-demo/eval/qual/ao-target-handoff-verify.json": "0715cbac999eba2145db514b657a1d75f39bd9aea4e3ac292bf6d0b336e55b30",
       "evals/python/ai-assistant-demo/eval/qual/finding-group-verify.json": "b79103f4d4b74c85ecadefcc2209964bd09d4fb6361c70e483400e162a54f9fe",
       "evals/python/ai-assistant-demo/eval/inputs/ao-gateway-context.json": "ee7d7dc01c0b164afc5b84ea885434912b1812a41f918dfcdbf7ad1dc2dfe72e",
@@ -461,6 +558,11 @@
       "evals/python/existing-otel-agent-demo/eval/inputs/genai-schema-evidence.json": "cb2d154a37cd662e4ddbcae6d30f7ce5588524d660d6ce19abdf42adc5032a5d",
       "evals/python/existing-otel-agent-demo/eval/inputs/python-preflight-requirements.txt": "9bc8378353b95a0405d8b052226aa3075aa7f7f32d30c29c235b0a343df6fa3f",
       "evals/python/existing-otel-agent-demo/eval/qual/verify.json": "73203448152dcccc42fbb6363cffea1103ff1956fe0b806cfec717cfcdb83a87",
+      "evals/python/flask-basic/Makefile": "f79ca681bdb892c85f084449a8bc6bbdbfa632ef7cb3bff8a3ff294bb2686028",
+      "evals/python/flask-basic/README.md": "cc5642a729de8e8fbf9c8865fc950247369d956a0d7ae1c04648908415325499",
+      "evals/python/flask-basic/app.py": "1209172394d85fc8244799b9ea13d0633ef39b9cedb4b1f1e95190fedb2903de",
+      "evals/python/flask-basic/eval/qual/logging-verify-contract.json": "65d430d071fce3970e61816024832781505e4227db0632b35b58260d57506e0b",
+      "evals/python/flask-basic/pyproject.toml": "3b624f5c0a1c9766603fc0e591341e7fe8cd44af5386521970f30673d34e6c8f",
       "evals/python/model-directed-agent/README.md": "4df0874e3a6d9596a7362376aa7d143ae4a8537ba5de86033a468702f1e87519",
       "evals/python/model-directed-agent/agent.py": "a9b953d189a35ac1e7518918651e5d8144754615d6592a5fdcb0e0d2d85da5dd",
       "evals/python/model-directed-agent/app.py": "f3fefd95b7d2cc84ab2eb58b35b9fecd7b032930776f7052d3affcffbd11ffda",
@@ -484,7 +586,12 @@
     "shared_reference_consumers": [
       "skills/references/full-runtime-acceptance.md",
       "skills/references/genai-readiness.md",
+      "skills/references/languages/go.md",
+      "skills/references/languages/java.md",
+      "skills/references/languages/node.md",
+      "skills/references/languages/python.md",
       "skills/references/local-otlp-receiver.md",
+      "skills/references/logging-readiness.md",
       "skills/references/report-flow-contract.md",
       "skills/references/scripts/observe_report.py",
       "skills/references/scripts/observe_report_core.py",
@@ -492,6 +599,27 @@
       "skills/references/splunk-agent-observability.md"
     ],
     "selections": [
+      {
+        "definition_path": "evals/go/chi-basic/eval/qual/logging-verify-contract.json",
+        "fixture_dir": "evals/go/chi-basic",
+        "prompt_id": "logging-trial-1",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/go/chi-basic/eval/qual/logging-verify-contract.json",
+        "fixture_dir": "evals/go/chi-basic",
+        "prompt_id": "logging-trial-2",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/go/chi-basic/eval/qual/logging-verify-contract.json",
+        "fixture_dir": "evals/go/chi-basic",
+        "prompt_id": "logging-trial-3",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
       {
         "definition_path": "evals/go/chi-basic/eval/qual/verify.json",
         "fixture_dir": "evals/go/chi-basic",
@@ -523,6 +651,48 @@
           "eval/inputs/native-lookup-failure-capture.json",
           "eval/inputs/native-rejected-traces-capture.json"
         ]
+      },
+      {
+        "definition_path": "evals/java/springboot-basic/eval/qual/logging-verify-contract.json",
+        "fixture_dir": "evals/java/springboot-basic",
+        "prompt_id": "logging-trial-1",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/java/springboot-basic/eval/qual/logging-verify-contract.json",
+        "fixture_dir": "evals/java/springboot-basic",
+        "prompt_id": "logging-trial-2",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/java/springboot-basic/eval/qual/logging-verify-contract.json",
+        "fixture_dir": "evals/java/springboot-basic",
+        "prompt_id": "logging-trial-3",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/node/express-basic/eval/qual/logging-verify-contract.json",
+        "fixture_dir": "evals/node/express-basic",
+        "prompt_id": "logging-trial-1",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/node/express-basic/eval/qual/logging-verify-contract.json",
+        "fixture_dir": "evals/node/express-basic",
+        "prompt_id": "logging-trial-2",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/node/express-basic/eval/qual/logging-verify-contract.json",
+        "fixture_dir": "evals/node/express-basic",
+        "prompt_id": "logging-trial-3",
+        "eval_kind": "rubric",
+        "eval_inputs": []
       },
       {
         "definition_path": "evals/python/ai-assistant-demo/eval/qual/ao-name-inputs-verify.json",
@@ -683,6 +853,27 @@
           "eval/inputs/python-preflight-requirements.txt",
           "eval/inputs/content-counterexamples.json"
         ]
+      },
+      {
+        "definition_path": "evals/python/flask-basic/eval/qual/logging-verify-contract.json",
+        "fixture_dir": "evals/python/flask-basic",
+        "prompt_id": "logging-trial-1",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/flask-basic/eval/qual/logging-verify-contract.json",
+        "fixture_dir": "evals/python/flask-basic",
+        "prompt_id": "logging-trial-2",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/flask-basic/eval/qual/logging-verify-contract.json",
+        "fixture_dir": "evals/python/flask-basic",
+        "prompt_id": "logging-trial-3",
+        "eval_kind": "rubric",
+        "eval_inputs": []
       },
       {
         "definition_path": "evals/python/model-directed-agent/eval/qual/connection-modes-verify.json",
