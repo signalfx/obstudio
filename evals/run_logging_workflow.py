@@ -273,7 +273,7 @@ def run(args: argparse.Namespace) -> int:
             stage["guards"] = grade.model_dump(mode="json")
             if role != "audit":
                 command = [sys.executable, str(repo / "evals/logging_workflow_check.py"),
-                           "--start-command-json", '["make","dev"]', "--operator-identity-profiles"]
+                           "--start-command-json", '["make","dev"]', "--operator-identity-profiles", "--bake-evidence"]
                 stage["independent_runtime_command"] = command
                 stage["independent_runtime_timeout_seconds"] = 720
                 with (output / f"{role}-independent-runtime.log").open("w") as log:

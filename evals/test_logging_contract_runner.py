@@ -65,7 +65,7 @@ def test_public_make_targets_forward_identity_profiles(tmp_path, case, target, c
     assert tool_calls == ([FIXTURE_CHECKS[case]] if target == "test" else [])
     if configured:
         assert calls == [{
-            "argv": ["--start-command-json", '["make","dev"]', "--operator-identity-profiles"],
+            "argv": ["--start-command-json", '["make","dev"]', "--operator-identity-profiles", "--bake-evidence"],
             "cwd": str(service),
         }]
     else:

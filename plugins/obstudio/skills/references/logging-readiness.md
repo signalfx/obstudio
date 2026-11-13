@@ -327,6 +327,14 @@ replaces or only denies a record; denial alone cannot preserve a required
 category. Apply the action before SDK/writer capture when the selected policy
 requires it. Bind forbidden-sentinel absence AND permitted category at every
 covered output, preserving application responses and original sinks.
+When extracting permitted fields from a producer's rendered parameters, inspect
+its actual formatting/decorations and normalize only that representation before
+bounded extraction. Assert selected useful fields in the actual rendered native
+output as well as SDK/wire records; record extras alone do not prove a native
+formatter retained them. Preserve the selected category and Body contracts rather
+than silently changing every output to fix one renderer. This applies only to
+fields promised by the selected policy and observable at that producer; do not
+invent unavailable fields or new mandatory OTel attributes.
 For an asserted event order, resolve registration/enqueue, actual callback
 invocation and completion relative to synchronous work and teardown. Scheduling
 is not invocation. A deferred logging callback can run after response/socket
@@ -1413,6 +1421,71 @@ output, then read back the **final generated report**:
 Resolve and read each local executed-evidence artifact; planned future paths are
 not execution proof. Keep `trace_ids` from that scenario's own operation/receipt,
 or empty when unproven.
+
+For representable execution evidence, use the packaged `evidence-bake` path to
+derive own-operation IDs, control verdicts and JSON/Markdown together, instead of
+hand-aggregating every ID in a shared trial. Start with an explicit expected-control
+manifest reconciled to the selected contract, then a capture or verified-import
+ledger. An audit allocates these executable controls and expected outcomes only;
+it does not invent observations or claim runtime success. Existing valid captures
+can be imported with inspected raw provenance; they need no newly generated token.
+
+The manifest is JSON with `schema_version: 1`, `kind: "otel-evidence-controls"`
+and `controls`. Each control names `id`, `scenario_id`, `run_id`, explicit
+`operation_ids`, `phase` and nonempty scalar `expected` facts. Use `match.method`
+AND `match.outcome` for HTTP operations, so a same-name error cannot supply a
+success control. Enumerate every required grouped operation; a missing member
+stays Not proven. Reusing a receipt for a legitimate shared predicate is valid
+when its operation, phase and expected facts actually apply. Reconcile manifest
+completeness independently: the tool cannot discover an omitted required branch.
+
+The ledger is a JSON array or JSONL observations with unique `id`, owned `run_id`,
+`operation_id`, `phase`, corresponding selectors, scalar `facts` and `artifacts`.
+Each artifact has a root-relative `path`, SHA-256 `sha256` and optional `locator`;
+paths must stay within `--artifact-root` and name existing regular files without
+symlink traversal. Use `provenance: "captured"` or `"source_import"` for supported
+ownership, retaining the raw source and how ownership was verified. Unknown or
+unattributed ownership remains unresolved, not borrowed from a neighboring record.
+The helper checks source hashes and declared equalities, not the truth of an
+adapter, locator or asserted fact. Preserve typed expected/actual values and
+unknowns; do not coerce a missing observation into a passing zero.
+
+`trace_context.state` is `context`, `none` or `unknown`. `context` carries a
+nonzero lowercase 32-character `trace_id` and, when known, a nonzero 16-character
+`span_id`; it need not represent an exported span. Retain valid unsampled/context-only
+IDs from their own observations without fabricating a span. Outside-context
+observations use `none` without IDs; unknown context stays unknown. A selected
+zero-export control uses `mode: "zero_export"`, `expected.exported_records: 0`
+and an own observation with `facts.exported_records: 0`,
+`facts.operation_continues: true` and finite increasing `window.start`/`window.end`.
+This can prove the selected negative observation, not acknowledgement or persistence.
+Keep received, acknowledged, accepted and persisted counts, decoded acknowledgement
+and independently observed persistence as separate facts; client success alone
+cannot supply them.
+
+```sh
+python3 -I "<directory-containing-loaded-SKILL.md>/../references/scripts/observe_report.py" evidence-bake --manifest <expected-controls.json> --ledger <observations.jsonl> --artifact-root <raw-evidence-root> --output <baked-controls.json> --markdown <baked-controls.md>
+```
+
+Successful generation can produce an honest partial report. Add
+`--require-working` when the calling check requires every declared control to
+pass; it still writes the truthful outputs and exits nonzero for failed or
+unproven controls. Keep unknown delivery facts in observations rather than
+treating unknown-equals-unknown as positive acceptance.
+
+For an existing `otel-verify` overlay, add `--report <verify.json>` and
+`--project-output <projected-verify.json>` together, then use
+`--check-report <final-verify.json>` on readback to detect projection drift
+(exit 1). Keep inputs, source artifacts and output paths distinct. Projection
+updates derived scenario trace IDs/status and aggregate status; canonical bindings,
+item proof, visibility, commands and other caller-owned evidence remain subject
+to normal validation and independent readback. It cannot manufacture those fields
+or clear unrelated remaining work. Instrumentation/direct reports can consume the
+baked controls without fabricating a verification overlay. Audit plans need no
+execution ledger. The baked Markdown is supporting evidence, not a replacement
+for the normal canonical report. Rerun baking and applicable drift checks after
+affected evidence/report changes; helper success cannot certify semantic
+completeness, adapter truth or a stronger execution boundary.
 
 - Verify the intended input actually reached the selected reader after runner,
   loader and child-process overrides. Retain effective values, authority and

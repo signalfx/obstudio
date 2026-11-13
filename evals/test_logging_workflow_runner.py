@@ -271,7 +271,7 @@ def test_all_roles_are_bare_feedback_free_and_archives_byte_exact(workflow):
     assert workflow.calls == ["audit", "instrument", "verify"]
     assert summary["collect_semantic_failures"] is False and summary["diagnostic_only"] is False
     expected_command = [sys.executable, str(ROOT / "evals/logging_workflow_check.py"),
-                        "--start-command-json", '["make","dev"]', "--operator-identity-profiles"]
+                        "--start-command-json", '["make","dev"]', "--operator-identity-profiles", "--bake-evidence"]
     assert workflow.state["runtime_commands"] == [expected_command, expected_command]
     for stage in summary["stages"][1:]:
         assert stage["independent_runtime_command"] == expected_command

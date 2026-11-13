@@ -5,6 +5,7 @@ import argparse
 from concurrent.futures import ThreadPoolExecutor
 import datetime as dt
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -149,11 +150,13 @@ def traced_requests(app_url: str, trace_endpoint: str) -> list[dict]:
             headers = {}
             propagate.inject(headers)
             started = time.monotonic()
-            with urllib.request.urlopen(urllib.request.Request(app_url + "/logging-workflow/" + slot,
-                                                              headers=headers), timeout=8) as response:
+            wire_request = urllib.request.Request(app_url + "/logging-workflow/" + slot, headers=headers)
+            with urllib.request.urlopen(wire_request, timeout=8) as response:
                 assert response.status == 200 and json.load(response) == {"status": "ok"}
             context = child.get_span_context()
-            return {"slot": slot, "trace_id": format(context.trace_id, "032x"),
+            return {"slot": slot, "method": wire_request.get_method(),
+                    "path": urllib.parse.urlsplit(wire_request.full_url).path, "http_status": response.status,
+                    "trace_id": format(context.trace_id, "032x"),
                     "client_span_id": format(context.span_id, "016x"),
                     "parent_span_id": format(parent.get_span_context().span_id, "016x"),
                     "traceparent": headers.get("traceparent"),
@@ -245,6 +248,110 @@ def capture_live_receipts(process, studio, requests, service_name, started, outp
             time.sleep(.25)
 
 
+CAPTURE_ARTIFACTS = ("requests.json", "receiver-logs.json", "receiver-traces.json", "native-output-at-receipt.log")
+BAKE_SCOPE = ("Four sync/async workflow log records received and joined to their own request spans while the "
+              "application was alive, with original native counts. No metrics, SDK trace flag equivalence, "
+              "shutdown drain, acknowledgement, acceptance, persistence, privacy or unrelated HTTP path proof. "
+              "Generic workflow operation IDs require an explicit caller mapping to selected audit contracts.")
+
+
+def capture_evidence_context(output: Path, service: Path, result: dict) -> None:
+    """Freeze capture provenance separately from the result updated during cleanup."""
+    context = {
+        "run_id": output.name, "phase": "source_alive", "source_root": str(service.resolve()),
+        "source_sha256": result["source_before"], "service_name": result["expected_service_name"],
+        "expected_resource": result.get("expected_resource"), "started": result["started"],
+        "verifier_sha256": result["verifier_sha256"], "scope": BAKE_SCOPE,
+        "artifacts": [{"path": name, "sha256": hashlib.sha256((output / name).read_bytes()).hexdigest()}
+                      for name in CAPTURE_ARTIFACTS],
+    }
+    (output / "evidence-bake-context.json").write_text(json.dumps(context, indent=2, sort_keys=True) + "\n")
+
+
+def bake_capture_evidence(output: Path) -> dict:
+    """Adapt immutable host captures to declared own-operation controls, never agent reports."""
+    context_path = output / "evidence-bake-context.json"
+    context_bytes = context_path.read_bytes()
+    context = json.loads(context_bytes)
+    assert context["phase"] == "source_alive", "Evidence baking requires a source-alive capture"
+    references = {reference["path"]: reference for reference in context["artifacts"]}
+    assert set(references) == set(CAPTURE_ARTIFACTS), "Incomplete captured source artifacts"
+    captured = {}
+    for name in CAPTURE_ARTIFACTS:
+        payload = (output / name).read_bytes()
+        assert hashlib.sha256(payload).hexdigest() == references[name]["sha256"], "Captured artifact changed: " + name
+        captured[name] = payload.decode("utf-8")
+    requests = json.loads(captured["requests.json"])
+    logs = json.loads(captured["receiver-logs.json"])
+    details = json.loads(captured["receiver-traces.json"])
+    native = captured["native-output-at-receipt.log"]
+    assert len(requests) == 2 and {r["slot"] for r in requests} == set(MARKERS), "Expected both captured workflow operations"
+    joins = validate_receipts(requests, logs, details, context["service_name"], native, context["expected_resource"])
+    assert len(joins) == 4, "Expected four independently joined workflow source records"
+    observations = []
+    context_reference = {"path": context_path.name, "sha256": hashlib.sha256(context_bytes).hexdigest()}
+    for request in requests:
+        assert request["method"] == "GET" and request["path"] == "/logging-workflow/" + request["slot"]
+        assert type(request["http_status"]) is int and request["http_status"] == 200
+        spans = details[request["trace_id"]]["spans"]
+        assert all(span.get("traceId") == request["trace_id"] for span in spans), "Captured span trace ownership mismatch"
+        span_map = {span["spanId"]: span for span in spans}
+        for kind, body in zip(("sync", "async"), MARKERS[request["slot"]]):
+            join = next(j for j in joins if j["body"] == body and j["trace_id"] == request["trace_id"])
+            record = next(z for z in logs if z.get("body") == body and z.get("traceId") == request["trace_id"])
+            owner = span_map[record["spanId"]]
+            operation = "workflow." + request["slot"] + "." + kind
+            artifacts = [
+                {**references["requests.json"], "locator": "/" + str(requests.index(request))},
+                {**references["receiver-logs.json"], "locator": "/" + str(logs.index(record))},
+                {**references["receiver-traces.json"], "locator": "/" + request["trace_id"] + "/spans/" + str(spans.index(owner))},
+                {**references["native-output-at-receipt.log"], "locator": "body=" + body},
+                dict(context_reference),
+            ]
+            observations.append({
+                "id": "observation." + operation, "run_id": context["run_id"], "operation_id": operation,
+                "phase": context["phase"], "method": request["method"], "outcome": request["http_status"],
+                "provenance": "captured", "trace_context": {
+                    "state": "context", "trace_id": record["traceId"], "span_id": record["spanId"]},
+                "facts": {"body": record["body"], "received_records": join["received_records"],
+                          "native_records": native.count(body), "exact_span_join": owner["spanId"] == record["spanId"],
+                          "server_ancestry": belongs_to(owner, join["server_span_id"], span_map),
+                          "real_remote_parent": span_map[request["client_span_id"]]["parentSpanId"] == request["parent_span_id"],
+                          "warn_mapping": 13 <= record["severityNumber"] <= 16,
+                          "service_identity": record["resource"]["serviceName"],
+                          "acknowledged_records": "unknown", "accepted_records": "unknown", "acknowledgement": "unknown",
+                          "persisted_records": "unknown", "persistence": "unknown", "sdk_trace_flags": "unknown"},
+                "artifacts": artifacts,
+            })
+    manifest = {"schema_version": 1, "kind": "otel-evidence-controls", "scope": BAKE_SCOPE, "controls": []}
+    for kind in ("sync", "async"):
+        manifest["controls"].append({
+            "id": "workflow.logs." + kind, "scenario_id": "workflow.logs.concurrent", "run_id": context["run_id"],
+            "operation_ids": ["workflow." + slot + "." + kind for slot in MARKERS], "phase": context["phase"],
+            "match": {"method": "GET", "outcome": 200},
+            "expected": {"received_records": 1, "native_records": 1, "exact_span_join": True,
+                         "server_ancestry": True, "real_remote_parent": True, "warn_mapping": True,
+                         "service_identity": context["service_name"]},
+        })
+    core_path = Path(__file__).resolve().parents[1] / "skills/references/scripts/observe_report_core.py"
+    spec = importlib.util.spec_from_file_location("logging_capture_evidence_core", core_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("Canonical evidence-bake helper unavailable")
+    core = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(core)
+    baked = core.bake_evidence_report(manifest, observations, output)
+    assert baked["status"] == "working", "Captured workflow controls were not proven"
+    baked["producer"] = {"scope": BAKE_SCOPE, "source_root": context["source_root"], "run_id": context["run_id"],
+                         "core_sha256": hashlib.sha256(core_path.read_bytes()).hexdigest()}
+    sidecars = {"evidence-bake-manifest.json": manifest, "evidence-bake-observations.json": observations,
+                "evidence-bake-report.json": baked}
+    for name, value in sidecars.items():
+        (output / name).write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
+    (output / "evidence-bake-report.md").write_text(core.render_evidence_report_markdown(baked) + "\nCapture scope: " + BAKE_SCOPE + "\n")
+    return {"report": "evidence-bake-report.json", "markdown": "evidence-bake-report.md", "status": baked["status"],
+            "scope": BAKE_SCOPE}
+
+
 def identity_profiles(environment: dict[str, str]) -> list[tuple[str, dict[str, str], dict[str, str]]]:
     token = secrets.token_hex(8)
     profiles = []
@@ -271,7 +378,7 @@ def identity_profiles(environment: dict[str, str]) -> list[tuple[str, dict[str, 
 
 def run_check(command: list[str], service: Path, environment: dict[str, str], *,
               expected_resource: dict[str, str] | None = None,
-              profile_id: str | None = None) -> int:
+              profile_id: str | None = None, bake_evidence: bool = False) -> int:
     port = int(environment["PORT"])
     studio = local_url(environment["LOGGING_WORKFLOW_STUDIO_URL"])
     trace_endpoint = local_url(environment["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"])
@@ -333,6 +440,8 @@ def run_check(command: list[str], service: Path, environment: dict[str, str], *,
                 )
                 result["capture_phase"] = "source_alive"
                 result["shutdown_drain_proven"] = False
+                if bake_evidence:
+                    capture_evidence_context(output, service, result)
                 result["graceful_stop"] = stop_owned(process, drained=drained)
                 pump.join(timeout=1)
                 result["application_exit_code"] = process.returncode
@@ -344,6 +453,8 @@ def run_check(command: list[str], service: Path, environment: dict[str, str], *,
         assert result["graceful_stop"], "Owned application shutdown exceeded10seconds"
         result["source_after"] = source_hashes(service)
         assert result["source_before"] == result["source_after"], "Runtime source changed during verification"
+        if bake_evidence:
+            result["evidence_bake"] = bake_capture_evidence(output)
         result["status"] = "passed"
     except Exception as error:
         result["status"] = "failed"
@@ -371,17 +482,20 @@ def main() -> int:
     parser.add_argument("--start-command-json", required=True)
     parser.add_argument("--operator-identity-profiles", action="store_true",
                         help="Also check three host-owned operator identity profiles through normal startup")
+    parser.add_argument("--bake-evidence", action="store_true",
+                        help="Bake own-operation sidecars from immutable live host captures")
     args = parser.parse_args()
     command = json.loads(args.start_command_json)
     if not isinstance(command, list) or not command or not all(isinstance(v, str) and v for v in command):
         raise ValueError("The foreground start command must be a nonempty JSON string array")
     service = Path.cwd()
     environment = dict(os.environ)
-    status = run_check(command, service, environment)
+    options = {"bake_evidence": True} if args.bake_evidence else {}
+    status = run_check(command, service, environment, **options)
     if args.operator_identity_profiles:
         for profile, child, expected in identity_profiles(environment):
             status = max(status, run_check(command, service, child,
-                                          expected_resource=expected, profile_id=profile))
+                                          expected_resource=expected, profile_id=profile, **options))
     return status
 
 

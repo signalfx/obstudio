@@ -795,7 +795,7 @@ def test_wrong_effective_identity_rejects_hardcoded_or_reversed_precedence(actua
         workflow.validate_receipts(*data[:3], expected["service.name"], data[4], expected_resource=expected)
 
 
-def mock_identity_run(monkeypatch, tmp_path, *, profiles, mutant=None):
+def mock_identity_run(monkeypatch, tmp_path, *, profiles, mutant=None, bake=False):
     """Drive actual checker role loop; substitute only process, wire and clock seams."""
     environment = {"PORT": "3333", "OTEL_SERVICE_NAME": "baseline", "OTEL_RESOURCE_ATTRIBUTES": "deployment.environment.name=eval",
                    "LOGGING_WORKFLOW_STUDIO_URL": "http://127.0.0.1:5555", "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": "http://127.0.0.1:5556/v1/traces"}
@@ -848,6 +848,27 @@ def mock_identity_run(monkeypatch, tmp_path, *, profiles, mutant=None):
                 # Incorrect generated app honors the lower-priority Resource name.
                 data = list(identity_receipts(attrs["service.name"], version=attrs["service.version"],
                                    retained=attrs["obstudio.eval.preserved"]))
+            if bake:
+                # Canonical ID formatting for the real adapter/core path; the legacy
+                # synthetic wire fixtures intentionally use readable placeholder IDs.
+                source_trace = data[0][0]["trace_id"]
+                trace_id = "1" * 32
+                spans = data[2][source_trace]["spans"]
+                ids = {span["spanId"]: format(i + 1, "016x") for i, span in enumerate(spans)}
+                for span in spans:
+                    span["traceId"] = trace_id
+                    span["spanId"] = ids[span["spanId"]]
+                    if span.get("parentSpanId"):
+                        span["parentSpanId"] = ids[span["parentSpanId"]]
+                data[2] = {trace_id: {"spans": spans}}
+                for request in data[0]:
+                    request.update(trace_id=trace_id, client_span_id=ids[request["client_span_id"]],
+                                   parent_span_id=ids[request["parent_span_id"]], method="GET",
+                                   path="/logging-workflow/" + request["slot"], http_status=200)
+                for log in data[1]:
+                    if log.get("traceId"):
+                        log["traceId"] = trace_id
+                        log["spanId"] = ids[log["spanId"]]
             timestamp = dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=1)
             if mutant == "stale" and len(state["launches"]) == 2:
                 timestamp -= dt.timedelta(days=2)
@@ -863,10 +884,11 @@ def mock_identity_run(monkeypatch, tmp_path, *, profiles, mutant=None):
     monkeypatch.setattr(workflow, "stop_owned", stop)
     def query(url):
         if url.endswith("/health"): return {"status": "ok"}
-        return state["current"][1] if "/api/query/logs" in url else state["current"][2]["trace"]
+        return state["current"][1] if "/api/query/logs" in url else state["current"][2][url.rsplit("/", 1)[-1]]
     monkeypatch.setattr(workflow, "get_json", query)
     args = ["checker", "--start-command-json", '["make","dev"]']
     if profiles: args.append("--operator-identity-profiles")
+    if bake: args.append("--bake-evidence")
     monkeypatch.setattr(sys, "argv", args)
     # The real pump thread writes the complete fresh captured sink before validation.
     real_capture = workflow.capture_live_receipts
@@ -987,3 +1009,194 @@ def test_fourth_whitespace_launch_rejects_substring_fallback_despite_three_plain
     assert failed["expected_resource"]["service.name"].startswith("operator-resource-resource-whitespace-")
     for name in ("receiver-logs.json", "receiver-traces.json", "requests.json", "native-output.log"):
         assert (raw / name).is_file()
+
+
+@pytest.fixture
+def captured_workflow(tmp_path):
+    """Saved REST/native fixture data; adapter tests do not claim a live SDK run."""
+    service, output = tmp_path / "service", tmp_path / "run-captured"
+    service.mkdir()
+    output.mkdir()
+    (service / "app.py").write_text("# source binding fixture\n")
+    requests, logs, details, native = [], [], {}, []
+    for number, slot in enumerate(("left", "right"), 1):
+        tid = format(number, "032x")
+        parent, client, server, handler = [format(number * 10 + i, "016x") for i in range(4)]
+        requests.append({"slot": slot, "method": "GET", "path": "/logging-workflow/" + slot,
+                         "http_status": 200, "trace_id": tid, "client_span_id": client, "parent_span_id": parent,
+                         "sdk_trace_flags": 1})
+        spans = [
+            {"spanId": parent, "traceId": tid, "resource": {"serviceName": "driver"}},
+            {"spanId": client, "traceId": tid, "parentSpanId": parent, "resource": {"serviceName": "driver"}},
+            {"spanId": server, "traceId": tid, "parentSpanId": client, "kind": "SERVER", "resource": {"serviceName": "app"}},
+            {"spanId": handler, "traceId": tid, "parentSpanId": server, "kind": "INTERNAL", "resource": {"serviceName": "app"}},
+        ]
+        details[tid] = {"spans": spans}
+        for kind in ("sync", "async"):
+            body = f"workflow {kind} completed {slot}"
+            logs.append({"body": body, "traceId": tid, "spanId": handler,
+                         "severityNumber": 13, "resource": {"serviceName": "app"}})
+            native.append(body)
+    logs.append({"body": workflow.OUTSIDE, "resource": {"serviceName": "app"}})
+    native.append(workflow.OUTSIDE)
+    for name, value in [("requests.json", requests), ("receiver-logs.json", logs), ("receiver-traces.json", details)]:
+        (output / name).write_text(json.dumps(value, indent=2) + "\n")
+    (output / "native-output-at-receipt.log").write_text("\n".join(native) + "\n")
+    result = {"source_before": workflow.source_hashes(service), "expected_service_name": "app",
+              "started": "2026-11-12T00:00:00+00:00", "verifier_sha256": "host-verifier-fixture"}
+    workflow.capture_evidence_context(output, service, result)
+    return output, service
+
+
+def test_capture_adapter_bakes_only_four_actual_own_operation_joins(captured_workflow, report_helper_and_sample):
+    output, service = captured_workflow
+    helper, _ = report_helper_and_sample
+    before = {name: (output / name).read_bytes() for name in workflow.CAPTURE_ARTIFACTS}
+    # Cleanup/result changes and the final output sink are deliberately outside capture hashes.
+    (output / "result.json").write_text('{"status":"running"}')
+    (output / "native-output.log").write_text("later cleanup output\n")
+    summary = workflow.bake_capture_evidence(output)
+    assert summary["status"] == "working"
+    report = json.loads((output / summary["report"]).read_text())
+    manifest = json.loads((output / "evidence-bake-manifest.json").read_text())
+    observations = json.loads((output / "evidence-bake-observations.json").read_text())
+    assert len(observations) == 4 and len(manifest["controls"]) == 2
+    assert {row["operation_id"] for row in observations} == {
+        "workflow.left.sync", "workflow.left.async", "workflow.right.sync", "workflow.right.async"}
+    for row in observations:
+        number = 1 if ".left." in row["operation_id"] else 2
+        assert row["trace_context"]["trace_id"] == format(number, "032x")
+        assert row["trace_context"]["span_id"] == format(number * 10 + 3, "016x")
+        assert row["provenance"] == "captured" and row["phase"] == "source_alive"
+        assert row["run_id"] == output.name
+        assert row["facts"]["received_records"] == row["facts"]["native_records"] == 1
+        assert row["facts"]["sdk_trace_flags"] == "unknown"  # Driver flags are not source flags.
+        assert all(row["facts"][fact] == "unknown" for fact in (
+            "acknowledged_records", "accepted_records", "acknowledgement", "persisted_records", "persistence"))
+        assert {reference["path"] for reference in row["artifacts"]} == set(workflow.CAPTURE_ARTIFACTS) | {"evidence-bake-context.json"}
+        for reference in row["artifacts"]:
+            assert hashlib.sha256((output / reference["path"]).read_bytes()).hexdigest() == reference["sha256"]
+    assert report["producer"]["source_root"] == str(service.resolve())
+    assert report["scenarios"][0]["id"] == "workflow.logs.concurrent"
+    assert report["scenarios"][0]["trace_ids"] == [format(1, "032x"), format(2, "032x")]
+    assert all(len(control["operation_ids"]) == 2 for control in report["controls"])
+    rebaked = helper.bake_evidence_report(manifest, observations, output)
+    assert rebaked["controls"] == report["controls"] and rebaked["scenarios"] == report["scenarios"]
+    assert "No metrics" in (output / summary["markdown"]).read_text()
+    assert {name: (output / name).read_bytes() for name in workflow.CAPTURE_ARTIFACTS} == before
+    sidecars = {p.name: p.read_bytes() for p in output.glob("evidence-bake-*")}
+    (output / "result.json").write_text('{"status":"passed","cleanup":true}')
+    workflow.bake_capture_evidence(output)
+    assert {p.name: p.read_bytes() for p in output.glob("evidence-bake-*")} == sidecars
+
+
+@pytest.mark.parametrize("fault", ["tampered", "wrong-owner", "missing-record", "invalid-sdk-id", "wrong-phase", "span-trace-mismatch"])
+def test_capture_adapter_rejects_changed_or_invalid_raw_proof(captured_workflow, fault):
+    output, service = captured_workflow
+    context_path = output / "evidence-bake-context.json"
+    context = json.loads(context_path.read_text())
+    if fault == "tampered":
+        path = output / "requests.json"
+        path.write_text(path.read_text() + "\n")
+    elif fault == "wrong-phase":
+        context["phase"] = "after_cleanup"
+        context_path.write_text(json.dumps(context))
+    else:
+        path = output / "receiver-logs.json"
+        logs = json.loads(path.read_text())
+        if fault == "span-trace-mismatch":
+            details_path = output / "receiver-traces.json"
+            details = json.loads(details_path.read_text())
+            next(iter(details.values()))["spans"][-1]["traceId"] = "f" * 32
+            details_path.write_text(json.dumps(details))
+        elif fault == "wrong-owner":
+            logs[0]["spanId"] = logs[2]["spanId"]
+        elif fault == "missing-record":
+            logs.pop(0)
+        else:
+            requests_path = output / "requests.json"
+            requests = json.loads(requests_path.read_text())
+            old = requests[0]["trace_id"]
+            requests[0]["trace_id"] = "invalid"
+            requests_path.write_text(json.dumps(requests))
+            details_path = output / "receiver-traces.json"
+            details = json.loads(details_path.read_text())
+            details["invalid"] = details.pop(old)
+            details_path.write_text(json.dumps(details))
+            for log in logs:
+                if log.get("traceId") == old:
+                    log["traceId"] = "invalid"
+        path.write_text(json.dumps(logs))
+        # Source-import a self-consistent fixture to exercise adapter/core validation,
+        # separately from the immutable-hash rejection above.
+        for reference in context["artifacts"]:
+            reference["sha256"] = hashlib.sha256((output / reference["path"]).read_bytes()).hexdigest()
+        context_path.write_text(json.dumps(context))
+    with pytest.raises((AssertionError, ValueError, KeyError)):
+        workflow.bake_capture_evidence(output)
+    assert not (output / "evidence-bake-report.json").exists()
+    assert not (output / "evidence-bake-report.md").exists()
+
+
+def test_bake_flag_forwards_to_normal_and_all_identity_profiles(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["checker", "--start-command-json", '["make","dev"]',
+                                     "--operator-identity-profiles", "--bake-evidence"])
+    monkeypatch.setattr(workflow, "run_check", lambda *args, **kwargs: calls.append(kwargs) or 0)
+    assert workflow.main() == 0 and len(calls) == 4
+    assert all(call["bake_evidence"] is True for call in calls)
+
+
+def test_bake_failure_after_live_capture_cannot_replace_runtime_outcome_or_skip_cleanup(monkeypatch, tmp_path):
+    def fail_bake(output):
+        assert (output / "native-output-at-receipt.log").is_file()
+        assert (output / "evidence-bake-context.json").is_file()
+        raise ValueError("captured source data cannot be baked")
+    monkeypatch.setattr(workflow, "bake_capture_evidence", fail_bake)
+    real_run = workflow.run_check
+    monkeypatch.setattr(workflow, "run_check", lambda *args, **kwargs: real_run(*args, **kwargs, bake_evidence=True))
+    status, state, paths, results = mock_identity_run(monkeypatch, tmp_path, profiles=False)
+    assert status == 1 and len(state["launches"]) == 1
+    assert results[0]["status"] == "failed" and results[0]["graceful_stop"] is True
+    assert "captured source data cannot be baked" in results[0]["error"]
+    assert results[0]["source_before"] == results[0]["source_after"]
+    assert not (paths[0].parent / "evidence-bake-report.json").exists()
+
+
+def test_normal_fixture_verifiers_opt_into_host_capture_baking():
+    root = Path(__file__).resolve().parent
+    for language, service in [("go", "chi-basic"), ("java", "springboot-basic"),
+                              ("python", "flask-basic"), ("node", "express-basic")]:
+        invocation = next(line for line in (root / language / service / "Makefile").read_text().splitlines()
+                          if '"$$LOGGING_WORKFLOW_PYTHON" "$$LOGGING_WORKFLOW_VERIFIER"' in line)
+        assert "--bake-evidence" in invocation and "--operator-identity-profiles" in invocation
+
+
+
+def test_flagged_checker_runs_real_capture_adapter_for_each_profile(monkeypatch, tmp_path):
+    status, state, paths, results = mock_identity_run(monkeypatch, tmp_path, profiles=True, bake=True)
+    assert status == 0 and len(state["launches"]) == len(results) == 4
+    for path, result in zip(paths, results):
+        assert result["status"] == "passed" and result["graceful_stop"] is True
+        assert result["evidence_bake"]["status"] == "working"
+        output = path.parent
+        report = json.loads((output / "evidence-bake-report.json").read_text())
+        context = json.loads((output / "evidence-bake-context.json").read_text())
+        assert len(report["controls"]) == 2 and len(report["scenarios"]) == 1
+        assert len({row["operation_id"] for control in report["controls"] for row in control["observations"]}) == 4
+        assert context["source_sha256"] == result["source_before"] == result["source_after"]
+        assert context["service_name"] == result["expected_service_name"]
+        assert "result.json" not in {r["path"] for r in context["artifacts"]}
+        assert (output / "evidence-bake-report.md").is_file()
+
+
+def test_failed_runtime_capture_gets_no_baked_credit_while_later_profiles_continue(monkeypatch, tmp_path):
+    status, _, _, results = mock_identity_run(monkeypatch, tmp_path, profiles=True,
+                                             mutant="lost-version", bake=True)
+    assert status == 1 and len(results) == 4
+    failed = next(result for result in results if result.get("identity_profile") == "resource-only")
+    assert failed["status"] == "failed" and "evidence_bake" not in failed
+    assert not (Path(failed["proof_directory"]) / "evidence-bake-report.json").exists()
+    assert all(result["status"] == "passed" and result["evidence_bake"]["status"] == "working"
+               for result in results if result is not failed)

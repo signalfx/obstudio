@@ -1394,6 +1394,45 @@ def cmd_instrumentation_digest(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_evidence_bake(args: argparse.Namespace) -> int:
+    if bool(args.report) != bool(args.project_output):
+        fail("evidence-bake requires --report and --project-output together")
+    outputs = [p for p in (args.output, args.markdown, args.project_output) if p is not None]
+    inputs = [p for p in (args.manifest, args.ledger, args.report, args.check_report) if p is not None]
+    if len({p.resolve() for p in outputs}) != len(outputs) or any(
+        out.resolve() == source.resolve() for out in outputs for source in inputs
+    ):
+        fail("evidence-bake output files must be distinct and must not overwrite inputs")
+    baked = bake_evidence_report(load_json(args.manifest), load_evidence_ledger(args.ledger), args.artifact_root)
+    projected = project_evidence_report(load_json(args.report), baked) if args.report else None
+    differences = check_evidence_report_projection(load_json(args.check_report), baked) if args.check_report else []
+    # Check input and artifact collisions; output writes are individually atomic.
+    observations = [row for c in baked["controls"] for row in c["observations"]]
+    artifacts = {
+        str((args.artifact_root / ref["path"]).resolve())
+        for row in observations + baked["diagnostics"]
+        for ref in row["artifacts"]
+    }
+    if any(str(out.resolve()) in artifacts for out in outputs):
+        fail("evidence-bake outputs must not overwrite source artifacts")
+    write_json(args.output, baked)
+    write_text(args.markdown, render_evidence_report_markdown(baked))
+    if projected is not None:
+        write_json(args.project_output, projected)
+    for difference in differences:
+        print("FAIL: " + difference, file=sys.stderr)
+    if not differences:
+        print("Evidence report baked: " + baked["status"])
+    gate_failed = args.require_working and baked["status"] != "working"
+    if gate_failed:
+        print(
+            "FAIL: --require-working requires every declared control to be working; "
+            f"baked status is {baked['status']} (truthful outputs written)",
+            file=sys.stderr,
+        )
+    return 1 if differences or gate_failed else 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -1570,6 +1609,23 @@ def build_parser() -> argparse.ArgumentParser:
         "--instrumentation-json", type=Path, required=True
     )
     instrumentation_digest_command.set_defaults(func=cmd_instrumentation_digest)
+
+    evidence_bake = subparsers.add_parser(
+        "evidence-bake", help="bake source-bound operation controls; no semantic or runtime judge",
+    )
+    evidence_bake.add_argument("--manifest", type=Path, required=True)
+    evidence_bake.add_argument("--ledger", type=Path, required=True, help="JSON array or JSONL observations")
+    evidence_bake.add_argument("--artifact-root", type=Path, required=True)
+    evidence_bake.add_argument("-o", "--output", type=Path, required=True)
+    evidence_bake.add_argument("--markdown", type=Path, required=True)
+    evidence_bake.add_argument("--report", type=Path, help="existing verification overlay to project")
+    evidence_bake.add_argument("--project-output", type=Path)
+    evidence_bake.add_argument("--check-report", type=Path, help="exit 1 on mechanical projection drift")
+    evidence_bake.add_argument(
+        "--require-working", action="store_true",
+        help="write reports and exit 1 unless every declared control works; no semantic completeness judgment",
+    )
+    evidence_bake.set_defaults(func=cmd_evidence_bake)
 
     return parser
 
