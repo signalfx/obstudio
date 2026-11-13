@@ -11,6 +11,7 @@ class RubricEvalDefinition(BaseEvalDefinition):
     rubric: list[str]
     judge_prompt: str | None = None
     judge_inputs: list[str] = Field(default_factory=list)
+    strict_rubric_output: bool = False
 
     @property
     def kind(self) -> Literal["rubric"]:
@@ -21,6 +22,7 @@ class RubricEvalCase(BaseEvalCase):
     rubric: list[str]
     judge_prompt: str | None = None
     judge_inputs: list[str] = Field(default_factory=list)
+    strict_rubric_output: bool = False
 
     @property
     def kind(self) -> Literal["rubric"]:

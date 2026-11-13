@@ -71,7 +71,7 @@ provided. The `skill` value is matched to the directory name passed with
 Role-specific schemas are strict:
 
 - `eval/sanity/*.json`: `skill`, `prompts`, optional `checks`.
-- `eval/qual/*.json`: `skill`, `prompts`, required `rubric`, optional `judge_prompt` and `judge_inputs`.
+- `eval/qual/*.json`: `skill`, `prompts`, either an inline `rubric` or a `rubric_base`, plus supported grading options.
 - `eval/runtime/*.json`: `skill`, `prompts`, required runtime `checks`.
 
 ### 0.2 runtime-expectation migration
@@ -86,6 +86,39 @@ empty `endpoints` list remains valid when `service_logs` is non-empty.
 use `{case_id}`, `{prompt_id}`, `{task}`, `{rubric}`, and `{inputs}` template
 fields. Use `judge_inputs` to tell the judge what artifacts matter for that
 skill; the default prompt does not assume every eval has service files.
+In strict mode, rendered evidence inputs are numbered separately from
+`rubric-N` verdicts. Legacy prompts retain bullet inputs.
+
+Use `rubric_base` to share `rubric`, `judge_inputs` and
+`strict_rubric_output` from a JSON file relative to the definition, within the
+same eval root. `rubric_additions` appends text to existing criterion IDs:
+
+```json
+{
+  "skill": "sample-skill",
+  "prompts": [{ "id": "direct", "task": "Assess the service." }],
+  "rubric_base": "../../../../rubrics/common.json",
+  "rubric_additions": { "rubric-2": "Also assess the case-specific obligation." }
+}
+```
+
+An extending definition cannot replace common criteria, evidence inputs,
+strictness or judge prompt. Invalid paths, symlinks, nested inheritance and
+unknown criterion IDs are rejected. Store bases outside the owning case's
+fixture tree so they cannot be staged as actor inputs. Resolution preserves
+criterion order and count, and source manifests include the shared file. Inline definitions remain
+supported. Moving unchanged requirements into a base is not new semantic coverage.
+
+`strict_rubric_output: true` requires the built-in output schema and one ordered
+`rubric-N` verdict per resolved criterion, nonempty `notes` and `evidence`, and
+`overall_pass` equal to their conjunction. An unsuccessful judge, invalid output
+or missing required grade is a grader error; raw artifacts and the resolved
+`rubric_prompt.txt` are retained. `--no-rubric` skips grading. A custom
+`judge_prompt` must state the selected contract; custom output schemas are
+incompatible with strict mode. Existing definitions default to non-strict mode.
+Strict reports preserve the raw informational quality score; legacy score
+normalization remains unchanged. Neither a valid output nor its score proves
+semantic correctness or satisfies an independent executable check.
 
 Sanity checks can assert final text, files, trace command evidence, or
 run local commands in the produced `service/` workspace. Command checks use an

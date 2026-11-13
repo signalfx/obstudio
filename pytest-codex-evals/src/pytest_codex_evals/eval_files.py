@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import fnmatch
+import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
 
 from .definitions.base import validate_eval_input_paths
+from .schema_resources import schema_validator
 
 
 EVAL_ROLE_DIRS = {
@@ -195,6 +197,57 @@ def regular_source_file(path: Path) -> Path | None:
             f"eval source input must be a regular file, not a symlink: {path}"
         )
     return path if path.is_file() else None
+
+
+def rubric_base_source(definition_path: Path, data: dict) -> Path | None:
+    reference = data.get("rubric_base")
+    if reference is None:
+        return None
+    layout = eval_file_layout(definition_path)
+    if layout is None or layout.role != "rubric":
+        raise ValueError("rubric_base requires a nested rubric eval definition")
+    if (not isinstance(reference, str) or not reference.strip()
+            or "\\" in reference or Path(reference).is_absolute()):
+        raise ValueError("rubric_base must be a relative JSON file within the eval root")
+    root = layout.fixture_dir.parent.parent.absolute()
+    source = Path(os.path.abspath(definition_path.parent / reference))
+    try:
+        source.relative_to(root)
+    except ValueError as exc:
+        raise ValueError("rubric_base must stay within the eval root") from exc
+    fixture = layout.fixture_dir.absolute()
+    if source.is_relative_to(fixture):
+        raise ValueError("rubric_base must not be staged in the actor fixture workspace")
+    if source.suffix != ".json":
+        raise ValueError("rubric_base must reference a JSON file")
+    parents = (parent for parent in (source, *source.parents) if parent.is_relative_to(root))
+    if any(parent.is_symlink() for parent in parents):
+        raise ValueError("rubric_base source must not be a symlink")
+    if regular_source_file(source) is None:
+        raise ValueError(f"rubric_base source is missing: {source}")
+    return source
+
+
+def resolve_rubric_definition(definition_path: Path, data: dict) -> dict:
+    source = rubric_base_source(definition_path, data)
+    if source is None:
+        return data
+    validator = schema_validator("rubric.schema.json")
+    validator.validate(data)
+    base = json.loads(source.read_text(encoding="utf-8"))
+    validator.evolve(schema=validator.schema["$defs"]["base"]).validate(base)
+    resolved = {**base, **data}
+    resolved.pop("rubric_base")
+    additions = resolved.pop("rubric_additions", {})
+    rubric = list(base["rubric"])
+    for label, text in additions.items():
+        index = int(label.removeprefix("rubric-")) - 1
+        if index >= len(rubric):
+            raise ValueError(f"rubric_additions references unknown criterion: {label}")
+        rubric[index] += "\n\n" + text
+    resolved["rubric"] = rubric
+    validator.validate(resolved)
+    return resolved
 
 
 def runtime_repository_source_files(repo_root: Path) -> list[Path]:
