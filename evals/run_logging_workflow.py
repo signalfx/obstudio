@@ -121,8 +121,7 @@ def bind_model_metadata(trace: Path, codex_home: Path, workspace: Path) -> dict:
 
 def archive_stage(workspace: Path, destination: Path) -> None:
     destination.mkdir()
-    for name in ("trace.jsonl", "last_message.md", "stderr.txt", "grade.json", "rubric_grade.json",
-                 "rubric_trace.jsonl", "rubric_stderr.txt", "rubric_prompt.txt"):
+    for name in ("trace.jsonl", "last_message.md", "stderr.txt", *GRADER_FEEDBACK_ARTIFACTS):
         path = workspace / name
         if path.exists():
             shutil.copy2(path, destination / name)
@@ -132,6 +131,7 @@ def archive_stage(workspace: Path, destination: Path) -> None:
 
 GRADER_FEEDBACK_ARTIFACTS = (
     "grade.json", "rubric_grade.json", "rubric_trace.jsonl", "rubric_stderr.txt", "rubric_prompt.txt",
+    "evidence-receipt-check.json",
 )
 
 
@@ -149,18 +149,76 @@ def isolate_stage_feedback(workspace: Path, archived_stage: Path) -> None:
         path.unlink()
 
 
-def validate_audit_handoff(repo: Path, workspace: Path) -> None:
-    """Use the existing canonical parser, without creating or repairing an audit."""
+def load_report_core(repo: Path):
+    """Import the independent repository core, never the actor's staged helper."""
     script = repo / "skills/references/scripts/observe_report_core.py"
     spec = importlib.util.spec_from_file_location("logging_workflow_report_core", script)
     if spec is None or spec.loader is None:
-        raise RuntimeError("Canonical audit parser unavailable")
+        raise RuntimeError("Canonical report parser unavailable")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    return module
+
+
+def validate_audit_handoff(repo: Path, workspace: Path) -> None:
+    """Use the existing canonical parser, without creating or repairing an audit."""
+    module = load_report_core(repo)
     report = json.loads((workspace / "service/.observe/otel-audit.json").read_text())
     normalized = module.normalize_audit_report(report)
     if normalized["meta"]["status"] == "Blocked":
         raise RuntimeError("Blocked audit cannot authorize workflow continuation")
+
+
+def check_evidence_receipt(repo: Path, workspace: Path, role: str) -> dict:
+    """Record an independent mechanical gate without changing actor-owned proof."""
+    service = workspace / "service"
+    observed = service / ".observe"
+    receipt = observed / "otel-evidence-receipt.json"
+    canonical = observed / "otel-verify.json"
+    core = repo / "skills/references/scripts/observe_report_core.py"
+    result = {"schema_version": 1, "kind": "logging-workflow-evidence-receipt-check",
+              "role": role, "status": "failed", "reason": "Receipt check did not complete",
+              "command": [sys.executable, str(repo / "skills/references/scripts/observe_report.py"),
+                          "validate-evidence-receipt", "--receipt", str(receipt), "--service-root", str(service)],
+              "execution": "in_process_canonical_api", "core": str(core),
+              "receipt": str(receipt), "canonical_report": str(canonical)}
+    try:
+        if role == "audit":
+            result.update(status="N_A", reason="Audit stage is plan-only", execution="not_applicable")
+        elif not os.path.lexists(canonical):
+            result.update(status="N_A", reason="No canonical verification overlay; direct Markdown handoff is outside this gate", execution="not_applicable")
+        else:
+            if canonical.is_symlink() or not canonical.is_file() or not canonical.resolve().is_relative_to(service.resolve()):
+                raise ValueError("Canonical verification overlay must be an owned regular file")
+            module = load_report_core(repo)
+            result["core_sha256"] = hashlib.sha256(core.read_bytes()).hexdigest()
+            audit_data = module.load_json(observed / "otel-audit.json")
+            audit = module.normalize_audit_report(audit_data)
+            selection_path = observed / "otel-selection.json"
+            selection = module.load_selection(selection_path if selection_path.exists() else None, audit, audit_data)
+            instrumentation = module.normalize_instrumentation(
+                module.load_json(observed / "otel-instrumentation.json"), audit, selection)
+            report = module.normalize_verify(module.load_json(canonical), audit, selection, instrumentation)
+            result["canonical_result"] = report["meta"]["result"]
+            rows = [row for finding in report["findings"]
+                    for row in finding["scenarios"] + finding["item_results"]]
+            executed = any(row["proof_mode"] != "not_run"
+                           or row["status"] in {"working", "not_working"}
+                           or row.get("trace_ids") or row["observed_telemetry"] for row in rows)
+            if not executed and report["meta"]["result"] in {"Not run", "Blocked"}:
+                result.update(status="N_A", reason="Validated canonical overlay records no executed proof", execution="not_applicable")
+            else:
+                result["validation"] = module.validate_evidence_receipt(receipt, service)
+                # A receipt for a different self-consistent report cannot authorize this canonical overlay.
+                value = module.load_json(receipt)
+                bound = receipt.parent / value["report"]["path"]
+                if bound.resolve() != canonical.resolve():
+                    raise ValueError("Evidence receipt must bind the final canonical otel-verify.json")
+                result.update(status="valid", reason="Canonical receipt inputs, raw artifacts and final report projection validated")
+    except Exception as error:
+        result.update(status="failed", reason=type(error).__name__ + ": " + str(error))
+    save(workspace / "evidence-receipt-check.json", result)
+    return result
 
 
 class CheckedJudgeBackend:
@@ -266,6 +324,7 @@ def run(args: argparse.Namespace) -> int:
                 archive_stage(workspace, output / role)
                 raise RuntimeError(f"{role} actor failed or produced no current final response")
             stage["task_model"] = bind_model_metadata(result.trace_path, args.codex_home.resolve(), workspace)
+            stage["evidence_receipt_guard"] = check_evidence_receipt(repo, workspace, role)
             trace = backend.parse_trace(result.trace_path)
             grade = grade_side(case=case, run_dir=workspace, final_message=result.final_message_path.read_text(),
                                trace=trace, side="with_skill", repo_root=repo)
@@ -309,7 +368,9 @@ def run(args: argparse.Namespace) -> int:
                 except Exception as error:
                     fatal_passed = False
                     stage["audit_handoff_error"] = type(error).__name__ + ": " + str(error)
-            semantic_passed = rubric_complete and rubric["overall_pass"] and all(check["pass"] for check in rubric["checks"])
+            semantic_passed = (rubric_complete and rubric["overall_pass"]
+                               and all(check["pass"] for check in rubric["checks"])
+                               and stage["evidence_receipt_guard"]["status"] in {"valid", "N_A"})
             passed = fatal_passed and semantic_passed
             stage["status"] = "passed" if passed else "failed"
             stage["failure_kind"] = None if passed else "semantic" if fatal_passed else "fatal"
@@ -319,12 +380,12 @@ def run(args: argparse.Namespace) -> int:
             print(json.dumps({"language": args.language, "trial": args.trial, "role": role, "status": stage["status"]}), flush=True)
             if not passed:
                 if not (fatal_passed and summary["collect_semantic_failures"]):
-                    raise RuntimeError(f"{role} stage did not pass all required guards, rubric and applicable runtime checks")
+                    raise RuntimeError(f"{role} stage did not pass all required guards, evidence receipt, rubric and applicable runtime checks")
                 stage["diagnostic_continuation"] = True
                 summary["diagnostic_only"] = True
                 save(output / "summary.json", summary)
         if any(stage["status"] != "passed" for stage in summary["stages"]):
-            summary.update(status="failed", error="Semantic rubric failure; later stages are diagnostic only")
+            summary.update(status="failed", error="Semantic rubric or evidence-receipt failure; later stages are diagnostic only")
         else:
             summary["status"] = "passed"
     except (Exception, KeyboardInterrupt) as error:

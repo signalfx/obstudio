@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import argparse
+import copy
+import hashlib
 import importlib.util
 import json
 import os
@@ -86,7 +88,8 @@ def test_every_logging_definition_uses_strict_judging_for_each_trial(tmp_path, l
         assert [rendered.index(section) for section in sections] == sorted(
             rendered.index(section) for section in sections)
         assert f"Actor task: {case.task}\n" in rendered
-        assert len(case.judge_inputs) == 3
+        assert len(case.judge_inputs) == 4
+        assert "evidence-receipt-check.json" in case.judge_inputs[-1]
         assert "\n".join(f"{i}. {item}" for i, item in enumerate(case.judge_inputs, 1)) in rendered
         assert {int(number) for number in re.findall(r"^\((\d+)\.[A-Z] ", rendered, re.MULTILINE)} == {2, 9, 10, 11, 14}
 
@@ -115,6 +118,17 @@ def workflow(tmp_path, monkeypatch):
     monkeypatch.setattr(driver, "prepare_dependencies", lambda *args: None)
     monkeypatch.setattr(driver, "start_receiver", lambda *args: object())
     monkeypatch.setattr(driver, "stop_owned", lambda *args, **kwargs: state["cleanup"])
+
+    real_receipt_guard = driver.check_evidence_receipt
+    def receipt_guard(repo, target, role):
+        if state.get("real_receipt_guard"):
+            return real_receipt_guard(repo, target, role)
+        value = {"status": state.get("receipt_failures", {}).get(role, "N_A"),
+                 "reason": "Mock orchestration fixture does not generate canonical verification proof",
+                 "command": [], "role": role}
+        driver.save(target / "evidence-receipt-check.json", value)
+        return value
+    monkeypatch.setattr(driver, "check_evidence_receipt", receipt_guard)
 
     def prepare(repo, case, side, target):
         (target / "service").mkdir()
@@ -220,6 +234,7 @@ def workflow(tmp_path, monkeypatch):
 
     def rubric(**kwargs):
         role = calls[-1]
+        assert (workspace / "evidence-receipt-check.json").is_file(), "Independent guard must precede grading"
         if state["fault"] == "judge_exception":
             raise RuntimeError("mock judge failed")
         checks = [{"id": f"rubric-{i}", "pass": role not in state["semantic"] or i != 2,
@@ -411,14 +426,15 @@ def test_fatal_later_stage_stops_even_after_diagnostic_continuation(workflow, fa
     assert summary["stages"][1]["failure_kind"] == "fatal"
 
 
-@pytest.mark.parametrize("failure", ["archive_exception", "archive_mismatch"])
+@pytest.mark.parametrize("failure", ["archive_exception", "archive_mismatch", "receipt_archive_mismatch"])
 def test_archive_failure_stops_before_next_actor_and_preserves_feedback(workflow, monkeypatch, failure):
     original = workflow.driver.archive_stage
     def archive(workspace, destination):
         if failure == "archive_exception":
             raise OSError("mock storage failure")
         original(workspace, destination)
-        (destination / "rubric_grade.json").write_text("corrupt archive")
+        name = "evidence-receipt-check.json" if failure == "receipt_archive_mismatch" else "rubric_grade.json"
+        (destination / name).write_text("corrupt archive")
     monkeypatch.setattr(workflow.driver, "archive_stage", archive)
     code, summary = workflow.run(collect=True)
     assert code == 1 and workflow.calls == ["audit"]
@@ -446,3 +462,219 @@ def test_cli_flag_defaults_off_and_is_explicit(monkeypatch):
     assert DRIVER.main() == 0 and seen[-1].collect_semantic_failures is False
     monkeypatch.setattr(sys, "argv", required + ["--collect-semantic-failures"])
     assert DRIVER.main() == 0 and seen[-1].collect_semantic_failures is True
+
+
+def receipt_flow(workspace, *, result="Pass", missing_manifest_scenario=False):
+    """Real canonical fixtures and real receipt API; no model or application run."""
+    core = REPORT.MODULE
+    service = workspace / "service"
+    observed = service / ".observe"
+    observed.mkdir(parents=True)
+    raw_audit = REPORT.sample_report()
+    if missing_manifest_scenario:
+        raw_audit["findings"][0]["verification_scenarios"].append("http.checkout.error")
+        extra = copy.deepcopy(raw_audit["verification"]["scenarios"][0])
+        extra["id"] = "http.checkout.error"
+        raw_audit["verification"]["scenarios"].append(extra)
+    audit = core.normalize_audit_report(raw_audit)
+    digest = core.audit_digest(audit)
+    selection = core.normalize_selection({"schema_version":1,"kind":"otel-selection",
+        "audit_id":audit["meta"]["audit_id"],"audit_sha256":digest,
+        "requested_ids":["OTEL-001"],"approved_ids":["OTEL-001"]},audit)
+    instrumentation = REPORT.sample_instrumentation(audit,digest,selection)
+    if missing_manifest_scenario:
+        instrumentation["findings"][0]["telemetry_changes"][0]["verification_scenarios"].append("http.checkout.error")
+    instrumentation = core.normalize_instrumentation(instrumentation,audit,selection)
+    report = REPORT.sample_verify(audit,digest,core.instrumentation_digest(instrumentation))
+    finding = report["findings"][0]
+    scenario, item = finding["scenarios"][0], finding["item_results"][0]
+    if result in {"Pass","Fail"}:
+        report["meta"]["result"] = result
+        status = "working" if result == "Pass" else "not_working"
+        finding.update(status=status,remaining=[] if result == "Pass" else ["Observed own-operation mismatch"])
+        for row in [scenario,item]:
+            row.update(status=status,proof_mode="full_runtime",visibility="otlp_accepted",
+                       observed_telemetry=["Own operation record decoded"],product_validation=["Own receiver receipt"])
+        scenario["trace_ids"] = ["1" * 32]
+        item["direct_assertion_passed"] = result == "Pass"
+    elif result in {"Not run","Blocked"}:
+        report["meta"]["result"] = result
+        for row in [scenario,item]:
+            row.update(proof_mode="not_run",visibility="not_proven",evidence=[],
+                       observed_telemetry=[],product_validation=[])
+        scenario["commands"] = []
+        if result == "Blocked":
+            scenario.update(status="blocked",blocking_reason="Owned receiver unavailable",
+                            unobserved_outcome="No runtime capture",commands=["make test"],
+                            evidence=[".observe/evidence/prerequisite.txt"])
+    if missing_manifest_scenario:
+        extra = copy.deepcopy(scenario);extra["id"] = "http.checkout.error"
+        finding["scenarios"].append(extra)
+        item["scenarios"].append("http.checkout.error")
+    files = {name:observed/filename for name,filename in {
+        "audit":"otel-audit.json","selection":"otel-selection.json",
+        "instrumentation":"otel-instrumentation.json","report":"otel-verify.json",
+        "manifest":"manifest.json","ledger":"observations.json",
+        "receipt":"otel-evidence-receipt.json","raw":"raw.json"}.items()}
+    files["raw"].write_text('{"actual_test_receipt":true}\n')
+    manifest = {"schema_version":1,"kind":"otel-evidence-controls","controls":[{
+        "id":"control.checkout","scenario_id":"http.checkout.success","run_id":"owned.run",
+        "operation_ids":["checkout.request"],"phase":"source_alive",
+        "match":{"method":"GET","outcome":200},"expected":{"joined":True}}]}
+    rows = [] if result == "Partial" else [{"id":"own.receipt","run_id":"owned.run",
+        "operation_id":"checkout.request","phase":"source_alive","method":"GET","outcome":200,
+        "trace_context":{"state":"context","trace_id":"1"*32,"span_id":"2"*16},
+        "facts":{"joined":result != "Fail"},"artifacts":[{"path":".observe/raw.json",
+        "sha256":hashlib.sha256(files["raw"].read_bytes()).hexdigest()}]}]
+    if result in {"Pass","Partial","Fail"} and not missing_manifest_scenario:
+        report = core.project_evidence_report(report,core.bake_evidence_report(manifest,rows,service))
+    report = core.normalize_verify(report,audit,selection,instrumentation)
+    for name,value in [("audit",audit),("selection",selection),("instrumentation",instrumentation),
+                       ("report",report),("manifest",manifest),("ledger",rows)]:
+        files[name].write_text(json.dumps(value))
+    if result in {"Pass","Partial","Fail"}:
+        if missing_manifest_scenario:
+            # Deliberately forge matching input hashes: rebaking, not a hash-only seal, must reject it.
+            receipt = {"schema_version":1,"kind":"otel-evidence-receipt",
+                       "artifact_root":{"path":".."},
+                       "core_sha256":hashlib.sha256((ROOT/"skills/references/scripts/observe_report_core.py").read_bytes()).hexdigest()}
+            for key in ["manifest","ledger","report"]:
+                receipt[key] = {"path":files[key].name,"sha256":hashlib.sha256(files[key].read_bytes()).hexdigest()}
+        else:
+            receipt = core.create_evidence_receipt(files["manifest"],files["ledger"],files["report"],service,files["receipt"])
+        files["receipt"].write_text(json.dumps(receipt))
+    return files
+
+
+@pytest.mark.parametrize("result",["Pass","Partial","Fail"])
+def test_real_receipt_guard_accepts_bound_canonical_proof_without_mutation(tmp_path,result):
+    files = receipt_flow(tmp_path,result=result)
+    # A malicious staged helper is never imported by the independent guard.
+    staged = tmp_path/".agents/skills/references/scripts/observe_report_core.py"
+    staged.parent.mkdir(parents=True)
+    staged.write_text('raise RuntimeError("actor-controlled parser executed")\n')
+    before = {path:path.read_bytes() for path in files.values()}
+    guard = DRIVER.check_evidence_receipt(ROOT,tmp_path,"verify")
+    assert guard["status"] == "valid",guard
+    assert guard["canonical_result"] == result
+    assert guard["validation"]["baked_status"] == {"Pass":"working","Partial":"not_proven","Fail":"failed"}[result]
+    assert guard["core"] == str(ROOT/"skills/references/scripts/observe_report_core.py")
+    assert guard["execution"] == "in_process_canonical_api"
+    assert {path:path.read_bytes() for path in files.values()} == before
+    assert json.loads((tmp_path/"evidence-receipt-check.json").read_text()) == guard
+
+
+@pytest.mark.parametrize("fault",["no_receipt","input_hash_drift","raw_hash_drift","wrong_ids","missing_required_ids","missing_canonical_scenario","different_report"])
+def test_real_receipt_guard_rejects_stale_unbound_and_node_style_working_claims(tmp_path,fault):
+    files = receipt_flow(tmp_path,missing_manifest_scenario=fault in {"missing_required_ids","missing_canonical_scenario"})
+    if fault == "no_receipt":
+        files["receipt"].unlink()
+    elif fault == "input_hash_drift":
+        files["report"].write_text(files["report"].read_text()+"\n")
+    elif fault == "raw_hash_drift":
+        files["raw"].write_text("tampered raw")
+    elif fault == "wrong_ids":
+        manifest = json.loads(files["manifest"].read_text())
+        manifest["controls"][0]["scenario_id"] = "unrelated.operation"
+        files["manifest"].write_text(json.dumps(manifest))
+        receipt = json.loads(files["receipt"].read_text())
+        receipt["manifest"]["sha256"] = hashlib.sha256(files["manifest"].read_bytes()).hexdigest()
+        files["receipt"].write_text(json.dumps(receipt))
+    elif fault == "missing_canonical_scenario":
+        report = json.loads(files["report"].read_text())
+        report["findings"][0]["scenarios"].pop()
+        files["report"].write_text(json.dumps(report))
+        receipt = json.loads(files["receipt"].read_text())
+        receipt["report"]["sha256"] = hashlib.sha256(files["report"].read_bytes()).hexdigest()
+        files["receipt"].write_text(json.dumps(receipt))
+    elif fault == "different_report":
+        other = files["report"].with_name("other-report.json")
+        other.write_bytes(files["report"].read_bytes())
+        receipt = REPORT.MODULE.create_evidence_receipt(files["manifest"],files["ledger"],other,
+            tmp_path/"service",files["receipt"])
+        files["receipt"].write_text(json.dumps(receipt))
+    before = {p:p.read_bytes() for p in (tmp_path/"service").rglob("*") if p.is_file()}
+    guard = DRIVER.check_evidence_receipt(ROOT,tmp_path,"instrument")
+    assert guard["status"] == "failed",guard
+    assert guard["reason"] and guard["command"]
+    assert {p:p.read_bytes() for p in (tmp_path/"service").rglob("*") if p.is_file()} == before
+    if fault == "missing_required_ids":
+        assert "http.checkout.error" in guard["reason"]
+    if fault == "different_report":
+        assert "final canonical" in guard["reason"]
+
+
+@pytest.mark.parametrize("result",["Not run","Blocked"])
+def test_receipt_guard_skips_only_valid_canonical_no_execution(tmp_path,result):
+    receipt_flow(tmp_path,result=result)
+    guard = DRIVER.check_evidence_receipt(ROOT,tmp_path,"verify")
+    assert guard["status"] == "N_A",guard
+    assert guard["canonical_result"] == result
+    assert "no executed proof" in guard["reason"]
+
+
+@pytest.mark.parametrize("fault",["invalid_json","wrong_kind","fake_not_run","bad_scenarios","executed_blocked"])
+def test_malformed_canonical_cannot_bypass_receipt_guard_as_not_applicable(tmp_path,fault):
+    files = receipt_flow(tmp_path,result="Not run")
+    report = json.loads(files["report"].read_text())
+    if fault == "wrong_kind":
+        report["kind"] = "unrelated"
+    elif fault == "fake_not_run":
+        report = {"kind":"otel-verify","meta":{"result":"Not run"}}
+    elif fault == "bad_scenarios":
+        report["findings"][0]["scenarios"] = None
+    elif fault == "executed_blocked":
+        report["meta"]["result"] = "Blocked"
+        report["findings"][0]["scenarios"][0]["proof_mode"] = "app_test"
+    files["report"].write_text("not JSON" if fault == "invalid_json" else json.dumps(report))
+    guard = DRIVER.check_evidence_receipt(ROOT,tmp_path,"verify")
+    assert guard["status"] == "failed",guard
+
+
+def test_receipt_guard_plan_and_direct_markdown_scopes_are_explicit(tmp_path):
+    observed = tmp_path/"service/.observe"
+    observed.mkdir(parents=True)
+    (observed/"otel-verify.md").write_text("Direct Markdown proof remains grader-owned")
+    guard = DRIVER.check_evidence_receipt(ROOT,tmp_path,"instrument")
+    assert guard["status"] == "N_A" and "No canonical" in guard["reason"]
+    (observed/"otel-verify.json").write_text("malformed overlay")
+    guard = DRIVER.check_evidence_receipt(ROOT,tmp_path,"audit")
+    assert guard["status"] == "N_A" and "plan-only" in guard["reason"]
+
+
+@pytest.mark.parametrize("collect",[False,True])
+def test_receipt_failure_is_semantic_preserves_raw_rubric_and_isolates_feedback(workflow,collect):
+    workflow.state["receipt_failures"] = {"instrument":"failed"}
+    code, summary = workflow.run(collect=collect)
+    assert code == 1
+    assert workflow.calls == (["audit","instrument","verify"] if collect else ["audit","instrument"])
+    stage = summary["stages"][1]
+    assert stage["failure_kind"] == "semantic"
+    assert stage["evidence_receipt_guard"]["status"] == "failed"
+    assert stage["rubric"]["overall_pass"] is True
+    assert len(stage["rubric"]["checks"]) == 14 and all(c["pass"] for c in stage["rubric"]["checks"])
+    assert stage["task_model"]["model"] == stage["rubric_model"]["model"] == "gpt-6.1-sol"
+    assert bool(stage.get("diagnostic_continuation")) == collect
+    assert summary["diagnostic_only"] == collect
+    assert_archives(workflow)
+    assert json.loads((workflow.output/"instrument/evidence-receipt-check.json").read_text())["status"] == "failed"
+
+
+@pytest.mark.parametrize("claim",["trace_ids","observed_telemetry"])
+def test_no_execution_receipt_exemption_cannot_hide_recorded_telemetry_claims(tmp_path,claim):
+    files = receipt_flow(tmp_path,result="Not run")
+    report = json.loads(files["report"].read_text())
+    report["findings"][0]["scenarios"][0][claim] = ["1"*32] if claim == "trace_ids" else ["Observed span"]
+    files["report"].write_text(json.dumps(report))
+    guard = DRIVER.check_evidence_receipt(ROOT,tmp_path,"verify")
+    assert guard["status"] == "failed",guard
+    assert "receipt" in guard["reason"]
+
+
+def test_receipt_failure_does_not_weaken_fatal_runtime_guard(workflow):
+    workflow.state.update(receipt_failures={"instrument":"failed"},runtime=9)
+    code, summary = workflow.run(collect=True)
+    assert code == 1 and workflow.calls == ["audit","instrument"]
+    stage = summary["stages"][1]
+    assert stage["failure_kind"] == "fatal"
+    assert not stage.get("diagnostic_continuation",False)

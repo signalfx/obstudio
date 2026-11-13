@@ -2991,3 +2991,197 @@ def check_evidence_report_projection(report: dict[str, Any], baked: dict[str, An
     if report["meta"].get("result") != projected["meta"]["result"]:
         differences.append("meta.result differs from baked evidence")
     return differences
+
+
+def _receipt_path(root: Path, path: Path, *, directory: bool = False, missing: bool = False) -> Path:
+    """Confine a path and reject link traversal, including a link before '..'."""
+    if "\x00" in str(path):
+        fail("evidence receipt path must not contain NUL characters")
+    candidate = Path(os.path.abspath(path))
+    # Inspect the uncollapsed spelling too: link/../file must not bypass a link check.
+    try:
+        for ancestor in (path, *path.parents):
+            if ancestor.is_symlink() and (ancestor.parent.resolve().is_relative_to(root) or ancestor.resolve().is_relative_to(root)):
+                fail(f"evidence receipt paths must not traverse symlinks: {path}")
+        candidate = candidate.resolve()
+    except (OSError, RuntimeError, ValueError) as exc:
+        fail(f"cannot resolve evidence receipt path {path}: {exc}")
+    if not candidate.is_relative_to(root):
+        fail(f"evidence receipt path escapes service_root: {path}")
+    relative = candidate.relative_to(root)
+    for index in range(1, len(relative.parts) + 1):
+        if root.joinpath(*relative.parts[:index]).is_symlink():
+            fail(f"evidence receipt paths must not traverse symlinks: {path}")
+    if not candidate.resolve().is_relative_to(root):
+        fail(f"evidence receipt path escapes service_root: {path}")
+    if directory:
+        if not candidate.is_dir():
+            fail(f"evidence receipt directory does not exist: {path}")
+    elif candidate.exists():
+        if not _stat.S_ISREG(candidate.stat(follow_symlinks=False).st_mode):
+            fail(f"evidence receipt input/output must be a regular file: {path}")
+    elif not missing:
+        fail(f"evidence receipt file does not exist: {path}")
+    return candidate
+
+
+def _receipt_root(root: Path) -> Path:
+    if root.is_symlink():
+        fail("service_root must not be a symlink")
+    try:
+        resolved = root.resolve(strict=True)
+    except (OSError, RuntimeError, ValueError) as exc:
+        fail(f"cannot resolve service_root: {exc}")
+    if not resolved.is_dir():
+        fail("service_root must be a directory")
+    return resolved
+
+
+def _receipt_read(root: Path, path: Path) -> bytes:
+    candidate = _receipt_path(root, path)
+    relative = candidate.relative_to(root)
+    descriptor = None
+    identity = lambda s: (s.st_dev, s.st_ino, s.st_size, s.st_mtime_ns, s.st_ctime_ns)
+    try:
+        if os.open in os.supports_dir_fd and hasattr(os, "O_NOFOLLOW"):
+            descriptor = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            root_identity = os.fstat(descriptor)
+            for part in relative.parts[:-1]:
+                child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=descriptor)
+                os.close(descriptor)
+                descriptor = child
+            source = os.open(relative.parts[-1], os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0), dir_fd=descriptor)
+        else:
+            root_identity = root.stat()
+            source = os.open(candidate, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
+        with os.fdopen(source, "rb") as handle:
+            before = os.fstat(handle.fileno())
+            if not _stat.S_ISREG(before.st_mode):
+                fail("evidence receipt inputs must be regular files")
+            value = handle.read()
+            after = os.fstat(handle.fileno())
+        if identity(before) != identity(after) or identity(candidate.stat(follow_symlinks=False)) != identity(after):
+            fail("evidence receipt input changed while reading")
+        if (root_identity.st_dev, root_identity.st_ino) != (root.stat().st_dev, root.stat().st_ino):
+            fail("service_root changed while reading")
+        _receipt_path(root, path)
+        return value
+    except (OSError, RuntimeError, IndexError) as exc:
+        fail(f"cannot read evidence receipt input {path}: {exc}")
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+
+
+def _receipt_json(raw: bytes, label: str) -> dict[str, Any]:
+    try:
+        return as_object(json.loads(raw), label)
+    except (UnicodeError, json.JSONDecodeError) as exc:
+        fail(f"{label} is not valid JSON: {exc}")
+
+
+def _receipt_ledger(raw: bytes) -> list[dict[str, Any]]:
+    try:
+        value = raw.decode("utf-8")
+        rows = json.loads(value) if value.lstrip().startswith("[") else [json.loads(line) for line in value.splitlines() if line.strip()]
+    except (UnicodeError, json.JSONDecodeError) as exc:
+        fail(f"receipt ledger is not JSON/JSONL: {exc}")
+    return [as_object(row, f"receipt ledger[{i}]") for i, row in enumerate(as_list(rows, "receipt ledger"))]
+
+
+def evidence_receipt_paths(
+    inputs: list[Path], outputs: list[Path], artifact_root: Path,
+    observations: list[dict[str, Any]], *, strict: bool = True,
+) -> None:
+    """Always guard collisions; strict path checks belong to explicit receipts."""
+    if strict:
+        paths = [Path(os.path.abspath(p)) for p in inputs + outputs + [artifact_root]]
+        # Preserve link spellings until the explicit receipt boundary is checked.
+        try:
+            boundary = _receipt_root(Path(os.path.commonpath([str(p.parent) for p in paths])))
+        except ValueError as exc:
+            fail(f"evidence receipt paths require a common filesystem root: {exc}")
+        for path in inputs:
+            _receipt_path(boundary, path)
+        _receipt_path(boundary, artifact_root, directory=True)
+        for path in outputs:
+            _receipt_path(boundary, path, missing=True)
+    raw = [artifact_root / a["path"] for row in observations for a in row["artifacts"]]
+    protected = inputs + raw
+    for index, output in enumerate(outputs):
+        for other in protected + outputs[:index]:
+            if output.resolve() == other.resolve() or (output.exists() and other.exists() and os.path.samefile(output, other)):
+                fail("evidence-bake outputs must be distinct and must not overwrite inputs or source artifacts")
+
+
+def create_evidence_receipt(
+    manifest: Path, ledger: Path, report: Path, artifact_root: Path, receipt: Path,
+) -> dict[str, Any]:
+    """Bind checked inputs; the receipt adds no semantic completeness claim."""
+    try:
+        parent = receipt.parent.resolve()
+        root = _receipt_root(Path(os.path.commonpath([str(p.resolve()) for p in [manifest, ledger, report, artifact_root, parent]])))
+    except (OSError, RuntimeError, ValueError) as exc:
+        fail(f"cannot resolve evidence receipt inputs: {exc}")
+    # A common path can be a file only when the caller supplied colliding inputs.
+    refs = {}
+    for key, path in (("manifest", manifest), ("ledger", ledger), ("report", report)):
+        raw = _receipt_read(root, path)
+        refs[key] = {"path": Path(os.path.relpath(path.resolve(), parent)).as_posix(), "sha256": hashlib.sha256(raw).hexdigest()}
+    value = {"schema_version": 1, "kind": "otel-evidence-receipt", **refs,
+             "artifact_root": {"path": Path(os.path.relpath(artifact_root.resolve(), parent)).as_posix()},
+             "core_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
+    # Re-bake the hashed bytes and check the exact final report again before publishing.
+    _validate_evidence_receipt(value, parent, root)
+    return value
+
+
+def _validate_evidence_receipt(value: dict[str, Any], parent: Path, root: Path) -> dict[str, Any]:
+    if type(value.get("schema_version")) is not int or value["schema_version"] != 1 or value.get("kind") != "otel-evidence-receipt":
+        fail("evidence receipt requires schema_version 1 and kind otel-evidence-receipt")
+    if value.get("core_sha256") != hashlib.sha256(Path(__file__).read_bytes()).hexdigest():
+        fail("evidence receipt core SHA-256 differs from canonical validator")
+    def reference(key: str, directory: bool = False) -> tuple[Path, bytes | None]:
+        ref = as_object(value.get(key), f"receipt.{key}")
+        name = text(ref.get("path"), f"receipt.{key}.path")
+        if "\x00" in name or "\\" in name or Path(name).is_absolute() or re.match(r"^[A-Za-z]:", name):
+            fail(f"receipt.{key}.path must be a portable relative path")
+        path = parent
+        for component in Path(name).parts:
+            path = path / component
+            if path.is_symlink():
+                fail(f"receipt.{key}.path must not traverse symlinks")
+            if not path.resolve().is_relative_to(root):
+                fail(f"receipt.{key}.path escapes service_root")
+        _receipt_path(root, path, directory=directory)
+        if directory:
+            return path, None
+        digest = text(ref.get("sha256"), f"receipt.{key}.sha256")
+        if not re.fullmatch(r"[0-9a-f]{64}", digest):
+            fail(f"receipt.{key}.sha256 must be a lowercase SHA-256 digest")
+        raw = _receipt_read(root, path)
+        if hashlib.sha256(raw).hexdigest() != digest:
+            fail(f"receipt.{key} SHA-256 differs from current input")
+        return path, raw
+    _, manifest = reference("manifest")
+    _, ledger = reference("ledger")
+    _, report = reference("report")
+    artifacts, _ = reference("artifact_root", directory=True)
+    artifacts = _receipt_path(root, artifacts, directory=True)
+    baked = bake_evidence_report(_receipt_json(manifest, "receipt manifest"), _receipt_ledger(ledger), artifacts)
+    _receipt_path(root, artifacts, directory=True)
+    # Detect input changes during raw verification rather than certifying stale bytes.
+    for key in ("manifest", "ledger", "report"):
+        reference(key)
+    differences = check_evidence_report_projection(_receipt_json(report, "receipt report"), baked)
+    if differences:
+        fail("evidence receipt report projection differs: " + "; ".join(differences))
+    return {"schema_version": 1, "kind": "otel-evidence-receipt-validation", "status": "valid", "baked_status": baked["status"], "limitations": "Mechanical input, raw-artifact and projection consistency only; no semantic completeness or capture-adapter truth claim."}
+
+
+def validate_evidence_receipt(receipt: Path, service_root: Path) -> dict[str, Any]:
+    """Independently rehash, re-bake and check a receipt under a caller-owned root."""
+    root = _receipt_root(service_root)
+    # The caller root may use a platform alias; inspect all paths below that root.
+    value = _receipt_json(_receipt_read(root, receipt), "evidence receipt")
+    return _validate_evidence_receipt(value, _receipt_path(root, receipt).parent, root)

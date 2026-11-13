@@ -5,6 +5,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -641,6 +642,281 @@ class EvidenceReportTest(unittest.TestCase):
         result = self.run_cli("--manifest", str(manifest), "--ledger", str(ledger), "--artifact-root", str(self.root), "--output", str(output), "--markdown", str(markdown))
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(output.read_text())["status"], "not_proven")
+
+
+    def receipt_fixture(self, *, partial: bool = False) -> tuple[list[str], dict[str, Path]]:
+        paths = {name: self.root / filename for name, filename in {
+            "manifest":"manifest.json", "ledger":"ledger.jsonl", "report":"canonical.json",
+            "output":"baked.json", "markdown":"baked.md", "receipt":"proof/receipt.json",
+        }.items()}
+        paths["receipt"].parent.mkdir(exist_ok=True)
+        paths["manifest"].write_text(json.dumps(self.manifest()))
+        rows = [] if partial else [self.observation()]
+        paths["ledger"].write_text("".join(json.dumps(row) + "\n" for row in rows))
+        report = MODULE.project_evidence_report(self.report(), self.bake(rows))
+        paths["report"].write_text(json.dumps(report))
+        arguments = ["--manifest", str(paths["manifest"]), "--ledger", str(paths["ledger"]),
+                     "--artifact-root", str(self.root), "--output", str(paths["output"]),
+                     "--markdown", str(paths["markdown"]), "--check-report", str(paths["report"]),
+                     "--receipt-output", str(paths["receipt"])]
+        return arguments, paths
+
+    def test_receipt_cli_roundtrip_repeat_relative_refs_and_readonly_validation(self) -> None:
+        args, p = self.receipt_fixture()
+        first = self.run_cli(*args)
+        self.assertEqual(first.returncode, 0, first.stderr)
+        receipt = json.loads(p["receipt"].read_text())
+        self.assertEqual(receipt["schema_version"], 1)
+        self.assertEqual(receipt["kind"], "otel-evidence-receipt")
+        self.assertEqual(receipt["manifest"]["path"], "../manifest.json")
+        self.assertEqual(receipt["artifact_root"]["path"], "..")
+        self.assertNotIn("timestamp", receipt)
+        before = {path: path.read_bytes() for path in p.values()}
+        second = self.run_cli(*args)
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertEqual({path: path.read_bytes() for path in p.values()}, before)
+        validated = MODULE.validate_evidence_receipt(p["receipt"], self.root)
+        self.assertEqual(validated["status"], "valid")
+        self.assertEqual(validated["baked_status"], "working")
+        cli = subprocess.run([sys.executable, str(SCRIPT), "validate-evidence-receipt", "--receipt", str(p["receipt"]), "--service-root", str(self.root)], text=True, capture_output=True)
+        self.assertEqual(cli.returncode, 0, cli.stderr)
+        self.assertEqual(json.loads(cli.stdout), validated)
+        self.assertEqual({path: path.read_bytes() for path in p.values()}, before)
+
+    def test_receipt_flag_requires_successful_final_check_and_respects_gate(self) -> None:
+        args, p = self.receipt_fixture()
+        index = args.index("--check-report")
+        absent = self.run_cli(*(args[:index] + args[index + 2:]))
+        self.assertEqual(absent.returncode, 1)
+        self.assertIn("requires --check-report", absent.stderr)
+        self.assertFalse(p["receipt"].exists())
+        p["report"].write_text(json.dumps(self.report()))
+        drift = self.run_cli(*args)
+        self.assertEqual(drift.returncode, 1)
+        self.assertFalse(p["receipt"].exists())
+        args, p = self.receipt_fixture(partial=True)
+        gated = self.run_cli(*args, "--require-working")
+        self.assertEqual(gated.returncode, 1)
+        self.assertFalse(p["receipt"].exists())
+        partial = self.run_cli(*args)
+        self.assertEqual(partial.returncode, 0, partial.stderr)
+        self.assertEqual(MODULE.validate_evidence_receipt(p["receipt"], self.root)["baked_status"], "not_proven")
+        self.assertEqual(json.loads(p["report"].read_text())["meta"]["result"], "Partial")
+
+    def test_receipt_api_rehashes_every_input_and_raw_artifact(self) -> None:
+        args, p = self.receipt_fixture()
+        self.assertEqual(self.run_cli(*args).returncode, 0)
+        for path in [p["manifest"],p["ledger"],p["report"],self.artifact]:
+            saved = path.read_bytes()
+            with self.subTest(path=path):
+                path.write_bytes(saved + b" ")
+                with self.assertRaises(MODULE.ReportError):
+                    MODULE.validate_evidence_receipt(p["receipt"], self.root)
+                path.write_bytes(saved)
+                path.unlink()
+                with self.assertRaises(MODULE.ReportError):
+                    MODULE.validate_evidence_receipt(p["receipt"], self.root)
+                path.write_bytes(saved)
+        receipt = json.loads(p["receipt"].read_text())
+        receipt["core_sha256"] = "0" * 64
+        p["receipt"].write_text(json.dumps(receipt))
+        with self.assertRaises(MODULE.ReportError):
+            MODULE.validate_evidence_receipt(p["receipt"], self.root)
+
+    def test_receipt_validation_rebakes_not_only_hashes(self) -> None:
+        args, p = self.receipt_fixture()
+        self.assertEqual(self.run_cli(*args).returncode, 0)
+        original = {path: path.read_bytes() for path in [p["manifest"],p["ledger"],p["report"],p["receipt"]]}
+        for drift in ["wrong_ids", "missing_observation", "missing_required_working_scenario", "wrong_report_ids"]:
+            for path, value in original.items():
+                path.write_bytes(value)
+            receipt = json.loads(p["receipt"].read_text())
+            if drift == "wrong_ids":
+                m = json.loads(p["manifest"].read_text());m["controls"][0]["scenario_id"] = "unrelated.scenario";p["manifest"].write_text(json.dumps(m))
+            elif drift == "missing_observation":
+                p["ledger"].write_text("")
+            else:
+                r = json.loads(p["report"].read_text())
+                if drift == "wrong_report_ids":
+                    r["findings"][0]["scenarios"][0]["id"] = "unrelated.scenario"
+                else:
+                    branch = copy.deepcopy(r["findings"][0]["scenarios"][0]);branch["id"] = "required.unexecuted";r["findings"][0]["scenarios"].append(branch)
+                p["report"].write_text(json.dumps(r))
+            for key in ["manifest","ledger","report"]:
+                receipt[key]["sha256"] = hashlib.sha256(p[key].read_bytes()).hexdigest()
+            p["receipt"].write_text(json.dumps(receipt))
+            with self.subTest(drift=drift), self.assertRaises(MODULE.ReportError):
+                MODULE.validate_evidence_receipt(p["receipt"], self.root)
+
+    def test_receipt_validation_confines_all_refs_and_receipt_itself(self) -> None:
+        args, p = self.receipt_fixture()
+        self.assertEqual(self.run_cli(*args).returncode, 0)
+        original = p["receipt"].read_bytes()
+        with tempfile.TemporaryDirectory() as elsewhere:
+            outside = Path(elsewhere) / "copy.json"
+            for key in ["manifest","ledger","report","artifact_root"]:
+                for spelling in [str(outside.resolve()), "../../../outside.json", "C:\\outside.json", "bad\x00path"]:
+                    receipt = json.loads(original);receipt[key]["path"] = spelling;p["receipt"].write_text(json.dumps(receipt))
+                    with self.subTest(key=key,path=spelling), self.assertRaises(MODULE.ReportError):
+                        MODULE.validate_evidence_receipt(p["receipt"], self.root)
+            p["receipt"].write_bytes(original)
+            outside.write_bytes(original)
+            with self.assertRaises(MODULE.ReportError):
+                MODULE.validate_evidence_receipt(outside, self.root)
+
+    def test_receipt_validation_rejects_file_and_directory_symlinks(self) -> None:
+        args, p = self.receipt_fixture()
+        self.assertEqual(self.run_cli(*args).returncode, 0)
+        for target in [p["manifest"],p["ledger"],p["report"],self.artifact,p["receipt"]]:
+            saved = target.with_name(target.name + ".saved");target.rename(saved);target.symlink_to(saved)
+            with self.subTest(path=target), self.assertRaises(MODULE.ReportError):
+                MODULE.validate_evidence_receipt(p["receipt"], self.root)
+            target.unlink();saved.rename(target)
+        original = p["receipt"].read_bytes()
+        link = self.root / "link";link.symlink_to(self.root, target_is_directory=True)
+        for name in ["../link/manifest.json", "../link/../" + self.root.name + "/manifest.json"]:
+            receipt = json.loads(original);receipt["manifest"]["path"] = name;p["receipt"].write_text(json.dumps(receipt))
+            with self.subTest(path=name), self.assertRaises(MODULE.ReportError):
+                MODULE.validate_evidence_receipt(p["receipt"], self.root)
+
+    def test_receipt_cli_preflights_all_collisions_and_symlinks_before_writes(self) -> None:
+        args, p = self.receipt_fixture()
+        for destination in [p["manifest"],p["ledger"],p["report"],self.artifact,p["output"],p["markdown"]]:
+            changed = args[:-1] + [str(destination)]
+            result = self.run_cli(*changed)
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertFalse(p["output"].exists())
+            self.assertFalse(p["markdown"].exists())
+        alias = self.root / "hardlink"
+        os.link(self.artifact, alias)
+        result = self.run_cli(*(args[:-1] + [str(alias)]))
+        self.assertEqual(result.returncode, 1, result.stderr)
+        alias.unlink();alias.symlink_to(self.artifact)
+        result = self.run_cli(*(args[:-1] + [str(alias)]))
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertFalse(p["output"].exists())
+        self.assertFalse(p["markdown"].exists())
+        self.assertEqual(self.artifact.read_bytes(), b'{"record_verified": true}\n')
+
+    def test_receipt_cli_protects_unmatched_raw_artifacts_and_input_links(self) -> None:
+        args, p = self.receipt_fixture()
+        unused = self.root / "unused-raw.json";unused.write_bytes(b"unmatched actual raw")
+        row = self.observation(id="other",operation_id="other",artifacts=[{"path":unused.name,"sha256":hashlib.sha256(unused.read_bytes()).hexdigest()}])
+        p["ledger"].write_text(json.dumps(self.observation()) + "\n" + json.dumps(row) + "\n")
+        result = self.run_cli(*(args[:-1] + [str(unused)]))
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertFalse(p["output"].exists())
+        saved = p["manifest"].with_suffix(".saved");p["manifest"].rename(saved);p["manifest"].symlink_to(saved)
+        result = self.run_cli(*args)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertFalse(p["output"].exists())
+        self.assertFalse(p["receipt"].exists())
+
+
+    def test_receipt_rejects_malformed_schema_missing_receipt_and_symlink_root(self) -> None:
+        args, p = self.receipt_fixture()
+        self.assertEqual(self.run_cli(*args).returncode, 0)
+        original = json.loads(p["receipt"].read_text())
+        for key, value in [("schema_version",True),("schema_version",2),("kind","other"),("manifest",None),("ledger",{}),("report",[]),("artifact_root",{})]:
+            invalid = copy.deepcopy(original);invalid[key] = value;p["receipt"].write_text(json.dumps(invalid))
+            with self.subTest(key=key,value=value), self.assertRaises(MODULE.ReportError):
+                MODULE.validate_evidence_receipt(p["receipt"], self.root)
+        p["receipt"].unlink()
+        with self.assertRaises(MODULE.ReportError):
+            MODULE.validate_evidence_receipt(p["receipt"], self.root)
+        p["receipt"].write_text("not JSON")
+        with self.assertRaises(MODULE.ReportError):
+            MODULE.validate_evidence_receipt(p["receipt"], self.root)
+        p["receipt"].write_text(json.dumps(original))
+        link = self.root / "root-link";link.symlink_to(self.root,target_is_directory=True)
+        with self.assertRaises(MODULE.ReportError):
+            MODULE.validate_evidence_receipt(p["receipt"], link)
+        original["artifact_root"]["path"] = "../root-link"
+        p["receipt"].write_text(json.dumps(original))
+        with self.assertRaises(MODULE.ReportError):
+            MODULE.validate_evidence_receipt(p["receipt"], self.root)
+
+    def test_receipt_detects_inputs_changed_during_rebake(self) -> None:
+        args, p = self.receipt_fixture()
+        self.assertEqual(self.run_cli(*args).returncode, 0)
+        core = MODULE._load_sibling("observe_report_core.py")
+        real = core.bake_evidence_report
+        def mutate(*args: Any, **kwargs: Any) -> dict[str, Any]:
+            baked = real(*args, **kwargs)
+            p["report"].write_bytes(p["report"].read_bytes() + b" ")
+            return baked
+        with mock.patch.object(core,"bake_evidence_report",side_effect=mutate), self.assertRaises(MODULE.ReportError):
+            MODULE.validate_evidence_receipt(p["receipt"], self.root)
+
+
+    def test_receipt_remains_valid_after_service_tree_relocation(self) -> None:
+        args, p = self.receipt_fixture()
+        self.assertEqual(self.run_cli(*args).returncode, 0)
+        expected = p["receipt"].read_bytes()
+        with tempfile.TemporaryDirectory() as elsewhere:
+            moved = Path(elsewhere) / "relocated-service"
+            shutil.copytree(self.root, moved)
+            receipt = moved / p["receipt"].relative_to(self.root)
+            self.assertEqual(MODULE.validate_evidence_receipt(receipt,moved)["status"], "valid")
+            self.assertEqual(receipt.read_bytes(), expected)
+
+
+    def test_receipt_incompatible_filesystem_roots_fail_actionably(self) -> None:
+        args, p = self.receipt_fixture()
+        core = MODULE._load_sibling("observe_report_core.py")
+        with mock.patch.object(core.os.path,"commonpath",side_effect=ValueError("different drives")):
+            with self.assertRaises(MODULE.ReportError):
+                MODULE.evidence_receipt_paths([p["manifest"]],[p["receipt"]],self.root,[])
+            with self.assertRaises(MODULE.ReportError):
+                MODULE.create_evidence_receipt(p["manifest"],p["ledger"],p["report"],self.root,p["receipt"])
+
+
+    def test_unflagged_bake_preserves_input_root_and_output_ancestor_aliases(self) -> None:
+        args, p = self.receipt_fixture()
+        alias = self.root / "directory-alias"
+        alias.symlink_to(self.root, target_is_directory=True)
+        real_output = self.root / "existing-output"
+        real_output.mkdir()
+        ordinary = args[:-2]  # Explicit receipt mode is opt-in.
+        cases = [
+            ("--manifest", str(alias / p["manifest"].name)),
+            ("--artifact-root", str(alias)),
+            ("--output", str(alias / real_output.name / "baked.json")),
+        ]
+        for option, value in cases:
+            changed = list(ordinary)
+            changed[changed.index(option) + 1] = value
+            with self.subTest(option=option):
+                baked = self.run_cli(*changed)
+                self.assertEqual(baked.returncode, 0, baked.stderr)
+                output = Path(changed[changed.index("--output") + 1])
+                self.assertEqual(json.loads(output.read_text())["status"], "working")
+                original = output.read_bytes()
+                rejected = self.run_cli(*changed, "--receipt-output", str(p["receipt"]))
+                self.assertEqual(rejected.returncode, 1, rejected.stderr)
+                self.assertIn("symlink", rejected.stderr)
+                self.assertFalse(p["receipt"].exists())
+                self.assertEqual(output.read_bytes(), original)
+
+
+    def test_unflagged_bake_still_rejects_hardlink_input_and_raw_collisions(self) -> None:
+        args, p = self.receipt_fixture()
+        ordinary = args[:-2]
+        for source in [p["manifest"],self.artifact]:
+            alias = self.root / "hardlink-output"
+            os.link(source, alias)
+            saved = source.read_bytes()
+            changed = list(ordinary)
+            changed[changed.index("--output") + 1] = str(alias)
+            with self.subTest(source=source):
+                rejected = self.run_cli(*changed)
+                self.assertEqual(rejected.returncode, 1, rejected.stderr)
+                self.assertIn("overwrite", rejected.stderr)
+                self.assertEqual(source.read_bytes(), saved)
+                self.assertFalse(p["markdown"].exists())
+            alias.unlink()
+
 
 
 if __name__ == "__main__":

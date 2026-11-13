@@ -865,6 +865,22 @@ instrumentation digest; validate the flow; and refresh
 `.observe/otel-instrumentation.html`. Leave `.observe/otel.html` as the audit
 and scope surface.
 
+For executed logging controls, follow
+[Deterministic evidence reports](../references/logging-readiness.md#deterministic-evidence-reports).
+Use the complete selected manifest and owned observations to derive the saved
+fields. In canonical flow, run `evidence-bake --check-report` with
+`--receipt-output <service-root>/.observe/otel-evidence-receipt.json`, then:
+
+```sh
+python3 -I "<directory-containing-loaded-SKILL.md>/../references/scripts/observe_report.py" validate-evidence-receipt \
+  --receipt "<service-root>/.observe/otel-evidence-receipt.json" --service-root "<service-root>"
+```
+
+Repair drift before handoff. A valid receipt may retain truthful Partial results;
+it does not establish semantic completeness. Plan-only and missing-prerequisite
+reports need no invented execution receipt. A direct report without a canonical
+overlay retains its baked controls instead.
+
 ## Reader Report
 
 Write this order:

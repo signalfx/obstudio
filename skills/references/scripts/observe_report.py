@@ -1397,24 +1397,19 @@ def cmd_instrumentation_digest(args: argparse.Namespace) -> int:
 def cmd_evidence_bake(args: argparse.Namespace) -> int:
     if bool(args.report) != bool(args.project_output):
         fail("evidence-bake requires --report and --project-output together")
-    outputs = [p for p in (args.output, args.markdown, args.project_output) if p is not None]
+    if args.receipt_output and not args.check_report:
+        fail("--receipt-output requires --check-report for the final canonical report")
+    outputs = [p for p in (args.output, args.markdown, args.project_output, args.receipt_output) if p is not None]
     inputs = [p for p in (args.manifest, args.ledger, args.report, args.check_report) if p is not None]
-    if len({p.resolve() for p in outputs}) != len(outputs) or any(
-        out.resolve() == source.resolve() for out in outputs for source in inputs
-    ):
-        fail("evidence-bake output files must be distinct and must not overwrite inputs")
+    evidence_receipt_paths(inputs, outputs, args.artifact_root, [], strict=bool(args.receipt_output))
     baked = bake_evidence_report(load_json(args.manifest), load_evidence_ledger(args.ledger), args.artifact_root)
     projected = project_evidence_report(load_json(args.report), baked) if args.report else None
     differences = check_evidence_report_projection(load_json(args.check_report), baked) if args.check_report else []
     # Check input and artifact collisions; output writes are individually atomic.
     observations = [row for c in baked["controls"] for row in c["observations"]]
-    artifacts = {
-        str((args.artifact_root / ref["path"]).resolve())
-        for row in observations + baked["diagnostics"]
-        for ref in row["artifacts"]
-    }
-    if any(str(out.resolve()) in artifacts for out in outputs):
-        fail("evidence-bake outputs must not overwrite source artifacts")
+    evidence_receipt_paths(inputs, outputs, args.artifact_root, observations + baked["diagnostics"], strict=bool(args.receipt_output))
+    # Bind and recheck exact final input bytes before any output is written.
+    receipt = create_evidence_receipt(args.manifest, args.ledger, args.check_report, args.artifact_root, args.receipt_output) if args.receipt_output and not differences else None
     write_json(args.output, baked)
     write_text(args.markdown, render_evidence_report_markdown(baked))
     if projected is not None:
@@ -1430,7 +1425,18 @@ def cmd_evidence_bake(args: argparse.Namespace) -> int:
             f"baked status is {baked['status']} (truthful outputs written)",
             file=sys.stderr,
         )
+    if receipt is not None and not gate_failed:
+        # Recheck immediately before the receipt is atomically published last.
+        current = create_evidence_receipt(args.manifest, args.ledger, args.check_report, args.artifact_root, args.receipt_output)
+        if current != receipt:
+            fail("evidence receipt inputs changed during output writes")
+        write_json(args.receipt_output, receipt)
     return 1 if differences or gate_failed else 0
+
+
+def cmd_validate_evidence_receipt(args: argparse.Namespace) -> int:
+    print(json.dumps(validate_evidence_receipt(args.receipt, args.service_root), sort_keys=True))
+    return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1621,11 +1627,16 @@ def build_parser() -> argparse.ArgumentParser:
     evidence_bake.add_argument("--report", type=Path, help="existing verification overlay to project")
     evidence_bake.add_argument("--project-output", type=Path)
     evidence_bake.add_argument("--check-report", type=Path, help="exit 1 on mechanical projection drift")
+    evidence_bake.add_argument("--receipt-output", type=Path, help="write a deterministic input-bound receipt only after --check-report succeeds")
     evidence_bake.add_argument(
         "--require-working", action="store_true",
         help="write reports and exit 1 unless every declared control works; no semantic completeness judgment",
     )
     evidence_bake.set_defaults(func=cmd_evidence_bake)
+    receipt_validate = subparsers.add_parser("validate-evidence-receipt", help="read-only rehash, re-bake and final projection check; no semantic completeness claim")
+    receipt_validate.add_argument("--receipt", type=Path, required=True)
+    receipt_validate.add_argument("--service-root", type=Path, required=True)
+    receipt_validate.set_defaults(func=cmd_validate_evidence_receipt)
 
     return parser
 

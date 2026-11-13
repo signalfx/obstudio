@@ -1955,6 +1955,16 @@ reader-first `.observe/otel-verify.md` using the selected audit scenario IDs.
 Use `./references/json-approval-handoff.md` and the bundled
 `./scripts/observe_report.py` to validate the audit, selection,
 instrumentation, and verify overlays and refresh the instrumentation HTML.
+For executed logging controls, use the shared
+[Deterministic evidence reports](../references/logging-readiness.md#deterministic-evidence-reports)
+recipe. Derive the final canonical verification fields from the complete selected
+control manifest, then run `evidence-bake --check-report` with
+`--receipt-output <service-root>/.observe/otel-evidence-receipt.json`.
+Run `validate-evidence-receipt` through the same bundled report helper with
+`--receipt <service-root>/.observe/otel-evidence-receipt.json` and
+`--service-root <service-root>` before handoff. A valid receipt may retain partial
+results. On the direct path without
+a canonical overlay, retain baked control results without fabricating one.
 Only an individual scenario needing an unavailable listener, credential,
 package, or fixture is blocked; a missing skill invocation or adjacent file
 is not itself a verification blocker. Do not report verification as `Not run`

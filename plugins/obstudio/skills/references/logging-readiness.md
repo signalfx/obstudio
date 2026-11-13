@@ -1422,6 +1422,8 @@ Resolve and read each local executed-evidence artifact; planned future paths are
 not execution proof. Keep `trace_ids` from that scenario's own operation/receipt,
 or empty when unproven.
 
+#### Deterministic evidence reports
+
 For representable execution evidence, use the packaged `evidence-bake` path to
 derive own-operation IDs, control verdicts and JSON/Markdown together, instead of
 hand-aggregating every ID in a shared trial. Start with an explicit expected-control
@@ -1473,10 +1475,32 @@ pass; it still writes the truthful outputs and exits nonzero for failed or
 unproven controls. Keep unknown delivery facts in observations rather than
 treating unknown-equals-unknown as positive acceptance.
 
-For an existing `otel-verify` overlay, add `--report <verify.json>` and
-`--project-output <projected-verify.json>` together, then use
-`--check-report <final-verify.json>` on readback to detect projection drift
-(exit 1). Keep inputs, source artifacts and output paths distinct. Projection
+For an existing `otel-verify` overlay, use `--report <verify-draft.json>` and
+`--project-output <final-verify.json>` together to derive the final fields. Then
+check the final saved report and issue its input-bound receipt:
+
+```sh
+python3 -I "<directory-containing-loaded-SKILL.md>/../references/scripts/observe_report.py" evidence-bake \
+  --manifest <expected-controls.json> --ledger <observations.jsonl> --artifact-root <raw-evidence-root> \
+  --output <baked-controls.json> --markdown <baked-controls.md> \
+  --check-report <service-root>/.observe/otel-verify.json \
+  --receipt-output <service-root>/.observe/otel-evidence-receipt.json
+python3 -I "<directory-containing-loaded-SKILL.md>/../references/scripts/observe_report.py" validate-evidence-receipt \
+  --receipt <service-root>/.observe/otel-evidence-receipt.json --service-root <service-root>
+```
+
+`--check-report` independently computes the projection and compares its derived
+fields; a complete matching check is equivalent to a separate projection step.
+It exits 1 on drift. A receipt requires this successful check and binds the exact
+manifest, ledger, final report and canonical core, with portable relative paths.
+The read-only validator rehashes the inputs and raw artifacts, re-bakes the facts
+and compares the current final report. The logging workflow runner independently
+performs this check for executed canonical reports before grading. Missing or
+stale receipts cannot satisfy that mechanical gate. A truthful Partial report
+can have a valid receipt; validity does not establish semantic completeness or
+turn unknown observations into passes.
+
+Keep inputs, source artifacts and output paths distinct. Projection
 updates derived scenario trace IDs/status and aggregate status; canonical bindings,
 item proof, visibility, commands and other caller-owned evidence remain subject
 to normal validation and independent readback. It cannot manufacture those fields
@@ -1486,6 +1510,8 @@ execution ledger. The baked Markdown is supporting evidence, not a replacement
 for the normal canonical report. Rerun baking and applicable drift checks after
 affected evidence/report changes; helper success cannot certify semantic
 completeness, adapter truth or a stronger execution boundary.
+
+#### Reconcile final assertions
 
 - Verify the intended input actually reached the selected reader after runner,
   loader and child-process overrides. Retain effective values, authority and
