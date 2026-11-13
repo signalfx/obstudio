@@ -34,3 +34,20 @@ logging or provider drain is still active and retain the delivery and event
 order. Separate single-stop runs or a request after process exit do not prove
 this contract. This is application policy, not an OpenTelemetry signal-handler
 requirement.
+
+## Telemetry privacy contract
+
+This fixture's operator policy covers exported application logs and existing
+HTTP server spans. Sensitive request path/query values, raw exception messages
+and rendered stack traces (including local source paths) must not be exported.
+Use supported sanitization boundaries and retain useful bounded error categories,
+HTTP method/route/status, trace context, Resource identity and SDK limit/drop
+accounting. A logging-only sanitizer does not establish span privacy.
+
+Acceptance includes an unmatched request containing sensitive path/query values
+and an escaping application error. Inspect the actual received server spans as
+well as the selected log outputs through normal startup. Do not add payload or
+header capture, create extra exception telemetry, suppress all errors, or change
+existing native sink/level/privacy policy to satisfy this export policy. These
+are fixture operator requirements, not universal OpenTelemetry prohibitions on
+exception messages or stack traces.
