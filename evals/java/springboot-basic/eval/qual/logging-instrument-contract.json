@@ -1,0 +1,31 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "logging-trial-1",
+      "eval_inputs": [],
+      "task": "$otel-instrument ./service"
+    },
+    {
+      "id": "logging-trial-2",
+      "eval_inputs": [],
+      "task": "$otel-instrument ./service"
+    },
+    {
+      "id": "logging-trial-3",
+      "eval_inputs": [],
+      "task": "$otel-instrument ./service"
+    }
+  ],
+  "rubric_base": "../../../../rubrics/logging-common.json",
+  "rubric_additions": {
+    "rubric-11": "Classify the installed Java SDK's parsed exporter selection: accepted surrounding whitespace or mixed lists containing otlp must receive local approval/header checks. Preserve remaining non-OTLP exporters when isolating added OTLP members; SDK-invalid duplicate or none-mixed selections must not become successful startup. Resolve normalization and supported combinations from that installed owner, without a replacement parser or unused permutation suite.",
+    "rubric-12": "A synthetic Java LoggingEvent/appender probe remains focused SDK/bridge proof even with an attached javaagent; agent startup alone does not make that probe app_test or full_runtime.",
+    "rubric-13": "When adding a Java identity fallback, include SDK-accepted whitespace around Resource entries through the normal launcher. Compact-only tests miss shell substring checks that append an overriding duplicate; preserve supplied configuration and SDK parsing rather than introducing a shell Resource parser.",
+    "rubric-21": "Bind Java appender value support to the resolved dependency and actual bridge path. Upstream main-branch mapper code, another release or a direct typed-SDK empty-array test cannot establish bridge preservation. Classify an observed selected-value limitation without imposing a fixed release or replacing the provider; ordinary absent optional values remain valid.",
+    "rubric-23": "When the Java contract selects repeated keep-alive requests or executor/thread reuse, retain actual repeated-round and same-unit reuse assertions. One concurrent left/right pair cannot establish those controls; retain them unproven if their own evidence is missing. The fixture uses CompletableFuture.runAsync. Audit plans to verify propagation supplied by the selected Java agent/runtime; instrumentation reuses that integration when proven effective instead of adding a redundant manual copy; verification checks the current real request-to-async join without editing. A standalone/manual SDK mode needs its own supported handoff evidence.",
+    "rubric-25": "For captured Spring MVC error/argument diagnostics, resolve a supported hook on the actual producer path. A supported logging-only repair need not change controllers or investigate every alternative. Inspect Tomcat JULI/JUL container producers that may bypass MVC handlers, including the installed LogRecord/Filter/Handler/bridge APIs, filter invocation and parameter/throwable rendering. Avoid mutation after async handoff, global per-request logger-level changes or replacing operator handlers. Audit plans the investigation; instrumentation repairs and replays a supported selected path; verification reports its actual boundary without unauthorized application edits.",
+    "rubric-26": "For the selected Java malformed-request diagnostic path, preserve response status, headers, body and diagnostic category. Replay the same malformed request without later raw-value or stack logging; a different successful request cannot supply that preservation proof.",
+    "rubric-56": "For a known safely isolated local-log conflict in the selected JVM startup path, retain application, native, trace and metric startup plus original operator headers while disabling only the added local-log branch. Unresolved JVM-argument ownership remains an explicit preflight blocker. Plan or execute the selected normalized-OTLP conflict and approved signal A with unused generic B through the actual launcher."
+  }
+}

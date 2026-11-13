@@ -69,6 +69,55 @@ returns quickly.
 Rubric evals may set `judge_inputs` or `judge_prompt` when the judge should
 inspect artifacts other than a service directory.
 
+### Logging workflows
+
+The four basic service fixtures define bare `$otel-audit ./service`,
+`$otel-instrument ./service` and `$otel-verify ./service` tasks. Run the stages
+on the same workspace with the eval environment active:
+
+```sh
+uv run python run_logging_workflow.py --language python --trial 1 \
+  --studio-binary /path/to/obstudio \
+  --codex-home ../.workspace/codex-evals/codex-home \
+  --output ../.workspace/logging-workflow/python-trial-1
+```
+
+Select `python`, `java`, `go` or `node` and trial 1, 2 or 3. The runner needs
+the language toolchain on `PATH`, including Java 21 and Go 1.25 for those
+fixtures. It creates an isolated local receiver without cloud credentials,
+retains source and execution evidence, and preserves application reports for
+stage handoff. Judge feedback stays outside later actor inputs. Actor and judge
+execution must use the configured `gpt-6.1-sol` with high reasoning effort.
+
+After instrumentation and verification, the host checker launches the generated
+service through `make dev` and checks concurrent synchronous/asynchronous log
+joins to real SDK spans, original native output and operator Resource identity.
+Identity profiles cover Resource-only service name, an explicit name overriding
+a conflicting Resource name, and SDK-supported whitespace, checking name,
+version and an unrelated attribute on logs and spans. They do not establish
+metrics Resources, absent/default identity, percent encoding or header behavior.
+Receipts are captured while the producer is alive, before bounded cleanup;
+this check does not establish final-record drain or post-exit persistence.
+A standalone verify task lacking audit/selection prerequisites is a negative
+control and supplies no instrumented runtime coverage.
+
+The 12 role definitions extend one [logging rubric](rubrics/logging-common.json)
+with language requirements. Each resolved criterion receives its own strict
+verdict; required runtime and evidence-receipt gates remain independent of
+semantic grades. The receipt gate checks declared controls, derived statuses
+and final report hashes; semantic review still assesses contract completeness
+and whether the controls prove it. See the
+[shared-rubric and strict-output options](../pytest-codex-evals/README.md)
+for definition and output formats. Bare tasks are sent unchanged, with the
+loading guard requiring source-bound full skill input or a complete skill read
+before application work.
+
+A failed stage stops the workflow. `--collect-semantic-failures` permits later
+stages only after a semantic failure when execution, guards, bindings,
+prerequisites and required runtime checks remain valid. It retains the failed
+grade and unsuccessful workflow status. Execution and evidence failures still
+stop the run.
+
 ## A/B Sides
 
 | Side | Skill visibility |

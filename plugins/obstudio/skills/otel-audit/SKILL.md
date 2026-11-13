@@ -298,6 +298,40 @@ Record the metric name and source file with line number.
 
 **Logs inventory** -- build a list of OTel log integrations:
 
+Read `../references/logging-readiness.md` and the detected language's logging
+checks. Prioritize the producing dependency for each selected privacy-critical
+error trigger before broad SDK capability or clause-ledger work: resolve its
+actual version from project configuration, locate the matching repository,
+resolved dependency artifact or versioned primary source, and inspect the native
+producer/event and supported action through later renderers. If source is not
+attached or available, use permitted read-only public API/bytecode inspection of
+the matching artifact; do not infer a producer mechanism from SDK mapper evidence.
+Retain the artifact/path and inspected symbol, or the exact unavailable producer/
+event/API edge, owner and next source/probe observation that would decide it.
+A generic dependency name or an instruction to find a hook is not that receipt.
+Keep this in existing evidence/scenario fields. This prioritizes investigation;
+complete equivalent source evidence remains valid regardless of tool-call order.
+Match distinct error branches to their actual producers; a handled rejection and
+an uncaught failure on the same endpoint need not use the same logging path.
+Then reconcile source clauses, actual capabilities and acceptance separately
+within the shared scope, preserving SDK defaults and operator policy. Emit only
+concrete app-owned gaps and required future proof; a missing override is not a
+defect when the SDK already supplies the behavior. Use permitted read-only dependency/source inspection without changing service
+code or manifests; this investigation does not require application startup.
+Before finalizing a logging audit, check the shared guide's scoped
+LOG-SPEC-CLOSURE matrix in canonical `evidence`: selected gaps, operator policy
+and source-supported claims need source/version, strength, owner, disposition,
+evidence, necessary finding/scenario mapping and proof boundary. Precise
+normative/conformance claims retain exact bindings; unchanged delegated defaults
+may use compact versioned source/ownership facts without every sibling SDK clause.
+Apply this same scope at readback while retaining every bound promise/control.
+An exhaustive clause-to-skill inventory belongs to skill maintenance when
+requested. This evidence contract
+adds no OTel requirement. For bounded fixed messages without an existing Body policy or a
+source-backed size problem, record no new Body cap is needed; do not turn an
+arbitrary example threshold or the separate GenAI capture defaults into a
+mandatory application-log repair.
+
 - OTel log bridge or SDK log packages
   (`opentelemetry-instrumentation-logging` for current Python releases, with
   the SDK `LoggingHandler` only when the installed bridge/API capability
@@ -318,9 +352,12 @@ Record the metric name and source file with line number.
   formatters, and exception helpers that can add request, user, tenant,
   session, trace, raw URL, exception text, or traceback data. Check the final
   formatting path, not only application logger call arguments.
+- Resolve effective configuration and any existing Collector forwarding route
+  using the shared logging reference before the environment-only branches below.
+  An ignored environment value is not an opt-out or proof of an exporter.
 - Classify logs as `local-otlp-default`, `explicitly-disabled`,
   `operator-owned`, `correlation-only`, `unsupported-stack`, or `not
-  configured`. Trace/MDC fields in stdout are not an OTLP log pipeline.
+  configured`. Trace/MDC fields alone do not prove an OTLP log pipeline.
   `OTEL_LOGS_EXPORTER=none` is an explicit opt-out, while an absent exporter on
   a supported Python, Node.js, Java, or Go application logging stack requires a
   default local Splunk Observability Studio OTLP pipeline only when the logs endpoint is absent or
@@ -354,17 +391,26 @@ proof.
   dimensions, log body/severity/correlation/redaction, or runtime/exporter
   behavior.
 - Classify each scenario's required proof as `focused call-site`,
-  `full runtime`, or `either`. Use `full runtime` when proof depends on agent or
+  `full runtime`, or `either`. Use `full runtime` when that control depends on agent or
   preload startup, framework-resolved route names, automatic metrics,
   runtime-installed log export, or absence of duplicate automatic spans.
+  For logging, map selected findings' promised operations/outcomes into individual
+  controls using the shared allocation check. Each published scenario must have
+  compatible paths, IDs, environments and scalar proof level. That level applies
+  to every trigger and acceptance assertion; prose cannot override it for a
+  subcase. Reference separately scoped prerequisites without promoting their
+  proof or upstream owner. Judge the completed allocation, not draft chronology.
 - For a default local application-log pipeline, include scenarios that prove
   body/category, severity, the same service resource identity as traces and
   metrics, trace/span correlation inside an active span, final-pipeline
   redaction, preservation of the existing stdout/file sink, exactly one OTLP
-  record per log call, provider shutdown/flush, and
+  received record per log call on a healthy delivery path, provider shutdown/flush, and
   `OTEL_LOGS_EXPORTER=none` producing no OTLP record. When cloud trace/metric
   export or forwarding exists, also prove the application record remains
   visible in local Splunk Observability Studio without any cloud log path.
+  For fault/retry scenarios, separate SDK emissions, transport attempts and
+  receiver copies before attributing duplicates to a second bridge. An outage
+  can have zero receipt; preserve the original sink's per-call count.
 - Require the normal generated launch profile to set
   `OTEL_LOGS_EXPORTER=otlp`, the resolved local Studio logs endpoint and its
   matching protocol alongside trace and metric settings. An absent logs bridge
@@ -1164,7 +1210,8 @@ markers to the prioritized gap table. Use only `[SOURCE-COVERED]` and
   a discovered non-default port with them.
 - Tracer/Meter created in hot paths instead of at startup
 - High-cardinality attributes on metrics (user IDs, request IDs)
-- Missing `recordException` in error handling paths
+- Failed operations without a supported SDK/instrumentation error-recording owner;
+  reuse automatic exception/status handling before adding manual recording
 - Custom span names with variable segments (IDs, paths)
 - Use of community or third-party OTel wrappers when an official OpenTelemetry package exists (e.g. `go.opentelemetry.io/contrib`, `@opentelemetry/`*, `opentelemetry-*`)
 - A generic direct-cloud OTLP endpoint implicitly receiving application logs,
@@ -1276,6 +1323,22 @@ Keep the receipt in canonical evidence and the applicable finding's
 `required_fix`/acceptance. A general SDK citation or 'logger/schema helpers'
 without named symbols/example/version is incomplete; correct that report
 before downstream handoff. Existing producers remain preserved.
+
+For application logging, read the complete shared
+[Report readback](../references/logging-readiness.md#report-readback) immediately
+before finalizing the saved handoff. Start from selected source-owned operations
+and promised outcomes, including selected errors/finalization, and compare them
+to saved acceptance: operation/selector or equivalent complete parameterization → shared
+predicate and parameters, including own context/privacy → asserting scenario and
+proof boundary. A truly shared global scan suffices when its covered outputs and
+lifecycle phases, and witnesses that every selected operation occurs, are explicit.
+Do not require duplicated tests or literal operation-name matches. Plan those
+witnesses during audit; later stages retain actual evidence. Resolve each missing
+binding or retain its concrete missing control. For source uncertainty, name the
+exact producer/API edge, owner and discriminating next source/probe observation;
+a broad allocation summary cannot establish coverage.
+Keep applicable storage/accounting controls and distinguish source facts, future
+checks and executed results. Use existing evidence/scenario fields, not new keys.
 
 Write two audit artifacts inside the scanned service root (create the
 `.observe/` directory if it does not exist):
@@ -1582,8 +1645,18 @@ JSON requirements:
   step; audit owns selection planning, while `$otel-instrument` invokes
   verification internally after implementation.
 - Every finding dependency must reference another finding ID and point from the
-  work toward its prerequisite. Every verification scenario reference must
-  exist in `verification.scenarios`.
+  work toward its prerequisite. Before finalizing a new audit's IDs, plan each
+  repair promise, acceptance assertion and required producer together. Give
+  foundational setup only acceptance it can deliver with its transitive
+  prerequisites; a focused provider test does not cover promised normal-launch
+  behaviour. Bind request/worker/log integration checks to the finding that owns
+  the complete path, including producers of other signals consumed by a control.
+  A repair owned only by a dependent finding is unavailable when the foundation
+  alone is selected. Group coupled bootstrap/activation/producer work when it
+  cannot form independently deliverable contracts, without cycles or dropping
+  required context transfer, final-record joins or other selected invariants.
+  Preserve established audit/selection IDs and obligations. Every verification
+  scenario reference must exist in `verification.scenarios`.
 - Put bulky command output under `.observe/evidence/` and cite it from JSON.
 
 After writing `.observe/otel-audit.json`, run `finalize-audit`. This command
@@ -1779,7 +1852,8 @@ reviewer's immediate command.
 - Fewer than expected auto-instrumentation packages for the detected dependencies
 - SDK initialized but no auto-instrumentation packages installed
 - OTel packages in dependencies but no SDK init file found
-- Error handling code without span error status or recordException
+- Unobserved failed-operation outcomes after checking existing SDK/instrumentation
+  exception ownership, successful recovery, and the selected semantic convention
 
 ## Auto-Instrumentation Library Map
 

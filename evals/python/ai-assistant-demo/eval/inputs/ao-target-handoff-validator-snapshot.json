@@ -3,7 +3,7 @@
   "schema_version": 1,
   "producer": {
     "source": "skills/references/scripts/observe_report.py",
-    "source_sha256": "sha256:4ee2b08fcb823d932242821665e15341cffddaeadd3606ba62475d5c8cec6b9a",
+    "source_sha256": "sha256:bb7739989a66e06574258d36f15df25ce552ac707d54b6dc4ed3dd5d610a3982",
     "generator_sha256": "427f6c9ca92efb17555ef16595bca62f7b9a8548def8d443f0d6943341b53432",
     "functions_executed": [
       "normalize_audit_report",

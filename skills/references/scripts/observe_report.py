@@ -10,6 +10,7 @@ import http.server
 import importlib.util
 import json
 import os
+import re
 import secrets
 import stat
 import subprocess
@@ -462,6 +463,102 @@ def cmd_required_inputs(args: argparse.Namespace) -> int:
     report = load_canonical_audit_for_selection(args.audit_json)
     selection = normalize_selection(load_json(args.selection_json), report)
     print(json.dumps(required_input_status(required_input_groups(report), selection), indent=2))
+    return 0
+
+
+
+SOURCE_SETTING_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9_])(?:OTEL_[A-Z][A-Z0-9_]*|otel\.[a-z0-9_]+(?:[.-][a-z0-9_]+)*)(?![A-Za-z0-9_])"
+)
+
+
+def source_settings_inventory(sources: list[Path], report_path: Path | None = None) -> dict[str, Any]:
+    """Find source spellings without inferring consumption or semantic coverage."""
+    report = None
+    report_names: set[str] = set()
+    if report_path is not None:
+        raw_report = report_path.read_bytes()
+        try:
+            report_text = raw_report.decode("utf-8")
+        except UnicodeError:
+            fail(f"report must be UTF-8 text: {report_path}")
+        report = {"path": str(report_path.resolve()), "sha256": hashlib.sha256(raw_report).hexdigest()}
+        report_names = set(SOURCE_SETTING_PATTERN.findall(report_text))
+    paths = []
+    for source in sources:
+        if not source.exists() and not source.is_symlink():
+            fail(f"source path does not exist: {source}")
+        if source.is_symlink() or source.is_file():
+            paths.append(source)
+        elif source.is_dir():
+            paths.extend(sorted(source.rglob("*")))
+        else:
+            fail(f"source must be a file or directory: {source}")
+    seen = set()
+    files, skipped, names = [], [], {}
+    scanned = 0
+    for path in paths:
+        if path.is_symlink():
+            skipped.append({"path": str(path), "reason": "symlink_not_followed"})
+            continue
+        if not path.is_file():
+            continue
+        resolved = path.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        if report is not None and str(resolved) == report["path"]:
+            skipped.append({"path": str(path), "reason": "report_input_excluded"})
+            continue
+        raw = path.read_bytes()
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeError:
+            skipped.append({"path": str(path), "reason": "non_utf8_not_scanned"})
+            continue
+        scanned += 1
+        matches: dict[str, list[int]] = {}
+        for line_number, line in enumerate(text.splitlines(), 1):
+            for name in set(SOURCE_SETTING_PATTERN.findall(line)):
+                matches.setdefault(name, []).append(line_number)
+        if not matches:
+            continue
+        source_id = len(files)
+        files.append({"id": source_id, "path": str(resolved), "sha256": hashlib.sha256(raw).hexdigest()})
+        for name, lines in matches.items():
+            names.setdefault(name, []).append({"source_id": source_id, "lines": lines})
+    candidates = []
+    for name, locations in sorted(names.items()):
+        hint = re.sub(r"[.-]", "_", name).upper()
+        spellings = sorted({name, hint} & report_names) if report is not None else None
+        candidates.append({"name": name, "normalization_hint": hint, "source_locations": locations,
+                           "report_spelling_matches": spellings})
+    return {
+        "inventory_scope": "lexical_source_setting_candidates",
+        "consumption_evaluated": False, "owners_resolved": False,
+        "normalization_mapping_verified": False, "dynamic_names_resolved": False,
+        "coverage_evaluated": False, "runtime_evaluated": False,
+        "complete_configuration_inventory": False,
+        "report": report, "report_comparison_performed": report is not None,
+        "report_match_mode": "exact_source_spelling_or_unverified_separator_normalization",
+        "source_roots": [str(source.absolute()) for source in sources],
+        "scanned_text_files": scanned, "matching_sources": files, "skipped_paths": skipped,
+        "candidates": candidates,
+        "unmentioned_names": [c["name"] for c in candidates if c["report_spelling_matches"] == []],
+    }
+
+
+def cmd_source_settings(args: argparse.Namespace) -> int:
+    print(json.dumps(source_settings_inventory(args.source, args.report), indent=2))
+    return 0
+
+
+def cmd_required_controls(args: argparse.Namespace) -> int:
+    requested_ids = None
+    if args.ids is not None:
+        requested_ids = [item.strip() for item in args.ids.split(",") if item.strip()]
+    inventory = audit_control_inventory(load_json(args.audit_json), requested_ids, view=args.view)
+    print(json.dumps(inventory, indent=2))
     return 0
 
 
@@ -1297,6 +1394,65 @@ def cmd_instrumentation_digest(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_evidence_bake(args: argparse.Namespace) -> int:
+    if bool(args.report) != bool(args.project_output):
+        fail("evidence-bake requires --report and --project-output together")
+    if args.check_report and args.check_direct_report:
+        fail("--check-report and --check-direct-report are mutually exclusive")
+    checked_report = args.check_report or args.check_direct_report
+    if args.receipt_output and not checked_report:
+        fail("--receipt-output requires --check-report or --check-direct-report for the final report")
+    outputs = [p for p in (args.output, args.markdown, args.project_output, args.receipt_output) if p is not None]
+    inputs = [p for p in (args.manifest, args.ledger, args.report, checked_report) if p is not None]
+    evidence_receipt_paths(inputs, outputs, args.artifact_root, [], strict=bool(args.receipt_output))
+    baked = bake_evidence_report(load_json(args.manifest), load_evidence_ledger(args.ledger), args.artifact_root)
+    projected = project_evidence_report(load_json(args.report), baked) if args.report else None
+    differences = check_evidence_report_projection(load_json(args.check_report), baked) if args.check_report else []
+    if args.check_direct_report:
+        # Use the same root boundary as the receipt; final report files are inputs,
+        # so outputs cannot overwrite a hash-bound narrative or JSON handoff.
+        try:
+            direct_root = Path(os.path.commonpath([str(p.resolve()) for p in inputs + [args.artifact_root]]))
+        except (OSError, RuntimeError, ValueError) as exc:
+            fail(f"cannot resolve direct-report inputs: {exc}")
+        direct = validate_direct_evidence_index(args.check_direct_report, direct_root, baked)
+        # Preserve the caller's platform alias when adding resolved report paths.
+        inputs.extend(args.check_direct_report.parent / os.path.relpath(path, args.check_direct_report.parent.resolve())
+                      for path in direct["report_paths"])
+    # Check input and artifact collisions; output writes are individually atomic.
+    observations = [row for c in baked["controls"] for row in c["observations"]]
+    evidence_receipt_paths(inputs, outputs, args.artifact_root, observations + baked["diagnostics"], strict=bool(args.receipt_output))
+    # Bind and recheck exact final input bytes before any output is written.
+    receipt = create_evidence_receipt(args.manifest, args.ledger, checked_report, args.artifact_root, args.receipt_output) if args.receipt_output and not differences else None
+    write_json(args.output, baked)
+    write_text(args.markdown, render_evidence_report_markdown(baked))
+    if projected is not None:
+        write_json(args.project_output, projected)
+    for difference in differences:
+        print("FAIL: " + difference, file=sys.stderr)
+    if not differences:
+        print("Evidence report baked: " + baked["status"])
+    gate_failed = args.require_working and baked["status"] != "working"
+    if gate_failed:
+        print(
+            "FAIL: --require-working requires every declared control to be working; "
+            f"baked status is {baked['status']} (truthful outputs written)",
+            file=sys.stderr,
+        )
+    if receipt is not None and not gate_failed:
+        # Recheck immediately before the receipt is atomically published last.
+        current = create_evidence_receipt(args.manifest, args.ledger, checked_report, args.artifact_root, args.receipt_output)
+        if current != receipt:
+            fail("evidence receipt inputs changed during output writes")
+        write_json(args.receipt_output, receipt)
+    return 1 if differences or gate_failed else 0
+
+
+def cmd_validate_evidence_receipt(args: argparse.Namespace) -> int:
+    print(json.dumps(validate_evidence_receipt(args.receipt, args.service_root), sort_keys=True))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -1304,6 +1460,24 @@ def build_parser() -> argparse.ArgumentParser:
     validate = subparsers.add_parser("validate", help="validate canonical OTel audit JSON")
     validate.add_argument("audit_json", type=Path)
     validate.set_defaults(func=cmd_validate)
+
+    required_controls = subparsers.add_parser(
+        "required-controls",
+        help="list audit promises and acceptance-text hints; no semantic or runtime coverage verdict",
+    )
+    required_controls.add_argument("audit_json", type=Path)
+    required_controls.add_argument("--ids", help="comma-separated finding IDs; defaults to all")
+    required_controls.add_argument("--view", choices=("telemetry", "contracts"), default="telemetry",
+                                   help="telemetry hints (default), or full saved contracts and prerequisite context; no semantic verdict")
+    required_controls.set_defaults(func=cmd_required_controls)
+
+    source_settings = subparsers.add_parser(
+        "source-settings", help="find lexical configuration names in selected sources; no consumption or coverage verdict",
+    )
+    source_settings.add_argument("--source", type=Path, action="append", required=True,
+                                 help="implementation file or directory; repeat for selected source roots")
+    source_settings.add_argument("--report", type=Path, help="optional existing UTF-8 report for spelling omission hints")
+    source_settings.set_defaults(func=cmd_source_settings)
 
     select = subparsers.add_parser("select", help="validate IDs and write a bound selection")
     select.add_argument("audit_json", type=Path)
@@ -1455,6 +1629,29 @@ def build_parser() -> argparse.ArgumentParser:
         "--instrumentation-json", type=Path, required=True
     )
     instrumentation_digest_command.set_defaults(func=cmd_instrumentation_digest)
+
+    evidence_bake = subparsers.add_parser(
+        "evidence-bake", help="bake source-bound operation controls; no semantic or runtime judge",
+    )
+    evidence_bake.add_argument("--manifest", type=Path, required=True)
+    evidence_bake.add_argument("--ledger", type=Path, required=True, help="JSON array or JSONL observations")
+    evidence_bake.add_argument("--artifact-root", type=Path, required=True)
+    evidence_bake.add_argument("-o", "--output", type=Path, required=True)
+    evidence_bake.add_argument("--markdown", type=Path, required=True)
+    evidence_bake.add_argument("--report", type=Path, help="existing verification overlay to project")
+    evidence_bake.add_argument("--project-output", type=Path)
+    evidence_bake.add_argument("--check-report", type=Path, help="exit 1 on mechanical projection drift")
+    evidence_bake.add_argument("--check-direct-report", type=Path, help="check explicit direct-report scenario index and final Markdown/JSON hashes against baked controls")
+    evidence_bake.add_argument("--receipt-output", type=Path, help="write an input-bound receipt after the canonical report or direct-report index check succeeds")
+    evidence_bake.add_argument(
+        "--require-working", action="store_true",
+        help="write reports and exit 1 unless every declared control works; no semantic completeness judgment",
+    )
+    evidence_bake.set_defaults(func=cmd_evidence_bake)
+    receipt_validate = subparsers.add_parser("validate-evidence-receipt", help="read-only rehash, re-bake and final projection check; no semantic completeness claim")
+    receipt_validate.add_argument("--receipt", type=Path, required=True)
+    receipt_validate.add_argument("--service-root", type=Path, required=True)
+    receipt_validate.set_defaults(func=cmd_validate_evidence_receipt)
 
     return parser
 

@@ -26,6 +26,22 @@ Before writing verification artifacts, read
 Contract plus Reader-First Report Order. When `.observe/otel-audit.json` exists,
 also read `./references/json-approval-handoff.md`; it owns canonical scope,
 schema, digest binding, status rollup, and the HTML refresh.
+When verifying application logs, also read `../references/logging-readiness.md`.
+Start with its source-and-applicability worklists: source clauses, concrete
+capabilities and acceptance controls must be reconciled separately.
+Apply its applicable acceptance obligations, including caller-to-worker context
+handoff and fresh per-trial evidence. Preserve this skill's read-only application
+boundary; missing wiring is a failed or unproven check, not authorization to
+repair instrumentation or turn fixture results into application proof.
+In the normal verification report, reconcile the shared scoped LOG-SPEC-CLOSURE
+fields for selected gaps, operator policy and source-supported claims, including
+strength, maturity, owner and proof boundary. Precise normative/conformance claims
+retain exact bindings; unchanged delegated defaults may use compact versioned
+source/ownership facts without every sibling SDK clause. Apply this same scope at
+planning/readback while retaining the complete immutable bound control set.
+Citations alone do not establish runtime coverage. An exhaustive clause-to-skill
+inventory belongs to requested skill maintenance rather than every application
+verification report.
 Independently reconcile each selected GenAI orchestration role with the source
 control flow before accepting the audit or test expectations. A custom
 model-directed tool/result feedback loop is an agent invocation; an existing
@@ -281,6 +297,13 @@ Inspect the repo before running anything:
   `instrumentation-introduced`, `pre-existing`, `environment`, or `unknown`.
 
 Create these working inventories before choosing commands:
+
+For logging, read `../references/logging-readiness.md` now. Independently derive
+the required controls from the complete bound contract, then reconcile named
+assertions, actual configuration, proof boundaries and missing results. Prefer
+this before writing probes; assess completeness rather than chronology alone.
+Prior Working rows and suite totals do not supply missing controls. Use the common
+proof-mode table for both scenarios and item results; package location is not proof.
 
 ```markdown
 ## Signal Inventory
@@ -823,12 +846,40 @@ Rules:
 
 ### 8. Produce Verification Artifacts
 
+For logging, read the common reference's
+[Report readback](../references/logging-readiness.md#report-readback) before producing
+the saved rows. For every bound control/case, match the actual input and expected
+value/oracle at its required boundary to a named assertion and raw outcome/receipt.
+Derive each status, proof mode, visibility and direct-item result from those
+matches, retaining missing controls rather than inferring them from suite or
+scenario-ID coverage. A valid related launch can prove an absent-setting input
+without a literal case name when its settings and assertions are retained.
+Keep current capability, direct item proof and ancillary gaps distinct; resolve
+executed evidence links and use that operation's own trace IDs. Do not inherit
+stale audit/instrumentation success or a stronger boundary from another check.
+
 In canonical flow, write `.observe/otel-verify.json` using
 `./references/json-approval-handoff.md`. Preserve exact selected finding,
 scenario, and instrumentation-item order; bind it to the exact normalized
 instrumentation digest; validate the flow; and refresh
 `.observe/otel-instrumentation.html`. Leave `.observe/otel.html` as the audit
 and scope surface.
+
+For executed logging controls, follow
+[Deterministic evidence reports](../references/logging-readiness.md#deterministic-evidence-reports).
+Use the complete selected manifest and owned observations to derive the saved
+fields. In canonical flow, run `evidence-bake --check-report` with
+`--receipt-output <service-root>/.observe/otel-evidence-receipt.json`, then:
+
+```sh
+python3 -I "<directory-containing-loaded-SKILL.md>/../references/scripts/observe_report.py" validate-evidence-receipt \
+  --receipt "<service-root>/.observe/otel-evidence-receipt.json" --service-root "<service-root>"
+```
+
+Repair drift before handoff. A valid receipt may retain truthful Partial results;
+it does not establish semantic completeness. Plan-only and missing-prerequisite
+reports need no invented execution receipt. A direct report without a canonical
+overlay retains its baked controls instead.
 
 ## Reader Report
 

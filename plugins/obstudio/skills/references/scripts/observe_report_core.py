@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import copy as _copy
 import hashlib
+import math as _math
+import stat as _stat
 import json
 import os
 import re
@@ -1063,6 +1066,163 @@ def normalize_audit_report(data: dict[str, Any]) -> dict[str, Any]:
     if unmapped_findings:
         fail(f"findings are not associated with a component-flow gap marker: {unmapped_findings}")
     return report
+
+
+def audit_control_inventory(
+    data: dict[str, Any], requested_ids: list[str] | None = None,
+    *, view: str = "telemetry",
+) -> dict[str, Any]:
+    """Enumerate declared promises without judging their acceptance or execution."""
+    if view not in {"telemetry", "contracts"}:
+        fail("required-controls view must be telemetry or contracts")
+    report = normalize_audit_report(data)
+    known_ids = {finding["id"] for finding in report["findings"]}
+    if requested_ids is None:
+        selected_ids = known_ids
+    else:
+        requested_ids = string_list(requested_ids, "required-controls.ids")
+        if not requested_ids:
+            fail("required-controls --ids must contain at least one finding ID")
+        if len(requested_ids) != len(set(requested_ids)):
+            fail("required-controls --ids must not contain duplicate finding IDs")
+        selected_ids = set(requested_ids)
+        unknown_ids = selected_ids - known_ids
+        if unknown_ids:
+            fail("unknown finding IDs: " + ", ".join(sorted(unknown_ids)))
+    findings = [finding for finding in report["findings"] if finding["id"] in selected_ids]
+    if view == "contracts":
+        return _audit_contract_projection(report, selected_ids)
+    promises = []
+    for finding in findings:
+        for index, item in enumerate(finding["expected_telemetry"]):
+            promises.append({
+                "finding_id": finding["id"],
+                "telemetry_index": index,
+                "type": item["type"],
+                "name": item["name"],
+                "attributes": list(item["attributes"]),
+                "candidate_scenario_ids": list(finding["verification_scenarios"]),
+            })
+    scenarios = {item["id"]: item for item in report["verification"]["scenarios"]}
+    unknown_literals = []
+
+    def inspect_finding_literals(value: Any, path: str) -> None:
+        if isinstance(value, str):
+            for literal in sorted(set(re.findall(r"\bOTEL-\d+(?:/\d+)*\b", value))):
+                first, *suffixes = literal.split("/")
+                for finding_id in [first, *("OTEL-" + suffix for suffix in suffixes)]:
+                    if finding_id not in known_ids:
+                        unknown_literals.append({"finding_id": finding_id, "source_literal": literal,
+                                                 "report_path": path})
+        elif isinstance(value, dict):
+            for key, child in value.items():
+                token = str(key).replace("~", "~0").replace("/", "~1")
+                inspect_finding_literals(child, path + "/" + token)
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                inspect_finding_literals(child, path + "/" + str(index))
+
+    inspect_finding_literals(report, "")
+    literal_checks = []
+    for item in promises:
+        for attribute in item["attributes"]:
+            literal_checks.append({
+                "finding_id": item["finding_id"],
+                "telemetry_index": item["telemetry_index"],
+                "attribute": attribute,
+                "candidate_scenario_ids": list(item["candidate_scenario_ids"]),
+                "matching_scenario_ids": [
+                    scenario_id for scenario_id in item["candidate_scenario_ids"]
+                    if attribute in scenarios[scenario_id]["acceptance_criteria"]
+                ],
+            })
+    return {
+        "audit_sha256": audit_digest(report),
+        "finding_ids": [finding["id"] for finding in findings],
+        "promise_count": len(promises),
+        "attribute_count": sum(len(item["attributes"]) for item in promises),
+        "inventory_scope": "audit_expected_telemetry",
+        "source_clause_controls_included": False,
+        "acceptance_controls_included": False,
+        "acceptance_literal_check_mode": "case_sensitive_substring_only",
+        "acceptance_literal_checks": literal_checks,
+        "unmatched_attribute_literals": [
+            item for item in literal_checks if not item["matching_scenario_ids"]
+        ],
+        "finding_id_literal_check_mode": "OTEL_numeric_tokens_and_slash_shorthand_only",
+        "finding_id_literal_scope": "entire_canonical_report",
+        "unknown_finding_id_literals": unknown_literals,
+        "finding_references_evaluated": False,
+        "coverage_evaluated": False,
+        "runtime_evaluated": False,
+        "promises": promises,
+    }
+
+
+def _audit_contract_projection(report: dict[str, Any], root_ids: set[str]) -> dict[str, Any]:
+    """Expose saved contracts and structural prerequisites, without approving work."""
+    by_id = {finding["id"]: finding for finding in report["findings"]}
+    included = set(root_ids)
+    pending = list(root_ids)
+    while pending:
+        for dependency in by_id[pending.pop()]["dependencies"]:
+            if dependency not in included:
+                included.add(dependency)
+                pending.append(dependency)
+    scenarios = {
+        scenario_id
+        for finding in report["findings"] if finding["id"] in included
+        for scenario_id in finding["verification_scenarios"]
+    }
+    environments = {
+        environment_id
+        for scenario in report["verification"]["scenarios"] if scenario["id"] in scenarios
+        for environment_id in scenario["environments"]
+    }
+    return {
+        "audit_sha256": audit_digest(report),
+        "inventory_scope": "saved_normalized_audit_contracts",
+        "finding_ids": [finding["id"] for finding in report["findings"] if finding["id"] in root_ids],
+        "prerequisite_context_ids": [
+            finding["id"] for finding in report["findings"]
+            if finding["id"] in included - root_ids
+        ],
+        "findings": [
+            {"source_pointer": f"/findings/{index}", "finding": finding}
+            for index, finding in enumerate(report["findings"]) if finding["id"] in included
+        ],
+        "scenarios": [
+            {
+                "source_pointer": f"/verification/scenarios/{index}",
+                "declared_by_included_finding_ids": [
+                    finding["id"] for finding in report["findings"]
+                    if finding["id"] in included and scenario["id"] in finding["verification_scenarios"]
+                ],
+                "scenario": scenario,
+            }
+            for index, scenario in enumerate(report["verification"]["scenarios"])
+            if scenario["id"] in scenarios
+        ],
+        "environments": [
+            {"source_pointer": f"/verification/environments/{index}", "environment": environment}
+            for index, environment in enumerate(report["verification"]["environments"])
+            if environment["id"] in environments
+        ],
+        "shared_evidence_context": {
+            "source_pointer": "/evidence",
+            "evidence": report["evidence"],
+            "finding_ownership_inferred": False,
+        },
+        "unprojected_report_fields": [
+            name for name in report if name not in {"findings", "verification", "evidence"}
+        ],
+        "source_clause_completeness_evaluated": False,
+        "acceptance_controls_included": True,
+        "finding_references_evaluated": False,
+        "selection_evaluated": False,
+        "coverage_evaluated": False,
+        "runtime_evaluated": False,
+    }
 
 
 def audit_digest(report: dict[str, Any]) -> str:
@@ -2393,3 +2553,738 @@ def try_load_bound_selection(path: Path, report: dict[str, Any]) -> tuple[dict[s
         return normalize_selection(data, report, str(path)), None
     except ReportError as exc:
         return None, str(exc)
+
+
+# Evidence baking deliberately checks declared receipts, not semantic coverage. Capture
+# adapters and the relevance/completeness of the control manifest still need source review.
+def _evidence_scalar(value: Any, path: str) -> Any:
+    if value is not None and not isinstance(value, (str, bool, int, float)):
+        fail(f"{path} must be a JSON scalar")
+    if isinstance(value, float) and not _math.isfinite(value):
+        fail(f"{path} must be finite")
+    return value
+
+
+def _evidence_type(value: Any) -> str:
+    if value is None or value == "unknown":
+        return "unknown"
+    if value == "not_applicable":
+        return "not_applicable"
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, (int, float)):
+        return "number"
+    return "string"
+
+
+def _evidence_status(statuses: list[str]) -> str:
+    if "failed" in statuses:
+        return "failed"
+    return "working" if statuses and all(s == "working" for s in statuses) else "not_proven"
+
+
+def _evidence_artifact(root: Path, reference: dict[str, Any], path: str) -> dict[str, str]:
+    relative = text(reference.get("path"), f"{path}.path")
+    if "\x00" in relative:
+        fail(f"{path}.path must not contain NUL characters")
+    parts = Path(relative).parts
+    if Path(relative).is_absolute() or ".." in parts or "\\" in relative or re.match(r"^[A-Za-z]:", relative):
+        fail(f"{path}.path must stay relative to artifact_root")
+    digest = text(reference.get("sha256"), f"{path}.sha256").removeprefix("sha256:")
+    if not re.fullmatch(r"[0-9a-f]{64}", digest):
+        fail(f"{path}.sha256 must contain a lowercase SHA-256 digest")
+    # Resolve first for portable containment, then refuse symlinks while opening
+    # descriptor-relative components where the platform supports that primitive.
+    candidate = root.joinpath(*parts)
+    try:
+        contained = candidate.resolve().is_relative_to(root)
+    except (OSError, RuntimeError) as exc:
+        fail(f"{path}: cannot resolve source artifact {relative}: {exc}")
+    if not contained:
+        fail(f"{path}.path escapes artifact_root")
+    if any(root.joinpath(*parts[:n]).is_symlink() for n in range(1, len(parts) + 1)):
+        fail(f"{path}.path must not traverse symlinks")
+    descriptor = None
+    try:
+        if os.open in os.supports_dir_fd and hasattr(os, "O_NOFOLLOW"):
+            descriptor = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            for component in parts[:-1]:
+                child = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=descriptor)
+                os.close(descriptor)
+                descriptor = child
+            source = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0), dir_fd=descriptor)
+        else:
+            source = os.open(candidate, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
+        with os.fdopen(source, "rb") as handle:
+            before = os.fstat(handle.fileno())
+            if not _stat.S_ISREG(before.st_mode):
+                fail(f"{path}.path must name a regular file")
+            actual = hashlib.sha256()
+            for block in iter(lambda: handle.read(1024 * 1024), b""):
+                actual.update(block)
+            after = os.fstat(handle.fileno())
+            identity = lambda status: (
+                status.st_dev, status.st_ino, status.st_size,
+                status.st_mtime_ns, status.st_ctime_ns,
+            )
+            if identity(before) != identity(after):
+                fail(f"{path}.path changed while reading")
+            if descriptor is not None:
+                named = os.stat(parts[-1], dir_fd=descriptor, follow_symlinks=False)
+            else:
+                named = candidate.stat(follow_symlinks=False)
+            if identity(named) != identity(after):
+                fail(f"{path}.path was replaced while reading")
+        if not candidate.resolve().is_relative_to(root) or any(
+            root.joinpath(*parts[:n]).is_symlink() for n in range(1, len(parts) + 1)
+        ):
+            fail(f"{path}.path changed or escaped artifact_root while reading")
+        # The retained parent may itself have been moved. Bind the public path
+        # back to the same source identity, not only the descriptor-relative name.
+        if identity(candidate.stat(follow_symlinks=False)) != identity(after):
+            fail(f"{path}.path was replaced while reading")
+    except (OSError, RuntimeError, IndexError) as exc:
+        fail(f"{path}: cannot read source artifact {relative}: {exc}")
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+    if actual.hexdigest() != digest:
+        fail(f"{path}: source bytes do not match SHA-256 for {relative}")
+    result = {"path": relative, "sha256": digest}
+    if "locator" in reference:
+        result["locator"] = text(reference["locator"], f"{path}.locator")
+    return result
+
+
+def _evidence_delivery_facts(facts: dict[str, Any], path: str, *, actual: bool) -> None:
+    counts = {
+        "received_records", "acknowledged_records", "accepted_records",
+        "persisted_records", "exported_records",
+    }
+    aliases = {
+        "received", "acknowledged", "accepted", "persisted", "delivery.accepted",
+        "delivery.acknowledged", "delivery.persisted",
+    }
+    if aliases.intersection(facts):
+        fail(f"{path}: use explicit delivery counts, acknowledgement and persistence facts, not delivery aliases")
+    for key in counts.intersection(facts):
+        value = facts[key]
+        if _evidence_type(value) not in {"unknown", "not_applicable"} and (type(value) is not int or value < 0):
+            fail(f"{path}.{key} must be a nonnegative integer, unknown or not_applicable")
+    if "acknowledgement" in facts and facts["acknowledgement"] not in {"decoded_conformant", "absent", "invalid", "unknown", "not_applicable", None}:
+        fail(f"{path}.acknowledgement must be decoded_conformant, absent, invalid, unknown or not_applicable")
+    if "persistence" in facts and facts["persistence"] not in {"observed", "not_observed", "unknown", "not_applicable", None}:
+        fail(f"{path}.persistence must be observed, not_observed, unknown or not_applicable")
+    if "client_outcome" in facts and facts["client_outcome"] not in (
+        "success", "failure", "unknown", "not_applicable", None,
+    ):
+        fail(f"{path}.client_outcome must be success, failure, unknown or not_applicable")
+    for key in ("final_record_before_exit", "persistence_observed", "operation_continues"):
+        if key in facts and not (
+            type(facts[key]) is bool or facts[key] is None
+            or facts[key] in ("unknown", "not_applicable")
+        ):
+            fail(f"{path}.{key} must be a boolean, unknown or not_applicable")
+    if not actual:
+        return
+    for key in ("acknowledged_records", "accepted_records"):
+        if type(facts.get(key)) is int and facts[key] > 0:
+            if facts.get("acknowledgement") != "decoded_conformant" or type(facts.get("received_records")) is not int or facts["received_records"] < facts[key]:
+                fail(f"{path}.{key} requires its own decoded_conformant acknowledgement and sufficient received_records; client success is insufficient")
+    if type(facts.get("accepted_records")) is int and facts["accepted_records"] > 0:
+        if type(facts.get("acknowledged_records")) is not int or facts["acknowledged_records"] < facts["accepted_records"]:
+            fail(f"{path}.accepted_records requires sufficient explicit acknowledged_records")
+    if (type(facts.get("persisted_records")) is int and facts["persisted_records"] > 0) or facts.get("persistence") == "observed":
+        if facts.get("persistence") != "observed" or facts.get("persistence_observed") is not True:
+            fail(f"{path}: persistence requires its own explicit persistence_observed=true observation; acknowledgement is insufficient")
+
+
+def load_evidence_ledger(path: Path) -> list[dict[str, Any]]:
+    """Read a JSON array or JSONL ledger without executing referenced commands."""
+    try:
+        raw = path.read_text(encoding="utf-8")
+        values = json.loads(raw) if raw.lstrip().startswith("[") else [
+            json.loads(line) for line in raw.splitlines() if line.strip()
+        ]
+    except (UnicodeError, json.JSONDecodeError) as exc:
+        fail(f"{path} is not a JSON array or JSONL observation ledger: {exc}")
+    return [as_object(row, f"{path}[{i}]") for i, row in enumerate(as_list(values, str(path)))]
+
+
+def bake_evidence_report(
+    manifest: dict[str, Any], observations: list[dict[str, Any]], artifact_root: Path,
+) -> dict[str, Any]:
+    """Bake caller-declared controls from exact, source-bound operation receipts.
+
+    This is mechanical equality/ownership validation. It cannot establish that a
+    capture adapter tells the truth or that the caller declared every relevant
+    branch. Facts such as received/acknowledged/accepted/persisted remain separate
+    explicit facts; no delivery fact is inferred from another fact or status.
+    """
+    manifest = as_object(manifest, "manifest")
+    if type(manifest.get("schema_version")) is not int or manifest["schema_version"] != 1 or manifest.get("kind") != "otel-evidence-controls":
+        fail("manifest requires schema_version 1 and kind otel-evidence-controls")
+    try:
+        root = Path(artifact_root).resolve(strict=True)
+    except (OSError, RuntimeError, ValueError) as exc:
+        fail(f"cannot resolve artifact_root: {exc}")
+    if not root.is_dir():
+        fail("artifact_root must be a directory")
+    rows = []
+    seen = set()
+    for i, source in enumerate(as_list(observations, "observations")):
+        path = f"observations[{i}]"
+        row = _copy.deepcopy(as_object(source, path))
+        row["id"] = text(row.get("id"), f"{path}.id")
+        for key in ("run_id", "operation_id", "phase"):
+            if row.get(key) not in (None, "unknown"):
+                row[key] = text(row[key], f"{path}.{key}")
+            else:
+                row[key] = None
+        provenance = row.get("provenance", "source_import")
+        if provenance not in ("captured", "source_import", "unattributed"):
+            fail(f"{path}.provenance must be captured, source_import or unattributed")
+        row["provenance"] = provenance
+        if provenance == "unattributed" and all(row[key] for key in ("run_id", "operation_id", "phase")):
+            fail(f"{path}: unattributed provenance contradicts complete ownership")
+        if row["id"] in seen:
+            fail(f"{path}.id duplicates observation {row['id']}")
+        seen.add(row["id"])
+        facts = as_object(row.get("facts"), f"{path}.facts")
+        for key, value in facts.items():
+            text(key, f"{path}.facts key")
+            _evidence_scalar(value, f"{path}.facts.{key}")
+        _evidence_delivery_facts(facts, f"{path}.facts", actual=True)
+        context = as_object(row.get("trace_context", {"state": "unknown"}), f"{path}.trace_context")
+        row["trace_context"] = context
+        state = context.get("state")
+        if state not in ("context", "none", "unknown"):
+            fail(f"{path}.trace_context.state must be context, none or unknown")
+        if state == "context":
+            if not isinstance(context.get("trace_id"), str) or not re.fullmatch(r"[0-9a-f]{32}", context["trace_id"]) or not context["trace_id"].strip("0"):
+                fail(f"{path}.trace_context.trace_id must be a nonzero 32-character lowercase canonical trace ID")
+            if context.get("span_id") is not None and (
+                not isinstance(context["span_id"], str) or not re.fullmatch(r"[0-9a-f]{16}", context["span_id"]) or not context["span_id"].strip("0")
+            ):
+                fail(f"{path}.trace_context.span_id must be a nonzero 16-character lowercase canonical span ID")
+        elif context.get("trace_id") or context.get("span_id"):
+            fail(f"{path}.trace_context {state} cannot carry IDs")
+        artifacts = as_list(row.get("artifacts"), f"{path}.artifacts")
+        if not artifacts:
+            fail(f"{path}.artifacts requires at least one exact source reference")
+        row["artifacts"] = [_evidence_artifact(root, as_object(a, f"{path}.artifacts[{j}]"), f"{path}.artifacts[{j}]") for j, a in enumerate(artifacts)]
+        rows.append(row)
+    rows.sort(key=lambda row: row["id"])
+    controls = []
+    seen = set()
+    for i, source in enumerate(as_list(manifest.get("controls"), "manifest.controls")):
+        path = f"manifest.controls[{i}]"
+        control = as_object(source, path)
+        cid = text(control.get("id"), f"{path}.id")
+        if cid in seen:
+            fail(f"{path}.id duplicates control {cid}")
+        seen.add(cid)
+        scenario = text(control.get("scenario_id"), f"{path}.scenario_id")
+        run = text(control.get("run_id"), f"{path}.run_id")
+        phase = text(control.get("phase"), f"{path}.phase")
+        operations = string_list(control.get("operation_ids"), f"{path}.operation_ids")
+        if not operations or len(set(operations)) != len(operations):
+            fail(f"{path}.operation_ids must contain unique explicit operation IDs")
+        match = as_object(control.get("match", {}), f"{path}.match")
+        if set(match) - {"method", "outcome"}:
+            fail(f"{path}.match supports only method and outcome")
+        if "method" in match:
+            text(match["method"], f"{path}.match.method")
+        if "method" in match and "outcome" not in match:
+            fail(f"{path}.match.method requires an exact outcome")
+        for key, value in match.items():
+            _evidence_scalar(value, f"{path}.match.{key}")
+            if _evidence_type(value) in {"unknown", "not_applicable"}:
+                fail(f"{path}.match.{key} requires a concrete value")
+        expected = as_object(control.get("expected"), f"{path}.expected")
+        if not expected:
+            fail(f"{path}.expected requires at least one declared fact")
+        for key, value in expected.items():
+            text(key, f"{path}.expected key")
+            _evidence_scalar(value, f"{path}.expected.{key}")
+        _evidence_delivery_facts(expected, f"{path}.expected", actual=False)
+        mode = control.get("mode", "positive")
+        if mode not in ("positive", "zero_export"):
+            fail(f"{path}.mode must be positive or zero_export")
+        if mode == "zero_export" and (expected.get("exported_records") != 0 or isinstance(expected.get("exported_records"), bool)):
+            fail(f"{path}: zero_export requires expected.exported_records=0")
+        if type(expected.get("exported_records")) is int and expected["exported_records"] == 0 and mode != "zero_export":
+            fail(f"{path}: expected zero exported_records requires mode=zero_export and its observation window")
+        matched = [row for row in rows if row["run_id"] == run and row["operation_id"] in operations and row["phase"] == phase and all(
+            key in row and type(row[key]) is type(value) and row[key] == value for key, value in match.items()
+        )]
+        if any("method" in row for row in matched) and not {"method", "outcome"}.issubset(match):
+            fail(f"{path}: HTTP operation controls require match.method and match.outcome")
+        verdicts = []
+        for operation in sorted(operations):
+            own = [row for row in matched if row["operation_id"] == operation]
+            if not own:
+                verdicts.append({"operation_id": operation, "fact": "observation", "expected": "present", "actual": "unknown", "expected_type": "string", "actual_type": "unknown", "status": "not_proven"})
+            for fact, value in sorted(expected.items()):
+                values = [(row["id"], row["facts"].get(fact)) for row in own]
+                if not values:
+                    values = [(None, None)]
+                for oid, actual in values:
+                    et, at = _evidence_type(value), _evidence_type(actual)
+                    status = "not_proven" if "unknown" in {et, at} else (
+                        "not_applicable" if et == at == "not_applicable" else (
+                            "working" if et == at and value == actual else "failed"
+                        )
+                    )
+                    verdicts.append({"operation_id": operation, "observation_id": oid, "fact": fact, "expected": value, "actual": actual, "expected_type": et, "actual_type": at, "status": status})
+            if mode == "zero_export":
+                witnesses = [row for row in own if row["facts"].get("exported_records") == 0 and not isinstance(row["facts"].get("exported_records"), bool) and row["facts"].get("operation_continues") is True and isinstance(row.get("window"), dict) and all(
+                    isinstance(row["window"].get(k), (int, float)) and not isinstance(row["window"].get(k), bool) and (not isinstance(row["window"][k], float) or _math.isfinite(row["window"][k])) for k in ("start", "end")
+                ) and row["window"]["start"] < row["window"]["end"]]
+                verdicts.append({"operation_id": operation, "fact": "negative_observation_window_and_continuation", "expected": True, "actual": bool(witnesses), "expected_type": "boolean", "actual_type": "boolean", "status": "working" if witnesses else "not_proven"})
+        status = _evidence_status([v["status"] for v in verdicts if v["status"] != "not_applicable"])
+        controls.append({"id": cid, "scenario_id": scenario, "status": status, "mode": mode, "run_id": run, "operation_ids": sorted(operations), "phase": phase, "match": dict(sorted(match.items())), "trace_ids": sorted({row["trace_context"]["trace_id"] for row in matched if row["trace_context"]["state"] == "context"}), "observations": matched, "verdicts": verdicts})
+    controls.sort(key=lambda control: (control["scenario_id"], control["id"]))
+    scenarios = []
+    for sid in sorted({control["scenario_id"] for control in controls}):
+        selected = [control for control in controls if control["scenario_id"] == sid]
+        scenarios.append({"id": sid, "status": _evidence_status([c["status"] for c in selected]), "control_ids": [c["id"] for c in selected], "trace_ids": sorted({tid for c in selected for tid in c["trace_ids"]})})
+    matched_ids = {row["id"] for c in controls for row in c["observations"]}
+    return {
+        "schema_version": 1,
+        "kind": "otel-evidence-report",
+        "status": _evidence_status([s["status"] for s in scenarios]),
+        "controls": controls,
+        "scenarios": scenarios,
+        "diagnostics": [row for row in rows if row["id"] not in matched_ids],
+        "limitations": (
+            "Mechanical source-hash, ownership and equality checks only; manifest "
+            "completeness, relevance and capture-adapter truth require source review. "
+            "No delivery, visibility or semantic conformance is inferred."
+        ),
+    }
+
+
+def render_evidence_report_markdown(baked: dict[str, Any]) -> str:
+    def cell(value: Any) -> str:
+        return str(value).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("|", "\\|").replace("\n", " ").replace("\r", " ")
+    lines = ["# Deterministic evidence report", "", "Result: " + baked["status"], "", baked["limitations"], "", "| Scenario | Control | Status | Trace IDs |", "|---|---|---|---|"]
+    for c in baked["controls"]:
+        lines.append("| " + " | ".join(cell(x) for x in [c["scenario_id"], c["id"], c["status"], ", ".join(c["trace_ids"]) or "No proven contextual IDs"]) + " |")
+    for c in baked["controls"]:
+        lines += ["", "## " + cell(c["id"]), "", "| Operation | Fact | Expected (type) | Actual (type) | Verdict |", "|---|---|---|---|---|"]
+        for v in c["verdicts"]:
+            lines.append("| " + " | ".join(cell(x) for x in [v["operation_id"], v["fact"], f"{v['expected']} ({v['expected_type']})", f"{v['actual']} ({v['actual_type']})", v["status"]]) + " |")
+    return "\n".join(lines) + "\n"
+
+
+def project_evidence_report(report: dict[str, Any], baked: dict[str, Any]) -> dict[str, Any]:
+    """Project only derived scenario IDs/status and aggregate status into an existing overlay.
+
+    Item proof, existing remaining-work text, visibility, commands and canonical
+    bindings remain untouched; unresolved evidence adds literal machine-derived
+    remaining reasons. Normal validate-flow still applies.
+    """
+    projected = _copy.deepcopy(as_object(report, "report"))
+    if projected.get("kind") != "otel-verify":
+        fail("projection requires an existing otel-verify report; no audit is fabricated")
+    meta = as_object(projected.get("meta"), "report.meta")
+    if text(meta.get("result"), "report.meta.result") not in RESULT_STATUSES:
+        fail("report.meta.result must be a canonical verification result")
+    for key in ("service_name", "date"):
+        if key in meta:
+            text(meta[key], f"report.meta.{key}")
+    results = {s["id"]: s for s in baked["scenarios"]}
+    found = set()
+    for finding_index, finding in enumerate(as_list(projected.get("findings"), "report.findings")):
+        finding_path = f"report.findings[{finding_index}]"
+        finding = as_object(finding, finding_path)
+        text(finding.get("id"), f"{finding_path}.id")
+        if text(finding.get("status"), f"{finding_path}.status") not in SCENARIO_STATUSES:
+            fail(f"{finding_path}.status must be a canonical verification status")
+        items = as_list(finding.get("item_results", []), f"{finding_path}.item_results")
+        for item_index, item in enumerate(items):
+            item_path = f"{finding_path}.item_results[{item_index}]"
+            item = as_object(item, item_path)
+            if text(item.get("status"), f"{item_path}.status") not in SCENARIO_STATUSES:
+                fail(f"{item_path}.status must be a canonical verification status")
+            if "proof_mode" in item and text(item["proof_mode"], f"{item_path}.proof_mode") not in PROOF_MODES:
+                fail(f"{item_path}.proof_mode must be a canonical proof mode")
+        scenarios = as_list(finding.get("scenarios"), f"{finding_path}.scenarios")
+        original_scenarios = report["findings"][finding_index]["scenarios"]
+        finding_seen = set()
+        for scenario_index, scenario in enumerate(scenarios):
+            scenario = as_object(scenario, "report.findings.scenarios entry")
+            sid = text(scenario.get("id"), "report.findings.scenarios.id")
+            scenario_path = f"{finding_path}.scenarios[{scenario_index}]"
+            if text(scenario.get("status"), f"{scenario_path}.status") not in SCENARIO_STATUSES:
+                fail(f"{scenario_path}.status must be a canonical verification status")
+            for key in ("commands", "evidence", "observed_telemetry", "product_validation", "trace_ids"):
+                if key in scenario:
+                    string_list(scenario[key], f"{scenario_path}.{key}")
+            for key, allowed in (("proof_mode", PROOF_MODES), ("visibility", VISIBILITY_STATES)):
+                if key in scenario and text(scenario[key], f"{scenario_path}.{key}") not in allowed:
+                    fail(f"{scenario_path}.{key} must be a canonical value")
+            for key in ("blocking_reason", "unobserved_outcome"):
+                optional_text(scenario.get(key), f"{scenario_path}.{key}")
+            if sid in finding_seen:
+                fail(f"report finding {finding.get('id')} repeats scenario {sid}")
+            finding_seen.add(sid)
+            found.add(sid)
+            if sid not in results:
+                # Absence from the explicit manifest must not leave an old working claim.
+                scenario["status"] = "not_proven"
+                scenario["trace_ids"] = []
+            else:
+                scenario["status"] = "not_working" if results[sid]["status"] == "failed" else results[sid]["status"]
+                scenario["trace_ids"] = list(results[sid]["trace_ids"])
+            original = original_scenarios[scenario_index]
+            if original.get("status") == "blocked" and scenario["status"] == "not_proven":
+                scenario["status"] = "blocked"
+            if scenario["status"] in {"working", "not_working"}:
+                if original.get("blocking_reason") is not None or original.get("unobserved_outcome") is not None:
+                    fail(f"scenario {sid}: resolve existing caller-owned blocking fields before projecting executed evidence")
+                if original.get("proof_mode", "not_run") == "not_run" or not all(original.get(k) for k in ("evidence", "observed_telemetry", "product_validation")):
+                    fail(f"scenario {sid}: projection requires caller-owned executed proof, evidence, observations and product validation")
+                if scenario["status"] == "working" and original.get("visibility", "not_proven") == "not_proven":
+                    fail(f"scenario {sid}: projection cannot invent a known visibility boundary")
+        unresolved = [s for s in finding["scenarios"] if s["status"] != "working"]
+        remaining = finding.setdefault("remaining", [])
+        string_list(remaining, f"{finding_path}.remaining")
+        for scenario in unresolved:
+            reason = f"Evidence bake: scenario {scenario['id']} is {scenario['status']} under declared controls."
+            if reason not in remaining:
+                remaining.append(reason)
+        nested = [s["status"] for s in finding["scenarios"]] + [i["status"] for i in finding.get("item_results", [])]
+        finding["status"] = "not_working" if "not_working" in nested else (
+            "working" if nested and all(s == "working" for s in nested) and not finding.get("remaining") else "not_proven"
+        )
+    if set(results) - found:
+        fail("report is missing baked scenarios: " + ", ".join(sorted(set(results) - found)))
+    statuses = [f["status"] for f in projected["findings"]]
+    meaningful = any(
+        row.get("proof_mode", "not_run") != "not_run"
+        for finding in projected["findings"]
+        for row in finding["scenarios"] + finding.get("item_results", [])
+    )
+    blocked = any(s["status"] == "blocked" for f in projected["findings"] for s in f["scenarios"])
+    projected["meta"]["result"] = "Fail" if "not_working" in statuses else (
+        "Pass" if statuses and all(s == "working" for s in statuses) else (
+            "Partial" if meaningful else ("Blocked" if blocked else "Not run")
+        )
+    )
+    return projected
+
+
+def check_evidence_report_projection(report: dict[str, Any], baked: dict[str, Any]) -> list[str]:
+    projected = project_evidence_report(report, baked)
+    differences = []
+    for before, after in zip(report["findings"], projected["findings"]):
+        for old, new in zip(before["scenarios"], after["scenarios"]):
+            for key in ("status", "trace_ids"):
+                if old.get(key) != new[key]:
+                    differences.append(f"scenario {new['id']}.{key} differs from baked evidence")
+        if before.get("remaining", []) != after.get("remaining", []):
+            differences.append(f"finding {after['id']}.remaining lacks machine-derived unresolved evidence reasons")
+        if before.get("status") != after["status"]:
+            differences.append(f"finding {after['id']}.status differs from baked evidence")
+    if report["meta"].get("result") != projected["meta"]["result"]:
+        differences.append("meta.result differs from baked evidence")
+    return differences
+
+
+def _receipt_path(root: Path, path: Path, *, directory: bool = False, missing: bool = False) -> Path:
+    """Confine a path and reject link traversal, including a link before '..'."""
+    if "\x00" in str(path):
+        fail("evidence receipt path must not contain NUL characters")
+    candidate = Path(os.path.abspath(path))
+    # Inspect the uncollapsed spelling too: link/../file must not bypass a link check.
+    try:
+        for ancestor in (path, *path.parents):
+            if ancestor.is_symlink() and (ancestor.parent.resolve().is_relative_to(root) or ancestor.resolve().is_relative_to(root)):
+                fail(f"evidence receipt paths must not traverse symlinks: {path}")
+        candidate = candidate.resolve()
+    except (OSError, RuntimeError, ValueError) as exc:
+        fail(f"cannot resolve evidence receipt path {path}: {exc}")
+    if not candidate.is_relative_to(root):
+        fail(f"evidence receipt path escapes service_root: {path}")
+    relative = candidate.relative_to(root)
+    for index in range(1, len(relative.parts) + 1):
+        if root.joinpath(*relative.parts[:index]).is_symlink():
+            fail(f"evidence receipt paths must not traverse symlinks: {path}")
+    if not candidate.resolve().is_relative_to(root):
+        fail(f"evidence receipt path escapes service_root: {path}")
+    if directory:
+        if not candidate.is_dir():
+            fail(f"evidence receipt directory does not exist: {path}")
+    elif candidate.exists():
+        if not _stat.S_ISREG(candidate.stat(follow_symlinks=False).st_mode):
+            fail(f"evidence receipt input/output must be a regular file: {path}")
+    elif not missing:
+        fail(f"evidence receipt file does not exist: {path}")
+    return candidate
+
+
+def _receipt_root(root: Path) -> Path:
+    if root.is_symlink():
+        fail("service_root must not be a symlink")
+    try:
+        resolved = root.resolve(strict=True)
+    except (OSError, RuntimeError, ValueError) as exc:
+        fail(f"cannot resolve service_root: {exc}")
+    if not resolved.is_dir():
+        fail("service_root must be a directory")
+    return resolved
+
+
+def _receipt_read(root: Path, path: Path) -> bytes:
+    candidate = _receipt_path(root, path)
+    relative = candidate.relative_to(root)
+    descriptor = None
+    identity = lambda s: (s.st_dev, s.st_ino, s.st_size, s.st_mtime_ns, s.st_ctime_ns)
+    try:
+        if os.open in os.supports_dir_fd and hasattr(os, "O_NOFOLLOW"):
+            descriptor = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            root_identity = os.fstat(descriptor)
+            for part in relative.parts[:-1]:
+                child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=descriptor)
+                os.close(descriptor)
+                descriptor = child
+            source = os.open(relative.parts[-1], os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0), dir_fd=descriptor)
+        else:
+            root_identity = root.stat()
+            source = os.open(candidate, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
+        with os.fdopen(source, "rb") as handle:
+            before = os.fstat(handle.fileno())
+            if not _stat.S_ISREG(before.st_mode):
+                fail("evidence receipt inputs must be regular files")
+            value = handle.read()
+            after = os.fstat(handle.fileno())
+        if identity(before) != identity(after) or identity(candidate.stat(follow_symlinks=False)) != identity(after):
+            fail("evidence receipt input changed while reading")
+        if (root_identity.st_dev, root_identity.st_ino) != (root.stat().st_dev, root.stat().st_ino):
+            fail("service_root changed while reading")
+        _receipt_path(root, path)
+        return value
+    except (OSError, RuntimeError, IndexError) as exc:
+        fail(f"cannot read evidence receipt input {path}: {exc}")
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+
+
+def _receipt_json(raw: bytes, label: str) -> dict[str, Any]:
+    try:
+        return as_object(json.loads(raw), label)
+    except (UnicodeError, json.JSONDecodeError) as exc:
+        fail(f"{label} is not valid JSON: {exc}")
+
+
+def _receipt_ledger(raw: bytes) -> list[dict[str, Any]]:
+    try:
+        value = raw.decode("utf-8")
+        rows = json.loads(value) if value.lstrip().startswith("[") else [json.loads(line) for line in value.splitlines() if line.strip()]
+    except (UnicodeError, json.JSONDecodeError) as exc:
+        fail(f"receipt ledger is not JSON/JSONL: {exc}")
+    return [as_object(row, f"receipt ledger[{i}]") for i, row in enumerate(as_list(rows, "receipt ledger"))]
+
+
+def evidence_receipt_paths(
+    inputs: list[Path], outputs: list[Path], artifact_root: Path,
+    observations: list[dict[str, Any]], *, strict: bool = True,
+) -> None:
+    """Always guard collisions; strict path checks belong to explicit receipts."""
+    if strict:
+        paths = [Path(os.path.abspath(p)) for p in inputs + outputs + [artifact_root]]
+        # Preserve link spellings until the explicit receipt boundary is checked.
+        try:
+            boundary = _receipt_root(Path(os.path.commonpath([str(p.parent) for p in paths])))
+        except ValueError as exc:
+            fail(f"evidence receipt paths require a common filesystem root: {exc}")
+        for path in inputs:
+            _receipt_path(boundary, path)
+        _receipt_path(boundary, artifact_root, directory=True)
+        for path in outputs:
+            _receipt_path(boundary, path, missing=True)
+    raw = [artifact_root / a["path"] for row in observations for a in row["artifacts"]]
+    protected = inputs + raw
+    for index, output in enumerate(outputs):
+        for other in protected + outputs[:index]:
+            if output.resolve() == other.resolve() or (output.exists() and other.exists() and os.path.samefile(output, other)):
+                fail("evidence-bake outputs must be distinct and must not overwrite inputs or source artifacts")
+
+
+def _receipt_reference(
+    reference: Any, parent: Path, root: Path, label: str, *, directory: bool = False,
+) -> tuple[Path, bytes | None]:
+    ref = as_object(reference, label)
+    name = text(ref.get("path"), f"{label}.path")
+    if "\x00" in name or "\\" in name or Path(name).is_absolute() or re.match(r"^[A-Za-z]:", name):
+        fail(f"{label}.path must be a portable relative path")
+    path = parent
+    for component in Path(name).parts:
+        path = path / component
+        if path.is_symlink():
+            fail(f"{label}.path must not traverse symlinks")
+        if not path.resolve().is_relative_to(root):
+            fail(f"{label}.path escapes service_root")
+    _receipt_path(root, path, directory=directory)
+    if directory:
+        return path, None
+    digest = text(ref.get("sha256"), f"{label}.sha256")
+    if not re.fullmatch(r"[0-9a-f]{64}", digest):
+        fail(f"{label}.sha256 must be a lowercase SHA-256 digest")
+    raw = _receipt_read(root, path)
+    if hashlib.sha256(raw).hexdigest() != digest:
+        fail(f"{label} SHA-256 differs from current input")
+    return path, raw
+
+
+def _validate_direct_evidence_index(
+    value: dict[str, Any], parent: Path, root: Path, baked: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Check the explicit claim set, never infer claims from unrestricted prose.
+
+    The caller owns the completeness/relevance of this index and the report's
+    narrative. Hash binding detects drift, not a semantically incomplete index.
+    """
+    if type(value.get("schema_version")) is not int or value["schema_version"] != 1 or value.get("kind") != "otel-direct-evidence-index":
+        fail("direct index requires schema_version 1 and kind otel-direct-evidence-index")
+    reports = as_list(value.get("reports"), "direct_index.reports")
+    if not reports:
+        fail("direct_index.reports requires at least one final report")
+    report_paths = []
+    for i, ref in enumerate(reports):
+        path, _ = _receipt_reference(ref, parent, root, f"direct_index.reports[{i}]")
+        resolved = path.resolve()
+        if resolved in report_paths:
+            fail("direct_index.reports repeats a final report")
+        report_paths.append(resolved)
+    results = {scenario["id"]: scenario for scenario in baked["scenarios"]} if baked is not None else {}
+    seen = set()
+    executed = []
+    blocked = False
+    scenarios = as_list(value.get("scenarios"), "direct_index.scenarios")
+    if not scenarios:
+        fail("direct_index.scenarios requires at least one explicit scenario")
+    for i, source in enumerate(scenarios):
+        label = f"direct_index.scenarios[{i}]"
+        scenario = as_object(source, label)
+        sid = text(scenario.get("id"), f"{label}.id")
+        if sid in seen:
+            fail(f"direct index repeats scenario {sid}")
+        seen.add(sid)
+        execution = text(scenario.get("execution"), f"{label}.execution")
+        status = text(scenario.get("status"), f"{label}.status")
+        controls = string_list(scenario.get("control_ids"), f"{label}.control_ids")
+        if len(set(controls)) != len(controls):
+            fail(f"scenario {sid}: control_ids must be unique")
+        if execution == "executed":
+            if status not in {"working", "failed", "not_proven"}:
+                fail(f"scenario {sid}: executed status must be working, failed or not_proven")
+            if not controls or sid not in results:
+                fail(f"scenario {sid}: executed claim requires declared baked controls")
+            if set(controls) != set(results[sid]["control_ids"]) or status != results[sid]["status"]:
+                fail(f"scenario {sid}: claimed controls/status differ from baked evidence")
+            executed.append(status)
+        elif execution in {"not_run", "prerequisite_only"}:
+            expected = "not_proven" if execution == "not_run" else "blocked"
+            if controls or status != expected or sid in results:
+                fail(f"scenario {sid}: {execution} requires {expected}, no controls and no baked execution")
+            text(scenario.get("reason"), f"{label}.reason")
+            blocked = blocked or execution == "prerequisite_only"
+        else:
+            fail(f"{label}.execution must be executed, not_run or prerequisite_only")
+    missing = set(results) - seen
+    if missing:
+        fail("direct index is missing baked scenarios: " + ", ".join(sorted(missing)))
+    if "failed" in executed:
+        result = "Fail"
+    elif len(executed) == len(seen) and all(status == "working" for status in executed):
+        result = "Pass"
+    elif executed:
+        result = "Partial"
+    else:
+        result = "Blocked" if blocked else "Not run"
+    if value.get("result") != result:
+        fail(f"direct_index.result must be {result} under indexed scenarios")
+    for i, ref in enumerate(reports):
+        _receipt_reference(ref, parent, root, f"direct_index.reports[{i}]")
+    return {"schema_version": 1, "kind": "otel-direct-evidence-index-validation",
+            "status": "valid", "result": result, "executed_scenarios": len(executed),
+            "report_paths": [str(path) for path in report_paths],
+            "limitations": "Explicit scenario/control consistency and final-report hashes only; index completeness, narrative claims, control relevance and capture-adapter truth require semantic review."}
+
+
+def validate_direct_evidence_index(
+    index: Path, service_root: Path, baked: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Validate a direct report without fabricating canonical audit or selection data."""
+    root = _receipt_root(service_root)
+    path = _receipt_path(root, index)
+    raw = _receipt_read(root, path)
+    result = _validate_direct_evidence_index(_receipt_json(raw, "direct index"), path.parent, root, baked)
+    if _receipt_read(root, path) != raw:
+        fail("direct index changed while validating")
+    return result
+
+
+def create_evidence_receipt(
+    manifest: Path, ledger: Path, report: Path, artifact_root: Path, receipt: Path,
+) -> dict[str, Any]:
+    """Bind checked inputs; the receipt adds no semantic completeness claim."""
+    try:
+        parent = receipt.parent.resolve()
+        root = _receipt_root(Path(os.path.commonpath([str(p.resolve()) for p in [manifest, ledger, report, artifact_root, parent]])))
+    except (OSError, RuntimeError, ValueError) as exc:
+        fail(f"cannot resolve evidence receipt inputs: {exc}")
+    # A common path can be a file only when the caller supplied colliding inputs.
+    refs = {}
+    for key, path in (("manifest", manifest), ("ledger", ledger), ("report", report)):
+        raw = _receipt_read(root, path)
+        refs[key] = {"path": Path(os.path.relpath(path.resolve(), parent)).as_posix(), "sha256": hashlib.sha256(raw).hexdigest()}
+    value = {"schema_version": 1, "kind": "otel-evidence-receipt", **refs,
+             "artifact_root": {"path": Path(os.path.relpath(artifact_root.resolve(), parent)).as_posix()},
+             "core_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
+    # Re-bake the hashed bytes and check the exact final report again before publishing.
+    _validate_evidence_receipt(value, parent, root)
+    return value
+
+
+def _validate_evidence_receipt(value: dict[str, Any], parent: Path, root: Path) -> dict[str, Any]:
+    if type(value.get("schema_version")) is not int or value["schema_version"] != 1 or value.get("kind") != "otel-evidence-receipt":
+        fail("evidence receipt requires schema_version 1 and kind otel-evidence-receipt")
+    if value.get("core_sha256") != hashlib.sha256(Path(__file__).read_bytes()).hexdigest():
+        fail("evidence receipt core SHA-256 differs from canonical validator")
+    def reference(key: str, directory: bool = False) -> tuple[Path, bytes | None]:
+        return _receipt_reference(value.get(key), parent, root, f"receipt.{key}", directory=directory)
+    _, manifest = reference("manifest")
+    _, ledger = reference("ledger")
+    report_path, report = reference("report")
+    artifacts, _ = reference("artifact_root", directory=True)
+    artifacts = _receipt_path(root, artifacts, directory=True)
+    baked = bake_evidence_report(_receipt_json(manifest, "receipt manifest"), _receipt_ledger(ledger), artifacts)
+    _receipt_path(root, artifacts, directory=True)
+    report_value = _receipt_json(report, "receipt report")
+    direct = None
+    if report_value.get("kind") == "otel-direct-evidence-index":
+        direct = _validate_direct_evidence_index(report_value, report_path.parent, root, baked)
+    else:
+        differences = check_evidence_report_projection(report_value, baked)
+        if differences:
+            fail("evidence receipt report projection differs: " + "; ".join(differences))
+    # Detect input changes during raw/report verification rather than certifying stale bytes.
+    for key in ("manifest", "ledger", "report"):
+        reference(key)
+    result = {"schema_version": 1, "kind": "otel-evidence-receipt-validation", "status": "valid", "baked_status": baked["status"], "limitations": "Mechanical input, raw-artifact and projection consistency only; no semantic completeness or capture-adapter truth claim."}
+    if direct is not None:
+        result["direct_index"] = direct
+    return result
+
+
+def validate_evidence_receipt(receipt: Path, service_root: Path) -> dict[str, Any]:
+    """Independently rehash, re-bake and check a receipt under a caller-owned root."""
+    root = _receipt_root(service_root)
+    # The caller root may use a platform alias; inspect all paths below that root.
+    value = _receipt_json(_receipt_read(root, receipt), "evidence receipt")
+    return _validate_evidence_receipt(value, _receipt_path(root, receipt).parent, root)

@@ -16,11 +16,36 @@
     "otel-audit",
     "otel-instrument"
   ],
+  "languages/go.md": [
+    "otel-audit",
+    "otel-instrument",
+    "otel-verify"
+  ],
+  "languages/java.md": [
+    "otel-audit",
+    "otel-instrument",
+    "otel-verify"
+  ],
+  "languages/node.md": [
+    "otel-audit",
+    "otel-instrument",
+    "otel-verify"
+  ],
+  "languages/python.md": [
+    "otel-audit",
+    "otel-instrument",
+    "otel-verify"
+  ],
   "ledger-template.md": [
     "splunk-dashboard-publish",
     "splunk-detector-publish"
   ],
   "local-otlp-receiver.md": [
+    "otel-audit",
+    "otel-instrument",
+    "otel-verify"
+  ],
+  "logging-readiness.md": [
     "otel-audit",
     "otel-instrument",
     "otel-verify"

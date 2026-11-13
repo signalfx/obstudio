@@ -1,0 +1,32 @@
+{
+  "skill": "otel-verify",
+  "prompts": [
+    {
+      "id": "logging-trial-1",
+      "eval_inputs": [],
+      "task": "$otel-verify ./service"
+    },
+    {
+      "id": "logging-trial-2",
+      "eval_inputs": [],
+      "task": "$otel-verify ./service"
+    },
+    {
+      "id": "logging-trial-3",
+      "eval_inputs": [],
+      "task": "$otel-verify ./service"
+    }
+  ],
+  "rubric_base": "../../../../rubrics/logging-common.json",
+  "rubric_additions": {
+    "rubric-10": "For selected Node metric configuration, preserve the actual owner's supported numeric parsing, defaults and timeout clamping. Label any short-run launch defaults as policy rather than SDK behavior.",
+    "rubric-11": "Resolve NodeSDK native environment autoconfiguration separately from direct reader/processor constructors. Preserve selected trace/metric exporter opt-outs and actual protocol precedence; an explicit HTTP exporter/reader cannot be assumed to honor those selectors. Preserve native exporter spelling and distinguish the stricter approved-local branch from SDK unsupported-value fallback. Calibrate constructor versus start before temporary guards, restore operator values, and never repeat startup after partial global registration.",
+    "rubric-13": "For Node Resource-only/absent-identity profiles, account for the active .env/profile reloading OTEL_SERVICE_NAME, using isolated configuration copies rather than changing operator settings.",
+    "rubric-23": "For selected Node bound-callback restoration controls, a throw caught inside the same context scope does not prove cleanup after escape. Assert exact span context on every reused bound callback record, then schedule and assert the subsequent callback after actual cancellation under its own context. Counts or a synchronous outside log alone cannot close these controls. The fixture awaits a Promise completed by setImmediate. Audit plans to verify the selected Node context manager/runtime propagation; instrumentation reuses that integration when proven effective instead of adding a redundant manual copy; verification checks the current request-to-callback SDK-context join without editing. Do not infer coverage from a language-wide assumption.",
+    "rubric-25": "For selected Node pre-capture privacy, an SDK onEmit sanitizer cannot protect native-console or original-argument capture. Assess supported Express error middleware and later/default re-rendering while preserving the response contract, or retain the exact unresolved boundary. Reconcile a framework traceback seen during opt-out or another profile with the normal enabled bridge; replay that same source-backed failing request at the selected boundary. Successful-request OTLP logs cannot close the error-rendering path.",
+    "rubric-26": "For the selected Node parser/error path, a retained native parser category cannot establish exported-category preservation when OTLP Body becomes a generic redaction label. Assess each selected output independently, preserve diagnostic category and HTTP status/headers, and retain source-proven inapplicable inputs without adding capture.",
+    "rubric-27": "For a selected isolated manual Node local-log processor, prove consumption of supported BLRP settings through actual public options/readers or retain the capability unverified. Omitted constructor options do not prove environment consumption.",
+    "rubric-40": "For the Node destination guard, assess a safe supported isolated process-local fault seam before concluding application fault proof is blocked. Preserve the real SDK/bootstrap, call sites, actual log failure responses, healthy other-signal receipts and production guards/shared receivers; restore mocks and retain concrete limitations when no such seam is available.",
+    "rubric-49": "Selected Node autoconfiguration/manual-reader/processor repairs must use public SDK ownership; source inspection does not authorize importing an internal SDK helper into application code."
+  }
+}

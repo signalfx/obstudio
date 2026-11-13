@@ -1,0 +1,27 @@
+{
+  "skill": "otel-verify",
+  "prompts": [
+    {
+      "id": "logging-trial-1",
+      "eval_inputs": [],
+      "task": "$otel-verify ./service"
+    },
+    {
+      "id": "logging-trial-2",
+      "eval_inputs": [],
+      "task": "$otel-verify ./service"
+    },
+    {
+      "id": "logging-trial-3",
+      "eval_inputs": [],
+      "task": "$otel-verify ./service"
+    }
+  ],
+  "rubric_base": "../../../../rubrics/logging-common.json",
+  "rubric_additions": {
+    "rubric-9": "For added or changed Go application-owned Resource initialization combining supplied attributes and native/default detectors, inspect actual detector order and merge precedence. When selected sources can overwrite a promised operator-owned key, bind a representative collision, such as host.name with selected host detection, to preservation through that same initialization and proof boundary. A service-name-only helper cannot prove another promised attribute survives a later detector. Audit plans this control; implementation/verification prove the selected owned path. Do not introduce custom parsers or certify unchanged unselected detectors.",
+    "rubric-10": "For a selected or newly application-owned Go standard-environment Boolean reader, bind raw true/TrUe, nontrue 1/t/T and padded true inputs to the actual reader/branch: only the raw case-insensitive literal true is true. Selector trimming or unqualified strconv.ParseBool is not equivalent. Preserve invalid-nonempty warning SHOULD strength and unchanged SDK/file-loader ownership, without unused SDK parser permutations.",
+    "rubric-20": "Before rebinding Go's process-wide slog default, resolve the captured handler's real output path: the built-in default may dynamically route through the standard logger that SetDefault rewires, so nesting it can recurse or deadlock. An application-owned logger may retain that handler without rebinding the default. A writer adapter alone does not establish native formatting/level markers; assert original enablement, formatting, sinks, ownership and multiplicity. Keep this native cycle separate from SDK diagnostic feedback, and retain an existing safe route without forced handler replacement.",
+    "rubric-23": "The pristine fixture emits context-free slog.Warn inside its goroutine. Audit plans request-context transfer and context-aware emit acceptance; instrumentation repairs this boundary where still missing; verification checks the current request-to-async SDK-context join without editing. Do not report an already repaired path as a remaining gap."
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "skill": "otel-verify",
+  "prompts": [
+    {
+      "id": "logging-trial-1",
+      "eval_inputs": [],
+      "task": "$otel-verify ./service"
+    },
+    {
+      "id": "logging-trial-2",
+      "eval_inputs": [],
+      "task": "$otel-verify ./service"
+    },
+    {
+      "id": "logging-trial-3",
+      "eval_inputs": [],
+      "task": "$otel-verify ./service"
+    }
+  ],
+  "rubric_base": "../../../../rubrics/logging-common.json",
+  "rubric_additions": {
+    "rubric-9": "Resolve effective Python runner precedence: FLASK_RUN_RELOAD=false does not override make dev's explicit --reload. A no-reload claim requires a supported effective flag/configuration; otherwise scope evidence to the actual reload worker and process-group cleanup. Preserve existing reload policy unless selected for change; an environment assignment alone cannot establish single-process startup.",
+    "rubric-10": "For the selected Python metric-reader settings, preserve supported fractional values and the SDK's invalid/empty-input handling. Any short-run timing defaults belong only to the selected launch policy.",
+    "rubric-11": "For a selected Python zero-code CLI, resolve the installed exporter-list reader and alias-selected transport; protocol environment values need not control explicit OTLP aliases. Valid mixed lists containing supported OTLP members require approval/header checks, with selected conflict and approved signal A/unused generic B controls through the normal command. Isolate only added OTLP members, retaining other exporters and their bridge. Preserve the installed owner's whole-none, case, empty-member and duplicate behavior; retain source-proven unsupported combinations without another language's normalization or a replacement parser.",
+    "rubric-20": "For selected Python lazy native sinks, credit public standard-library logger/handler configuration that establishes each producer's detected route before root bridge installation. Inspecting private initialization may explain laziness; calling an underscored initializer solely to trigger lazy setup or a diagnostic cannot establish a supported bootstrap mechanism or preservation proof.",
+    "rubric-23": "The pristine fixture submits app.logger.warning to its executor without copying caller context. Audit plans acceptance for that missing boundary; instrumentation repairs it where still missing; verification checks the current request-to-async SDK-context join without editing. An already repaired current path is not a remaining missing-transfer defect.",
+    "rubric-25": "The Python fixture's operator telemetry-privacy contract covers existing exported HTTP SERVER spans as well as selected logs. A logging-only sanitizer cannot close span privacy. Allocate unmatched sensitive path/query and escaping-error cases to their actual producers and supported sanitization boundaries. Audit retains source-backed repairs and future controls; instrumentation/verification retain current normal-launch received server-span assertions and selected log evidence. Do not add payload/header capture, extra exception telemetry or blanket suppression. This policy is not a universal OpenTelemetry ban on exception messages or stacks.",
+    "rubric-26": "For the Python fixture's selected HTTP privacy path, retained fields include bounded error category, method/route/status, trace context and Resource identity. Use actual structured producer fields or message-template arguments with their source types, normalize only verified decoration, and bind every selected non-success/access/error operation to its native and exported category plus required typed fields.",
+    "rubric-28": "For a selected Python attribute sanitizer, inspect a downstream record after the actual callback. A plain mapping that loses existing SDK drop state is not unchanged default behavior; use that owner's supported mutation/snapshot contract without synthesizing counters. Rebuilding a parent span does not preserve each event's own attribute limits or accumulated dropped-attribute count.",
+    "rubric-34": "A selected Python metric reader's collection timeout is not automatically its transport timeout or the application stop budget.",
+    "rubric-41": "In Python standard logging, even a rejecting handler can prevent lastResort fallback. Bridge namespace exclusion therefore does not establish native diagnostics: inspect an eligible handler or supported suppression for the actual SDK logger namespace. Application/framework sibling handlers or a different internal recursion logger cannot supply that route. An adequate existing route or source-supported suppression requires neither a new handler nor a newly emitted diagnostic.",
+    "rubric-49": "For a selected manually constructed Python metric reader, omitted timing kwargs are not missing wiring when the actual installed constructor consumes the supported environment values.",
+    "rubric-56": "When a selected Python repair supplies a local-development launch profile, bind that profile to the independently approved logs authority, port and path. Plan or prove that its default settings activate the selected log pipeline through the same launcher; selecting an OTLP exporter alone is not activation evidence. Retain an unapproved authority spelling as a negative control without treating all loopback aliases as interchangeable approval. A profile may use an alias when preflight independently approves that alias. Judge this profile/approval agreement here, without duplicating credential or Resource identity predicates."
+  }
+}
