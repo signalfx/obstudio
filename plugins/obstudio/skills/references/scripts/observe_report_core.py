@@ -3114,6 +3114,121 @@ def evidence_receipt_paths(
                 fail("evidence-bake outputs must be distinct and must not overwrite inputs or source artifacts")
 
 
+def _receipt_reference(
+    reference: Any, parent: Path, root: Path, label: str, *, directory: bool = False,
+) -> tuple[Path, bytes | None]:
+    ref = as_object(reference, label)
+    name = text(ref.get("path"), f"{label}.path")
+    if "\x00" in name or "\\" in name or Path(name).is_absolute() or re.match(r"^[A-Za-z]:", name):
+        fail(f"{label}.path must be a portable relative path")
+    path = parent
+    for component in Path(name).parts:
+        path = path / component
+        if path.is_symlink():
+            fail(f"{label}.path must not traverse symlinks")
+        if not path.resolve().is_relative_to(root):
+            fail(f"{label}.path escapes service_root")
+    _receipt_path(root, path, directory=directory)
+    if directory:
+        return path, None
+    digest = text(ref.get("sha256"), f"{label}.sha256")
+    if not re.fullmatch(r"[0-9a-f]{64}", digest):
+        fail(f"{label}.sha256 must be a lowercase SHA-256 digest")
+    raw = _receipt_read(root, path)
+    if hashlib.sha256(raw).hexdigest() != digest:
+        fail(f"{label} SHA-256 differs from current input")
+    return path, raw
+
+
+def _validate_direct_evidence_index(
+    value: dict[str, Any], parent: Path, root: Path, baked: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Check the explicit claim set, never infer claims from unrestricted prose.
+
+    The caller owns the completeness/relevance of this index and the report's
+    narrative. Hash binding detects drift, not a semantically incomplete index.
+    """
+    if type(value.get("schema_version")) is not int or value["schema_version"] != 1 or value.get("kind") != "otel-direct-evidence-index":
+        fail("direct index requires schema_version 1 and kind otel-direct-evidence-index")
+    reports = as_list(value.get("reports"), "direct_index.reports")
+    if not reports:
+        fail("direct_index.reports requires at least one final report")
+    report_paths = []
+    for i, ref in enumerate(reports):
+        path, _ = _receipt_reference(ref, parent, root, f"direct_index.reports[{i}]")
+        resolved = path.resolve()
+        if resolved in report_paths:
+            fail("direct_index.reports repeats a final report")
+        report_paths.append(resolved)
+    results = {scenario["id"]: scenario for scenario in baked["scenarios"]} if baked is not None else {}
+    seen = set()
+    executed = []
+    blocked = False
+    scenarios = as_list(value.get("scenarios"), "direct_index.scenarios")
+    if not scenarios:
+        fail("direct_index.scenarios requires at least one explicit scenario")
+    for i, source in enumerate(scenarios):
+        label = f"direct_index.scenarios[{i}]"
+        scenario = as_object(source, label)
+        sid = text(scenario.get("id"), f"{label}.id")
+        if sid in seen:
+            fail(f"direct index repeats scenario {sid}")
+        seen.add(sid)
+        execution = text(scenario.get("execution"), f"{label}.execution")
+        status = text(scenario.get("status"), f"{label}.status")
+        controls = string_list(scenario.get("control_ids"), f"{label}.control_ids")
+        if len(set(controls)) != len(controls):
+            fail(f"scenario {sid}: control_ids must be unique")
+        if execution == "executed":
+            if status not in {"working", "failed", "not_proven"}:
+                fail(f"scenario {sid}: executed status must be working, failed or not_proven")
+            if not controls or sid not in results:
+                fail(f"scenario {sid}: executed claim requires declared baked controls")
+            if set(controls) != set(results[sid]["control_ids"]) or status != results[sid]["status"]:
+                fail(f"scenario {sid}: claimed controls/status differ from baked evidence")
+            executed.append(status)
+        elif execution in {"not_run", "prerequisite_only"}:
+            expected = "not_proven" if execution == "not_run" else "blocked"
+            if controls or status != expected or sid in results:
+                fail(f"scenario {sid}: {execution} requires {expected}, no controls and no baked execution")
+            text(scenario.get("reason"), f"{label}.reason")
+            blocked = blocked or execution == "prerequisite_only"
+        else:
+            fail(f"{label}.execution must be executed, not_run or prerequisite_only")
+    missing = set(results) - seen
+    if missing:
+        fail("direct index is missing baked scenarios: " + ", ".join(sorted(missing)))
+    if "failed" in executed:
+        result = "Fail"
+    elif len(executed) == len(seen) and all(status == "working" for status in executed):
+        result = "Pass"
+    elif executed:
+        result = "Partial"
+    else:
+        result = "Blocked" if blocked else "Not run"
+    if value.get("result") != result:
+        fail(f"direct_index.result must be {result} under indexed scenarios")
+    for i, ref in enumerate(reports):
+        _receipt_reference(ref, parent, root, f"direct_index.reports[{i}]")
+    return {"schema_version": 1, "kind": "otel-direct-evidence-index-validation",
+            "status": "valid", "result": result, "executed_scenarios": len(executed),
+            "report_paths": [str(path) for path in report_paths],
+            "limitations": "Explicit scenario/control consistency and final-report hashes only; index completeness, narrative claims, control relevance and capture-adapter truth require semantic review."}
+
+
+def validate_direct_evidence_index(
+    index: Path, service_root: Path, baked: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Validate a direct report without fabricating canonical audit or selection data."""
+    root = _receipt_root(service_root)
+    path = _receipt_path(root, index)
+    raw = _receipt_read(root, path)
+    result = _validate_direct_evidence_index(_receipt_json(raw, "direct index"), path.parent, root, baked)
+    if _receipt_read(root, path) != raw:
+        fail("direct index changed while validating")
+    return result
+
+
 def create_evidence_receipt(
     manifest: Path, ledger: Path, report: Path, artifact_root: Path, receipt: Path,
 ) -> dict[str, Any]:
@@ -3142,41 +3257,29 @@ def _validate_evidence_receipt(value: dict[str, Any], parent: Path, root: Path) 
     if value.get("core_sha256") != hashlib.sha256(Path(__file__).read_bytes()).hexdigest():
         fail("evidence receipt core SHA-256 differs from canonical validator")
     def reference(key: str, directory: bool = False) -> tuple[Path, bytes | None]:
-        ref = as_object(value.get(key), f"receipt.{key}")
-        name = text(ref.get("path"), f"receipt.{key}.path")
-        if "\x00" in name or "\\" in name or Path(name).is_absolute() or re.match(r"^[A-Za-z]:", name):
-            fail(f"receipt.{key}.path must be a portable relative path")
-        path = parent
-        for component in Path(name).parts:
-            path = path / component
-            if path.is_symlink():
-                fail(f"receipt.{key}.path must not traverse symlinks")
-            if not path.resolve().is_relative_to(root):
-                fail(f"receipt.{key}.path escapes service_root")
-        _receipt_path(root, path, directory=directory)
-        if directory:
-            return path, None
-        digest = text(ref.get("sha256"), f"receipt.{key}.sha256")
-        if not re.fullmatch(r"[0-9a-f]{64}", digest):
-            fail(f"receipt.{key}.sha256 must be a lowercase SHA-256 digest")
-        raw = _receipt_read(root, path)
-        if hashlib.sha256(raw).hexdigest() != digest:
-            fail(f"receipt.{key} SHA-256 differs from current input")
-        return path, raw
+        return _receipt_reference(value.get(key), parent, root, f"receipt.{key}", directory=directory)
     _, manifest = reference("manifest")
     _, ledger = reference("ledger")
-    _, report = reference("report")
+    report_path, report = reference("report")
     artifacts, _ = reference("artifact_root", directory=True)
     artifacts = _receipt_path(root, artifacts, directory=True)
     baked = bake_evidence_report(_receipt_json(manifest, "receipt manifest"), _receipt_ledger(ledger), artifacts)
     _receipt_path(root, artifacts, directory=True)
-    # Detect input changes during raw verification rather than certifying stale bytes.
+    report_value = _receipt_json(report, "receipt report")
+    direct = None
+    if report_value.get("kind") == "otel-direct-evidence-index":
+        direct = _validate_direct_evidence_index(report_value, report_path.parent, root, baked)
+    else:
+        differences = check_evidence_report_projection(report_value, baked)
+        if differences:
+            fail("evidence receipt report projection differs: " + "; ".join(differences))
+    # Detect input changes during raw/report verification rather than certifying stale bytes.
     for key in ("manifest", "ledger", "report"):
         reference(key)
-    differences = check_evidence_report_projection(_receipt_json(report, "receipt report"), baked)
-    if differences:
-        fail("evidence receipt report projection differs: " + "; ".join(differences))
-    return {"schema_version": 1, "kind": "otel-evidence-receipt-validation", "status": "valid", "baked_status": baked["status"], "limitations": "Mechanical input, raw-artifact and projection consistency only; no semantic completeness or capture-adapter truth claim."}
+    result = {"schema_version": 1, "kind": "otel-evidence-receipt-validation", "status": "valid", "baked_status": baked["status"], "limitations": "Mechanical input, raw-artifact and projection consistency only; no semantic completeness or capture-adapter truth claim."}
+    if direct is not None:
+        result["direct_index"] = direct
+    return result
 
 
 def validate_evidence_receipt(receipt: Path, service_root: Path) -> dict[str, Any]:

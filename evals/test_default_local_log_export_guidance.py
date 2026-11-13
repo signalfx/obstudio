@@ -2760,6 +2760,124 @@ def test_python_decorated_span_records_escaping_error_once():
         provider.shutdown()
 
 
+@pytest.mark.parametrize("status", [200, 404, 500])
+def test_python_access_log_producer_arguments_preserve_decorated_categories(
+    monkeypatch, caplog, status,
+):
+    import logging
+    from opentelemetry.exporter.otlp.proto.common._log_encoder import encode_logs
+    from opentelemetry.instrumentation.logging.handler import LoggingHandler
+    from opentelemetry.sdk._logs import LoggerProvider
+    from opentelemetry.sdk._logs.export import InMemoryLogRecordExporter, SimpleLogRecordProcessor
+    from werkzeug import serving
+
+    monkeypatch.setattr(serving, "_log_add_style", True)
+    caplog.set_level(logging.INFO, logger="werkzeug")
+    handler = serving.WSGIRequestHandler.__new__(serving.WSGIRequestHandler)
+    handler.path = "/PRIVATE_REQUEST?token=PRIVATE_QUERY"
+    handler.command = "GET"
+    handler.request_version = "HTTP/1.1"
+    handler.client_address = ("127.0.0.1", 12345)
+    handler.log_request(status)
+
+    record, = [item for item in caplog.records if item.name == "werkzeug"]
+    rendered = logging.Formatter("%(message)s").format(record)
+    rendered_match = re.search(r'"(GET|POST|PATCH|DELETE|PUT|HEAD|OPTIONS) .*?" (\d{3})', rendered)
+    assert bool(rendered_match) is (status == 200)
+    assert "PRIVATE_REQUEST" in rendered and "PRIVATE_QUERY" in rendered
+
+    # These argument positions and ANSI sequences come from this producer's
+    # log_request path; they are not a layout contract for other Python loggers.
+    request_text, status_text, _ = record.args
+    request_text = re.sub(r"\x1b\[[0-9;]*m", "", request_text)
+    method = request_text.split(" ", 1)[0]
+    status_code = int(status_text)
+    summary = f"HTTP {method} completed {status_code}"
+    assert summary == f"HTTP GET completed {status}"
+    assert "PRIVATE_REQUEST" not in summary and "PRIVATE_QUERY" not in summary
+    assert "\x1b" not in summary
+
+    record.msg, record.args = summary, ()
+    record.__dict__["http.request.method"] = method
+    record.__dict__["http.response.status_code"] = status_code
+    exporter = InMemoryLogRecordExporter()
+    provider = LoggerProvider(shutdown_on_exit=False)
+    provider.add_log_record_processor(SimpleLogRecordProcessor(exporter))
+    bridge = LoggingHandler(logger_provider=provider)
+    try:
+        assert logging.Formatter("%(message)s").format(record) == summary
+        bridge.emit(record)
+        wire = encode_logs(exporter.get_finished_logs())
+        log, = wire.resource_logs[0].scope_logs[0].log_records
+        attributes = {item.key: item.value for item in log.attributes}
+        assert log.body.string_value == summary
+        assert attributes["http.request.method"].string_value == method
+        assert attributes["http.response.status_code"].WhichOneof("value") == "int_value"
+        assert attributes["http.response.status_code"].int_value == status
+        assert b"PRIVATE_REQUEST" not in wire.SerializeToString()
+        assert b"PRIVATE_QUERY" not in wire.SerializeToString()
+    finally:
+        bridge.close()
+        provider.shutdown()
+
+
+def test_python_span_event_privacy_snapshot_preserves_its_own_wire_drop_count():
+    from types import SimpleNamespace
+    from opentelemetry.exporter.otlp.proto.common.trace_encoder import encode_spans
+    from opentelemetry.sdk.trace import Event, ReadableSpan, SpanLimits, TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    provider = TracerProvider(
+        shutdown_on_exit=False, span_limits=SpanLimits(max_event_attributes=2),
+    )
+    exporter = InMemorySpanExporter()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    try:
+        with provider.get_tracer("event-owner-test").start_as_current_span("selected") as span:
+            span.add_event("exception", {
+                "overflow": "discarded", "exception.type": "RuntimeError",
+                "exception.message": "PRIVATE_EXCEPTION",
+            })
+        source_span, = exporter.get_finished_spans()
+        source_event, = source_span.events
+        assert source_span.dropped_attributes == 0
+        assert source_event.dropped_attributes == 1
+        safe_attributes = {
+            key: value for key, value in source_event.attributes.items()
+            if key != "exception.message"
+        }
+
+        def encode_event(event):
+            view = ReadableSpan(
+                name=source_span.name, context=source_span.context,
+                resource=source_span.resource, events=[event],
+                start_time=source_span.start_time, end_time=source_span.end_time,
+            )
+            wire = encode_spans([view]).resource_spans[0].scope_spans[0].spans[0]
+            assert wire.dropped_attributes_count == 0
+            return wire.events[0]
+
+        original_wire = encode_event(source_event)
+        rebuilt_wire = encode_event(Event(
+            source_event.name, safe_attributes, source_event.timestamp,
+        ))
+        snapshot_wire = encode_event(SimpleNamespace(
+            name=source_event.name, attributes=safe_attributes,
+            timestamp=source_event.timestamp,
+            dropped_attributes=source_event.dropped_attributes,
+        ))
+        assert original_wire.dropped_attributes_count == 1
+        assert rebuilt_wire.dropped_attributes_count == 0
+        assert snapshot_wire.dropped_attributes_count == 1
+        assert snapshot_wire.name == source_event.name
+        assert snapshot_wire.time_unix_nano == source_event.timestamp
+        assert {item.key for item in snapshot_wire.attributes} == {"exception.type"}
+        assert b"PRIVATE_EXCEPTION" not in snapshot_wire.SerializeToString()
+    finally:
+        provider.shutdown()
+
+
 @pytest.mark.parametrize("configuration,expected", [
     ({}, ["1000", "500"]),
     ({"OTEL_METRIC_EXPORT_INTERVAL": "1000.5", "OTEL_METRIC_EXPORT_TIMEOUT": "500.25"}, ["1000.5", "500.25"]),

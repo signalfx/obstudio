@@ -1397,19 +1397,33 @@ def cmd_instrumentation_digest(args: argparse.Namespace) -> int:
 def cmd_evidence_bake(args: argparse.Namespace) -> int:
     if bool(args.report) != bool(args.project_output):
         fail("evidence-bake requires --report and --project-output together")
-    if args.receipt_output and not args.check_report:
-        fail("--receipt-output requires --check-report for the final canonical report")
+    if args.check_report and args.check_direct_report:
+        fail("--check-report and --check-direct-report are mutually exclusive")
+    checked_report = args.check_report or args.check_direct_report
+    if args.receipt_output and not checked_report:
+        fail("--receipt-output requires --check-report or --check-direct-report for the final report")
     outputs = [p for p in (args.output, args.markdown, args.project_output, args.receipt_output) if p is not None]
-    inputs = [p for p in (args.manifest, args.ledger, args.report, args.check_report) if p is not None]
+    inputs = [p for p in (args.manifest, args.ledger, args.report, checked_report) if p is not None]
     evidence_receipt_paths(inputs, outputs, args.artifact_root, [], strict=bool(args.receipt_output))
     baked = bake_evidence_report(load_json(args.manifest), load_evidence_ledger(args.ledger), args.artifact_root)
     projected = project_evidence_report(load_json(args.report), baked) if args.report else None
     differences = check_evidence_report_projection(load_json(args.check_report), baked) if args.check_report else []
+    if args.check_direct_report:
+        # Use the same root boundary as the receipt; final report files are inputs,
+        # so outputs cannot overwrite a hash-bound narrative or JSON handoff.
+        try:
+            direct_root = Path(os.path.commonpath([str(p.resolve()) for p in inputs + [args.artifact_root]]))
+        except (OSError, RuntimeError, ValueError) as exc:
+            fail(f"cannot resolve direct-report inputs: {exc}")
+        direct = validate_direct_evidence_index(args.check_direct_report, direct_root, baked)
+        # Preserve the caller's platform alias when adding resolved report paths.
+        inputs.extend(args.check_direct_report.parent / os.path.relpath(path, args.check_direct_report.parent.resolve())
+                      for path in direct["report_paths"])
     # Check input and artifact collisions; output writes are individually atomic.
     observations = [row for c in baked["controls"] for row in c["observations"]]
     evidence_receipt_paths(inputs, outputs, args.artifact_root, observations + baked["diagnostics"], strict=bool(args.receipt_output))
     # Bind and recheck exact final input bytes before any output is written.
-    receipt = create_evidence_receipt(args.manifest, args.ledger, args.check_report, args.artifact_root, args.receipt_output) if args.receipt_output and not differences else None
+    receipt = create_evidence_receipt(args.manifest, args.ledger, checked_report, args.artifact_root, args.receipt_output) if args.receipt_output and not differences else None
     write_json(args.output, baked)
     write_text(args.markdown, render_evidence_report_markdown(baked))
     if projected is not None:
@@ -1427,7 +1441,7 @@ def cmd_evidence_bake(args: argparse.Namespace) -> int:
         )
     if receipt is not None and not gate_failed:
         # Recheck immediately before the receipt is atomically published last.
-        current = create_evidence_receipt(args.manifest, args.ledger, args.check_report, args.artifact_root, args.receipt_output)
+        current = create_evidence_receipt(args.manifest, args.ledger, checked_report, args.artifact_root, args.receipt_output)
         if current != receipt:
             fail("evidence receipt inputs changed during output writes")
         write_json(args.receipt_output, receipt)
@@ -1627,7 +1641,8 @@ def build_parser() -> argparse.ArgumentParser:
     evidence_bake.add_argument("--report", type=Path, help="existing verification overlay to project")
     evidence_bake.add_argument("--project-output", type=Path)
     evidence_bake.add_argument("--check-report", type=Path, help="exit 1 on mechanical projection drift")
-    evidence_bake.add_argument("--receipt-output", type=Path, help="write a deterministic input-bound receipt only after --check-report succeeds")
+    evidence_bake.add_argument("--check-direct-report", type=Path, help="check explicit direct-report scenario index and final Markdown/JSON hashes against baked controls")
+    evidence_bake.add_argument("--receipt-output", type=Path, help="write an input-bound receipt after the canonical report or direct-report index check succeeds")
     evidence_bake.add_argument(
         "--require-working", action="store_true",
         help="write reports and exit 1 unless every declared control works; no semantic completeness judgment",

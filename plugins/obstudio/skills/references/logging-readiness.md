@@ -327,10 +327,12 @@ replaces or only denies a record; denial alone cannot preserve a required
 category. Apply the action before SDK/writer capture when the selected policy
 requires it. Bind forbidden-sentinel absence AND permitted category at every
 covered output, preserving application responses and original sinks.
-When extracting permitted fields from a producer's rendered parameters, inspect
-its actual formatting/decorations and normalize only that representation before
-bounded extraction. Assert selected useful fields in the actual rendered native
-output as well as SDK/wire records; record extras alone do not prove a native
+Prefer the producer's structured fields or source-verified message-template
+arguments for permitted categories; retain the value types required by the
+selected output schema. For fields available only in rendered text or parameters,
+inspect actual formatting/decorations and normalize only that representation
+before bounded extraction. Assert selected useful fields in the actual rendered
+native output as well as SDK/wire records; record extras alone do not prove a native
 formatter retained them. Preserve the selected category and Body contracts rather
 than silently changing every output to fix one renderer. This applies only to
 fields promised by the selected policy and observable at that producer; do not
@@ -1212,9 +1214,11 @@ Trace SDK/exporter diagnostic routing through handlers, appenders, transports
 and HTTP-client instrumentation. Avoid returning a log exporter failure to
 the same application bridge recursively. Prefer the SDK's suppression and
 separate diagnostic mechanism; preserve the ordinary application sink.
-For continued-operation proof, first observe the selected log-export refusal,
-failure or blocked operation while the application and other configured
-producers are running. Then exercise the selected application work and retain
+For continued-operation proof, first observe the selected log-export refusal or
+failure at the originating SDK/client, or establish the selected blocked operation,
+while the application and other configured producers are running. Receiver request
+arrival or a receiver's rejection alone does not establish that the SDK/client has
+observed a failure. Then exercise the selected application work and retain
 its native output and independent signal receipts during that same fault.
 A trial that first exports logs during shutdown cannot establish this live
 conjunction. Keep its batch timing separate from a pending-record drain trial,
@@ -1499,6 +1503,39 @@ performs this check for executed canonical reports before grading. Missing or
 stale receipts cannot satisfy that mechanical gate. A truthful Partial report
 can have a valid receipt; validity does not establish semantic completeness or
 turn unknown observations into passes.
+
+For an allowed direct Markdown report without a canonical overlay, save
+`.observe/otel-direct-evidence-index.json` with `schema_version: 1`,
+`kind: "otel-direct-evidence-index"`, aggregate `result`, nonempty `reports` and
+`scenarios`. Each report names its `path` relative to the index and SHA-256
+`sha256`; include the final role Markdown, such as `otel-instrumentation.md`.
+Each scenario names `id`, `execution`, `status` and `control_ids`. An `executed`
+scenario must own the exact nonempty baked control-ID set and matching baked
+status (`working`, `failed` or `not_proven`); index every baked scenario. A
+`not_run` row has `status: "not_proven"`; a `prerequisite_only` row has
+`status: "blocked"`. Both require empty `control_ids`, a concrete `reason` and
+no baked execution. Derive `result` from the rows: any failed execution is
+`Fail`, all rows executed and working is `Pass`, other execution is `Partial`,
+and no execution is `Blocked` if a prerequisite-only row exists or `Not run`
+otherwise.
+
+Use `--check-direct-report` instead of the mutually exclusive `--check-report`:
+
+```sh
+python3 -I "<directory-containing-loaded-SKILL.md>/../references/scripts/observe_report.py" evidence-bake \
+  --manifest <expected-controls.json> --ledger <observations.jsonl> --artifact-root <raw-evidence-root> \
+  --output <baked-controls.json> --markdown <baked-controls.md> \
+  --check-direct-report <service-root>/.observe/otel-direct-evidence-index.json \
+  --receipt-output <service-root>/.observe/otel-evidence-receipt.json
+```
+
+The direct workflow requires the final role Markdown's hash binding and, for
+execution, a valid receipt. A validated index with no executed scenarios supplies
+no execution proof; other workflow/runtime gates still apply. No fabricated
+canonical JSON report is needed. This check reconciles the declared scenario set
+and final report bytes; semantic review must still reconcile the index with all
+actual report promises, control relevance and capture-adapter truth. Missing
+controls, false working statuses and changed report bytes cannot pass the check.
 
 Keep inputs, source artifacts and output paths distinct. Projection
 updates derived scenario trace IDs/status and aggregate status; canonical bindings,

@@ -175,6 +175,7 @@ def check_evidence_receipt(repo: Path, workspace: Path, role: str) -> dict:
     observed = service / ".observe"
     receipt = observed / "otel-evidence-receipt.json"
     canonical = observed / "otel-verify.json"
+    direct_index = observed / "otel-direct-evidence-index.json"
     core = repo / "skills/references/scripts/observe_report_core.py"
     result = {"schema_version": 1, "kind": "logging-workflow-evidence-receipt-check",
               "role": role, "status": "failed", "reason": "Receipt check did not complete",
@@ -186,7 +187,36 @@ def check_evidence_receipt(repo: Path, workspace: Path, role: str) -> dict:
         if role == "audit":
             result.update(status="N_A", reason="Audit stage is plan-only", execution="not_applicable")
         elif not os.path.lexists(canonical):
-            result.update(status="N_A", reason="No canonical verification overlay; direct Markdown handoff is outside this gate", execution="not_applicable")
+            module = load_report_core(repo)
+            result["core_sha256"] = hashlib.sha256(core.read_bytes()).hexdigest()
+            result["direct_index"] = str(direct_index)
+            if direct_index.is_symlink() or not direct_index.is_file() or not direct_index.resolve().is_relative_to(service.resolve()):
+                raise ValueError("Direct-report index must be an owned regular file: " + str(direct_index))
+            index = module.load_json(direct_index)
+            scenarios = module.as_list(index.get("scenarios"), "direct_index.scenarios")
+            executed = any(module.as_object(row, "direct_index.scenario").get("execution") == "executed" for row in scenarios)
+            if executed:
+                result["validation"] = module.validate_evidence_receipt(receipt, service)
+                value = module.load_json(receipt)
+                bound = receipt.parent / value["report"]["path"]
+                if bound.resolve() != direct_index.resolve():
+                    raise ValueError("Evidence receipt must bind the final direct-report index")
+                validation = result["validation"].get("direct_index")
+                if validation is None:
+                    raise ValueError("Evidence receipt must validate the direct-report index")
+            else:
+                validation = module.validate_direct_evidence_index(direct_index, service)
+            expected = observed / ("otel-instrumentation.md" if role == "instrument" else "otel-verify.md")
+            if expected.is_symlink() or not expected.is_file() or not expected.resolve().is_relative_to(service.resolve()):
+                raise ValueError("Final direct report must be an owned regular file: " + expected.name)
+            if str(expected.resolve()) not in validation["report_paths"]:
+                raise ValueError("Direct-report index must bind the final " + expected.name)
+            result["direct_result"] = validation["result"]
+            if executed:
+                result.update(status="valid", reason="Direct index claims, baked controls and final-report hashes validated")
+            else:
+                result["validation"] = validation
+                result.update(status="N_A", reason="Validated direct index records no executed proof", execution="not_applicable")
         else:
             if canonical.is_symlink() or not canonical.is_file() or not canonical.resolve().is_relative_to(service.resolve()):
                 raise ValueError("Canonical verification overlay must be an owned regular file")

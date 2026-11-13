@@ -122,6 +122,8 @@ def workflow(tmp_path, monkeypatch):
     real_receipt_guard = driver.check_evidence_receipt
     def receipt_guard(repo, target, role):
         if state.get("real_receipt_guard"):
+            if role != "audit" and state.get("direct_report_result"):
+                direct_flow(target, result=state["direct_report_result"])
             return real_receipt_guard(repo, target, role)
         value = {"status": state.get("receipt_failures", {}).get(role, "N_A"),
                  "reason": "Mock orchestration fixture does not generate canonical verification proof",
@@ -636,7 +638,7 @@ def test_receipt_guard_plan_and_direct_markdown_scopes_are_explicit(tmp_path):
     observed.mkdir(parents=True)
     (observed/"otel-verify.md").write_text("Direct Markdown proof remains grader-owned")
     guard = DRIVER.check_evidence_receipt(ROOT,tmp_path,"instrument")
-    assert guard["status"] == "N_A" and "No canonical" in guard["reason"]
+    assert guard["status"] == "failed" and "otel-direct-evidence-index.json" in guard["reason"]
     (observed/"otel-verify.json").write_text("malformed overlay")
     guard = DRIVER.check_evidence_receipt(ROOT,tmp_path,"audit")
     assert guard["status"] == "N_A" and "plan-only" in guard["reason"]
@@ -678,3 +680,150 @@ def test_receipt_failure_does_not_weaken_fatal_runtime_guard(workflow):
     stage = summary["stages"][1]
     assert stage["failure_kind"] == "fatal"
     assert not stage.get("diagnostic_continuation",False)
+
+
+def direct_flow(workspace, *, result="Pass", role="instrument"):
+    """Real direct report, explicit index and receipt; no audit/selection fabrication."""
+    core = REPORT.MODULE
+    service = workspace / "service"
+    observed = service / ".observe"
+    observed.mkdir(parents=True, exist_ok=True)
+    files = {key: observed / name for key, name in {
+        "manifest": "direct-controls.json", "ledger": "direct-observations.json",
+        "report": "otel-direct-evidence-index.json", "receipt": "otel-evidence-receipt.json",
+        "final": "otel-instrumentation.md" if role == "instrument" else "otel-verify.md",
+        "raw": "direct-raw.json"}.items()}
+    files["final"].write_text("# Direct report\nScenario results are declared in the adjacent evidence index.\n")
+    files["raw"].write_text('{"received_records":1}\n')
+    manifest = {"schema_version": 1, "kind": "otel-evidence-controls", "controls": [{
+        "id": "control.direct", "scenario_id": "direct.operation", "run_id": "owned.run",
+        "operation_ids": ["own.operation"], "phase": "received", "expected": {"received_records": 1}}]}
+    rows = [] if result == "Partial" else [{"id": "own.receipt", "run_id": "owned.run",
+        "operation_id": "own.operation", "phase": "received", "trace_context": {"state": "none"},
+        "facts": {"received_records": 0 if result == "Fail" else 1},
+        "artifacts": [{"path": ".observe/direct-raw.json", "sha256": hashlib.sha256(files["raw"].read_bytes()).hexdigest()}]}]
+    status = {"Pass": "working", "Partial": "not_proven", "Fail": "failed",
+              "Not run": "not_proven", "Blocked": "blocked"}[result]
+    scenario = {"id": "direct.operation", "execution": "executed", "status": status,
+                "control_ids": ["control.direct"]}
+    if result in {"Not run", "Blocked"}:
+        scenario.update(execution="not_run" if result == "Not run" else "prerequisite_only",
+                        control_ids=[], reason="Owned runtime prerequisite unavailable")
+    index = {"schema_version": 1, "kind": "otel-direct-evidence-index", "result": result,
+             "reports": [{"path": files["final"].name, "sha256": hashlib.sha256(files["final"].read_bytes()).hexdigest()}],
+             "scenarios": [scenario]}
+    for key, value in [("report", index), ("manifest", manifest), ("ledger", rows)]:
+        files[key].write_text(json.dumps(value))
+    if result in {"Pass", "Partial", "Fail"}:
+        receipt = core.create_evidence_receipt(files["manifest"], files["ledger"], files["report"], service, files["receipt"])
+        files["receipt"].write_text(json.dumps(receipt))
+    return files
+
+
+@pytest.mark.parametrize("role", ["instrument", "verify"])
+@pytest.mark.parametrize("result", ["Pass", "Partial", "Fail"])
+def test_real_direct_guard_accepts_only_bound_role_report_and_rebaked_scenarios(tmp_path, role, result):
+    files = direct_flow(tmp_path, role=role, result=result)
+    before = {path: path.read_bytes() for path in files.values()}
+    guard = DRIVER.check_evidence_receipt(ROOT, tmp_path, role)
+    assert guard["status"] == "valid", guard
+    assert guard["direct_result"] == result
+    assert guard["validation"]["direct_index"]["executed_scenarios"] == 1
+    assert {path: path.read_bytes() for path in files.values()} == before
+    assert not (tmp_path / "service/.observe/otel-audit.json").exists()
+    assert not (tmp_path / "service/.observe/otel-selection.json").exists()
+    assert not (tmp_path / "service/.observe/otel-verify.json").exists()
+
+
+@pytest.mark.parametrize("fault", ["no_index", "no_receipt", "final_report_drift", "raw_drift",
+                                  "uncovered_claim", "control_tamper", "status_tamper", "wrong_role", "detached_index", "role_symlink"])
+def test_real_direct_guard_rejects_uncovered_tampered_and_detached_claims(tmp_path, fault):
+    files = direct_flow(tmp_path, role="verify" if fault == "wrong_role" else "instrument")
+    if fault == "no_index":
+        files["report"].unlink()
+    elif fault == "no_receipt":
+        files["receipt"].unlink()
+    elif fault == "final_report_drift":
+        files["final"].write_text("Different final report claims")
+    elif fault == "raw_drift":
+        files["raw"].write_text("Different raw receipts")
+    elif fault == "wrong_role":
+        pass
+    elif fault == "role_symlink":
+        other = files["final"].with_name("unrelated-final.md")
+        files["final"].rename(other)
+        files["final"].symlink_to(other)
+        index = json.loads(files["report"].read_text())
+        index["reports"][0]["path"] = other.name
+        files["report"].write_text(json.dumps(index))
+        receipt = REPORT.MODULE.create_evidence_receipt(files["manifest"], files["ledger"], files["report"],
+                                                      tmp_path / "service", files["receipt"])
+        files["receipt"].write_text(json.dumps(receipt))
+    elif fault == "detached_index":
+        other = files["report"].with_name("unrelated-index.json")
+        other.write_bytes(files["report"].read_bytes())
+        receipt = REPORT.MODULE.create_evidence_receipt(files["manifest"], files["ledger"], other,
+                                                      tmp_path / "service", files["receipt"])
+        files["receipt"].write_text(json.dumps(receipt))
+    else:
+        index = json.loads(files["report"].read_text())
+        if fault == "uncovered_claim":
+            index["scenarios"].append({"id": "executed.privacy", "execution": "executed", "status": "working",
+                                       "control_ids": ["control.direct"]})
+        elif fault == "control_tamper":
+            manifest = json.loads(files["manifest"].read_text())
+            manifest["controls"][0]["scenario_id"] = "unrelated.operation"
+            files["manifest"].write_text(json.dumps(manifest))
+        else:
+            index["scenarios"][0]["status"] = "failed"; index["result"] = "Fail"
+        files["report"].write_text(json.dumps(index))
+        receipt = json.loads(files["receipt"].read_text())
+        for key in ["report", "manifest"]:
+            receipt[key]["sha256"] = hashlib.sha256(files[key].read_bytes()).hexdigest()
+        files["receipt"].write_text(json.dumps(receipt))
+    before = {path: path.read_bytes() for path in (tmp_path / "service").rglob("*") if path.is_file()}
+    guard = DRIVER.check_evidence_receipt(ROOT, tmp_path, "instrument")
+    assert guard["status"] == "failed", guard
+    assert {path: path.read_bytes() for path in (tmp_path / "service").rglob("*") if path.is_file()} == before
+    if fault == "uncovered_claim":
+        assert "executed.privacy" in guard["reason"]
+    if fault == "wrong_role":
+        assert "otel-instrumentation.md" in guard["reason"]
+    if fault == "detached_index":
+        assert "final direct-report index" in guard["reason"]
+
+
+@pytest.mark.parametrize("result", ["Not run", "Blocked"])
+def test_real_direct_no_execution_is_na_only_after_index_and_report_validation(tmp_path, result):
+    files = direct_flow(tmp_path, result=result)
+    guard = DRIVER.check_evidence_receipt(ROOT, tmp_path, "instrument")
+    assert guard["status"] == "N_A", guard
+    assert guard["direct_result"] == result
+    assert not files["receipt"].exists()
+    for fault in ["empty", "false_working", "false_result", "executed_without_receipt"]:
+        index = json.loads(files["report"].read_text())
+        if fault == "empty":
+            index["scenarios"] = []
+        elif fault == "false_working":
+            index["scenarios"][0]["status"] = "working"
+        elif fault == "false_result":
+            index["result"] = "Pass"
+        else:
+            index["scenarios"][0].update(execution="executed", status="working", control_ids=["control.direct"])
+        original = files["report"].read_bytes()
+        files["report"].write_text(json.dumps(index))
+        guard = DRIVER.check_evidence_receipt(ROOT, tmp_path, "instrument")
+        assert guard["status"] == "failed", guard
+        files["report"].write_bytes(original)
+
+
+def test_direct_no_execution_exemption_does_not_authorize_failed_runtime(workflow):
+    workflow.state.update(real_receipt_guard=True, direct_report_result="Not run", runtime=9)
+    code, summary = workflow.run(collect=True)
+    assert code == 1 and workflow.calls == ["audit", "instrument"]
+    stage = summary["stages"][1]
+    assert stage["evidence_receipt_guard"]["status"] == "N_A"
+    assert stage["evidence_receipt_guard"]["direct_result"] == "Not run"
+    assert stage["independent_runtime_exit_code"] == 9
+    assert stage["rubric"]["overall_pass"] is True
+    assert stage["failure_kind"] == "fatal"

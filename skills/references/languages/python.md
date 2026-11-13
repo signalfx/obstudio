@@ -978,6 +978,13 @@ application-runtime coverage. Distinguish native severity from OTel severity and
 preserve the source timestamp's actual precision, formatters and supported
 structured values.
 
+For selected content-preserving privacy work, inspect native `LogRecord.msg`,
+`LogRecord.args` and existing structured extras before `getMessage()` or a
+formatter. A producer can keep a status argument separate while decorating its
+request text; use only source-verified argument positions and retain a selected
+numeric status as an integer. Normalize a verified rendered-only field when its
+raw value is unavailable, and exercise non-success records as well as success.
+
 ### Configuration and limits
 
 Resolve public options, signatures, units and configuration precedence from the
@@ -1006,6 +1013,9 @@ accounting. Use that owner's supported mutation or snapshot mechanism while
 preserving its limits and existing drop state. Check the downstream count as
 well as sanitized values; do not synthesize counters or assume another
 SDK/version has the same container semantics.
+When a selected privacy repair also rebuilds spans or span events, check each
+affected owner's count separately: preserving a parent span's drop counts does
+not preserve an event's exported `dropped_attributes_count`.
 
 Direct SDK and native-bridge controls prove different paths; keep either missing
 control unproven. Attribute limits do not define Body or exception-capture

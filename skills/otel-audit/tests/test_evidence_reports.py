@@ -661,6 +661,191 @@ class EvidenceReportTest(unittest.TestCase):
                      "--receipt-output", str(paths["receipt"])]
         return arguments, paths
 
+    def direct_fixture(self, *, status: str = "working") -> tuple[list[str], dict[str, Path]]:
+        args, paths = self.receipt_fixture(partial=status == "not_proven")
+        if status == "failed":
+            paths["ledger"].write_text(json.dumps(self.observation(facts={"record_verified": False})) + "\n")
+        paths["final_markdown"] = self.root / "otel-instrumentation.md"
+        paths["final_json"] = self.root / "direct-results.json"
+        paths["final_markdown"].write_text("# Direct instrumentation report\nExplicit scenario results are indexed beside this report.\n")
+        paths["final_json"].write_text(json.dumps({"scope": "direct application proof"}))
+        index = {"schema_version": 1, "kind": "otel-direct-evidence-index",
+                 "result": {"working": "Pass", "failed": "Fail", "not_proven": "Partial"}[status],
+                 "reports": [{"path": paths[key].name, "sha256": hashlib.sha256(paths[key].read_bytes()).hexdigest()}
+                             for key in ["final_markdown", "final_json"]],
+                 "scenarios": [{"id": "http.health", "execution": "executed", "status": status,
+                                "control_ids": ["control.health"]}]}
+        paths["report"].write_text(json.dumps(index))
+        args[args.index("--check-report")] = "--check-direct-report"
+        return args, paths
+
+    def test_direct_report_cli_binds_actual_final_files_and_exact_baked_status(self) -> None:
+        for status in ["working", "failed", "not_proven"]:
+            with self.subTest(status=status):
+                args, paths = self.direct_fixture(status=status)
+                result = self.run_cli(*args)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                before = {path: path.read_bytes() for path in paths.values()}
+                validation = MODULE.validate_evidence_receipt(paths["receipt"], self.root)
+                self.assertEqual(validation["baked_status"], status)
+                self.assertEqual(validation["direct_index"]["executed_scenarios"], 1)
+                self.assertEqual(set(validation["direct_index"]["report_paths"]),
+                                 {str(paths[key].resolve()) for key in ["final_markdown", "final_json"]})
+                self.assertEqual({path: path.read_bytes() for path in paths.values()}, before)
+
+    def test_eight_host_joins_cannot_cover_claimed_privacy_optout_stop_and_fault(self) -> None:
+        args, paths = self.direct_fixture()
+        controls = [self.control(id=f"host.{profile}.{mode}", scenario_id="workflow.logs.concurrent")
+                    for profile in range(4) for mode in ["sync", "async"]]
+        paths["manifest"].write_text(json.dumps(self.manifest(*controls)))
+        index = json.loads(paths["report"].read_text())
+        index["scenarios"] = [{"id": "workflow.logs.concurrent", "execution": "executed", "status": "working",
+                               "control_ids": [control["id"] for control in controls]}]
+        for sid in ["privacy", "optout", "stop", "application_fault"]:
+            index["scenarios"].append({"id": sid, "execution": "executed", "status": "working",
+                                       "control_ids": ["host.0.sync"]})
+        paths["report"].write_text(json.dumps(index))
+        result = self.run_cli(*args)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("scenario privacy: executed claim requires declared baked controls", result.stderr)
+        self.assertFalse(paths["receipt"].exists())
+        self.assertFalse(paths["output"].exists())
+
+    def test_direct_report_rebakes_despite_forged_matching_input_hashes(self) -> None:
+        args, paths = self.direct_fixture()
+        self.assertEqual(self.run_cli(*args).returncode, 0)
+        original = {key: paths[key].read_bytes() for key in ["report", "manifest", "ledger", "receipt"]}
+        for fault in ["missing_control", "wrong_control", "duplicate_control", "wrong_scenario", "status",
+                      "orphan_baked_scenario", "false_pass", "removed_observation", "control_tamper"]:
+            for key, raw in original.items():
+                paths[key].write_bytes(raw)
+            index = json.loads(paths["report"].read_text())
+            row = index["scenarios"][0]
+            if fault == "missing_control":
+                row["control_ids"] = []
+            elif fault == "wrong_control":
+                row["control_ids"] = ["other.control"]
+            elif fault == "duplicate_control":
+                row["control_ids"] *= 2
+            elif fault == "wrong_scenario":
+                row["id"] = "unrelated.scenario"
+            elif fault == "status":
+                row["status"] = "failed"; index["result"] = "Fail"
+            elif fault == "orphan_baked_scenario":
+                index["scenarios"] = [{"id": "planned", "execution": "not_run", "status": "not_proven",
+                                       "control_ids": [], "reason": "Not attempted"}]
+                index["result"] = "Not run"
+            elif fault == "false_pass":
+                index["scenarios"].append({"id": "planned", "execution": "not_run", "status": "not_proven",
+                                            "control_ids": [], "reason": "Not attempted"})
+            elif fault == "removed_observation":
+                paths["ledger"].write_text("")
+            elif fault == "control_tamper":
+                manifest = json.loads(paths["manifest"].read_text())
+                manifest["controls"][0]["expected"]["record_verified"] = False
+                paths["manifest"].write_text(json.dumps(manifest))
+            paths["report"].write_text(json.dumps(index))
+            receipt = json.loads(paths["receipt"].read_text())
+            for key in ["report", "manifest", "ledger"]:
+                receipt[key]["sha256"] = hashlib.sha256(paths[key].read_bytes()).hexdigest()
+            paths["receipt"].write_text(json.dumps(receipt))
+            with self.subTest(fault=fault), self.assertRaises(MODULE.ReportError):
+                MODULE.validate_evidence_receipt(paths["receipt"], self.root)
+
+    def test_direct_final_report_drift_missing_file_and_unsafe_refs_reject(self) -> None:
+        args, paths = self.direct_fixture()
+        self.assertEqual(self.run_cli(*args).returncode, 0)
+        for key in ["final_markdown", "final_json"]:
+            raw = paths[key].read_bytes()
+            paths[key].write_bytes(raw + b" changed claim")
+            with self.subTest(key=key, fault="drift"), self.assertRaises(MODULE.ReportError):
+                MODULE.validate_evidence_receipt(paths["receipt"], self.root)
+            paths[key].unlink()
+            with self.subTest(key=key, fault="missing"), self.assertRaises(MODULE.ReportError):
+                MODULE.validate_evidence_receipt(paths["receipt"], self.root)
+            paths[key].write_bytes(raw)
+        index = json.loads(paths["report"].read_text())
+        for name in ["/tmp/outside", "../outside", "C:\\outside", "bad\x00path"]:
+            invalid = copy.deepcopy(index); invalid["reports"][0]["path"] = name
+            paths["report"].write_text(json.dumps(invalid))
+            with self.subTest(path=name), self.assertRaises(MODULE.ReportError):
+                MODULE.validate_direct_evidence_index(paths["report"], self.root, self.bake())
+        paths["report"].write_text(json.dumps(index))
+        target = paths["final_markdown"]
+        saved = target.with_suffix(".saved"); target.rename(saved); target.symlink_to(saved)
+        with self.assertRaises(MODULE.ReportError):
+            MODULE.validate_evidence_receipt(paths["receipt"], self.root)
+
+    def test_direct_cli_protects_bound_reports_and_requires_one_report_mode(self) -> None:
+        args, paths = self.direct_fixture()
+        for key in ["final_markdown", "final_json"]:
+            changed = list(args); changed[changed.index("--output") + 1] = str(paths[key])
+            result = self.run_cli(*changed)
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertIn("must not overwrite inputs", result.stderr)
+        result = self.run_cli(*args, "--check-report", str(paths["report"]))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("mutually exclusive", result.stderr)
+        self.assertFalse(paths["receipt"].exists())
+
+    def test_direct_report_changes_during_validation_cannot_be_certified(self) -> None:
+        args, paths = self.direct_fixture()
+        self.assertEqual(self.run_cli(*args).returncode, 0)
+        core = MODULE._load_sibling("observe_report_core.py")
+        real_reference = core._receipt_reference
+        changed = False
+        def mutate(*args: Any, **kwargs: Any) -> Any:
+            nonlocal changed
+            result = real_reference(*args, **kwargs)
+            if not changed and args[3] == "direct_index.reports[0]":
+                paths["final_markdown"].write_text("Replaced report after first hash read")
+                changed = True
+            return result
+        with mock.patch.object(core, "_receipt_reference", side_effect=mutate), self.assertRaises(MODULE.ReportError):
+            MODULE.validate_evidence_receipt(paths["receipt"], self.root)
+
+    def test_direct_no_execution_index_changes_during_validation_reject(self) -> None:
+        _, paths = self.direct_fixture()
+        index = json.loads(paths["report"].read_text())
+        index.update(result="Not run", scenarios=[{"id": "http.health", "execution": "not_run",
+                     "status": "not_proven", "control_ids": [], "reason": "Not attempted"}])
+        paths["report"].write_text(json.dumps(index))
+        core = MODULE._load_sibling("observe_report_core.py")
+        real_reference = core._receipt_reference
+        def mutate(*args: Any, **kwargs: Any) -> Any:
+            result = real_reference(*args, **kwargs)
+            paths["report"].write_text(paths["report"].read_text() + " ")
+            return result
+        with mock.patch.object(core, "_receipt_reference", side_effect=mutate), self.assertRaises(MODULE.ReportError):
+            MODULE.validate_direct_evidence_index(paths["report"], self.root)
+
+    def test_direct_not_run_and_prerequisite_only_need_explicit_truthful_rows(self) -> None:
+        _, paths = self.direct_fixture()
+        index = json.loads(paths["report"].read_text())
+        for execution, status, result in [("not_run", "not_proven", "Not run"),
+                                           ("prerequisite_only", "blocked", "Blocked")]:
+            index.update(result=result, scenarios=[{"id": "http.health", "execution": execution,
+                         "status": status, "control_ids": [], "reason": "Owned receiver unavailable"}])
+            paths["report"].write_text(json.dumps(index))
+            validated = MODULE.validate_direct_evidence_index(paths["report"], self.root)
+            self.assertEqual(validated["result"], result)
+            self.assertEqual(validated["executed_scenarios"], 0)
+            for fault in ["empty", "no_reason", "false_working", "hidden_control", "duplicate_scenario"]:
+                invalid = copy.deepcopy(index)
+                if fault == "empty":
+                    invalid["scenarios"] = []
+                elif fault == "no_reason":
+                    invalid["scenarios"][0].pop("reason")
+                elif fault == "false_working":
+                    invalid["scenarios"][0]["status"] = "working"
+                elif fault == "hidden_control":
+                    invalid["scenarios"][0]["control_ids"] = ["control.health"]
+                else:
+                    invalid["scenarios"] *= 2
+                paths["report"].write_text(json.dumps(invalid))
+                with self.subTest(execution=execution, fault=fault), self.assertRaises(MODULE.ReportError):
+                    MODULE.validate_direct_evidence_index(paths["report"], self.root)
+
     def test_receipt_cli_roundtrip_repeat_relative_refs_and_readonly_validation(self) -> None:
         args, p = self.receipt_fixture()
         first = self.run_cli(*args)
