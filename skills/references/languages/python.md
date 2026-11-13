@@ -132,19 +132,30 @@ not permission to persist `none` as the normal configuration.
 set -eu
 
 logs_exporter="${OTEL_LOGS_EXPORTER:-}"
-logs_exporter="${logs_exporter#"${logs_exporter%%[![:space:]]*}"}"
-logs_exporter="${logs_exporter%"${logs_exporter##*[![:space:]]}"}"
-case "$logs_exporter" in
-  '') logs_exporter=otlp; export OTEL_LOGS_EXPORTER=otlp ;;
-  [oO][tT][lL][pP]) logs_exporter=otlp ;;
-  [nN][oO][nN][eE]) logs_exporter=none ;;
-  *) logs_exporter="${OTEL_LOGS_EXPORTER}" ;;
-esac
+if [ -z "$logs_exporter" ]; then
+  logs_exporter=otlp
+  export OTEL_LOGS_EXPORTER=otlp
+fi
+# Match the selected Python SDK's list reader: strip each member, preserve
+# case, and recognize none only as the whole value. Do not repair invalid lists.
+logs_class="$(python -I - <<'PY_EXPORTERS'
+import os
+
+value = os.environ["OTEL_LOGS_EXPORTER"]
+if value.lower().strip() == "none":
+    print("none")
+elif any(name.strip() in ("otlp", "otlp_proto_http", "otlp_proto_grpc")
+         for name in value.split(",")):
+    print("otlp")
+else:
+    print("operator")
+PY_EXPORTERS
+)"
 effective_logs_exporter="$logs_exporter"
-if [ "$logs_exporter" = otlp ]; then
+if [ "$logs_class" = otlp ]; then
   # Use the selected project Python. Validate before the CLI constructs any
   # local log exporter; never print endpoint/header values on failure.
-  if logs_configuration="$(python - <<'PY_LOGS'
+  if logs_configuration="$(python -I - <<'PY_LOGS'
 import os
 import sys
 from urllib.parse import urlsplit, urlunsplit
@@ -178,13 +189,23 @@ def local_endpoint(raw, protocol, *, signal=False):
 try:
     if os.environ.get("OTEL_EXPORTER_OTLP_HEADERS", "").strip():
         raise ValueError("generic local log headers")
-    generic_protocol = os.environ.get("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf").strip().lower()
-    logs_protocol = os.environ.get(
-        "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL",
-        os.environ.get("OTEL_EXPORTER_OTLP_PROTOCOL", approved_logs_protocol),
-    ).strip().lower()
-    if logs_protocol not in ("http/protobuf", "grpc"):
-        raise ValueError("unsupported logs protocol")
+    generic_protocol = (os.environ.get("OTEL_EXPORTER_OTLP_PROTOCOL") or "http/protobuf").strip()
+    configured_protocol = (os.environ.get("OTEL_EXPORTER_OTLP_LOGS_PROTOCOL")
+                           or os.environ.get("OTEL_EXPORTER_OTLP_PROTOCOL")
+                           or (generic_protocol if "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL" in os.environ
+                               else approved_logs_protocol)).strip()
+    transports = set()
+    for name in os.environ["OTEL_LOGS_EXPORTER"].split(","):
+        name = name.strip()
+        if name == "otlp":
+            transports.add(configured_protocol)
+        elif name == "otlp_proto_http":
+            transports.add("http/protobuf")
+        elif name == "otlp_proto_grpc":
+            transports.add("grpc")
+    if transports != {approved_logs_protocol}:
+        raise ValueError("selected OTLP transports differ from approval")
+    logs_protocol = approved_logs_protocol
     logs_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", "")
     generic_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "")
     if any(ord(char) < 32 or ord(char) == 127 for char in logs_endpoint):
@@ -218,17 +239,34 @@ PY_LOGS
 )"; then
     logs_protocol="${logs_configuration%% *}"
     logs_endpoint="${logs_configuration#* }"
-    export OTEL_EXPORTER_OTLP_LOGS_PROTOCOL="$logs_protocol"
+    if [ "${OTEL_EXPORTER_OTLP_LOGS_PROTOCOL+x}" != x ]; then
+      export OTEL_EXPORTER_OTLP_LOGS_PROTOCOL="$logs_protocol"
+    fi
     export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT="$logs_endpoint"
   else
     # This invocation skips only the added CLI log path. Preserve the intended
     # profile and all trace/metric/header settings; do not persist an opt-out.
     printf '%s\n' 'local OTLP log export skipped; check receiver, protocol and header configuration' >&2
-    effective_logs_exporter=none
-    export OTEL_PYTHON_LOG_AUTO_INSTRUMENTATION=false
+    # Remove only OTLP members; retain the other exporters and their bridge.
+    # The suffix preserves trailing whitespace through shell substitution.
+    effective_logs_exporter="$(python -I - <<'PY_WITHOUT_OTLP'
+import os
+import sys
+
+members = [name for name in os.environ["OTEL_LOGS_EXPORTER"].split(",")
+           if name.strip() not in ("otlp", "otlp_proto_http", "otlp_proto_grpc")]
+value = ",".join(members) if members else "none"
+# A mixed list's empty/none member must still reach SDK component lookup,
+# rather than accidentally becoming the SDK's special whole-value opt-out.
+if members and (not value or value.lower().strip() == "none"):
+    value += "," + members[0]
+sys.stdout.write(value + "X")
+PY_WITHOUT_OTLP
+)"
+    effective_logs_exporter="${effective_logs_exporter%X}"
   fi
 fi
-if [ "$logs_exporter" = none ]; then
+if [ "$logs_class" = none ] || [ "$effective_logs_exporter" = none ]; then
   # Ensure the explicit opt-out cannot inherit the zero-code default bridge.
   export OTEL_PYTHON_LOG_AUTO_INSTRUMENTATION=false
 fi
@@ -237,6 +275,7 @@ exec opentelemetry-instrument \
   --logs_exporter "$effective_logs_exporter" \
   --exporter_otlp_endpoint "${OTEL_EXPORTER_OTLP_ENDPOINT:-http://127.0.0.1:4318}" \
   --exporter_otlp_protocol "${OTEL_EXPORTER_OTLP_PROTOCOL:-http/protobuf}" \
+  -- \
   "$@"
 ```
 
@@ -253,7 +292,9 @@ Save the checked-in wrapper as `otel-entrypoint.sh`, make it executable, and
 pass the same command the project already uses, for example
 `./otel-entrypoint.sh python app.py`, `uv run`, `poetry run`, `gunicorn`, or
 `uvicorn`. Do not inline only the final `opentelemetry-instrument` command and
-drop the policy checks.
+drop the policy checks. Arguments after the wrapper are the application command
+and its arguments; the `--` boundary prevents additional OTel CLI options from
+overriding configuration after it has been checked.
 
 The wrapper leaves service and resource selection to the existing SDK/configuration
 owner. Do not add higher-precedence wrapper or CLI defaults over operator
@@ -297,9 +338,14 @@ particular, a root OTel handler installed before Flask creates `app.logger` can
 make Flask skip its default console handler. If the original sink is missing,
 do not ship the zero-code log path; route the service to the split
 provider/late-bridge programmatic setup below.
-Only the effective `otlp` branch adds or validates the local receiver logs
-protocol, endpoint, and header isolation. `none` and every other explicit
-operator-owned exporter bypass that added log configuration, so generic
+Every selected SDK-supported OTLP member (`otlp`, `otlp_proto_http`, or
+`otlp_proto_grpc`) requires the approved local tuple and header isolation,
+including in mixed lists. Explicit transport aliases win over protocol selectors;
+incompatible selected transports skip OTLP. On a conflict, remove only OTLP
+members for that invocation, preserving other exporters and their bridge. Keep
+the SDK's case-sensitive member lookup, duplicate handling, whole-value `none`
+and invalid-list behavior; do not turn mixed `none` or empty members into a valid
+opt-out. With no OTLP member, operator-owned exporters bypass the added checks, so generic
 trace/metric cloud settings cannot make an opted-out application fail startup.
 At instrumentation time, persist the detected Splunk Observability Studio
 service address through the standard OTel endpoint variables for

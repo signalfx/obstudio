@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import warnings
@@ -766,19 +767,19 @@ def test_shell_wrappers_only_add_local_log_configuration_for_otlp() -> None:
     python = _read(LANGUAGES / "python.md")
     java = _read(LANGUAGES / "java.md")
 
-    assert 'if [ "$logs_exporter" = otlp ]; then' in python
-    assert "every other explicit\noperator-owned exporter bypass" in python
-    assert 'if [ "$logs_exporter" = none ]; then' in python
+    assert 'if [ "$logs_class" = otlp ]; then' in python
+    assert "Every selected SDK-supported OTLP member" in python
+    assert 'if [ "$logs_class" = none ] || [ "$effective_logs_exporter" = none ]; then' in python
     python_none_branch = python.split(
-        'if [ "$logs_exporter" = none ]; then',
+        'if [ "$logs_class" = none ] || [ "$effective_logs_exporter" = none ]; then',
         1,
     )[1].split("fi", 1)[0]
     assert "export OTEL_PYTHON_LOG_AUTO_INSTRUMENTATION=false" in python_none_branch
-    assert 'if [ "$logs_exporter" != otlp ]; then' in java
+    assert 'if [ "$otel_exporter_class" != otlp ]; then' in java
     assert 'scan_otel_options "${JAVA_TOOL_OPTIONS:-}"' in java
     assert 'for otel_jvm_arg in "$@"; do' in java
     assert '-Dotel.exporter.otlp.endpoint)' in java
-    assert java.index('if [ "$logs_exporter" != otlp ]; then') < java.index(
+    assert java.index('if [ "$otel_exporter_class" != otlp ]; then') < java.index(
         'if [ -n "$generic_endpoint" ]'
     )
     assert '[ "$add_logs_endpoint" -eq 0 ] || export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=' in java
@@ -804,6 +805,7 @@ def test_python_cli_preserves_non_otlp_bridge_ownership(tmp_path: Path) -> None:
 
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
+    (fake_bin / "python").symlink_to(sys.executable)
     _write_executable(
         fake_bin / "opentelemetry-instrument",
         """#!/bin/sh
@@ -873,6 +875,8 @@ while index < len(args) and args[index] in {
 }:
     options[args[index]] = args[index + 1]
     index += 2
+if index < len(args) and args[index] == "--":
+    index += 1
 app = args[index:]
 print(json.dumps({
     "options": options, "app": app,
@@ -1042,26 +1046,46 @@ def test_python_cli_log_conflicts_preserve_app_trace_metric_and_profile(
     ({"OTEL_EXPORTER_OTLP_ENDPOINT": "http://[::1", "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://localhost:55444/v1/logs"}, "http://localhost:55444/v1/logs", "http/protobuf"),
     ({"OTEL_EXPORTER_OTLP_PROTOCOL": "grpc", "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:55317"}, "http://localhost:55317", "grpc"),
     ({"OTEL_EXPORTER_OTLP_PROTOCOL": "grpc", "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:55317", "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL": "http/protobuf", "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://localhost:55444/v1/logs"}, "http://localhost:55444/v1/logs", "http/protobuf"),
-    ({"OTEL_LOGS_EXPORTER": "  OTLP  "}, "http://127.0.0.1:4318/v1/logs", "http/protobuf"),
+    ({"OTEL_LOGS_EXPORTER": "  otlp  "}, "http://127.0.0.1:4318/v1/logs", "http/protobuf"),
+    ({"OTEL_LOGS_EXPORTER": "\u00a0otlp\u00a0,console,otlp_proto_http,otlp"}, "http://127.0.0.1:4318/v1/logs", "http/protobuf"),
+    ({"OTEL_LOGS_EXPORTER": "otlp_proto_http,console", "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL": "grpc"}, "http://127.0.0.1:4318/v1/logs", "http/protobuf"),
+    ({"OTEL_LOGS_EXPORTER": "console,otlp_proto_grpc", "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL": "http/protobuf"}, "http://localhost:55317", "grpc"),
+    ({"OTEL_LOGS_EXPORTER": "otlp_proto_http,console", "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL": "SDK-invalid-selector"}, "http://127.0.0.1:4318/v1/logs", "http/protobuf"),
+    ({"OTEL_EXPORTER_OTLP_LOGS_PROTOCOL": ""}, "http://127.0.0.1:4318/v1/logs", "http/protobuf"),
 ])
 def test_python_cli_normal_local_logs_keep_checked_transport_and_app(
-    tmp_path, config, endpoint, protocol,
+    tmp_path, monkeypatch, config, endpoint, protocol,
 ) -> None:
+    from opentelemetry.sdk._configuration import _get_exporter_names, _import_exporters
+
     result, instrument = _run_python_cli(
         tmp_path, config, exit_code=19,
         approved_endpoint=endpoint, approved_protocol=protocol,
     )
-    assert instrument["options"]["--logs_exporter"] == "otlp"
+    assert instrument["options"]["--logs_exporter"] == config.get("OTEL_LOGS_EXPORTER", "otlp")
     assert instrument["env"]["OTEL_LOGS_EXPORTER"] == config.get("OTEL_LOGS_EXPORTER", "otlp")
     assert instrument["env"]["OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"] == endpoint
-    assert instrument["env"]["OTEL_EXPORTER_OTLP_LOGS_PROTOCOL"] == protocol
+    assert instrument["env"]["OTEL_EXPORTER_OTLP_LOGS_PROTOCOL"] == config.get("OTEL_EXPORTER_OTLP_LOGS_PROTOCOL", protocol)
     for name, value in config.items():
         assert instrument["env"][name] == value
     assert "OTEL_PYTHON_LOG_AUTO_INSTRUMENTATION" not in instrument["env"]
     assert result.stderr == ""
+    for name in ("OTEL_LOGS_EXPORTER", "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL", "OTEL_EXPORTER_OTLP_PROTOCOL"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("OTEL_LOGS_EXPORTER", instrument["options"]["--logs_exporter"])
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_PROTOCOL", instrument["options"]["--exporter_otlp_protocol"])
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_LOGS_PROTOCOL", instrument["env"]["OTEL_EXPORTER_OTLP_LOGS_PROTOCOL"])
+    names = _get_exporter_names("logs")
+    otlp_names = {name for name in names if name.startswith("otlp_proto_")}
+    assert otlp_names == {"otlp_proto_grpc" if protocol == "grpc" else "otlp_proto_http"}
+    # This test environment installs the HTTP exporter; gRPC name resolution
+    # still uses the actual SDK reader without requiring another installation.
+    if protocol == "http/protobuf":
+        exporters = _import_exporters([], [], names)[2]
+        assert sum(name.startswith("otlp_proto_") for name in exporters) == 1
 
 
-@pytest.mark.parametrize("exporter", ["none", "console", "custom", "otlp,console"])
+@pytest.mark.parametrize("exporter", ["none", " NoNe ", "console", "custom", "OTLP", "  ", "console,", "none,console"])
 def test_python_cli_operator_exporters_bypass_added_local_log_validation(
     tmp_path, exporter,
 ) -> None:
@@ -1076,10 +1100,93 @@ def test_python_cli_operator_exporters_bypass_added_local_log_validation(
     result, instrument = _run_python_cli(tmp_path, config, exit_code=23)
     assert instrument["options"]["--logs_exporter"] == exporter
     expected = dict(config)
-    if exporter == "none":
+    if exporter.lower().strip() == "none":
         expected["OTEL_PYTHON_LOG_AUTO_INSTRUMENTATION"] = "false"
     assert instrument["env"] == expected
     assert result.stderr == ""
+
+
+@pytest.mark.parametrize("exporter,effective", [
+    ("otlp,console", "console"),
+    ("console, otlp_proto_http ,console", "console,console"),
+    ("console,otlp_proto_grpc", "console"),
+    ("otlp_proto_http,console,otlp_proto_grpc", "console"),
+    ("none,otlp", "none,none"),
+    ("NoNe,otlp", "NoNe,NoNe"),
+    ("otlp,", ","),
+    ("otlp, \n", " \n"),
+    ("otlp_proto_grpc,OTLP", "OTLP"),
+    ("otlp_proto_http", "none"),
+    ("otlp,otlp", "none"),
+])
+def test_python_cli_conflicts_remove_only_otlp_members(
+    tmp_path, monkeypatch, exporter, effective,
+) -> None:
+    from opentelemetry.sdk._configuration import _get_exporter_names, _import_exporters
+
+    config = {
+        **_PYTHON_CLI_TRACE_METRIC_SETTINGS,
+        "OTEL_LOGS_EXPORTER": exporter,
+        "OTEL_PYTHON_LOG_AUTO_INSTRUMENTATION": "true",
+        "OTEL_EXPORTER_OTLP_HEADERS": "Authorization=synthetic-secret",
+    }
+    result, instrument = _run_python_cli(tmp_path, config, exit_code=31)
+    assert instrument["options"]["--logs_exporter"] == effective
+    expected = {**config, "OTEL_PYTHON_LOG_AUTO_INSTRUMENTATION":
+                "false" if effective == "none" else "true"}
+    assert instrument["env"] == expected
+    assert result.stderr == "local OTLP log export skipped; check receiver, protocol and header configuration\n"
+    # Resolve actual installed SDK classes without constructing providers/exporters.
+    monkeypatch.setenv("OTEL_LOGS_EXPORTER", effective)
+    names = _get_exporter_names("logs")
+    if effective == "none" or effective.startswith("console"):
+        exporters = _import_exporters([], [], names)[2]
+        assert list(exporters) == ([] if effective == "none" else ["console"])
+    else:
+        with pytest.raises(RuntimeError, match="not found"):
+            _import_exporters([], [], names)
+
+
+@pytest.mark.parametrize("exporter,protocol", [
+    ("otlp_proto_grpc,console", "http/protobuf"),
+    ("otlp_proto_http,otlp_proto_grpc,console", "http/protobuf"),
+    ("otlp,console", "HTTP/PROTOBUF"),
+])
+def test_python_cli_transport_selection_cannot_bypass_approval(
+    tmp_path, exporter, protocol,
+) -> None:
+    config = {"OTEL_LOGS_EXPORTER": exporter,
+              "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL": protocol,
+              "OTEL_PYTHON_LOG_AUTO_INSTRUMENTATION": "true"}
+    result, instrument = _run_python_cli(tmp_path, config)
+    assert instrument["options"]["--logs_exporter"] == "console"
+    assert instrument["env"] == config
+    assert result.stderr.startswith("local OTLP log export skipped;")
+
+
+def test_python_cli_command_boundary_uses_actual_cli_parser(tmp_path, monkeypatch) -> None:
+    import opentelemetry.instrumentation.auto_instrumentation as cli
+
+    launcher, _, environment = _python_cli_launcher(tmp_path)
+    capture = tmp_path / "arguments.json"
+    _write_executable(Path(environment["PATH"]) / "opentelemetry-instrument",
+                      f"#!{sys.executable}\nimport json,sys\n"
+                      f"open({str(capture)!r}, 'w').write(json.dumps(sys.argv[1:]))\n")
+    late_options = ["--logs_exporter", "otlp", "--exporter_otlp_logs_endpoint",
+                    "https://unapproved.invalid/v1/logs", "python", "app.py"]
+    subprocess.run([launcher, *late_options], env={**environment, "OTEL_LOGS_EXPORTER": "none"},
+                   text=True, capture_output=True, check=True)
+    arguments = json.loads(capture.read_text())
+    assert arguments[-len(late_options) - 1:] == ["--", *late_options]
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", "http://127.0.0.1:4318/v1/logs")
+    monkeypatch.setattr(sys, "argv", ["opentelemetry-instrument", *arguments])
+    executed = []
+    monkeypatch.setattr(cli, "which", lambda command: command)
+    monkeypatch.setattr(cli, "execl", lambda *args: executed.append(args))
+    cli.run()
+    assert executed == [(late_options[0], late_options[0], *late_options[1:])]
+    assert os.environ["OTEL_LOGS_EXPORTER"] == "none"
+    assert os.environ["OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"] == "http://127.0.0.1:4318/v1/logs"
 
 
 def test_python_cli_preserves_resolved_nondefault_receiver_ports(
@@ -1484,6 +1591,114 @@ def test_java_launcher_log_conflicts_preserve_app_and_operator_configuration(
     for key in ["OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL"]:
         if key not in supplied:
             assert key not in actual
+
+
+@pytest.mark.parametrize("exporters,remaining", [
+    (" otlp ", "none"),
+    (", ,\totlp\r\n,,", "none"),
+    (" ,, \t", "none"),
+    (" console , otlp ", "console"),
+])
+@pytest.mark.parametrize("conflict", [
+    {"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "https://unapproved.invalid/v1/logs"},
+    {"OTEL_EXPORTER_OTLP_HEADERS": "X-Generic=synthetic-value"},
+])
+def test_java_launcher_guards_normalized_otlp_membership(
+    tmp_path: Path, exporters: str, remaining: str, conflict: dict[str, str],
+) -> None:
+    launcher, base_env = _java_launcher(tmp_path)
+    supplied = {"OTEL_LOGS_EXPORTER": exporters,
+                "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://127.0.0.1:4318/v1/logs",
+                "OTEL_EXPORTER_OTLP_TRACES_HEADERS": "X-Trace=synthetic-trace",
+                "OTEL_EXPORTER_OTLP_METRICS_HEADERS": "X-Metric=synthetic-metric", **conflict}
+    result = subprocess.run([launcher, "com.example.Main"], env={**base_env, **supplied},
+                            capture_output=True, text=True, check=True)
+    actual = _java_configuration(result)
+    assert "Local OTLP logs inactive" in result.stderr
+    assert "synthetic" not in result.stderr
+    assert actual["_JAVA_OPTIONS"] == "-Dotel.logs.exporter=" + remaining
+    assert all(actual[key] == value for key, value in supplied.items())
+
+
+@pytest.mark.parametrize("exporters", ["otlp,otlp", "none, otlp", "OTLP", "\u00a0otlp\u00a0"])
+def test_java_launcher_retains_sdk_invalid_or_non_otlp_selection(
+    tmp_path: Path, exporters: str,
+) -> None:
+    launcher, base_env = _java_launcher(tmp_path)
+    supplied = {"OTEL_LOGS_EXPORTER": exporters,
+                "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "https://unapproved.invalid/v1/logs",
+                "OTEL_EXPORTER_OTLP_HEADERS": "X-Generic=synthetic-value"}
+    result = subprocess.run([launcher, "com.example.Main"], env={**base_env, **supplied},
+                            capture_output=True, text=True, check=True)
+    actual = _java_configuration(result)
+    # Leave syntax/provider errors with the selected SDK; do not repair into success.
+    assert not result.stderr
+    assert actual["_JAVA_OPTIONS"] == ""
+    assert all(actual[key] == value for key, value in supplied.items())
+
+
+@pytest.mark.parametrize("exporters", [" otlp ", " console , otlp "])
+def test_java_launcher_normalized_otlp_preserves_approved_signal_and_unused_generic(
+    tmp_path: Path, exporters: str,
+) -> None:
+    launcher, base_env = _java_launcher(tmp_path)
+    supplied = {"OTEL_LOGS_EXPORTER": exporters,
+                "OTEL_EXPORTER_OTLP_ENDPOINT": "https://unused-generic.invalid",
+                "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://127.0.0.1:4318/v1/logs"}
+    result = subprocess.run([launcher, "com.example.Main"], env={**base_env, **supplied},
+                            capture_output=True, text=True, check=True)
+    actual = _java_configuration(result)
+    assert not result.stderr and actual["_JAVA_OPTIONS"] == ""
+    assert all(actual[key] == value for key, value in supplied.items())
+
+
+def test_java_launcher_guards_effective_jvm_mixed_selector(tmp_path: Path) -> None:
+    launcher, base_env = _java_launcher(tmp_path)
+    supplied = {"OTEL_LOGS_EXPORTER": "console", "JAVA_TOOL_OPTIONS": "-Dotel.logs.exporter=otlp,console",
+                "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "https://unapproved.invalid/v1/logs"}
+    result = subprocess.run([launcher, "com.example.Main"], env={**base_env, **supplied},
+                            capture_output=True, text=True, check=True)
+    actual = _java_configuration(result)
+    assert "Local OTLP logs inactive" in result.stderr
+    assert actual["_JAVA_OPTIONS"] == "-Dotel.logs.exporter=console"
+    assert all(actual[key] == value for key, value in supplied.items())
+
+
+def test_java_launcher_filtered_spi_value_roundtrips_as_one_jvm_property(tmp_path: Path) -> None:
+    home = Path(os.environ["JAVA_HOME"]) / "bin" if os.environ.get("JAVA_HOME") else None
+    java = str(home / "java") if home else shutil.which("java")
+    javac = str(home / "javac") if home else shutil.which("javac")
+    if not java or not javac:
+        pytest.skip("A configured JDK is required for the real JVM option roundtrip")
+    source = tmp_path / "ExporterProperty.java"
+    source.write_text("""import java.util.Base64;
+public class ExporterProperty {
+ public static void main(String[] args) {
+  System.out.println(Base64.getEncoder().encodeToString(System.getProperty("otel.logs.exporter").getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+  System.out.println(System.getProperty("other", "absent"));
+ }
+}
+""")
+    compiled = subprocess.run([javac, "-d", str(tmp_path), str(source)], capture_output=True, text=True)
+    if compiled.returncode and "Unable to locate a Java Runtime" in compiled.stderr:
+        pytest.skip("No installed JDK behind the platform launcher")
+    assert compiled.returncode == 0, compiled.stderr
+    launcher, base_env = _java_launcher(tmp_path)
+    custom = 'custom"quoted\'name\\path -Dother=injected'
+    result = subprocess.run([launcher, "com.example.Main"],
+        env={**base_env, "OTEL_LOGS_EXPORTER": "otlp," + custom,
+             "OTEL_EXPORTER_OTLP_HEADERS": "X-Generic=synthetic-value"},
+        capture_output=True, text=True, check=True)
+    actual = _java_configuration(result)
+    env = {key:value for key,value in os.environ.items()
+           if key not in {"JAVA_TOOL_OPTIONS", "JDK_JAVA_OPTIONS", "_JAVA_OPTIONS"}}
+    env["_JAVA_OPTIONS"] = actual["_JAVA_OPTIONS"]
+    roundtrip = subprocess.run([java, "-cp", str(tmp_path), "ExporterProperty"], env=env,
+                               capture_output=True, text=True, check=True)
+    import base64
+    encoded, other = roundtrip.stdout.splitlines()
+    assert base64.b64decode(encoded).decode() == custom
+    assert other == "absent"
 
 
 @pytest.mark.parametrize("operator_exporter", ["none", "console"])

@@ -121,13 +121,14 @@ which existing appenders remain active before editing.
 
   | Existing log configuration | Required action |
   |---|---|
-  | exporter unset/empty and endpoint absent or preflight-classified local | Default the exporter to `otlp` for the local Splunk Observability Studio baseline |
-  | exporter `otlp` and endpoint absent or preflight-classified local | Preserve `otlp` and use the classified local Splunk Observability Studio endpoint |
-  | exporter unset/`otlp` and endpoint source-proven non-local during preflight | Report the operator-owned boundary conflict before applying this pattern |
+  | exporter list empty after SDK normalization and endpoint absent or preflight-classified local | Use the SDK default `otlp` for the local Splunk Observability Studio baseline |
+  | valid exporter selection contains `otlp` and endpoint absent or preflight-classified local | Preserve the selector and use the classified local Splunk Observability Studio endpoint |
+  | SDK default or a selection containing `otlp`, with endpoint source-proven non-local during preflight | Report the operator-owned boundary conflict before applying this pattern |
   | `none` | Keep it disabled; do not add another provider, exporter, or bridge |
-  | any other explicit value | Preserve it as operator-owned; do not supplement it with a local pipeline |
+  | explicit selection without `otlp`, or an SDK-invalid list | Preserve it as operator-owned, including SDK errors; do not supplement it with a local pipeline |
 
-- When the logs exporter is absent/`otlp`, set the signal-specific OTLP/HTTP
+- When the SDK defaults the logs exporter to `otlp` or its normalized selection
+  contains `otlp`, set the signal-specific OTLP/HTTP
   endpoint to the receiver resolved during instrumentation, using
   `http://127.0.0.1:4318/v1/logs` only as the no-discovery host fallback. Accept
   an explicit endpoint on that branch when preflight classifies it as the
@@ -210,7 +211,7 @@ skip_local_logs() {
   printf '%s\n' 'Local OTLP logs inactive: resolve receiver, protocol or generic-header conflict during preflight.' >&2
   # This launcher targets the inspected OpenJDK option order. Keep all existing
   # options and append only the added log path's disable at the winning surface.
-  export _JAVA_OPTIONS="${_JAVA_OPTIONS:+$_JAVA_OPTIONS }-Dotel.logs.exporter=none"
+  export _JAVA_OPTIONS="${_JAVA_OPTIONS:+$_JAVA_OPTIONS }$logs_disable_option"
   exec java "$@"
 }
 
@@ -343,11 +344,76 @@ if [ -z "$logs_exporter" ]; then
   [ "$logs_exporter_d" -eq 1 ] || add_logs_exporter=1
 fi
 
-# Explicit none and non-OTLP exporters are operator-owned. Add nothing and do
-# not interpret their endpoint or generic trace/metric configuration.
-if [ "$logs_exporter" != otlp ]; then
+# The inspected SDK reader splits comma lists, applies String.trim (<= U+0020),
+# filters blanks, rejects duplicates, and rejects none mixed with other names.
+# Preserve the raw selector on accepted/operator-owned paths. Guard every
+# syntactically acceptable set containing otlp, including mixed SDK exporters.
+quote_java_option() {
+  case "$1" in
+    *[!a-zA-Z0-9._,=-]*) ;;
+    *) printf '%s' "$1"; return ;;
+  esac
+  otel_quote_value=$1
+  printf "'"
+  while case "$otel_quote_value" in *"'"*) true ;; *) false ;; esac; do
+    otel_quote_prefix=${otel_quote_value%%"'"*}
+    printf '%s' "$otel_quote_prefix" "'\"'\"'"
+    otel_quote_value=${otel_quote_value#*"'"}
+  done
+  printf "%s'" "$otel_quote_value"
+}
+classify_logs_exporters() (
+  LC_ALL=C
+  export LC_ALL
+  otel_trim_range=$(printf '\001-\040')
+  otel_remaining=$1
+  otel_seen=
+  otel_other_exporters=
+  otel_count=0
+  otel_duplicates=0
+  otel_has_none=0
+  otel_has_otlp=0
+  while :; do
+    case "$otel_remaining" in
+      *,*) otel_name=${otel_remaining%%,*}; otel_remaining=${otel_remaining#*,}; otel_more=1 ;;
+      *) otel_name=$otel_remaining; otel_more=0 ;;
+    esac
+    otel_name=${otel_name#"${otel_name%%[!$otel_trim_range]*}"}
+    otel_name=${otel_name%"${otel_name##*[!$otel_trim_range]}"}
+    if [ -n "$otel_name" ]; then
+      case ",$otel_seen," in *,"$otel_name",*) otel_duplicates=1 ;; esac
+      otel_seen=${otel_seen:+$otel_seen,}$otel_name
+      otel_count=$((otel_count + 1))
+      case "$otel_name" in
+        otlp) otel_has_otlp=1 ;;
+        none) otel_has_none=1 ;;
+      esac
+      if [ "$otel_name" != otlp ]; then
+        otel_other_exporters=${otel_other_exporters:+$otel_other_exporters,}$otel_name
+      fi
+    fi
+    [ "$otel_more" -eq 1 ] || break
+  done
+  if [ "$otel_duplicates" -eq 1 ] || { [ "$otel_has_none" -eq 1 ] && [ "$otel_count" -gt 1 ]; }; then
+    printf '%s' sdk-invalid
+  elif [ "$otel_count" -eq 0 ] || [ "$otel_has_otlp" -eq 1 ]; then
+    printf 'otlp\n'
+    # Generate one opaque JVM option, preserving every non-OTLP SPI name.
+    # This cannot inject additional options through whitespace or quote bytes.
+    quote_java_option "-Dotel.logs.exporter=${otel_other_exporters:-none}"
+  else
+    printf '%s' operator-owned
+  fi
+)
+otel_exporter_classification=$(classify_logs_exporters "$logs_exporter")
+otel_exporter_class=${otel_exporter_classification%%'
+'*}
+if [ "$otel_exporter_class" != otlp ]; then
+  # Invalid lists retain the SDK's own error; do not repair them into success.
   exec java "$@"
 fi
+logs_disable_option=${otel_exporter_classification#*'
+'}
 
 # This template does not parse operator-owned agent properties files. Defaults
 # must not override a file-selected opt-out, endpoint, protocol or credential.
@@ -415,9 +481,16 @@ Invoke the checked-in launcher with the project's existing Java arguments:
 The launcher resolves each effective setting from the environment and standard
 JVM option sources, including `JAVA_TOOL_OPTIONS` and explicit launcher `-D`
 arguments. It never exports a missing environment default for a setting already
-present on a JVM property surface. `none` and every other explicit exporter run
-unchanged; only the absent/`otlp` branch receives local defaults through standard
-OTel environment variables. A signal-specific endpoint wins over an unused
+present on a JVM property surface. Resolve exporter-list syntax against the
+selected SDK reader before using this example. The inspected reader splits on
+commas, trims only Java `String.trim` characters through U+0020 and removes blank
+members; an empty set defaults to `otlp`. Duplicate names and `none` mixed with
+other names remain SDK errors. Other SPI names are delegated to the SDK without
+an application allowlist. Selections without `otlp` run unchanged; any normalized
+selection containing `otlp` receives the local boundary checks, including padded
+and mixed selections. Approved paths retain the original selector bytes. On a
+conflict remove only `otlp`, preserving other operator exporters through one
+quoted JVM property when needed. No extra parser dependency is required. A signal-specific endpoint wins over an unused
 generic endpoint, but must match
 its independently approved protocol/complete URL. Otherwise, resolve the generic
 base using the selected transport and compare that result with approval. Known
@@ -430,8 +503,9 @@ path and that established JVM option order. An empty
 `-Dotel.logs.exporter=` keeps its one existing key and follows the current
 agent's default OTLP behavior. Launcher scanning stops at the main class,
 source file, JAR, or module so application arguments cannot alter ownership.
-Keep each relevant JVM option value whitespace-free, as required for the
-exporter, protocol, endpoint, and encoded header forms shown here; only plain
+Keep relevant values in JVM option-string environments whitespace-free for
+this scanner; exporter lists supplied as environment variables or explicit
+launcher arguments still receive SDK list normalization. Only plain
 space/tab option separators are accepted in the three standard option
 environments. The guard rejects argument files, CR/LF/form-feed/vertical-tab
 and other control whitespace, and quoted or backslash-escaped JVM option
@@ -439,10 +513,10 @@ environment values instead of guessing how OpenJDK will parse them. Move such
 reviewed options to explicit launcher arguments, where the calling shell
 preserves each value's boundary. A selected
 `OTEL_JAVAAGENT_CONFIGURATION_FILE` or `-Dotel.javaagent.configuration-file`
-is also a preflight blocker on the absent/`otlp` branch until its relevant
+is also a preflight blocker on the SDK-default or normalized-`otlp` branch until its relevant
 ownership is resolved: do not override a file-selected opt-out or endpoint with
-new environment defaults. Explicit higher-priority `none`/other-exporter values
-still bypass local setup. This example does not parse that file. It also leaves
+new environment defaults. Explicit higher-priority selections without `otlp`
+and SDK-invalid lists still bypass local setup. This example does not parse that file. It also leaves
 generic URL query/fragment resolution unsupported: report that limitation during
 preflight and skip only added local logs if such a runtime generic value is
 consumed. An independently approved signal-specific URL remains unchanged and
@@ -695,7 +769,7 @@ approved nondefault port or container/service address.
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | resolved local receiver; fallback `http://127.0.0.1:4318` | Common OTLP endpoint only when it is local or collector-owned; preserve a configured non-default port and never leave a direct-cloud value for logs to inherit |
 | `OTEL_EXPORTER_OTLP_HEADERS` | unset | As an explicit reviewed preflight/configuration change, move cloud credentials to trace/metric signal headers and remove this generic value before enabling local logs; never rewrite credentials during startup. Until then, disable only the added local log path |
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` for the local baseline, after checking selected agent support | Common protocol when using port 4318 |
-| `OTEL_LOGS_EXPORTER` | `otlp` only when absent and the logs endpoint is absent or preflight-classified local | `none` disables agent log export; any other explicit value is preserved |
+| `OTEL_LOGS_EXPORTER` | `otlp` when the selected SDK resolves an empty list and the logs destination is approved | Guard normalized `otlp` membership; preserve other SPI exporters and SDK-invalid selection errors |
 | `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` | `http/protobuf` for the local baseline | Signal-specific log transport |
 | `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | resolved local receiver; fallback `http://127.0.0.1:4318/v1/logs` | Signal-specific local Splunk Observability Studio application-log destination |
 | `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset | Only signal-specific operator-owned log headers; never inherit a generic cloud credential |
