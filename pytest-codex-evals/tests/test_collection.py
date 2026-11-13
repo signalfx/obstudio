@@ -751,3 +751,94 @@ def test_prompt_eval_inputs_schema_rejects_unsafe_paths():
         payload["prompts"][0]["eval_inputs"] = [unsafe]
         with pytest.raises(ValidationError):
             schema_validator("rubric.schema.json").validate(payload)
+
+
+@pytest.mark.parametrize("contract", ["legacy", "strict-valid", "strict-invalid", "strict-disabled"])
+def test_collected_strict_grading_preserves_legacy_skip_and_failure_isolation(pytester: pytest.Pytester, contract: str):
+    write_eval_repo(pytester)
+    sample = pytester.path / "evals/sample/service/eval/qual/sample.json"
+    if contract != "legacy":
+        definition = json.loads(sample.read_text())
+        rubric = definition.pop("rubric")
+        definition["rubric_base"] = "../../../../common.json"
+        sample.write_text(json.dumps(definition))
+        (pytester.path / "evals/common.json").write_text(json.dumps({
+            "rubric": rubric, "judge_inputs": [], "strict_rubric_output": True,
+        }))
+    other = pytester.path / "evals/sample/other"
+    legacy = other / "eval/qual/other.json"
+    definition = json.loads(legacy.read_text())
+    definition["skill"] = "sample-skill"
+    legacy.write_text(json.dumps(definition))
+    other.rename(other.with_name("zz-other"))
+    calls = pytester.path / "judge-calls.txt"
+    pytester.makeconftest(f'''
+        import json
+        import pytest
+        from pathlib import Path
+        from pytest_codex_evals.backends import AgentResult
+        from pytest_codex_evals.plugin import BACKEND_ATTR
+        from pytest_codex_evals.trace import parse_trace
+
+        class ControlledBackend:
+            name = "codex"
+
+            def run_agent(self, *, exec_dir, **kwargs):
+                skill = exec_dir / ".agents/skills/sample-skill/SKILL.md"
+                trace, final, stderr = [exec_dir / name for name in ("trace.jsonl", "last_message.md", "stderr.txt")]
+                trace.write_text(json.dumps({{"type": "item.completed", "item": {{
+                    "id": "load", "type": "command_execution", "status": "completed", "exit_code": 0,
+                    "command": "cat .agents/skills/sample-skill/SKILL.md", "aggregated_output": skill.read_text(),
+                }}}}) + "\\n")
+                final.write_text("Done.")
+                stderr.write_text("")
+                return AgentResult(0, trace, final, stderr)
+
+            def run_judge(self, *, exec_dir, **kwargs):
+                with Path({str(calls)!r}).open("a") as output:
+                    output.write("judge\\n")
+                trace, grade, stderr = [exec_dir / name for name in ("rubric_trace.jsonl", "rubric_grade.json", "rubric_stderr.txt")]
+                trace.write_text("")
+                stderr.write_text("controlled judge diagnostic")
+                grade.write_text(json.dumps({{"overall_pass": True, "score": 100, "checks": [{{
+                    "id": {('rubric-1' if contract == 'strict-valid' else 'quality')!r},
+                    "pass": True, "notes": "Controlled verdict.", "evidence": "last_message.md:1",
+                }}]}}))
+                return AgentResult(0, trace, grade, stderr)
+
+            def parse_trace(self, trace_path):
+                return parse_trace(trace_path)
+
+        @pytest.hookimpl(trylast=True)
+        def pytest_configure(config):
+            setattr(config, BACKEND_ATTR, ControlledBackend())
+    ''')
+    args = ["--codex-eval-kind", "rubric", "--skill", str(pytester.path / "skills/sample-skill"), "-q"]
+    if contract == "strict-disabled":
+        args.append("--no-rubric")
+    result = pytester.runpytest(*args)
+    if contract == "strict-invalid":
+        result.assert_outcomes(failed=2, passed=1)
+        assert "rubric grading failed" in result.stdout.str()
+    else:
+        result.assert_outcomes(passed=3)
+    if contract == "strict-disabled":
+        assert not calls.exists()
+    else:
+        assert calls.read_text().splitlines() == ["judge"] * 3
+    summaries = list(pytester.path.glob(".workspace/codex-evals/sample-skill/*/cases/sample/*/*/with_skill/summary.json"))
+    assert len(summaries) == 3
+    for path in summaries:
+        summary = json.loads(path.read_text())
+        strict = summary["strict_rubric_output"]
+        if strict and contract == "strict-invalid":
+            assert summary["rubric_grade_path"] is None
+            assert summary["errors"]
+            assert (path.parent / "rubric_grade.json").exists()
+            assert (path.parent / "rubric_prompt.txt").exists()
+            assert (path.parent / "rubric_stderr.txt").read_text() == "controlled judge diagnostic"
+        elif contract == "strict-disabled":
+            assert summary["rubric_grade_path"] is None
+            assert not (path.parent / "rubric_prompt.txt").exists()
+        else:
+            assert summary["rubric_grade_path"] is not None

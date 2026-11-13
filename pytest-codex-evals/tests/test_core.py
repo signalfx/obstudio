@@ -478,7 +478,6 @@ def test_shared_rubric_rejects_invalid_sources_and_common_overrides(tmp_path, fa
         load_eval_definition(path)
 
 
-
 def test_codex_subprocess_env_uses_sandbox_local_package_caches(
     tmp_path: Path, monkeypatch
 ):
@@ -2229,7 +2228,6 @@ def test_strict_grade_preserves_raw_quality_score_without_legacy_count_conversio
     assert loaded["score"] == expected_score
     assert (loaded["passed"], loaded["total"]) == (10, 14)
     assert path.read_text() == raw
-
 
 
 def test_report_normalizes_count_shaped_rubric_score():
