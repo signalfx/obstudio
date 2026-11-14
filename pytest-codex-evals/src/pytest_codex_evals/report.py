@@ -427,6 +427,8 @@ def native_invocation_source_files(repo_root: Path, skill: str, task: str | None
     if not isinstance(task, str) or task not in {f"${skill}", f"${skill} ./service"}:
         return []
     package = Path(__file__).resolve().parent
+    if package.parent.name != "src" or not (package.parent.parent / "pyproject.toml").is_file():
+        return []
     paths = [package / "ab.py", package / "graders/shared.py", package / "runner.py", package / "report.py"]
     # Editable source checkouts bind direct-task prompt/loading behavior without
     # invalidating unrelated legacy task reports.

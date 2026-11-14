@@ -405,7 +405,10 @@ def test_native_loading_source_change_invalidates_only_direct_task_reports(tmp_p
     definition = definitions / "native.json"
     definition.write_text(json.dumps({"skill": "sample-skill", "prompts": [{"id": "direct", "eval_inputs": [],
         "task": "$sample-skill ./service" if direct else "Scan the service."}], "rubric": ["Accurate"]}))
-    package = tmp_path / "editable-harness"
+    project = tmp_path / "editable-harness"
+    project.mkdir()
+    (project / "pyproject.toml").write_text('[project]\nname = "pytest-codex-evals"\n')
+    package = project / "src/pytest_codex_evals"
     (package / "graders").mkdir(parents=True)
     for relative in ("ab.py", "report.py", "runner.py", "graders/shared.py"):
         (package / relative).write_text("original\n")
@@ -415,7 +418,36 @@ def test_native_loading_source_change_invalidates_only_direct_task_reports(tmp_p
     (package / changed_source).write_text("changed invocation semantics\n")
     after = source_input_digests(tmp_path, "sample-skill", "rubric", skill, **kwargs)
     assert (before != after) is direct
-    assert (f"editable-harness/{changed_source}" in before) is direct
+    assert (f"editable-harness/src/pytest_codex_evals/{changed_source}" in before) is direct
+
+
+@pytest.mark.parametrize("layout", ["site-packages", "dist-packages", "external-source"])
+@pytest.mark.parametrize("selected", [False, True])
+def test_native_loading_manifest_excludes_non_repository_sources(tmp_path, monkeypatch, layout, selected):
+    import pytest_codex_evals.report as report_module
+
+    root = tmp_path / "repo"
+    skill = root / "skills/sample-skill"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text("name: sample-skill\n")
+    fixture = root / "evals/python/example"
+    definitions = fixture / "eval/qual"
+    definitions.mkdir(parents=True)
+    definition = definitions / "native.json"
+    definition.write_text(json.dumps({"skill": "sample-skill", "prompts": [
+        {"id": "direct", "task": "$sample-skill ./service", "eval_inputs": []},
+    ], "rubric": ["Accurate"]}))
+    kwargs = {"definition_path": definition, "fixture_dir": fixture, "prompt_id": "direct", "eval_inputs": []} if selected else {}
+    expected = source_input_digests(root, "sample-skill", "rubric", skill, **kwargs)
+    package = (tmp_path / "external/src/pytest_codex_evals" if layout == "external-source"
+               else root / f".venv/lib/python3.12/{layout}/pytest_codex_evals")
+    (package / "graders").mkdir(parents=True)
+    (package.parent.parent / "pyproject.toml").write_text('[project]\nname = "pytest-codex-evals"\n')
+    for relative in ("ab.py", "report.py", "runner.py", "graders/shared.py"):
+        (package / relative).write_text("installed package source\n")
+    monkeypatch.setattr(report_module, "__file__", str(package / "report.py"))
+
+    assert source_input_digests(root, "sample-skill", "rubric", skill, **kwargs) == expected
 
 
 def test_codex_subprocess_env_uses_sandbox_local_package_caches(
@@ -1385,6 +1417,7 @@ def bare_cli_skill(tmp_path, monkeypatch):
     [("/bin/zsh -lc \"pwd && rg --files -g AGENTS.md -g SKILL.md .agents service .observe 2>/dev/null\"", 2, "file names"),
      ("cat CONTRIBUTING.md && cat .agents/skills/otel-audit/SKILL.md", 1, "missing CONTRIBUTING.md")],
     [("ls -la", 0, "file names"), ("cat AGENTS.md", 0, "project instructions")],
+    [("rg --files -g '**/AGENTS.md' service .agents", 0, "file names")],
 ])
 def test_bare_cli_skill_read_allows_only_bootstrap_before_complete_source(tmp_path, bare_cli_skill, before):
     target, _ = bare_cli_skill
@@ -1407,6 +1440,8 @@ def test_bare_cli_skill_read_allows_only_bootstrap_before_complete_source(tmp_pa
     "./service/ls", "./service/rg --files", "./service/cat AGENTS.md", "./service/sh -c pwd",
     "cat service/app.py && cat .agents/skills/otel-audit/SKILL.md",
     "ls > service/output", "ls $(touch service/app.py)", "ls 2> service/error",
+    "ls ~", "cat ~/AGENTS.md", "cat service*/AGENTS.md", "cat service?/AGENTS.md",
+    "cat service[12]/AGENTS.md", "cat {service1,service2}/AGENTS.md",
 ])
 def test_bare_cli_bootstrap_cannot_hide_task_actions_or_execution(tmp_path, bare_cli_skill, command):
     target, _ = bare_cli_skill
@@ -1495,7 +1530,14 @@ def test_bound_bare_task_combined_instruction_and_skill_read(tmp_path, bare_cli_
 
 @pytest.mark.parametrize("backend_name", ["codex", "claude", "cursor"])
 @pytest.mark.parametrize("task", ["$sample-skill", "$sample-skill ./service"])
-def test_run_case_selects_native_prompt_only_for_codex(tmp_path, backend_name, task):
+@pytest.mark.parametrize("home", ["configured", "unset", "blank"])
+def test_run_case_selects_native_prompt_only_with_codex_proof_home(tmp_path, monkeypatch, backend_name, task, home):
+    if home == "configured":
+        monkeypatch.setenv("CODEX_EVAL_HOME", str(tmp_path))
+    elif home == "blank":
+        monkeypatch.setenv("CODEX_EVAL_HOME", " \t ")
+    else:
+        monkeypatch.delenv("CODEX_EVAL_HOME", raising=False)
     fixture = tmp_path / "fixture"
     fixture.mkdir()
     skill = tmp_path / "skills/sample-skill"
@@ -1524,7 +1566,7 @@ def test_run_case_selects_native_prompt_only_for_codex(tmp_path, backend_name, t
     )
 
     loaded, baseline = backend.prompts
-    if backend_name == "codex":
+    if backend_name == "codex" and home == "configured":
         assert loaded == task
     else:
         assert loaded.startswith("Use the $sample-skill skill.")

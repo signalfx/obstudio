@@ -240,6 +240,8 @@ def bare_task_bootstrap(
             else:
                 return False, False
             for value in paths:
+                if value.startswith("~") or any(character in value for character in "*?[]{}"):
+                    return False, False
                 path = Path(value)
                 resolved = (path if path.is_absolute() else run_dir / path).resolve()
                 if not resolved.is_relative_to(run_dir.resolve()):

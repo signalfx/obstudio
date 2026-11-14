@@ -87,16 +87,18 @@ use `{case_id}`, `{prompt_id}`, `{task}`, `{rubric}`, and `{inputs}` template
 fields. Use `judge_inputs` to tell the judge what artifacts matter for that
 skill; the default prompt does not assume every eval has service files.
 
-On the Codex backend, an exact `$skill-name` or `$skill-name ./service`
-with-skill task is sent unchanged. Other backends and all other wording keep
-the explicit loading wrapper and first-read check. Native loading proof uses
+On the Codex backend with `CODEX_EVAL_HOME` configured, an exact `$skill-name`
+or `$skill-name ./service` with-skill task is sent unchanged. Other backends,
+an unset or blank home, and all other wording keep the explicit loading wrapper
+and first-read check. Native loading proof uses
 the executed Codex session under `CODEX_EVAL_HOME`, which must be outside the
 actor's writable sandbox, including its workspace and temporary directories.
 It accepts complete pre-assistant skill input only when the executed thread,
 workspace, path and content match the staged source. Bound bare tasks may
 instead discover file names and read project instructions before a complete
 source-matching skill read; application reads, edits or execution must follow
-that read. Without bound session proof, the first-read check still applies.
+that read. Bootstrap paths must be literal workspace paths; `rg --files` glob
+filters remain supported. Without bound session proof, the first-read check still applies.
 Baseline prompts are unchanged.
 
 Sanity checks can assert final text, files, trace command evidence, or
