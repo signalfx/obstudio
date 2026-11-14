@@ -799,16 +799,16 @@ def test_collected_strict_grading_preserves_legacy_skip_and_failure_isolation(py
                 stderr.write_text("")
                 return AgentResult(0, trace, final, stderr)
 
-            def run_judge(self, *, exec_dir, schema_path, **kwargs):
+            def run_judge(self, *, exec_dir, schema_path, output_dir=None, **kwargs):
                 with Path({str(calls)!r}).open("a") as output:
                     output.write("judge\\n")
-                trace, grade, stderr = [exec_dir / name for name in ("rubric_trace.jsonl", "rubric_grade.json", "rubric_stderr.txt")]
+                trace, grade, stderr = [(output_dir or exec_dir) / name for name in ("rubric_trace.jsonl", "rubric_grade.json", "rubric_stderr.txt")]
                 trace.write_text("")
                 stderr.write_text("controlled judge diagnostic")
                 if schema_path.name == "rubric_dimension_grade.schema.json":
                     criterion = "rubric-1"
                     if {contract!r} == "strict-middle-error":
-                        criterion = "rubric-" + exec_dir.name.rsplit("-", 1)[1]
+                        criterion = "rubric-" + output_dir.name.rsplit("-", 1)[1]
                         if criterion == "rubric-2":
                             raise RuntimeError("middle judge unavailable")
                     payload = {{"checks": [{{

@@ -189,7 +189,7 @@ def run_side(
         except Exception as exc:  # pragma: no cover - preserved in run artifacts
             result.errors.append(f"rubric grading failed: {exc}")
         finally:
-            result.rubric_duration_seconds = round(time.monotonic() - rubric_start, 3)
+            result.rubric_duration_seconds = time.monotonic() - rubric_start
             if strict:
                 rubric_result = output_dir / "rubric_result.json"
                 if rubric_result.is_file():

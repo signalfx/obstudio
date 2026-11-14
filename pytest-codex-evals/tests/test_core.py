@@ -36,6 +36,7 @@ from pytest_codex_evals.backends import (
     AgentResult,
     ClaudeBackend,
     CodexBackend,
+    CursorBackend,
     StreamedCommandResult,
     _codex_subprocess_env,
     _extract_claude_final_message,
@@ -4852,11 +4853,13 @@ class RecordingBackend:
         model: str | None = None,
         schema_path: Path | None = None,
         timeout: int = 900,
+        output_dir: Path | None = None,
+        read_dirs: tuple[Path, ...] = (),
     ) -> AgentResult:
         self.judge_timeouts.append(timeout)
-        trace_path = exec_dir / "rubric_trace.jsonl"
-        output_path = exec_dir / "rubric_grade.json"
-        stderr_path = exec_dir / "rubric_stderr.txt"
+        trace_path = (output_dir or exec_dir) / "rubric_trace.jsonl"
+        output_path = (output_dir or exec_dir) / "rubric_grade.json"
+        stderr_path = (output_dir or exec_dir) / "rubric_stderr.txt"
         trace_path.write_text(
             json.dumps({"type": "turn.completed", "usage": {"total_tokens": 1}}) + "\n",
             encoding="utf-8",
@@ -4988,11 +4991,13 @@ class DimensionBackend(RecordingBackend):
         self.outputs = outputs
         self.hook = hook
         self.directories = []
+        self.output_directories = []
         self.prompts = []
 
     def run_judge(self, **kwargs):
         index = len(self.directories)
         self.directories.append(kwargs["exec_dir"])
+        self.output_directories.append(kwargs["output_dir"])
         self.prompts.append(kwargs["prompt"])
         result = super().run_judge(**kwargs)
         output = self.outputs[index]
@@ -5038,7 +5043,10 @@ def test_dimension_grading_keeps_independent_artifacts_and_continues_after_error
     for index, (directory, prompt, dimension) in enumerate(zip(
         backend.directories, backend.prompts, data["dimensions"], strict=True,
     ), 1):
-        assert directory == path.parent / f"dimension-{index}"
+        assert backend.output_directories[index - 1] == path.parent / f"dimension-{index}"
+        assert not directory.resolve().is_relative_to(path.parent)
+        assert not directory.resolve().is_relative_to(workspace.resolve())
+        assert not directory.exists()
         assert str(workspace.resolve()) in prompt
         assert f"rubric-{index}: Requirement {index}." in prompt
         assert all(f"rubric-{other}:" not in prompt for other in range(1, 4) if other != index)
@@ -5194,11 +5202,11 @@ def test_dimension_grading_requires_artifacts_owned_by_that_judge(tmp_path, plac
     workspace = tmp_path / "task"
     workspace.mkdir()
     def relocate(index, kwargs, result):
-        root = kwargs["exec_dir"] if placement == "custom" else tmp_path
+        root = kwargs["output_dir"] if placement == "custom" else tmp_path
         output = root / "custom-output.json"
         output.write_text(json.dumps(dimension_grade("pass")))
         if placement == "symlink":
-            link = kwargs["exec_dir"] / "linked.json"
+            link = kwargs["output_dir"] / "linked.json"
             link.symlink_to(output)
             output = link
         return AgentResult(0, result.trace_path, output, result.stderr_path)
@@ -5212,7 +5220,7 @@ def test_dimension_grading_requires_artifacts_owned_by_that_judge(tmp_path, plac
         assert dimension["artifacts"]["output"] == "dimension-1/custom-output.json"
     else:
         assert data["status"] == "incomplete"
-        assert "inside their own working directory" in dimension["error"]
+        assert "inside their own output directory" in dimension["error"]
 
 
 @pytest.mark.parametrize("missing", ["metadata", "grade"])
@@ -5281,6 +5289,27 @@ def test_dimension_grading_rechecks_budget_after_preparing_prompt(tmp_path, monk
     assert not backend.directories
     assert data["dimensions"][0]["status"] == "not_run"
     assert "budget exhausted" in data["dimensions"][0]["error"]
+
+
+def test_dimension_grading_refuses_temporary_cwd_inside_a_repository(tmp_path, monkeypatch):
+    import tempfile
+
+    repository = tmp_path / "consumer"
+    (repository / ".git").mkdir(parents=True)
+    temporary = repository / "tmp"
+    temporary.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(temporary))
+    workspace = tmp_path / "task"
+    workspace.mkdir()
+    backend = DimensionBackend([])
+    path = run_rubric_dimensions(case=dimension_case(1), workspace_dir=workspace, output_dir=tmp_path / "grades",
+                                 model=None, deadline=time.monotonic() + 30, backend=backend)
+    data = json.loads(path.read_text())
+    assert not backend.directories
+    assert data["status"] == "incomplete"
+    assert data["counts"]["ungraded"] == 1
+    assert "temporary location outside" in data["dimensions"][0]["error"]
+    assert not list(temporary.iterdir())
 
 
 @pytest.mark.parametrize("failure", ["mutation", "interruption"])
@@ -5378,3 +5407,76 @@ def test_strict_results_survive_reports_without_hiding_gaps_or_missing_usage(tmp
         assert loaded["overall_pass"] is False
         assert "1 not proven" in report
         assert "NOT_PROVEN" in report
+
+
+@pytest.mark.parametrize('extra_result', [None, 7, 'pass', 'not_applicable'])
+def test_custom_schema_metadata_does_not_change_legacy_failure_reporting(tmp_path, extra_result):
+    case = RubricEvalCase(id='sample/service/direct', base_id='sample/service', prompt_id='direct',
+                         skill='sample-skill', language='sample', service='service', task='Assess.',
+                         rubric=['Correct output.'])
+    payload = {'overall_pass': True, 'score': 0, 'checks': [
+        {'id': 'quality', 'pass': False, 'result': extra_result,
+         'notes': 'Observed failure.', 'evidence': 'answer.md:1'},
+    ]}
+    schema = tmp_path / 'custom.schema.json'
+    schema.write_text(json.dumps({'type': 'object', 'required': ['overall_pass', 'score', 'checks']}))
+    class Backend:
+        def run_judge(self, **kwargs):
+            output = tmp_path / 'rubric_grade.json'
+            output.write_text(json.dumps(payload))
+            return AgentResult(0, tmp_path / 'trace.jsonl', output, tmp_path / 'stderr.txt')
+    grade = run_rubric_grade(case=case, side_dir=tmp_path, schema_path=schema, model=None, backend=Backend())
+    side = SideResult(side='with_skill', exit_code=0, trace_path='trace.jsonl', final_message_path='last_message.md',
+                      grade=GradeResult(), rubric_grade_path=str(grade))
+    result = CaseResult(id=case.id, base_id=case.base_id, prompt_id=case.prompt_id, skill=case.skill,
+                        language=case.language, service=case.service, with_skill=side)
+    run_root = tmp_path / '.workspace/codex-evals/sample-skill/run'
+    write_session_results([{'mode': 'with_skill', 'eval_kind': 'rubric', 'repo_root': tmp_path,
+                            'run_root': run_root, 'skill': 'sample-skill', 'results': [result]}])
+    report, benchmark = render_reports_for_run_root(run_root, 'rubric')
+    assert 'rubric:quality FAIL' in report.read_text()
+    assert json.loads(benchmark.read_text())['evals'][0]['with_skill']['rubric']['passed'] == 0
+
+
+@pytest.mark.parametrize("backend_type", [CodexBackend, CursorBackend, ClaudeBackend])
+@pytest.mark.parametrize("separate_output", [False, True])
+def test_judge_backends_keep_working_directory_output_and_read_access_separate(tmp_path, monkeypatch, backend_type, separate_output):
+    working = tmp_path / "working"
+    output = tmp_path / "output" if separate_output else working
+    evidence = tmp_path / "evidence"
+    for directory in {working, output, evidence}:
+        directory.mkdir()
+    payload = dimension_grade("pass")
+    calls = []
+    def fake_run(command, **kwargs):
+        calls.append((command, kwargs))
+        if "--output-last-message" in command:
+            Path(command[command.index("--output-last-message") + 1]).write_text(json.dumps(payload))
+        return subprocess.CompletedProcess(command, 0, stdout=json.dumps({"result": json.dumps(payload)}), stderr="diagnostic")
+    monkeypatch.setattr("pytest_codex_evals.backends.subprocess.run", fake_run)
+    backend = backend_type(command="judge-cli", extra_args=["--test-extra"])
+    result = backend.run_judge(prompt="Grade it.", exec_dir=working, model="judge-model", timeout=17,
+                               output_dir=output if separate_output else None,
+                               read_dirs=(evidence,) if separate_output else ())
+    command, options = calls[0]
+    assert result.final_message_path == output / "rubric_grade.json"
+    assert json.loads(result.final_message_path.read_text()) == payload
+    assert result.trace_path == output / "rubric_trace.jsonl"
+    assert result.trace_path.is_file()
+    assert result.stderr_path.read_text() == "diagnostic"
+    assert options["timeout"] == 17
+    assert "--test-extra" in command
+    assert command[command.index("--model") + 1] == "judge-model"
+    if backend_type is ClaudeBackend:
+        assert options["cwd"] == working
+        assert ("--add-dir" in command) is separate_output
+        assert ("--setting-sources" in command) is separate_output
+        if separate_output:
+            assert command[command.index("--add-dir") + 1] == str(evidence)
+            assert command[command.index("--setting-sources") + 1] == "user"
+            assert command.index("--setting-sources") < command.index("--test-extra")
+    else:
+        assert command[command.index("--cd") + 1] == str(working)
+        assert options["cwd"] == (working if separate_output else None)
+    if separate_output:
+        assert not list(working.iterdir())

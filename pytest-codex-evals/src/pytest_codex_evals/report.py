@@ -1923,7 +1923,10 @@ def collect_failures(results: list[CaseResult]) -> list[dict[str, str]]:
                 continue
             rubric_failures = 0
             for check in rubric.get("checks", []):
-                if bool(check.get("pass")) or check.get("result") in {"pass", "not_applicable"}:
+                verdict = "pass" if check.get("pass") else "fail"
+                if rubric.get("mode") == "dimensions":
+                    verdict = check["result"]
+                if verdict in {"pass", "not_applicable"}:
                     continue
                 rubric_failures += 1
                 failures.append(
@@ -1932,7 +1935,7 @@ def collect_failures(results: list[CaseResult]) -> list[dict[str, str]]:
                         "side": side_key,
                         "prompt": result.prompt_id,
                         "category": "rubric",
-                        "result": f"rubric:{check.get('id', 'check')} {check.get('result', 'fail').upper()}",
+                        "result": f"rubric:{check.get('id', 'check')} {verdict.upper()}",
                         "evidence": str(check.get("evidence") or check.get("notes") or ""),
                     }
                 )
@@ -2149,8 +2152,7 @@ def load_rubric_grade(side: SideResult) -> dict[str, Any] | None:
     data = json.loads(path.read_text(encoding="utf-8"))
     checks = data.get("checks") or []
     passed = sum(1 for check in checks if bool(check.get("pass")))
-    score = data.get("score")
-    score = normalize_rubric_score(score, passed, len(checks))
+    score = normalize_rubric_score(data.get("score"), passed, len(checks))
     normalized = {
         "overall_pass": data.get("overall_pass"),
         "score": score,

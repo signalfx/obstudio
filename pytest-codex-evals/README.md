@@ -112,7 +112,8 @@ supported. Moving unchanged requirements into a base is not new semantic coverag
 Enable `strict_rubric_output` to require a result, explanation and evidence for
 every checklist item. Add `rubric_dimensions` to divide the checklist among
 focused judges that inspect the same completed task. The agent runs once;
-each group gets a separate judge call and raw output directory. Without groups,
+each group gets a separate judge call, temporary working directory, and retained
+output directory. Without groups,
 one judge grades the whole checklist. For example, an inline definition can use:
 
 ```json
@@ -158,7 +159,13 @@ The existing `run_rubric_grade` API and output schema serve non-strict callers.
 All groups share the existing `judge_timeout` budget; calls receive the remaining
 whole seconds, with no retries. Backend startup, cleanup and filesystem work can
 exceed that deadline. Fresh judge working directories and prompts separate judge
-outputs from candidate evidence. Stat checks detect ordinary local file changes,
+outputs from candidate evidence. Working directories use the system temporary
+location to avoid inheriting the consumer repository's instructions. Strict
+grading refuses a temporary location inside a Git repository. Strict
+Claude calls explicitly grant access to the task directory and exclude its
+project settings from discovery; explicit backend extra arguments still apply.
+Global and managed host instructions remain subject to the backend's behavior.
+Stat checks detect ordinary local file changes,
 discard the affected verdict and stop later judges. They do not detect reads,
 changes outside the task tree, changes behind symlinks, or edits that preserve
 size and timestamps. Actual read-only enforcement belongs to the backend.
@@ -168,6 +175,10 @@ four-result response format; custom output schemas remain a non-strict feature.
 Existing non-strict prompts, grading and score normalization remain unchanged.
 Usage totals are complete only when every attempted judge supplies them; flat
 token totals sum known usage, and reports retain missing-usage coverage.
+Custom backends using strict grading must support the optional `output_dir` and
+`read_dirs` judge arguments: write raw artifacts to the supplied output directory
+and permit evidence reads from the supplied directories. Existing non-strict
+calls omit both arguments and keep their existing working-directory behavior.
 
 This supports focused graders and partial credit described in
 [Anthropic's agent eval guidance](https://www.anthropic.com/research/demystifying-evals-for-ai-agents).
