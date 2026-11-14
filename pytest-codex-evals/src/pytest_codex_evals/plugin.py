@@ -9,7 +9,7 @@ from jsonschema.exceptions import ValidationError as JSONSchemaValidationError
 
 from .backends import AgentBackend, create_backend
 from .config import CodexEvalSettings, load_settings
-from .eval_files import eval_file_layout, is_eval_file, iter_eval_files
+from .eval_files import eval_file_layout, is_eval_file, iter_eval_files, resolve_rubric_definition
 from .definitions import (
     CaseResult,
     EvalCase,
@@ -251,6 +251,7 @@ class CodexEvalItem(pytest.Item):
 
         sides = sides_for_mode(mode)
         run = session_run(self.config, repo_root, self.case.skill, mode, kind)
+        grading_requested = rubric_enabled(self.config)
         result = run_case(
             repo_root=repo_root,
             run_root=run["run_root"],
@@ -258,7 +259,7 @@ class CodexEvalItem(pytest.Item):
             skill_dir=skill_dir,
             model=agent_model(self.config),
             judge_model=judge_model(self.config),
-            rubric=rubric_enabled(self.config),
+            rubric=grading_requested,
             runtime=runtime_enabled(self.config),
             eval_kind=kind,
             sides=sides,
@@ -267,7 +268,11 @@ class CodexEvalItem(pytest.Item):
             judge_timeout=judge_timeout(self.config),
         )
         run["results"].append(result)
-        validate_live_result(result)
+        validate_live_result(
+            result,
+            require_valid_rubric=(grading_requested and isinstance(self.case, RubricEvalCase)
+                                  and self.case.strict_rubric_output),
+        )
 
     def reportinfo(self):
         return self.path, 0, self.name
@@ -278,6 +283,8 @@ def load_eval_definition(path: Path) -> EvalDefinition:
     data = with_path_defaults(path, data)
     role = eval_role(path)
     schema_validator(schema_name_for_role(role)).validate(data)
+    if role == "rubric":
+        data = resolve_rubric_definition(path, data)
     definition = definition_model_for_role(role).model_validate(data)
     definition.definition_path = path
     definition.fixture_dir = eval_fixture_dir(path)
@@ -301,7 +308,11 @@ def case_from_definition(definition: EvalDefinition, prompt: PromptVariant, path
     if isinstance(definition, SanityEvalDefinition):
         return SanityEvalCase(**common, checks=definition.checks)
     if isinstance(definition, RubricEvalDefinition):
-        return RubricEvalCase(**common, rubric=definition.rubric, judge_prompt=definition.judge_prompt, judge_inputs=definition.judge_inputs)
+        return RubricEvalCase(
+            **common, rubric=definition.rubric, judge_prompt=definition.judge_prompt,
+            judge_inputs=definition.judge_inputs, strict_rubric_output=definition.strict_rubric_output,
+            rubric_dimensions=definition.rubric_dimensions,
+        )
     if isinstance(definition, RuntimeEvalDefinition):
         return RuntimeEvalCase(**common, checks=definition.checks)
     raise TypeError(f"unsupported eval definition: {type(definition).__name__}")
@@ -649,8 +660,22 @@ def _create_backend(config: pytest.Config) -> AgentBackend:
     return create_backend(name=backend_name, command=command, extra_args=extra_args)
 
 
-def validate_live_result(result: CaseResult) -> None:
+def validate_live_result(result: CaseResult, *, require_valid_rubric: bool = False) -> None:
     failures: list[str] = []
+    if require_valid_rubric:
+        for label, side in (("with_skill", result.with_skill), ("baseline", result.baseline)):
+            if side is None:
+                continue
+            valid = False
+            if side.rubric_result_path:
+                try:
+                    data = json.loads(Path(side.rubric_result_path).read_text(encoding="utf-8"))
+                    valid = data["status"] == "complete"
+                except (OSError, ValueError, KeyError, TypeError):
+                    pass
+            if not valid:
+                detail = "; ".join(side.errors) or "no valid rubric output"
+                failures.append(f"{label} rubric grading failed: {detail}")
     if result.with_skill is not None and result.with_skill.exit_code != 0:
         failures.append(f"with_skill exited {result.with_skill.exit_code}")
     if result.baseline is not None and result.baseline.exit_code != 0:

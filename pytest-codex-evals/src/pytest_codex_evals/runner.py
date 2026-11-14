@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import shutil
 import tempfile
 import time
@@ -18,7 +19,7 @@ from .eval_files import (
     staged_skill_source_files,
 )
 from .graders import grade_side
-from .graders.rubric import run_rubric_grade
+from .graders.rubric import run_rubric_dimensions, run_rubric_grade
 from .trace import TraceUsage, UsageProvider
 
 
@@ -150,86 +151,104 @@ def run_side(
     grade_path = exec_dir / "grade.json"
     grade_path.write_text(grade.model_dump_json(indent=2), encoding="utf-8")
 
-    rubric_path: Path | None = None
-    rubric_duration_seconds = 0.0
-    rubric_tokens = 0
-    rubric_usage: TokenUsage | None = None
-    errors: list[str] = []
-    if agent_result.returncode != 0:
-        errors.append(f"{backend.name} exited with {agent_result.returncode}")
-    if rubric and isinstance(case, RubricEvalCase) and case.rubric:
-        rubric_usage = TokenUsage(provider=usage_provider_for_backend(backend))
-        rubric_start = time.monotonic()
-        try:
-            rubric_path = run_rubric_grade(
-                case=case,
-                side_dir=exec_dir,
-                model=judge_model or model,
-                backend=backend,
-                timeout=judge_timeout,
-            )
-        except Exception as exc:  # pragma: no cover - preserved in run artifacts
-            errors.append(f"rubric grading failed: {exc}")
-        finally:
-            rubric_duration_seconds = time.monotonic() - rubric_start
-            rubric_trace_path = exec_dir / "rubric_trace.jsonl"
-            if rubric_trace_path.exists():
-                try:
-                    rubric_usage = token_usage_from_trace_usage(
-                        backend.parse_trace(rubric_trace_path).usage
-                    )
-                    rubric_tokens = flat_token_total(rubric_usage)
-                except Exception as exc:  # pragma: no cover - preserved in run artifacts
-                    errors.append(f"rubric trace parsing failed: {exc}")
-
-    if artifact_dir.exists():
-        shutil.rmtree(artifact_dir)
-    shutil.copytree(exec_dir, artifact_dir, symlinks=True)
-
-    artifact_trace_path = artifact_dir / "trace.jsonl"
-    artifact_final_path = artifact_dir / "last_message.md"
-    artifact_rubric_path = artifact_dir / "rubric_grade.json"
-    artifact_rubric_trace_path = artifact_dir / "rubric_trace.jsonl"
-
+    strict = isinstance(case, RubricEvalCase) and case.strict_rubric_output
     result = SideResult(
-        side=side,
-        exit_code=agent_result.returncode,
-        trace_path=str(artifact_trace_path),
-        final_message_path=str(artifact_final_path),
-        grade=grade,
-        rubric_grade_path=str(artifact_rubric_path) if rubric_path else None,
-        rubric_trace_path=str(artifact_rubric_trace_path) if rubric_path else None,
+        side=side, exit_code=agent_result.returncode,
+        trace_path=str(artifact_dir / "trace.jsonl"),
+        final_message_path=str(artifact_dir / "last_message.md"),
+        grade=grade, strict_rubric_output=strict,
         command_count=len(trace.commands),
-        duration_seconds=round(time.monotonic() - side_start, 3),
         agent_duration_seconds=round(agent_duration_seconds, 3),
-        rubric_duration_seconds=round(rubric_duration_seconds, 3),
-        tokens=agent_tokens + rubric_tokens,
-        agent_tokens=agent_tokens,
-        rubric_tokens=rubric_tokens,
-        agent_usage=agent_usage,
-        rubric_usage=rubric_usage,
-        errors=errors,
+        tokens=agent_tokens, agent_tokens=agent_tokens, agent_usage=agent_usage,
     )
+    if agent_result.returncode != 0:
+        result.errors.append(f"{backend.name} exited with {agent_result.returncode}")
+    if strict:
+        retain_side_workspace(exec_dir, artifact_dir)
+        (artifact_dir / "summary.json").write_text(result.model_dump_json(indent=2), encoding="utf-8")
+    if rubric and isinstance(case, RubricEvalCase) and case.rubric:
+        rubric_start = time.monotonic()
+        output_dir = artifact_dir.with_name(artifact_dir.name + ".rubric")
+        try:
+            if strict:
+                if output_dir.exists():
+                    shutil.rmtree(output_dir)
+                run_rubric_dimensions(
+                    case=case, workspace_dir=exec_dir, output_dir=output_dir,
+                    model=judge_model or model, backend=backend,
+                    deadline=rubric_start + judge_timeout,
+                )
+            else:
+                result.rubric_usage = TokenUsage(provider=usage_provider_for_backend(backend))
+                run_rubric_grade(
+                    case=case, side_dir=exec_dir, model=judge_model or model,
+                    backend=backend, timeout=judge_timeout,
+                )
+                result.rubric_grade_path = str(artifact_dir / "rubric_grade.json")
+                result.rubric_trace_path = str(artifact_dir / "rubric_trace.jsonl")
+        except Exception as exc:  # pragma: no cover - preserved in run artifacts
+            result.errors.append(f"rubric grading failed: {exc}")
+        finally:
+            result.rubric_duration_seconds = round(time.monotonic() - rubric_start, 3)
+            if strict:
+                rubric_result = output_dir / "rubric_result.json"
+                if rubric_result.is_file():
+                    result.rubric_result_path = str(rubric_result)
+                    data = json.loads(rubric_result.read_text(encoding="utf-8"))
+                    result.rubric_usage, result.rubric_tokens = dimension_usage(data, backend)
+                    if data["status"] != "complete":
+                        details = "; ".join(f"{row['id']}: {row['error']}" for row in data["dimensions"] if row["error"])
+                        result.errors.append(f"rubric grading failed: {details}")
+                result.tokens = agent_tokens + result.rubric_tokens
+                result.duration_seconds = round(time.monotonic() - side_start, 3)
+                (artifact_dir / "summary.json").write_text(result.model_dump_json(indent=2), encoding="utf-8")
+            elif (exec_dir / "rubric_trace.jsonl").exists():
+                try:
+                    result.rubric_usage = token_usage_from_trace_usage(
+                        backend.parse_trace(exec_dir / "rubric_trace.jsonl").usage
+                    )
+                    result.rubric_tokens = flat_token_total(result.rubric_usage)
+                except Exception as exc:  # pragma: no cover - preserved in run artifacts
+                    result.errors.append(f"rubric trace parsing failed: {exc}")
+
+    if not strict:
+        retain_side_workspace(exec_dir, artifact_dir)
+    result.tokens = agent_tokens + result.rubric_tokens
+    result.duration_seconds = round(time.monotonic() - side_start, 3)
     (artifact_dir / "summary.json").write_text(result.model_dump_json(indent=2), encoding="utf-8")
     return result
 
 
-def token_usage_from_trace_usage(usage: TraceUsage) -> TokenUsage:
-    return TokenUsage(
-        provider=usage.provider,
-        source=usage.source,
-        observed=usage.observed,
-        usage_record_count=usage.usage_record_count,
-        selected_record_count=usage.selected_record_count,
-        input_tokens=usage.input_tokens,
-        cached_input_tokens=usage.cached_input_tokens,
-        cache_creation_input_tokens=usage.cache_creation_input_tokens,
-        output_tokens=usage.output_tokens,
-        reasoning_output_tokens=usage.reasoning_output_tokens,
-        provider_total_tokens=usage.provider_total_tokens,
-        derived_total_tokens=usage.derived_total_tokens,
-        effective_total_tokens=usage.total_tokens,
+def retain_side_workspace(exec_dir: Path, artifact_dir: Path) -> None:
+    if artifact_dir.exists():
+        shutil.rmtree(artifact_dir)
+    shutil.copytree(exec_dir, artifact_dir, symlinks=True)
+
+
+def dimension_usage(data: dict, backend: AgentBackend) -> tuple[TokenUsage | None, int]:
+    usages = [TokenUsage.model_validate(row["usage"]) if row["usage"] else
+              TokenUsage(provider=usage_provider_for_backend(backend))
+              for row in data["dimensions"] if row["timeout_seconds"] > 0]
+    if not usages:
+        return None, 0
+    fields = {}
+    for name in TokenUsage.model_fields:
+        if name.endswith("_tokens"):
+            values = [getattr(usage, name) for usage in usages]
+            fields[name] = sum(values) if all(value is not None for value in values) else None
+    combined = TokenUsage(
+        provider=usages[0].provider if all(usage.provider == usages[0].provider for usage in usages) else "unknown",
+        source=usages[0].source if len(usages) == 1 else "incremental",
+        observed=any(usage.observed for usage in usages),
+        usage_record_count=sum(usage.usage_record_count for usage in usages),
+        selected_record_count=sum(usage.selected_record_count for usage in usages),
+        **fields,
     )
+    return combined, sum(flat_token_total(usage) for usage in usages)
+
+
+def token_usage_from_trace_usage(usage: TraceUsage) -> TokenUsage:
+    return TokenUsage.from_trace_usage(usage)
 
 
 def flat_token_total(usage: TokenUsage | None) -> int:

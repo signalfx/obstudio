@@ -44,6 +44,8 @@ class AgentBackend(Protocol):
         model: str | None = None,
         schema_path: Path | None = None,
         timeout: int = 900,
+        output_dir: Path | None = None,
+        read_dirs: tuple[Path, ...] = (),
     ) -> AgentResult: ...
 
     def parse_trace(self, trace_path: Path) -> TraceSummary: ...
@@ -367,10 +369,12 @@ class CodexBackend:
         model: str | None = None,
         schema_path: Path | None = None,
         timeout: int = 900,
+        output_dir: Path | None = None,
+        read_dirs: tuple[Path, ...] = (),
     ) -> AgentResult:
-        output_path = exec_dir / "rubric_grade.json"
-        trace_path = exec_dir / "rubric_trace.jsonl"
-        stderr_path = exec_dir / "rubric_stderr.txt"
+        output_path = (output_dir or exec_dir) / "rubric_grade.json"
+        trace_path = (output_dir or exec_dir) / "rubric_trace.jsonl"
+        stderr_path = (output_dir or exec_dir) / "rubric_stderr.txt"
 
         cmd = [
             self.command,
@@ -403,6 +407,7 @@ class CodexBackend:
             text=True,
             timeout=timeout,
             env=_judge_subprocess_env(_codex_subprocess_env(exec_dir)),
+            cwd=exec_dir if output_dir is not None else None,
         )
         trace_path.write_text(completed.stdout, encoding="utf-8")
         stderr_path.write_text(completed.stderr, encoding="utf-8")
@@ -504,10 +509,12 @@ class CursorBackend:
         model: str | None = None,
         schema_path: Path | None = None,
         timeout: int = 900,
+        output_dir: Path | None = None,
+        read_dirs: tuple[Path, ...] = (),
     ) -> AgentResult:
-        output_path = exec_dir / "rubric_grade.json"
-        trace_path = exec_dir / "rubric_trace.jsonl"
-        stderr_path = exec_dir / "rubric_stderr.txt"
+        output_path = (output_dir or exec_dir) / "rubric_grade.json"
+        trace_path = (output_dir or exec_dir) / "rubric_trace.jsonl"
+        stderr_path = (output_dir or exec_dir) / "rubric_stderr.txt"
 
         cmd = [
             self.command,
@@ -525,7 +532,10 @@ class CursorBackend:
             cmd.extend(["--model", model])
         cmd.append(prompt)
 
-        completed = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        completed = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=timeout,
+            cwd=exec_dir if output_dir is not None else None,
+        )
         trace_path.write_text(completed.stdout, encoding="utf-8")
         stderr_path.write_text(completed.stderr, encoding="utf-8")
 
@@ -625,10 +635,12 @@ class ClaudeBackend:
         model: str | None = None,
         schema_path: Path | None = None,
         timeout: int = 900,
+        output_dir: Path | None = None,
+        read_dirs: tuple[Path, ...] = (),
     ) -> AgentResult:
-        output_path = exec_dir / "rubric_grade.json"
-        trace_path = exec_dir / "rubric_trace.jsonl"
-        stderr_path = exec_dir / "rubric_stderr.txt"
+        output_path = (output_dir or exec_dir) / "rubric_grade.json"
+        trace_path = (output_dir or exec_dir) / "rubric_trace.jsonl"
+        stderr_path = (output_dir or exec_dir) / "rubric_stderr.txt"
 
         judge_prompt = prompt
         if schema_path:
@@ -645,8 +657,12 @@ class ClaudeBackend:
             "json",
             "--max-turns",
             "5",
-            *self.extra_args,
         ]
+        if read_dirs:
+            cmd.extend(["--setting-sources", "user"])
+            for directory in read_dirs:
+                cmd.extend(["--add-dir", str(directory)])
+        cmd.extend(self.extra_args)
         if model:
             cmd.extend(["--model", model])
 
