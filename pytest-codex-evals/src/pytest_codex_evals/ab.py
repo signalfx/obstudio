@@ -3,8 +3,10 @@ from __future__ import annotations
 from .definitions import EvalCase
 
 
-def side_prompt(case: EvalCase, side: str) -> str:
+def side_prompt(case: EvalCase, side: str, *, native_skill_invocation: bool = False) -> str:
     if side == "with_skill":
+        if native_skill_invocation and case.task in {f"${case.skill}", f"${case.skill} ./service"}:
+            return case.task
         return (
             f"Use the ${case.skill} skill. Before doing or saying anything else, run "
             f"exactly this one read-only command and wait for it to complete: cat "
