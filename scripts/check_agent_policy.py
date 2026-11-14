@@ -1503,6 +1503,7 @@ def _effective_rubric_definition(
 
     normalized = dict(definition)
     normalized.pop("id", None)
+    normalized.pop("rubric_dimensions", None)
     normalized["language"] = path.parts[1]
     normalized["service"] = path.parts[2]
     normalized.setdefault("judge_prompt", None)
@@ -1606,13 +1607,15 @@ def _resolve_rubric_for_policy(
         source = _rubric_base_reference(path, definition)
         if source is None:
             return definition
-        if any(key in definition for key in ("rubric", "judge_prompt", "judge_inputs", "strict_rubric_output")):
+        if any(key in definition for key in ("rubric", "judge_prompt", "judge_inputs", "strict_rubric_output", "rubric_dimensions")):
             raise ValueError("rubric_base cannot be combined with overridden common fields")
         text = _git_file_text(root, base_tree, source) if base_tree else _read(root / source, errors)
         if text is None:
             raise ValueError(f"cannot read rubric base {source}")
         base = json.loads(text)
-        if (not isinstance(base, dict) or set(base) != {"rubric", "judge_inputs", "strict_rubric_output"}
+        required = {"rubric", "judge_inputs", "strict_rubric_output"}
+        if (not isinstance(base, dict) or not required.issubset(base)
+                or set(base) - (required | {"rubric_dimensions"})
                 or not isinstance(base["rubric"], list) or not base["rubric"]
                 or any(not isinstance(item, str) or not item for item in base["rubric"])):
             raise ValueError(f"invalid rubric base {source}")

@@ -954,6 +954,34 @@ make -C evals --directory=. verify
         self._write(base_path, json.dumps(common))
         self.assertEqual(check_repository(self.root, "main"), [])
 
+    def test_regrouping_rubric_dimensions_is_not_new_requirement_coverage(self) -> None:
+        path = "evals/go/example/eval/qual/audit.json"
+        base_path = "evals/rubrics/common.json"
+        common = {
+            "rubric": ["The service starts.", "The original sink is preserved."],
+            "judge_inputs": [], "strict_rubric_output": True,
+            "rubric_dimensions": [{"id": "all", "criteria": ["rubric-1", "rubric-2"]}],
+        }
+        self._write(path, json.dumps({
+            "skill": "example", "prompts": [{"id": "direct", "task": "Task."}],
+            "rubric_base": "../../../../rubrics/common.json",
+        }))
+        self._write(base_path, json.dumps(common))
+        self._init_git()
+        self._write("skills/example/SKILL.md", "---\nname: example\n---\nChanged behavior.\n")
+        common["rubric_dimensions"] = [
+            {"id": "startup", "criteria": ["rubric-1"]},
+            {"id": "logging", "criteria": ["rubric-2"]},
+        ]
+        self._write(base_path, json.dumps(common))
+
+        errors = check_repository(self.root, "main")
+
+        self.assertTrue(any("effectively equivalent to the base tree" in error for error in errors))
+        common["rubric"][1] = "The original sink is preserved without duplicated records."
+        self._write(base_path, json.dumps(common))
+        self.assertEqual(check_repository(self.root, "main"), [])
+
     def test_extracting_inline_rubric_to_shared_base_is_not_semantic_coverage(self) -> None:
         path = "evals/go/example/eval/qual/audit.json"
         common = {"rubric": ["Common rule."], "judge_inputs": [], "strict_rubric_output": True}

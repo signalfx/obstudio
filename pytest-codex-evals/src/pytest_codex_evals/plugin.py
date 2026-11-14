@@ -311,6 +311,7 @@ def case_from_definition(definition: EvalDefinition, prompt: PromptVariant, path
         return RubricEvalCase(
             **common, rubric=definition.rubric, judge_prompt=definition.judge_prompt,
             judge_inputs=definition.judge_inputs, strict_rubric_output=definition.strict_rubric_output,
+            rubric_dimensions=definition.rubric_dimensions,
         )
     if isinstance(definition, RuntimeEvalDefinition):
         return RuntimeEvalCase(**common, checks=definition.checks)
@@ -663,7 +664,16 @@ def validate_live_result(result: CaseResult, *, require_valid_rubric: bool = Fal
     failures: list[str] = []
     if require_valid_rubric:
         for label, side in (("with_skill", result.with_skill), ("baseline", result.baseline)):
-            if side is not None and (not side.rubric_grade_path or not Path(side.rubric_grade_path).is_file()):
+            if side is None:
+                continue
+            valid = False
+            if side.rubric_result_path:
+                try:
+                    data = json.loads(Path(side.rubric_result_path).read_text(encoding="utf-8"))
+                    valid = data["status"] == "complete"
+                except (OSError, ValueError, KeyError, TypeError):
+                    pass
+            if not valid:
                 detail = "; ".join(side.errors) or "no valid rubric output"
                 failures.append(f"{label} rubric grading failed: {detail}")
     if result.with_skill is not None and result.with_skill.exit_code != 0:

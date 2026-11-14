@@ -5,8 +5,9 @@
   "required": ["skill", "prompts"],
   "oneOf": [
     { "required": ["rubric"], "not": { "anyOf": [{ "required": ["rubric_base"] }, { "required": ["rubric_additions"] }] } },
-    { "required": ["rubric_base"], "not": { "anyOf": [{ "required": ["rubric"] }, { "required": ["judge_prompt"] }, { "required": ["judge_inputs"] }, { "required": ["strict_rubric_output"] }] } }
+    { "required": ["rubric_base"], "not": { "anyOf": [{ "required": ["rubric"] }, { "required": ["judge_prompt"] }, { "required": ["judge_inputs"] }, { "required": ["strict_rubric_output"] }, { "required": ["rubric_dimensions"] }] } }
   ],
+  "allOf": [{"if": {"required": ["rubric_dimensions"]}, "then": {"required": ["strict_rubric_output"], "properties": {"strict_rubric_output": {"const": true}}}}],
   "additionalProperties": false,
   "properties": {
     "id": { "type": "string" },
@@ -28,6 +29,7 @@
     },
     "judge_prompt": { "type": "string", "minLength": 1 },
     "strict_rubric_output": { "type": "boolean", "default": false },
+    "rubric_dimensions": { "$ref": "#/$defs/dimensions" },
     "judge_inputs": {
       "type": "array",
       "items": { "type": "string", "minLength": 1 },
@@ -35,14 +37,42 @@
     }
   },
   "$defs": {
+    "dimensions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "criteria"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "criteria": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "pattern": "^rubric-[1-9][0-9]*$"
+            }
+          }
+        }
+      }
+    },
     "base": {
       "type": "object",
       "required": ["rubric", "judge_inputs", "strict_rubric_output"],
+      "allOf": [{"if": {"required": ["rubric_dimensions"]}, "then": {"required": ["strict_rubric_output"], "properties": {"strict_rubric_output": {"const": true}}}}],
       "additionalProperties": false,
       "properties": {
         "rubric": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
         "judge_inputs": { "type": "array", "items": { "type": "string", "minLength": 1 } },
-        "strict_rubric_output": { "type": "boolean" }
+        "strict_rubric_output": { "type": "boolean" },
+        "rubric_dimensions": { "$ref": "#/$defs/dimensions" }
       }
     }
   }

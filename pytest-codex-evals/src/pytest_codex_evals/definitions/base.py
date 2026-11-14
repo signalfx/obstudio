@@ -5,6 +5,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from ..trace import TraceUsage
 
 EvalRole = Literal["sanity", "rubric", "runtime"]
 CheckCategory = Literal["sanity", "runtime"]
@@ -169,6 +170,24 @@ class TokenUsage(BaseModel):
     derived_total_tokens: int | None = Field(default=None, ge=0)
     effective_total_tokens: int | None = Field(default=None, ge=0)
 
+    @classmethod
+    def from_trace_usage(cls, usage: TraceUsage) -> TokenUsage:
+        return cls(
+            provider=usage.provider,
+            source=usage.source,
+            observed=usage.observed,
+            usage_record_count=usage.usage_record_count,
+            selected_record_count=usage.selected_record_count,
+            input_tokens=usage.input_tokens,
+            cached_input_tokens=usage.cached_input_tokens,
+            cache_creation_input_tokens=usage.cache_creation_input_tokens,
+            output_tokens=usage.output_tokens,
+            reasoning_output_tokens=usage.reasoning_output_tokens,
+            provider_total_tokens=usage.provider_total_tokens,
+            derived_total_tokens=usage.derived_total_tokens,
+            effective_total_tokens=usage.total_tokens,
+        )
+
     @model_validator(mode="before")
     @classmethod
     def populate_missing_effective_total(cls, value: Any) -> Any:
@@ -209,6 +228,7 @@ class SideResult(BaseModel):
     grade: GradeResult
     rubric_grade_path: str | None = None
     rubric_trace_path: str | None = None
+    rubric_result_path: str | None = None
     strict_rubric_output: bool = False
     command_count: int = 0
     duration_seconds: float = 0.0

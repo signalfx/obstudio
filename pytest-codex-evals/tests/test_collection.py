@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 from jsonschema.exceptions import ValidationError
@@ -753,7 +754,7 @@ def test_prompt_eval_inputs_schema_rejects_unsafe_paths():
             schema_validator("rubric.schema.json").validate(payload)
 
 
-@pytest.mark.parametrize("contract", ["legacy", "strict-valid", "strict-invalid", "strict-disabled"])
+@pytest.mark.parametrize("contract", ["legacy", "strict-valid", "strict-fail", "strict-not-proven", "strict-na", "strict-invalid", "strict-middle-error", "strict-disabled"])
 def test_collected_strict_grading_preserves_legacy_skip_and_failure_isolation(pytester: pytest.Pytester, contract: str):
     write_eval_repo(pytester)
     sample = pytester.path / "evals/sample/service/eval/qual/sample.json"
@@ -762,9 +763,13 @@ def test_collected_strict_grading_preserves_legacy_skip_and_failure_isolation(py
         rubric = definition.pop("rubric")
         definition["rubric_base"] = "../../../../common.json"
         sample.write_text(json.dumps(definition))
-        (pytester.path / "evals/common.json").write_text(json.dumps({
-            "rubric": rubric, "judge_inputs": [], "strict_rubric_output": True,
-        }))
+        common = {"rubric": rubric, "judge_inputs": [], "strict_rubric_output": True}
+        if contract == "strict-middle-error":
+            common["rubric"] = ["Grade correctness.", "Grade evidence.", "Grade scope."]
+            common["rubric_dimensions"] = [
+                {"id": f"group-{index}", "criteria": [f"rubric-{index}"]} for index in range(1, 4)
+            ]
+        (pytester.path / "evals/common.json").write_text(json.dumps(common))
     other = pytester.path / "evals/sample/other"
     legacy = other / "eval/qual/other.json"
     definition = json.loads(legacy.read_text())
@@ -794,16 +799,29 @@ def test_collected_strict_grading_preserves_legacy_skip_and_failure_isolation(py
                 stderr.write_text("")
                 return AgentResult(0, trace, final, stderr)
 
-            def run_judge(self, *, exec_dir, **kwargs):
+            def run_judge(self, *, exec_dir, schema_path, **kwargs):
                 with Path({str(calls)!r}).open("a") as output:
                     output.write("judge\\n")
                 trace, grade, stderr = [exec_dir / name for name in ("rubric_trace.jsonl", "rubric_grade.json", "rubric_stderr.txt")]
                 trace.write_text("")
                 stderr.write_text("controlled judge diagnostic")
-                grade.write_text(json.dumps({{"overall_pass": True, "score": 100, "checks": [{{
-                    "id": {('rubric-1' if contract == 'strict-valid' else 'quality')!r},
-                    "pass": True, "notes": "Controlled verdict.", "evidence": "last_message.md:1",
-                }}]}}))
+                if schema_path.name == "rubric_dimension_grade.schema.json":
+                    criterion = "rubric-1"
+                    if {contract!r} == "strict-middle-error":
+                        criterion = "rubric-" + exec_dir.name.rsplit("-", 1)[1]
+                        if criterion == "rubric-2":
+                            raise RuntimeError("middle judge unavailable")
+                    payload = {{"checks": [{{
+                        "id": "quality" if {contract!r} == "strict-invalid" else criterion,
+                        "result": {({'strict-fail': 'fail', 'strict-not-proven': 'not_proven', 'strict-na': 'not_applicable'}.get(contract, 'pass'))!r},
+                        "notes": "Controlled verdict.", "evidence": "last_message.md:1",
+                    }}]}}
+                else:
+                    payload = {{"overall_pass": True, "score": 100, "checks": [{{
+                        "id": "quality", "pass": True,
+                        "notes": "Controlled verdict.", "evidence": "last_message.md:1",
+                    }}]}}
+                grade.write_text(json.dumps(payload))
                 return AgentResult(0, trace, grade, stderr)
 
             def parse_trace(self, trace_path):
@@ -817,7 +835,7 @@ def test_collected_strict_grading_preserves_legacy_skip_and_failure_isolation(py
     if contract == "strict-disabled":
         args.append("--no-rubric")
     result = pytester.runpytest(*args)
-    if contract == "strict-invalid":
+    if contract in {"strict-invalid", "strict-middle-error"}:
         result.assert_outcomes(failed=2, passed=1)
         assert "rubric grading failed" in result.stdout.str()
     else:
@@ -825,20 +843,42 @@ def test_collected_strict_grading_preserves_legacy_skip_and_failure_isolation(py
     if contract == "strict-disabled":
         assert not calls.exists()
     else:
-        assert calls.read_text().splitlines() == ["judge"] * 3
+        assert calls.read_text().splitlines() == ["judge"] * (7 if contract == "strict-middle-error" else 3)
     summaries = list(pytester.path.glob(".workspace/codex-evals/sample-skill/*/cases/sample/*/*/with_skill/summary.json"))
     assert len(summaries) == 3
     for path in summaries:
         summary = json.loads(path.read_text())
         strict = summary["strict_rubric_output"]
-        if strict and contract == "strict-invalid":
+        if strict and contract != "strict-disabled":
             assert summary["rubric_grade_path"] is None
-            assert summary["errors"]
-            assert (path.parent / "rubric_grade.json").exists()
-            assert (path.parent / "rubric_prompt.txt").exists()
-            assert (path.parent / "rubric_stderr.txt").read_text() == "controlled judge diagnostic"
+            result_path = Path(summary["rubric_result_path"])
+            grade = json.loads(result_path.read_text())
+            dimension = grade["dimensions"][0]
+            assert (result_path.parent / dimension["artifacts"]["output"]).exists()
+            assert (result_path.parent / dimension["artifacts"]["prompt"]).exists()
+            assert (result_path.parent / dimension["artifacts"]["stderr"]).read_text() == "controlled judge diagnostic"
+            if contract == "strict-invalid":
+                assert summary["errors"]
+                assert grade["status"] == "incomplete"
+                assert grade["checks"][0]["result"] == "ungraded"
+            elif contract == "strict-middle-error":
+                assert summary["errors"]
+                assert grade["status"] == "incomplete"
+                assert grade["overall_pass"] is None
+                assert [row["result"] for row in grade["checks"]] == ["pass", "ungraded", "pass"]
+                assert [row["status"] for row in grade["dimensions"]] == ["graded", "grader_error", "graded"]
+                assert "middle judge unavailable" in grade["dimensions"][1]["error"]
+            else:
+                assert not summary["errors"]
+                assert grade["status"] == "complete"
+                expected = {"strict-valid": "pass", "strict-fail": "fail",
+                            "strict-not-proven": "not_proven", "strict-na": "not_applicable"}[contract]
+                assert grade["checks"][0]["result"] == expected
+                assert grade["overall_pass"] == {"pass": True, "fail": False, "not_proven": False,
+                                                  "not_applicable": None}[expected]
         elif contract == "strict-disabled":
             assert summary["rubric_grade_path"] is None
-            assert not (path.parent / "rubric_prompt.txt").exists()
+            assert summary["rubric_result_path"] is None
+            assert not path.parent.with_name(path.parent.name + ".rubric").exists()
         else:
             assert summary["rubric_grade_path"] is not None
