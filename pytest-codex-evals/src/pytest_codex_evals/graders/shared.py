@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+import json
 import re
 import shlex
+import stat
 from pathlib import Path
 
+from pytest_codex_evals.ab import is_bare_skill_task
+from pytest_codex_evals.codex_home import resolve_eval_home
 from pytest_codex_evals.definitions import GradeCheckResult
 from pytest_codex_evals.trace import ActionEvent, TraceSummary
 
 
-def guard_checks(run_dir: Path, final_message: str, trace: TraceSummary, side: str, skill: str) -> list[GradeCheckResult]:
+def guard_checks(run_dir: Path, final_message: str, trace: TraceSummary, side: str, skill: str,
+                 *, native_skill_invocation: bool = False, comparison: bool = False) -> list[GradeCheckResult]:
     checks = [
         GradeCheckResult(
             id="final-message-present",
@@ -20,7 +25,15 @@ def guard_checks(run_dir: Path, final_message: str, trace: TraceSummary, side: s
     ]
     if side == "with_skill":
         checks.append(check_repo_skills_loaded(run_dir, skill))
-        checks.append(check_skill_instructions_read(run_dir, trace, skill))
+        if comparison:
+            checks.append(GradeCheckResult(
+                id="skill-instructions-read",
+                description="Instruction consumption is checked by separate single-side loading runs.",
+                passed=False, skipped=True,
+                evidence="Shared-prompt A/B measures skill availability without requiring a forced first read.",
+            ))
+        else:
+            checks.append(check_skill_instructions_read(run_dir, trace, skill, native_skill_invocation=native_skill_invocation))
     elif side == "baseline":
         checks.append(check_repo_skills_absent(run_dir))
         contaminated = trace_contains_skill_reference(trace, skill)
@@ -62,26 +75,102 @@ def check_skill_instructions_read(
     run_dir: Path,
     trace: TraceSummary,
     target_skill: str,
+    *, native_skill_invocation: bool = False,
 ) -> GradeCheckResult:
     target_path = (run_dir / ".agents" / "skills" / target_skill / "SKILL.md").resolve()
-    inspected = reads_complete_skill_before_other_actions(trace.actions, run_dir, target_path)
+    direct, native = (_native_skill_input(run_dir, trace, target_skill, target_path)
+                      if native_skill_invocation else (False, False))
+    inspected = reads_complete_skill_before_other_actions(
+        trace.actions, run_dir, target_path, allow_bootstrap=direct,
+        require_system_executables=native_skill_invocation or direct,
+    )
+    if native:
+        evidence = f"Executed native invocation injected the complete source-bound {target_skill}/SKILL.md before assistant actions"
+    elif inspected and direct:
+        evidence = f"Read complete {target_skill}/SKILL.md before application actions with only permitted bare-task bootstrap"
+    elif inspected:
+        evidence = f"Initial actions completely read {target_skill}/SKILL.md"
+    elif direct:
+        evidence = f"Complete source before task actions was not proven for {target_skill}/SKILL.md"
+    else:
+        evidence = f"Did not successfully read all of {target_skill}/SKILL.md before another action"
     return GradeCheckResult(
         id="skill-instructions-read",
-        description="Loaded side completely reads the target SKILL.md before any other task action.",
-        passed=inspected,
-        evidence=(
-            f"Initial actions completely read {target_skill}/SKILL.md"
-            if inspected
-            else f"Did not successfully read all of {target_skill}/SKILL.md before another action"
-        ),
+        description="Loaded side consumes the complete target SKILL.md before application task actions.",
+        passed=inspected or native,
+        evidence=evidence,
         category="sanity",
     )
+
+
+def _native_skill_input(
+    run_dir: Path, trace: TraceSummary, skill: str, target: Path,
+) -> tuple[bool, bool]:
+    """Return bound bare-task and pre-assistant complete-source input evidence."""
+    threads = [event.get("thread_id") for event in trace.events if event.get("type") == "thread.started"]
+    if len(threads) != 1 or not isinstance(threads[0], str) or not re.fullmatch(r"[A-Za-z0-9_-]+", threads[0]):
+        return False, False
+    try:
+        home = resolve_eval_home(run_dir, protected=True)
+        if home is None:
+            return False, False
+        session_root = home / "sessions"
+        if session_root.is_symlink():
+            return False, False
+        sessions = list(session_root.rglob("*" + threads[0] + ".jsonl"))
+        if len(sessions) != 1:
+            return False, False
+        session = sessions[0]
+        if not stat.S_ISREG(session.lstat().st_mode) or not session.resolve().is_relative_to(home):
+            return False, False
+        source = target.read_bytes().decode("utf-8").rstrip("\n")
+        bound, direct, injected, conflicting = False, False, False, False
+        metadata_seen = False
+        with session.open(encoding="utf-8") as stream:
+            for line in stream:
+                event = json.loads(line)
+                if not isinstance(event, dict):
+                    return False, False
+                payload = event.get("payload", {})
+                if not isinstance(payload, dict):
+                    return False, False
+                if event.get("type") == "session_meta":
+                    if metadata_seen:
+                        return False, False
+                    metadata_seen = True
+                    cwd = payload.get("cwd")
+                    bound = (payload.get("id") == threads[0] and isinstance(cwd, str) and bool(cwd.strip())
+                             and Path(cwd).resolve() == run_dir.resolve())
+                if event.get("type") != "response_item":
+                    continue
+                # Only inspect supplied user input, never assistant reasoning.
+                if payload.get("type") != "message" or payload.get("role") == "assistant":
+                    break
+                if payload.get("role") != "user":
+                    continue
+                for content in payload.get("content", []):
+                    if not isinstance(content, dict):
+                        return False, False
+                    text = content.get("text", "")
+                    if is_bare_skill_task(text, skill):
+                        direct = True
+                    match = re.fullmatch(r"<skill>\n<name>([^<]+)</name>\n<path>([^<]+)</path>\n(.*)\n</skill>", text, re.DOTALL)
+                    if match and match[1] == skill:
+                        matching = Path(match[2]).resolve() == target and match[3].rstrip("\n") == source
+                        injected = injected or matching
+                        conflicting = conflicting or not matching
+        return bound and direct, bound and direct and injected and not conflicting
+    except (OSError, RuntimeError, ValueError, TypeError):
+        return False, False
 
 
 def reads_complete_skill_before_other_actions(
     actions: list[ActionEvent],
     run_dir: Path,
     target_path: Path,
+    *,
+    allow_bootstrap: bool = False,
+    require_system_executables: bool = False,
 ) -> bool:
     try:
         target_lines = target_path.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True)
@@ -92,11 +181,19 @@ def reads_complete_skill_before_other_actions(
 
     covered_through = 0
     for index, action in enumerate(actions):
-        segment = skill_read_segment(action, run_dir, target_path, target_lines)
-        if segment is None:
-            return False
         if index + 1 < len(actions) and not completes_before_action(action, actions[index + 1]):
             return False
+        segment = skill_read_segment(action, run_dir, target_path, target_lines,
+                                     require_system_executables=require_system_executables)
+        if segment is None:
+            if not allow_bootstrap:
+                return False
+            permitted, complete = bare_task_bootstrap(action, run_dir, target_path, target_lines)
+            if not permitted:
+                return False
+            if complete:
+                return True
+            continue
         start_line, end_line = segment
         if start_line > covered_through + 1:
             return False
@@ -106,11 +203,96 @@ def reads_complete_skill_before_other_actions(
     return False
 
 
+def bare_task_bootstrap(
+    action: ActionEvent, run_dir: Path, target: Path, target_lines: list[str],
+) -> tuple[bool, bool]:
+    """Admit filename discovery and project instructions, never app reads or execution."""
+    if (action.kind != "command" or action.status.lower() not in {"completed", "failed"}
+            or action.exit_code not in {None, 0, 1, 2}):
+        return False, False
+    raw = action.input.get("command")
+    if not isinstance(raw, str) or any(token in raw for token in ("\n", "\r", "$", "`")):
+        return False, False
+    try:
+        outer = shlex.split(raw)
+        if len(outer) == 3 and Path(outer[0]).name in {"bash", "dash", "ksh", "sh", "zsh"} and outer[1] in {"-c", "-lc"}:
+            shell = Path(outer[0]).name
+            if outer[0] not in {shell, "/bin/" + shell, "/usr/bin/" + shell}:
+                return False, False
+            raw = outer[2]
+        raw = re.sub(r"\s+2>\s*/dev/null(?=\s|$)", "", raw)
+        lexer = shlex.shlex(raw, posix=True, punctuation_chars=";&|<>")
+        lexer.whitespace_split = True
+        lexer.commenters = ""
+        commands: list[list[str]] = [[]]
+        for token in lexer:
+            if token == "&&":
+                commands.append([])
+            elif any(character in token for character in ";&|<>$`\n\r"):
+                return False, False
+            else:
+                commands[-1].append(token)
+        requested_skill = False
+        for command in commands:
+            if not command:
+                return False, False
+            name, arguments = Path(command[0]).name, command[1:]
+            if command[0] not in {name, "/bin/" + name, "/usr/bin/" + name}:
+                return False, False
+            if name == "pwd" and arguments in ([], ["-P"], ["-L"]):
+                continue
+            if name == "rg":
+                if "--files" not in arguments:
+                    return False, False
+                paths = []
+                index = 0
+                while index < len(arguments):
+                    value = arguments[index]
+                    if value in {"-g", "--glob", "--iglob"}:
+                        index += 1
+                        if index >= len(arguments):
+                            return False, False
+                    elif value not in {"--files", "--hidden", "--no-ignore", "--no-ignore-vcs", "--"}:
+                        if value.startswith("-"):
+                            return False, False
+                        paths.append(value)
+                    index += 1
+            elif name == "ls":
+                paths = [value for value in arguments if value not in {"-a", "-A", "-l", "-la", "-al", "-1", "--"}]
+                if any(value.startswith("-") for value in paths):
+                    return False, False
+            elif name == "cat":
+                paths = arguments[1:] if arguments[:1] == ["--"] else arguments
+                if not paths:
+                    return False, False
+            else:
+                return False, False
+            for value in paths:
+                if value.startswith("~") or any(character in value for character in "*?[]{}"):
+                    return False, False
+                path = Path(value)
+                resolved = (path if path.is_absolute() else run_dir / path).resolve()
+                if not resolved.is_relative_to(run_dir.resolve()):
+                    return False, False
+                if name == "cat":
+                    if resolved == target:
+                        requested_skill = True
+                    elif (path.name not in {"AGENTS.md", "CONTRIBUTING.md", "CLAUDE.md"}
+                          or resolved.name not in {"AGENTS.md", "CONTRIBUTING.md", "CLAUDE.md"}):
+                        return False, False
+        complete = (requested_skill and action.status.lower() == "completed" and action.exit_code in {None, 0}
+                    and "".join(target_lines).rstrip("\n") in action.output.rstrip("\n"))
+        return True, complete
+    except (OSError, RuntimeError, ValueError):
+        return False, False
+
+
 def skill_read_segment(
     action: ActionEvent,
     run_dir: Path,
     target_path: Path,
     target_lines: list[str],
+    *, require_system_executables: bool = False,
 ) -> tuple[int, int] | None:
     if action.status.lower() != "completed" or action.exit_code not in {None, 0}:
         return None
@@ -121,10 +303,12 @@ def skill_read_segment(
     command = action.input.get("command")
     if not isinstance(command, str):
         return None
-    tokens = simple_command_tokens(command)
+    tokens = simple_command_tokens(command, require_system_executables=require_system_executables)
     if tokens is None or not tokens:
         return None
     reader = Path(tokens[0]).name
+    if require_system_executables and tokens[0] not in {reader, "/bin/" + reader, "/usr/bin/" + reader}:
+        return None
     arguments = tokens[1:]
     if reader == "cat":
         if arguments[:1] == ["--"]:
@@ -215,7 +399,7 @@ def completes_before_action(action: ActionEvent, next_action: ActionEvent) -> bo
     return action.completion_order is not None and action.completion_order < next_action.start_order
 
 
-def simple_command_tokens(command: str) -> list[str] | None:
+def simple_command_tokens(command: str, *, require_system_executables: bool = False) -> list[str] | None:
     try:
         tokens = shlex.split(command)
     except ValueError:
@@ -225,6 +409,9 @@ def simple_command_tokens(command: str) -> list[str] | None:
         and Path(tokens[0]).name in {"bash", "dash", "ksh", "sh", "zsh"}
         and tokens[1] in {"-c", "-lc"}
     ):
+        shell = Path(tokens[0]).name
+        if require_system_executables and tokens[0] not in {shell, "/bin/" + shell, "/usr/bin/" + shell}:
+            return None
         try:
             tokens = shlex.split(tokens[2])
         except ValueError:

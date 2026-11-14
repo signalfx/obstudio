@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 from jsonschema.exceptions import ValidationError as JSONSchemaValidationError
 
+from .ab import is_bare_skill_task
 from .backends import AgentBackend, create_backend
 from .config import CodexEvalSettings, load_settings
 from .eval_files import eval_file_layout, is_eval_file, iter_eval_files, resolve_rubric_definition
@@ -235,14 +236,19 @@ class CodexEvalItem(pytest.Item):
         mode = run_mode(self.config)
         kind = eval_kind(self.config)
         validate_case(self.case, repo_root, skill_dir)
+        if mode not in {"validation", "with_skill"} and is_bare_skill_task(self.case.task, self.case.skill):
+            pytest.skip("Bare skill invocation checks run only in with_skill mode, separately from A/B comparisons")
 
         validation_run = session_run(self.config, repo_root, self.case.skill, "validation", "validation")
+        if mode == "ab":
+            validation_run["metadata"]["comparison_prompt"] = "shared_task"
         validation_run["results"].append(
             validation_result(
                 self.case,
                 repo_root,
                 skill_dir,
                 config_path(self.config),
+                comparison=mode == "ab",
             )
         )
 
@@ -508,7 +514,7 @@ def run_metadata(config: pytest.Config, repo_root: Path, skill: str, mode: str) 
     workers = getattr(config.option, "numprocesses", None) or 1
     backend = get_backend(config)
     grading_enabled = mode != "validation" and rubric_enabled(config)
-    return {
+    metadata = {
         "mode": mode,
         "eval_kind": eval_kind(config) if mode != "validation" else "validation",
         "ab_enabled": mode == "ab",
@@ -525,6 +531,9 @@ def run_metadata(config: pytest.Config, repo_root: Path, skill: str, mode: str) 
         "runtime_enabled": runtime_enabled(config),
         "workers": str(workers),
     }
+    if mode == "ab":
+        metadata["comparison_prompt"] = "shared_task"
+    return metadata
 
 
 def validation_selection_scope(
@@ -613,6 +622,7 @@ def validation_result(
     repo_root: Path,
     skill_dir: Path | None,
     selected_config_path: Path | None,
+    *, comparison: bool = False,
 ) -> ValidationResult:
     resolved_skill_dir = resolve_skill_source(repo_root, case.skill, case.skill_source, skill_dir)
     if case.definition_path is None or case.fixture_dir is None:
@@ -646,6 +656,7 @@ def validation_result(
             fixture_dir=case.fixture_dir,
             prompt_id=case.prompt_id,
             eval_inputs=case.eval_inputs,
+            comparison=comparison,
         ),
     )
 
@@ -683,7 +694,9 @@ def validate_live_result(result: CaseResult, *, require_valid_rubric: bool = Fal
     if result.with_skill is not None and result.with_skill.grade.total == 0:
         failures.append("with_skill produced no checks")
     if result.with_skill is not None:
-        required_guards = {"final-message-present", "skills-loaded", "skill-instructions-read"}
+        required_guards = {"final-message-present", "skills-loaded"}
+        if result.baseline is None:
+            required_guards.add("skill-instructions-read")
         guards = {check.id: check for check in result.with_skill.grade.checks if check.id in required_guards}
         failed_guards = sorted(
             guard_id

@@ -10,6 +10,17 @@ def normalized(path: Path) -> str:
     return " ".join(path.read_text(encoding="utf-8").split())
 
 
+def test_audit_declared_tools_scope_edits_to_report_artifacts() -> None:
+    source = SKILL.read_text(encoding="utf-8")
+    assert source.startswith("---\n")
+    frontmatter = source.partition("\n---\n")[0]
+    allowed = [line for line in frontmatter.splitlines() if line.startswith("allowed-tools:")]
+    assert len(allowed) == 1
+    assert set(allowed[0].removeprefix("allowed-tools:").split()) == {
+        "Read", "Grep", "Glob", "Edit(**/.observe/**)",
+    }
+
+
 def test_audit_renderer_owns_the_canonical_reader_projection() -> None:
     skill = normalized(SKILL)
 

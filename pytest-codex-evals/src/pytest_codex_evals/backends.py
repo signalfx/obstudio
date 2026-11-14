@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
+from .codex_home import resolve_eval_home
 from .trace import ActionEvent, CommandEvent, TraceSummary, parse_events, parse_trace
 
 
@@ -41,6 +42,7 @@ class AgentResult:
     trace_path: Path
     final_message_path: Path
     stderr_path: Path
+    trace_text: str | None = None
 
 
 class AgentBackend(Protocol):
@@ -162,13 +164,8 @@ def _pump_stream(pipe: Any, output_path: Path, chunks: list[str]) -> None:
 
 def _codex_subprocess_env(exec_dir: Path | None = None) -> dict[str, str]:
     env = os.environ.copy()
-    eval_home = env.get("CODEX_EVAL_HOME", "").strip()
-    if eval_home:
-        resolved_eval_home = Path(eval_home).expanduser().resolve()
-        if not resolved_eval_home.is_dir():
-            raise ValueError(
-                "CODEX_EVAL_HOME must be an existing directory; run make eval-codex-home first"
-            )
+    resolved_eval_home = resolve_eval_home(exec_dir)
+    if resolved_eval_home is not None:
         # Keep live evals independent of a developer's personal skills, plugins,
         # and Codex configuration. The fixture still provides the skill under
         # test through its workspace-local .agents/skills directory.
@@ -356,6 +353,7 @@ class CodexBackend:
         final_path = exec_dir / "last_message.md"
         stderr_path = exec_dir / "stderr.txt"
 
+        env = _codex_subprocess_env(exec_dir)
         _prepare_eval_python_dependencies(exec_dir)
 
         cmd = [
@@ -382,7 +380,7 @@ class CodexBackend:
             stdout_path=trace_path,
             stderr_path=stderr_path,
             timeout=timeout,
-            env=_codex_subprocess_env(exec_dir),
+            env=env,
         )
         if not final_path.exists():
             final_path.write_text("", encoding="utf-8")
@@ -392,6 +390,7 @@ class CodexBackend:
             trace_path=trace_path,
             final_message_path=final_path,
             stderr_path=stderr_path,
+            trace_text=completed.stdout,
         )
 
     def run_judge(

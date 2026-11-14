@@ -194,6 +194,59 @@ checks for deterministic outcomes, inspect trial transcripts, and calibrate
 model judgments against real expert labels on representative successes and
 failures before relying on a rubric. AI-written reference labels are provisional.
 
+On single-side runs using the built-in Codex backend with `CODEX_EVAL_HOME` configured, an exact `$skill-name`
+or `$skill-name ./service` with-skill task is sent unchanged. Other backends,
+an unset or blank home, and all other wording keep the explicit loading wrapper
+and first-read check. Native loading proof uses
+the executed Codex session under `CODEX_EVAL_HOME`, which must be outside the
+actor's writable sandbox, including its workspace and temporary directories.
+For these bare tasks, the runner rejects a home that overlaps the task workspace
+or sits under the system temporary directory, `/tmp`, or `TMPDIR`/`TMP`/`TEMP`. Paths are resolved
+before checking, and existing folder identities are compared so symlinks or
+different letter casing cannot hide an unsafe location. Session evidence
+must be a regular file inside that home; redirected session files are rejected.
+Additional writable roots must be absolute and cannot overlap the home. Custom
+permission profiles, workspace overrides and unrestricted sandbox settings are
+rejected for this path. These restrictions do not apply to legacy wrapped tasks
+or baseline runs. Keep host-managed permissions from granting writes to the home.
+Permission escalation must stay disabled for native runs.
+Unrecognized extra CLI options are rejected instead of bypassing validation.
+Single-side runs on custom backends and subclasses retain the loading wrapper, even if their name is `codex`.
+The loading check accepts complete pre-assistant skill input only when the executed thread,
+workspace, path and content match the staged source. Bound bare tasks may
+instead discover file names and read project instructions before a complete
+source-matching skill read; application reads, edits or execution must follow
+that read. Bootstrap paths must be literal workspace paths; `rg --files` glob
+filters remain supported. Without bound session proof, the first-read check still applies.
+Native explicit-read proof accepts bare executable names and `/bin` or `/usr/bin` shell and reader
+executables; non-system shells keep working on the legacy wrapped path.
+In A/B mode both sides receive exactly the same `task` text, without the loading
+wrapper. Only the with-skill workspace contains the repository skill. Availability
+and baseline isolation remain required checks. Instruction consumption is shown
+as a skipped loading check: an unforced comparison measures the benefit of making
+the skill available, including runs where the agent chooses not to use it.
+Both sides use the same task and rubric for grading.
+
+Bare `$skill-name` tasks may be used in with-skill sanity or quality evals.
+They are explicitly skipped in A/B and baseline-only pytest runs, and direct
+`run_case` calls must select `sides=("with_skill",)`. Use descriptive tasks for
+A/B comparisons. Single-side evals keep their required complete-instruction proof.
+The runner also compares the skill instructions with the copy staged before
+the task, so replacing those instructions cannot redefine a successful load.
+For native Codex tasks, explicit-read proof uses captured process output rather
+than an agent-replaceable workspace trace. Non-regular task artifacts are omitted from retained copies and
+reported as errors, so a rejected task can still produce diagnostics.
+
+For bare tasks and A/B comparisons, saved reports also track the prompting, process setup and loading
+checker sources when the harness is an editable `src` checkout inside the eval
+repository. Sources in an installed package or a checkout outside that repository
+are not included. Those consumers should use `evals/evaluator-semantics.toml`
+(described under report freshness below) and increase its version when upgrading
+to harness behavior that can change an eval result or its interpretation.
+A/B reports record `comparison_prompt = shared_task`. Results from the earlier
+wrapped-prompt comparison must be rerun; re-rendering them cannot establish a
+shared-prompt comparison. Existing single-side reports retain their meaning.
+
 Sanity checks can assert final text, files, trace command evidence, or
 run local commands in the produced `service/` workspace. Command checks use an
 argv list, not a shell string, so they work well with ecosystem tools:

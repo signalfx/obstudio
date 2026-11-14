@@ -7,6 +7,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
+from .ab import is_bare_skill_task
 from .definitions import (
     CaseResult,
     GradeCheckResult,
@@ -265,6 +266,8 @@ def build_kind_benchmark(
     live_selection_keys: set[tuple[str, str, str]] = set()
     for payload in sorted(live_payloads, key=lambda item: str(item.get("mode", ""))):
         mode = str(payload["mode"])
+        if mode == "ab" and payload.get("metadata", {}).get("comparison_prompt") != "shared_task":
+            raise ValueError("A/B results predate shared-prompt comparisons; rerun the owning A/B eval")
         metadata_sources.append(payload.get("metadata", {}))
         results = [CaseResult.model_validate(item) for item in payload.get("results", [])]
         live_selection_keys.update(
@@ -322,6 +325,7 @@ def source_input_digests(
     fixture_dir: Path | None = None,
     prompt_id: str | None = None,
     eval_inputs: list[str] | None = None,
+    comparison: bool = False,
 ) -> dict[str, str]:
     root = repo_root.resolve()
     resolved_skill = skill_path.resolve()
@@ -353,6 +357,7 @@ def source_input_digests(
             fixture_dir,
             prompt_id,
             eval_inputs,
+            comparison=comparison,
         )
         paths.extend(selected_paths)
     elif fixture_dir is not None or prompt_id is not None or eval_inputs is not None:
@@ -382,6 +387,7 @@ def source_input_digests(
                         raise ValueError(
                             f"eval definition prompt must be an object: {path}"
                         )
+                    paths.extend(invocation_source_files(root, skill, prompt.get("task"), comparison=comparison))
                     eval_inputs = prompt.get("eval_inputs")
                     if eval_inputs is not None and (
                         not isinstance(eval_inputs, list)
@@ -426,6 +432,22 @@ def source_input_digests(
     return digests
 
 
+def invocation_source_files(repo_root: Path, skill: str, task: str | None, *, comparison: bool = False) -> list[Path]:
+    if not comparison and not is_bare_skill_task(task, skill):
+        return []
+    package = Path(__file__).resolve().parent
+    if package.parent.name != "src" or not (package.parent.parent / "pyproject.toml").is_file():
+        return []
+    paths = [package / name for name in (
+        "ab.py", "graders/shared.py", "runner.py", "report.py", "backends.py", "codex_home.py",
+        "graders/__init__.py", "graders/sanity.py", "graders/runtime.py", "trace.py",
+        "plugin.py", "definitions/base.py",
+    )]
+    # Bind native loading and shared-prompt comparisons in editable checkouts
+    # without invalidating unrelated single-side wrapped-task reports.
+    return [path for path in paths if path.is_file() and path.is_relative_to(repo_root)]
+
+
 def selected_eval_source_files(
     repo_root: Path,
     skill: str,
@@ -434,6 +456,7 @@ def selected_eval_source_files(
     fixture_dir: Path,
     prompt_id: str,
     eval_inputs: list[str] | None,
+    *, comparison: bool = False,
 ) -> tuple[list[Path], bool]:
     definition_source = regular_source_file(definition_path)
     if definition_source is None:
@@ -502,6 +525,7 @@ def selected_eval_source_files(
     base = rubric_base_source(definition_source, definition)
     if base is not None:
         paths.append(base)
+    paths.extend(invocation_source_files(repo_root, skill, matching_prompts[0].get("task"), comparison=comparison))
     paths.extend(
         source
         for _relative, source in fixture_eval_input_sources(
@@ -521,6 +545,7 @@ def source_input_digests_for_kinds(
     kinds: list[str],
     skill_path: Path,
     config_path: Path | None = None,
+    *, comparison: bool = False,
 ) -> dict[str, str]:
     files: dict[str, str] = {}
     for kind in sorted(set(kinds)):
@@ -530,6 +555,7 @@ def source_input_digests_for_kinds(
             kind,
             skill_path,
             config_path,
+            comparison=comparison,
         ).items():
             existing = files.get(path)
             if existing is not None and existing != digest:
@@ -544,6 +570,7 @@ def source_input_digests_for_selections(
     selections: list[dict[str, Any]],
     skill_path: Path,
     config_path: Path | None = None,
+    *, comparison: bool = False,
 ) -> dict[str, str]:
     files: dict[str, str] = {}
     for selection in selections:
@@ -557,6 +584,7 @@ def source_input_digests_for_selections(
             fixture_dir=repo_root / selection["fixture_dir"],
             prompt_id=selection["prompt_id"],
             eval_inputs=selection["eval_inputs"],
+            comparison=comparison,
         )
         for path, digest in manifest.items():
             existing = files.get(path)
@@ -958,6 +986,13 @@ def verify_published_report_sources(repo_root: Path) -> list[Path]:
     }
     for benchmark_path in benchmark_paths:
         benchmark = json.loads(benchmark_path.read_text(encoding="utf-8"))
+        metadata = benchmark.get("metadata", {})
+        if not isinstance(metadata, dict):
+            raise ValueError(f"{benchmark_path}: report metadata is malformed")
+        comparison = metadata.get("comparison_prompt") == "shared_task"
+        ab_report = "ab" in str(metadata.get("mode", benchmark.get("mode", ""))).split(", ")
+        if ab_report and not comparison:
+            raise ValueError(f"{benchmark_path}: A/B results predate shared-prompt comparisons; rerun the owning A/B eval")
         source = benchmark.get("source")
         if not isinstance(source, dict):
             if benchmark_path.parent.parent.name in provenance_skills:
@@ -1095,6 +1130,7 @@ def verify_published_report_sources(repo_root: Path) -> list[Path]:
                     selections,
                     resolved_skill_path,
                     resolved_config_path,
+                    comparison=comparison,
                 )
             else:
                 current = source_input_digests_for_kinds(
@@ -1103,6 +1139,7 @@ def verify_published_report_sources(repo_root: Path) -> list[Path]:
                     reconstruction_eval_kinds,
                     resolved_skill_path,
                     resolved_config_path,
+                    comparison=comparison,
                 )
         except ValueError as exc:
             raise ValueError(
@@ -1295,7 +1332,7 @@ def kind_report_metadata(skill: str, run_root: Path, kind: str, metadata_sources
         and (meta.get("judge_model") or meta.get("agent_model"))
     }) or ["-"]
     config_paths = sorted({str(meta.get("config_path") or "-") for meta in metadata_sources if meta.get("config_path")}) or ["-"]
-    return {
+    metadata = {
         "mode": ", ".join(modes),
         "eval_kind": kind,
         "skill": skill,
@@ -1307,6 +1344,9 @@ def kind_report_metadata(skill: str, run_root: Path, kind: str, metadata_sources
         "workers": ", ".join(sorted({str(meta.get("workers") or "-") for meta in metadata_sources if meta.get("workers")})) or "-",
         "config_path": ", ".join(config_paths),
     }
+    if any(meta.get("mode") == "ab" for meta in metadata_sources):
+        metadata["comparison_prompt"] = "shared_task"
+    return metadata
 
 
 def render_kind_report(skill: str, benchmark: dict[str, Any]) -> str:
@@ -2075,6 +2115,8 @@ def render_environment_table(metadata: dict[str, Any], mode_label: str) -> list[
     ]
     if not metadata_has_eval_kind(metadata, "validation"):
         rows.append(("Agent model", "agent_model"))
+    if metadata.get("comparison_prompt"):
+        rows.append(("Comparison prompt", "comparison_prompt"))
     if metadata_has_eval_kind(metadata, "rubric") or truthy_metadata(metadata.get("rubric_enabled")):
         rows.extend(
             [
@@ -2099,7 +2141,10 @@ def render_environment_table(metadata: dict[str, Any], mode_label: str) -> list[
         "|---|---|",
     ]
     for label, key in rows:
-        lines.append(f"| {label} | {markdown_cell(metadata.get(key))} |")
+        value = metadata.get(key)
+        if key == "comparison_prompt" and value == "shared_task":
+            value = "Identical task text on both sides"
+        lines.append(f"| {label} | {markdown_cell(value)} |")
     return lines
 
 

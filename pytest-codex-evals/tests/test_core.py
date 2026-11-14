@@ -580,6 +580,931 @@ def test_rubric_dimensions_reject_ambiguous_or_non_strict_partitions(tmp_path, f
         load_eval_definition(path)
 
 
+@pytest.mark.parametrize("task", ["$sample-skill", "$sample-skill ./service"])
+def test_direct_skill_task_is_not_wrapped_with_an_extra_actor_prompt(task):
+    case = sanity_case(task=task)
+    assert side_prompt(case, "with_skill", native_skill_invocation=True) == task
+    wrapped = side_prompt(case, "with_skill")
+    assert wrapped.startswith("Use the $sample-skill skill.")
+    assert wrapped.endswith(task) and wrapped != task
+    assert side_prompt(case, "baseline", native_skill_invocation=True) == task
+    assert side_prompt(case, "baseline") == task
+
+
+def test_kvstore_comparison_uses_identical_actor_and_judge_tasks(tmp_path):
+    root = Path(__file__).resolve().parents[2]
+    path = root / "evals/go/kvstore/eval/qual/audit.json"
+    definition = load_eval_definition(path)
+    case = case_from_definition(definition, definition.prompts[0], path)
+    prompts = []
+    available = []
+
+    class PromptBackend(DimensionBackend):
+        def run_agent(self, *, prompt, exec_dir, **kwargs):
+            prompts.append(prompt)
+            available.append((exec_dir / ".agents/skills/otel-audit/SKILL.md").is_file())
+            result = super().run_agent(prompt=prompt, exec_dir=exec_dir, **kwargs)
+            result.final_message_path.write_text(prompt)
+            return result
+
+    backend = PromptBackend([
+        dimension_grade("pass", "pass", "pass", "pass"),
+        dimension_grade("pass", "pass", "pass", start=5),
+    ] * 2)
+    result = run_case(repo_root=root, run_root=tmp_path / "artifacts", case=case,
+                      rubric=True, backend=backend)
+
+    assert prompts == [case.task, case.task]
+    assert available == [True, False]
+    assert case.task.startswith("Scan the Go key-value store service in ./service")
+    assert all(f"Actor task: {case.task}\n" in prompt for prompt in backend.prompts)
+    assert all(check.passed for check in result.baseline.grade.checks)
+    observed = next(check for check in result.with_skill.grade.checks if check.id == "skill-instructions-read")
+    assert observed.skipped and result.with_skill.grade.pass_rate == 1
+    assert result.with_skill.errors == result.baseline.errors == []
+
+
+@pytest.mark.parametrize("kind", ["sanity", "rubric", "runtime"])
+@pytest.mark.parametrize("comparison", [False, True])
+def test_comparison_acceptance_keeps_availability_and_isolation_required(tmp_path, kind, comparison):
+    from pytest_codex_evals.graders import grade_side
+
+    loaded = tmp_path / "with_skill"
+    baseline = tmp_path / "baseline"
+    baseline.mkdir()
+    write_loaded_skill(loaded, "sample-skill")
+    case = sanity_case()
+    if kind == "runtime":
+        case = runtime_case()
+    elif kind == "rubric":
+        case = RubricEvalCase.model_validate({**case.model_dump(exclude={"checks"}), "rubric": ["Accurate"]})
+    trace = TraceSummary([], "")
+    grade = grade_side(case=case, run_dir=loaded, final_message="done", trace=trace,
+                       side="with_skill", comparison=comparison)
+    read = next(check for check in grade.checks if check.id == "skill-instructions-read")
+    assert read.skipped is comparison
+    assert grade.total == (2 if comparison else 3)
+    other = grade_side(case=case, run_dir=baseline, final_message="done", trace=trace,
+                       side="baseline", comparison=comparison)
+    result = case_result(side_result("with_skill", grade), side_result("baseline", other) if comparison else None)
+    if not comparison:
+        with pytest.raises(AssertionError, match="skill-instructions-read"):
+            validate_live_result(result)
+        return
+    validate_live_result(result)
+    for side, check_id in [(result.with_skill, "skills-loaded"), (result.baseline, "baseline-skill-isolation")]:
+        check = next(check for check in side.grade.checks if check.id == check_id)
+        check.passed = False
+        with pytest.raises(AssertionError, match=check_id):
+            validate_live_result(result)
+        check.passed = True
+
+
+@pytest.mark.parametrize("shared", [False, True])
+def test_ab_reports_do_not_relabel_older_different_prompt_runs(tmp_path, shared):
+    run_root = tmp_path / ".workspace/codex-evals/sample-skill/run"
+    grade = GradeResult(checks=[GradeCheckResult(id="check", description="check", passed=True)])
+    result = case_result(side_result("with_skill", grade), side_result("baseline", grade))
+    metadata = {"mode": "ab", "eval_kind": "sanity"}
+    if shared:
+        metadata["comparison_prompt"] = "shared_task"
+    write_session_results([{
+        "mode": "ab", "eval_kind": "sanity", "repo_root": tmp_path, "run_root": run_root,
+        "skill": "sample-skill", "metadata": metadata, "results": [result],
+    }])
+    if not shared:
+        with pytest.raises(ValueError, match="predate shared-prompt"):
+            render_reports_for_run_root(run_root, "sanity")
+        assert not (run_root / "sanity/benchmark.json").exists()
+        return
+    report, benchmark = render_reports_for_run_root(run_root, "sanity")
+    assert json.loads(benchmark.read_text())["metadata"]["comparison_prompt"] == "shared_task"
+    assert "Identical task text on both sides" in report.read_text()
+
+
+@pytest.mark.parametrize("changed_source", ["ab.py", "graders/shared.py", "runner.py", "report.py", "backends.py", "codex_home.py", "trace.py",
+                                          "graders/__init__.py", "graders/sanity.py", "graders/runtime.py", "plugin.py", "definitions/base.py"])
+@pytest.mark.parametrize("selected", [False, True])
+@pytest.mark.parametrize("direct", [False, True])
+@pytest.mark.parametrize("comparison", [False, True])
+def test_invocation_source_changes_invalidate_bare_and_comparison_reports(tmp_path, monkeypatch, selected, direct, comparison, changed_source):
+    import pytest_codex_evals.report as report_module
+
+    skill = tmp_path / "skills/sample-skill"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text("name: sample-skill\n")
+    fixture = tmp_path / "evals/python/example"
+    definitions = fixture / "eval/qual"
+    definitions.mkdir(parents=True)
+    definition = definitions / "native.json"
+    definition.write_text(json.dumps({"skill": "sample-skill", "prompts": [{"id": "direct", "eval_inputs": [],
+        "task": "$sample-skill ./service" if direct else "Scan the service."}], "rubric": ["Accurate"]}))
+    project = tmp_path / "editable-harness"
+    project.mkdir()
+    (project / "pyproject.toml").write_text('[project]\nname = "pytest-codex-evals"\n')
+    package = project / "src/pytest_codex_evals"
+    (package / "graders").mkdir(parents=True)
+    (package / "definitions").mkdir()
+    for relative in ("ab.py", "report.py", "runner.py", "graders/shared.py", "backends.py", "codex_home.py", "trace.py",
+                     "graders/__init__.py", "graders/sanity.py", "graders/runtime.py", "plugin.py", "definitions/base.py"):
+        (package / relative).write_text("original\n")
+    monkeypatch.setattr(report_module, "__file__", str(package / "report.py"))
+    kwargs = {"definition_path": definition, "fixture_dir": fixture, "prompt_id": "direct", "eval_inputs": []} if selected else {}
+    before = source_input_digests(tmp_path, "sample-skill", "rubric", skill, comparison=comparison, **kwargs)
+    (package / changed_source).write_text("changed invocation semantics\n")
+    after = source_input_digests(tmp_path, "sample-skill", "rubric", skill, comparison=comparison, **kwargs)
+    assert (before != after) is (direct or comparison)
+    assert (f"editable-harness/src/pytest_codex_evals/{changed_source}" in before) is (direct or comparison)
+
+
+@pytest.mark.parametrize("layout", ["site-packages", "dist-packages", "external-source"])
+@pytest.mark.parametrize("selected", [False, True])
+def test_native_loading_manifest_excludes_non_repository_sources(tmp_path, monkeypatch, layout, selected):
+    import pytest_codex_evals.report as report_module
+
+    root = tmp_path / "repo"
+    skill = root / "skills/sample-skill"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text("name: sample-skill\n")
+    fixture = root / "evals/python/example"
+    definitions = fixture / "eval/qual"
+    definitions.mkdir(parents=True)
+    definition = definitions / "native.json"
+    definition.write_text(json.dumps({"skill": "sample-skill", "prompts": [
+        {"id": "direct", "task": "$sample-skill ./service", "eval_inputs": []},
+    ], "rubric": ["Accurate"]}))
+    kwargs = {"definition_path": definition, "fixture_dir": fixture, "prompt_id": "direct", "eval_inputs": []} if selected else {}
+    expected = source_input_digests(root, "sample-skill", "rubric", skill, **kwargs)
+    package = (tmp_path / "external/src/pytest_codex_evals" if layout == "external-source"
+               else root / f".venv/lib/python3.12/{layout}/pytest_codex_evals")
+    (package / "graders").mkdir(parents=True)
+    (package / "definitions").mkdir()
+    (package.parent.parent / "pyproject.toml").write_text('[project]\nname = "pytest-codex-evals"\n')
+    for relative in ("ab.py", "report.py", "runner.py", "graders/shared.py", "backends.py", "codex_home.py", "trace.py",
+                     "graders/__init__.py", "graders/sanity.py", "graders/runtime.py", "plugin.py", "definitions/base.py"):
+        (package / relative).write_text("installed package source\n")
+    monkeypatch.setattr(report_module, "__file__", str(package / "report.py"))
+
+    assert source_input_digests(root, "sample-skill", "rubric", skill, **kwargs) == expected
+
+
+@pytest.fixture
+def protected_codex_home(tmp_path, tmp_path_factory, monkeypatch):
+    home = tmp_path_factory.mktemp("protected-codex-home")
+    monkeypatch.setattr("pytest_codex_evals.codex_home._temporary_directories", lambda: {tmp_path / "actor-tmp"})
+    return home
+
+
+@pytest.mark.parametrize("fault", [None, "wrong-body", "wrong-path", "wrong-thread", "wrong-cwd",
+                                 "missing-cwd", "empty-cwd", "null-cwd", "late", "wrapped", "malformed"])
+def test_direct_skill_guard_binds_complete_native_input_and_isolates_bad_sessions(tmp_path, monkeypatch, protected_codex_home, fault):
+    target = write_loaded_skill(tmp_path, "otel-audit").resolve()
+    home = protected_codex_home
+    sessions = home / "sessions"
+    sessions.mkdir(parents=True)
+    monkeypatch.setenv("CODEX_EVAL_HOME", str(home))
+    body = target.read_text() if fault != "wrong-body" else "name: otel-audit\ntruncated\n"
+    path = target if fault != "wrong-path" else tmp_path / "other/SKILL.md"
+    injected = f"<skill>\n<name>otel-audit</name>\n<path>{path}</path>\n{body}\n</skill>"
+    def message(text):
+        return {"type": "response_item", "payload": {"type": "message", "role": "user", "content": [{"type": "input_text", "text": text}]}}
+    events = [{"type": "session_meta", "payload": {"id": "other" if fault == "wrong-thread" else "native-thread",
+               "cwd": str(tmp_path / "other") if fault == "wrong-cwd" else str(tmp_path)}},
+              message("Use $otel-audit after another instruction" if fault == "wrapped" else "$otel-audit ./service")]
+    if fault in {"missing-cwd", "empty-cwd", "null-cwd"}:
+        monkeypatch.chdir(tmp_path)
+        if fault == "missing-cwd":
+            events[0]["payload"].pop("cwd")
+        else:
+            events[0]["payload"]["cwd"] = "" if fault == "empty-cwd" else None
+    if fault == "late":
+        events.append({"type": "response_item", "payload": {"type": "message", "role": "assistant", "content": []}})
+    events.append(message(injected))
+    session = sessions / "rollout-native-thread.jsonl"
+    session.write_text("invalid json" if fault == "malformed" else "\n".join(json.dumps(event) for event in events))
+    trace_events = [{"type": "thread.started", "thread_id": "native-thread"},
+                    codex_command_event("pwd", "completed", item_id="discovery", output=str(tmp_path))]
+    check = instruction_guard_check(tmp_path, trace_events, native_skill_invocation=True)
+    assert check.passed is (fault is None)
+    if fault:
+        # A failed proof does not contaminate or abort a later independent run.
+        events[0]["payload"] = {"id": "native-thread", "cwd": str(tmp_path)}
+        session.write_text("\n".join(json.dumps(event) for event in [events[0], message("$otel-audit ./service"),
+            message(f"<skill>\n<name>otel-audit</name>\n<path>{target}</path>\n{target.read_text()}\n</skill>")]))
+        assert instruction_guard_check(tmp_path, trace_events, native_skill_invocation=True).passed
+
+
+@pytest.fixture
+def bare_cli_skill(tmp_path, monkeypatch, protected_codex_home):
+    target = write_loaded_skill(tmp_path, "otel-audit")
+    target.write_text("name: otel-audit\n# Contract\nFollow the owned application policy.\n")
+    home = protected_codex_home
+    sessions = home / "sessions"
+    sessions.mkdir(parents=True)
+    monkeypatch.setenv("CODEX_EVAL_HOME", str(home))
+    events = [
+        {"type": "session_meta", "payload": {"id": "bare-thread", "cwd": str(tmp_path)}},
+        {"type": "response_item", "payload": {"type": "message", "role": "user",
+         "content": [{"type": "input_text", "text": "$otel-audit ./service"}]}},
+    ]
+    session = sessions / "rollout-bare-thread.jsonl"
+    session.write_text("\n".join(json.dumps(e) for e in events))
+    return target, session
+
+
+@pytest.mark.parametrize("newline", ["\n", "\r\n"])
+def test_native_injected_source_preserves_file_line_endings(tmp_path, bare_cli_skill, newline):
+    target, session = bare_cli_skill
+    body = newline.join(["name: otel-audit", "# Follow the skill.", ""])
+    target.write_bytes(body.encode("utf-8"))
+    injected = {"type": "response_item", "payload": {"type": "message", "role": "user", "content": [
+        {"type": "input_text", "text": f"<skill>\n<name>otel-audit</name>\n<path>{target.resolve()}</path>\n{body}\n</skill>"},
+    ]}}
+    with session.open("a") as stream:
+        stream.write("\n" + json.dumps(injected))
+    events = [{"type": "thread.started", "thread_id": "bare-thread"},
+              codex_command_event("cat service/app.py", "completed", item_id="app", output="source")]
+
+    assert instruction_guard_check(tmp_path, events, native_skill_invocation=True).passed
+
+
+@pytest.mark.parametrize("before", [
+    [("/bin/zsh -lc \"pwd && rg --files -g AGENTS.md -g SKILL.md .agents service .observe 2>/dev/null\"", 2, "file names"),
+     ("cat CONTRIBUTING.md && cat .agents/skills/otel-audit/SKILL.md", 1, "missing CONTRIBUTING.md")],
+    [("ls -la", 0, "file names"), ("cat AGENTS.md", 0, "project instructions")],
+    [("rg --files -g '**/AGENTS.md' service .agents", 0, "file names")],
+])
+def test_bare_cli_skill_read_allows_only_bootstrap_before_complete_source(tmp_path, bare_cli_skill, before):
+    target, _ = bare_cli_skill
+    trace = [{"type": "thread.started", "thread_id": "bare-thread"}]
+    for i, (command, exit_code, output) in enumerate(before):
+        event = codex_command_event(command, "completed" if exit_code == 0 else "failed",
+                                    item_id=f"bootstrap-{i}", output=output)
+        event["item"]["exit_code"] = exit_code
+        trace.append(event)
+    trace.append(codex_command_event("cat .agents/skills/otel-audit/SKILL.md", "completed",
+                                     item_id="complete-read", output=target.read_text()))
+    trace.append(codex_command_event("cat service/app.py", "completed", item_id="task", output="app source"))
+    assert instruction_guard_check(tmp_path, trace, native_skill_invocation=True).passed
+
+
+@pytest.mark.parametrize("command", [
+    "cat service/app.py", "cat service/.env", "python service/app.py", "env",
+    "echo .agents/skills/otel-audit/SKILL.md", "touch service/app.py",
+    "rg OTEL service", "rg --files --pre python service", "ls /tmp",
+    "pwd && touch service/app.py", "pwd; cat AGENTS.md",
+    "./service/ls", "./service/rg --files", "./service/cat AGENTS.md", "./service/sh -c pwd",
+    "./service/cat .agents/skills/otel-audit/SKILL.md",
+    "./service/sh -c 'cat .agents/skills/otel-audit/SKILL.md'",
+    "cat service/app.py && cat .agents/skills/otel-audit/SKILL.md",
+    "ls > service/output", "ls $(touch service/app.py)", "ls 2> service/error",
+    "ls ~", "cat ~/AGENTS.md", "cat service*/AGENTS.md", "cat service?/AGENTS.md",
+    "cat service[12]/AGENTS.md", "cat {service1,service2}/AGENTS.md",
+])
+def test_bare_cli_bootstrap_cannot_hide_task_actions_or_execution(tmp_path, bare_cli_skill, command):
+    target, _ = bare_cli_skill
+    trace = [{"type": "thread.started", "thread_id": "bare-thread"},
+             codex_command_event(command, "completed", item_id="before", output="arbitrary output"),
+             codex_command_event("cat .agents/skills/otel-audit/SKILL.md", "completed",
+                                 item_id="read", output=target.read_text())]
+    assert not instruction_guard_check(tmp_path, trace, native_skill_invocation=True).passed
+
+
+@pytest.mark.parametrize("fault", ["truncated", "wrong-body", "absent", "wrong-thread", "wrong-cwd", "wrapped"])
+def test_bare_cli_discovery_still_requires_bound_complete_source(tmp_path, bare_cli_skill, fault):
+    target, session = bare_cli_skill
+    events = [json.loads(line) for line in session.read_text().splitlines()]
+    if fault == "wrong-thread":
+        events[0]["payload"]["id"] = "another-thread"
+    elif fault == "wrong-cwd":
+        events[0]["payload"]["cwd"] = str(tmp_path / "another-workspace")
+    elif fault == "wrapped":
+        events[1]["payload"]["content"][0]["text"] = "Do something else, then $otel-audit ./service"
+    session.write_text("\n".join(json.dumps(e) for e in events))
+    trace = [{"type": "thread.started", "thread_id": "bare-thread"},
+             codex_command_event("pwd", "completed", item_id="bootstrap", output=str(tmp_path))]
+    if fault != "absent":
+        output = target.read_text()
+        if fault == "truncated":
+            output = output.splitlines()[0] + "\n"
+        elif fault == "wrong-body":
+            output = "name: otel-instrument\n"
+        trace.append(codex_command_event("cat .agents/skills/otel-audit/SKILL.md", "completed",
+                                         item_id="read", output=output))
+    assert not instruction_guard_check(tmp_path, trace, native_skill_invocation=True).passed
+
+
+@pytest.mark.parametrize("injection_first", [False, True])
+def test_native_skill_input_order_is_irrelevant_before_assistant_actions(tmp_path, bare_cli_skill, injection_first):
+    target, session = bare_cli_skill
+    events = [json.loads(line) for line in session.read_text().splitlines()]
+    injected = {"type": "response_item", "payload": {"type": "message", "role": "user", "content": [
+        {"type": "input_text", "text": f"<skill>\n<name>otel-audit</name>\n<path>{target.resolve()}</path>\n{target.read_text()}\n</skill>"}]}}
+    events.insert(1 if injection_first else 2, injected)
+    session.write_text("\n".join(json.dumps(e) for e in events))
+    trace = [{"type": "thread.started", "thread_id": "bare-thread"},
+             codex_command_event("pwd", "completed", item_id="bootstrap", output=str(tmp_path))]
+    assert instruction_guard_check(tmp_path, trace, native_skill_invocation=True).passed
+
+
+@pytest.mark.parametrize("bad_record", [[], {"payload": []}, {
+    "type": "response_item", "payload": {"type": "message", "role": "user", "content": [None]},
+}])
+def test_native_session_invalid_shapes_fail_closed_and_recover(tmp_path, bare_cli_skill, bad_record):
+    target, session = bare_cli_skill
+    original = session.read_text()
+    events = [
+        {"type": "thread.started", "thread_id": "bare-thread"},
+        codex_command_event("pwd", "completed", item_id="bootstrap", output=str(tmp_path)),
+        codex_command_event("cat .agents/skills/otel-audit/SKILL.md", "completed",
+                            item_id="skill", output=target.read_text()),
+    ]
+    session.write_text(original + "\n" + json.dumps(bad_record))
+
+    assert not instruction_guard_check(tmp_path, events, native_skill_invocation=True).passed
+
+    session.write_text(original)
+    assert instruction_guard_check(tmp_path, events, native_skill_invocation=True).passed
+
+
+@pytest.mark.parametrize("fault", [None, "truncated", "application-read"])
+def test_bound_bare_task_combined_instruction_and_skill_read(tmp_path, bare_cli_skill, fault):
+    target, session = bare_cli_skill
+    original = [json.loads(line) for line in session.read_text().splitlines()]
+    original.insert(1, {"type": "response_item", "payload": {
+        "type": "message", "role": "developer", "content": [{"type": "input_text", "text": "Host instructions."}],
+    }})
+    session.write_text("\n".join(json.dumps(event) for event in original))
+    (tmp_path / "AGENTS.md").write_text("Project instructions.\n")
+    command = "cat AGENTS.md && cat .agents/skills/otel-audit/SKILL.md"
+    if fault == "application-read":
+        command += " && cat service/app.py"
+    output = "Project instructions.\n" + (target.read_text().splitlines()[0] if fault == "truncated" else target.read_text())
+    events = [
+        {"type": "thread.started", "thread_id": "bare-thread"},
+        codex_command_event(command, "completed", item_id="combined", output=output),
+    ]
+
+    assert instruction_guard_check(tmp_path, events, native_skill_invocation=True).passed is (fault is None)
+
+
+@pytest.mark.parametrize("backend_name", ["codex", "codex-adapter", "codex-subclass", "claude", "cursor"])
+@pytest.mark.parametrize("task", ["$sample-skill", "$sample-skill ./service", "Scan the service."])
+@pytest.mark.parametrize("home", ["configured", "unset", "blank"])
+@pytest.mark.parametrize("sides", [("with_skill",), ("with_skill", "baseline")])
+def test_run_case_selects_matching_prompt_and_loading_contract(tmp_path, monkeypatch, protected_codex_home, backend_name, task, home, sides):
+    if home == "configured":
+        monkeypatch.setenv("CODEX_EVAL_HOME", str(protected_codex_home))
+    elif home == "blank":
+        monkeypatch.setenv("CODEX_EVAL_HOME", " \t ")
+    else:
+        monkeypatch.delenv("CODEX_EVAL_HOME", raising=False)
+    fixture = tmp_path / "fixture"
+    fixture.mkdir()
+    skill = tmp_path / "skills/sample-skill"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text("name: sample-skill\n")
+    case = SanityEvalCase(
+        id="sample/service/sanity/direct", base_id="sample/service/sanity", prompt_id="direct",
+        skill="sample-skill", language="sample", service="service", task=task,
+        fixture_dir=fixture, checks=[],
+    )
+
+    class PromptBackend(RecordingBackend):
+        def __init__(self):
+            super().__init__()
+            self.name = "codex" if backend_name == "codex-adapter" else backend_name
+            self.prompts = []
+
+        def run_agent(self, *, prompt, **kwargs):
+            self.prompts.append(prompt)
+            result = super().run_agent(prompt=prompt, **kwargs)
+            result.trace_text = result.trace_path.read_text()
+            return result
+
+    recording = PromptBackend()
+    backend = recording
+    if backend_name == "codex":
+        backend = CodexBackend()
+        monkeypatch.setattr(backend, "run_agent", recording.run_agent)
+    elif backend_name == "codex-subclass":
+        class CustomCodexBackend(CodexBackend):
+            def run_agent(self, **kwargs):
+                result = recording.run_agent(**kwargs)
+                result.trace_text = None
+                return result
+        backend = CustomCodexBackend()
+    from pytest_codex_evals.ab import is_bare_skill_task
+    comparison = len(sides) == 2
+    bare = is_bare_skill_task(task, case.skill)
+    if comparison and bare:
+        with pytest.raises(ValueError, match="Bare skill invocation checks require"):
+            run_case(repo_root=tmp_path, run_root=tmp_path / "artifacts", case=case,
+                     skill_dir=skill, rubric=False, backend=backend, sides=sides)
+        assert recording.prompts == []
+        return
+    result = run_case(
+        repo_root=tmp_path, run_root=tmp_path / "artifacts", case=case,
+        skill_dir=skill, rubric=False, backend=backend, sides=sides,
+    )
+
+    native = backend_name == "codex" and home == "configured" and bare
+    loaded = recording.prompts[0]
+    if comparison or native:
+        assert loaded == task
+    else:
+        assert loaded.startswith("Use the $sample-skill skill.")
+        assert loaded.endswith(task) and loaded != task
+    if comparison:
+        assert recording.prompts == [task, task]
+        assert result.with_skill.grade.pass_rate == result.baseline.grade.pass_rate == 1
+    else:
+        assert len(recording.prompts) == 1 and result.baseline is None
+    assert any(check.id == "skill-source-unchanged" for check in result.with_skill.grade.checks) is native
+
+
+@pytest.mark.parametrize("task", [
+    "$sample-skill ", "$sample-skill ./service\n", "Use $sample-skill", "$sample-skill ./other",
+])
+def test_native_prompt_keeps_wrapper_for_other_wording(task):
+    case = sanity_case(task=task)
+
+    prompt = side_prompt(case, "with_skill", native_skill_invocation=True)
+
+    assert prompt == side_prompt(case, "with_skill")
+    assert prompt.startswith("Use the $sample-skill skill.")
+    assert side_prompt(case, "baseline", native_skill_invocation=True) == task
+
+
+def test_native_run_rejects_backend_result_without_captured_output(tmp_path, monkeypatch, protected_codex_home):
+    monkeypatch.setenv("CODEX_EVAL_HOME", str(protected_codex_home))
+    fixture = tmp_path / "fixture"
+    fixture.mkdir()
+    skill = tmp_path / "skills/sample-skill"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text("name: sample-skill\n")
+    case = sanity_case(task="$sample-skill ./service", fixture_dir=fixture)
+    backend = CodexBackend()
+    monkeypatch.setattr(backend, "run_agent", RecordingBackend().run_agent)
+    with pytest.raises(ValueError, match="requires captured Codex process output"):
+        run_case(repo_root=tmp_path, run_root=tmp_path / "results", case=case,
+                 skill_dir=skill, rubric=False, backend=backend, sides=("with_skill",))
+
+
+@pytest.mark.parametrize("native", [False, True])
+def test_wrapped_task_cannot_use_unvalidated_native_session_input(tmp_path, bare_cli_skill, native):
+    target, session = bare_cli_skill
+    injected = {"type": "response_item", "payload": {"type": "message", "role": "user", "content": [
+        {"type": "input_text", "text": f"<skill>\n<name>otel-audit</name>\n<path>{target.resolve()}</path>\n{target.read_text()}\n</skill>"},
+    ]}}
+    with session.open("a") as stream:
+        stream.write("\n" + json.dumps(injected))
+    events = [{"type": "thread.started", "thread_id": "bare-thread"},
+              codex_command_event("cat service/app.py", "completed", item_id="app", output="source")]
+    check = instruction_guard_check(tmp_path, events, native_skill_invocation=native)
+    assert check.passed is native
+
+
+@pytest.mark.parametrize("change", [None, "edit", "redirect", "missing", "cycle", "fifo"])
+def test_native_run_checks_skill_source_against_prelaunch_copy(tmp_path, monkeypatch, protected_codex_home, change):
+    if change == "fifo" and not hasattr(os, "mkfifo"):
+        pytest.skip("Named pipes are unavailable on this platform")
+    monkeypatch.setenv("CODEX_EVAL_HOME", str(protected_codex_home))
+    fixture = tmp_path / "fixture"
+    fixture.mkdir()
+    skill = tmp_path / "skills/sample-skill"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text("name: sample-skill\nFollow the original instructions.\n")
+    case = SanityEvalCase(
+        id="sample/service/sanity/direct", base_id="sample/service/sanity", prompt_id="direct",
+        skill="sample-skill", language="sample", service="service", task="$sample-skill ./service",
+        fixture_dir=fixture, checks=[],
+    )
+
+    recording = RecordingBackend()
+
+    def run_agent(*, prompt, exec_dir, **kwargs):
+        source = exec_dir / ".agents/skills/sample-skill/SKILL.md"
+        if not source.exists():
+            return recording.run_agent(prompt=prompt, exec_dir=exec_dir, **kwargs)
+        read_output = source.read_text()
+        if change == "edit":
+            read_output = "name: sample-skill\nFollow replacement instructions.\n"
+            source.write_text(read_output)
+        elif change == "redirect":
+            replacement = exec_dir / "replacement.md"
+            replacement.write_bytes(source.read_bytes())
+            source.unlink()
+            source.symlink_to(replacement)
+        elif change in {"missing", "cycle", "fifo"}:
+            source.unlink()
+            if change == "cycle":
+                source.symlink_to(source.name)
+            elif change == "fifo":
+                os.mkfifo(source)
+        result = recording.run_agent(prompt=prompt, exec_dir=exec_dir, **kwargs)
+        result.trace_path.write_text(json.dumps(codex_command_event(
+            "cat .agents/skills/sample-skill/SKILL.md", "completed", item_id="read", output=read_output,
+        )))
+        result.trace_text = result.trace_path.read_text()
+        return result
+
+    backend = CodexBackend()
+    monkeypatch.setattr(backend, "run_agent", run_agent)
+    result = run_case(
+        repo_root=tmp_path, run_root=tmp_path / "results", case=case,
+        skill_dir=skill, rubric=False, backend=backend, sides=("with_skill",),
+    )
+    check = next(check for check in result.with_skill.grade.checks if check.id == "skill-source-unchanged")
+    assert check.passed is (change is None)
+    assert result.baseline is None
+    if change == "fifo":
+        assert any("Non-regular artifacts" in error for error in result.with_skill.errors)
+
+
+@pytest.mark.parametrize("home_form", ["whitespace", "relative", "tilde", "unset"])
+def test_bare_cli_home_matches_backend_normalization(tmp_path, bare_cli_skill, monkeypatch, home_form):
+    target, session = bare_cli_skill
+    home = session.parent.parent
+    if home_form == "whitespace":
+        value = f" {home} "
+    elif home_form == "relative":
+        monkeypatch.chdir(tmp_path)
+        value = os.path.relpath(home, tmp_path)
+    elif home_form == "tilde":
+        try:
+            value = "~/" + os.path.relpath(home, Path.home())
+        except ValueError:
+            pytest.skip("Tilde test requires home and fixture on the same volume")
+    if home_form == "unset":
+        monkeypatch.delenv("CODEX_EVAL_HOME")
+    else:
+        monkeypatch.setenv("CODEX_EVAL_HOME", value)
+    events = [
+        {"type": "thread.started", "thread_id": "bare-thread"},
+        codex_command_event("pwd", "completed", item_id="bootstrap", output=str(tmp_path)),
+        codex_command_event("cat .agents/skills/otel-audit/SKILL.md", "completed",
+                            item_id="read", output=target.read_text()),
+    ]
+
+    assert instruction_guard_check(tmp_path, events, native_skill_invocation=True).passed is (home_form != "unset")
+
+
+@pytest.mark.parametrize("duplicate", ["thread", "rollout"])
+def test_bare_cli_rejects_ambiguous_session_and_recovers(tmp_path, bare_cli_skill, duplicate):
+    target, session = bare_cli_skill
+    events = [
+        {"type": "thread.started", "thread_id": "bare-thread"},
+        codex_command_event("pwd", "completed", item_id="bootstrap", output=str(tmp_path)),
+        codex_command_event("cat .agents/skills/otel-audit/SKILL.md", "completed",
+                            item_id="read", output=target.read_text()),
+    ]
+    if duplicate == "thread":
+        events.insert(0, {"type": "thread.started", "thread_id": "another-thread"})
+    else:
+        extra = session.with_name("another-bare-thread.jsonl")
+        extra.write_text(session.read_text())
+
+    assert not instruction_guard_check(tmp_path, events, native_skill_invocation=True).passed
+
+    if duplicate == "thread":
+        events.pop(0)
+    else:
+        extra.unlink()
+    assert instruction_guard_check(tmp_path, events, native_skill_invocation=True).passed
+
+
+@pytest.mark.parametrize("location", ["workspace", "workspace-alias", "workspace-parent", "temp", "temp-alias",
+                                     "workspace-case-alias", "workspace-parent-case-alias", "temp-case-alias"])
+def test_codex_home_rejects_untrusted_locations_at_launch_and_grading(
+    tmp_path, monkeypatch, protected_codex_home, location,
+):
+    from pytest_codex_evals.graders.shared import _native_skill_input
+    from pytest_codex_evals.codex_home import resolve_eval_home
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    target = write_loaded_skill(workspace, "otel-audit").resolve()
+    if location.startswith("workspace-parent"):
+        unsafe = tmp_path
+    else:
+        unsafe = (tmp_path / "actor-tmp" / "home" if location.startswith("temp")
+                  else workspace / "home")
+        unsafe.mkdir(parents=True)
+    configured = unsafe
+    if location.endswith("case-alias"):
+        configured = Path(str(unsafe).swapcase())
+        if not configured.exists() or not configured.samefile(unsafe):
+            pytest.skip("requires a case-insensitive filesystem")
+    elif location.endswith("alias"):
+        configured = protected_codex_home / "alias"
+        configured.symlink_to(unsafe, target_is_directory=True)
+    monkeypatch.setenv("CODEX_EVAL_HOME", str(configured))
+    trace = TraceSummary([{"type": "thread.started", "thread_id": "bare-thread"}], "")
+
+    with pytest.raises(ValueError, match="CODEX_EVAL_HOME must be (outside|separate)"):
+        resolve_eval_home(workspace, protected=True)
+    assert _native_skill_input(workspace, trace, "otel-audit", target) == (False, False)
+
+    monkeypatch.setenv("CODEX_EVAL_HOME", str(protected_codex_home))
+    assert _codex_subprocess_env(workspace)["CODEX_HOME"] == str(protected_codex_home)
+
+
+def test_codex_temporary_roots_include_system_and_environment_paths(tmp_path, monkeypatch):
+    from pytest_codex_evals.codex_home import _temporary_directories
+
+    monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path / "system-temp"))
+    for name in ("TMPDIR", "TMP", "TEMP"):
+        monkeypatch.setenv(name, str(tmp_path / name))
+    assert _temporary_directories() == {
+        Path("/tmp").resolve(), tmp_path / "system-temp",
+        *(tmp_path / name for name in ("TMPDIR", "TMP", "TEMP")),
+    }
+
+
+def test_codex_rejects_unsafe_home_before_dependency_setup_or_agent_launch(tmp_path, monkeypatch):
+    monkeypatch.setenv("CODEX_EVAL_HOME", str(tmp_path))
+    calls = []
+    monkeypatch.setattr("pytest_codex_evals.backends._prepare_eval_python_dependencies", lambda _: calls.append("setup"))
+    monkeypatch.setattr("pytest_codex_evals.backends.run_streamed_command", lambda *a, **k: calls.append("launch"))
+    fixture = tmp_path / "fixture"
+    fixture.mkdir()
+    skill = tmp_path / "skills/sample-skill"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text("name: sample-skill\n")
+    case = sanity_case(task="$sample-skill ./service", fixture_dir=fixture)
+
+    with pytest.raises(ValueError, match="CODEX_EVAL_HOME"):
+        run_case(repo_root=tmp_path, run_root=tmp_path / "results", case=case,
+                 skill_dir=skill, rubric=False, backend=CodexBackend(), sides=("with_skill",))
+    assert calls == []
+
+
+@pytest.mark.parametrize("via", ["add-dir", "add-dir-equals", "config-cli", "config-cli-short", "config-file",
+                                 "profile", "unsafe-sandbox", "permission-config", "relative-root", "auto-approve", "approval-policy",
+                                 "bypass-alias", "unknown-option", "add-dir-case-alias", "add-dir-child-case-alias"])
+def test_native_sandbox_rejects_settings_that_expose_or_obscure_session_protection(
+    tmp_path, monkeypatch, protected_codex_home, via,
+):
+    from pytest_codex_evals.codex_home import validate_native_sandbox
+
+    monkeypatch.setenv("CODEX_EVAL_HOME", str(protected_codex_home))
+    root = str(protected_codex_home)
+    override = "sandbox_workspace_write.writable_roots=" + json.dumps([root])
+    arguments = []
+    if via == "add-dir":
+        arguments = ["--add-dir", root]
+    elif via == "add-dir-equals":
+        arguments = ["--add-dir=" + root]
+    elif via == "config-cli":
+        arguments = ["--config", override]
+    elif via == "config-cli-short":
+        arguments = ["-c" + override]
+    elif via == "config-file":
+        (protected_codex_home / "config.toml").write_text(override)
+    elif via == "profile":
+        arguments = ["--profile", "custom"]
+    elif via == "unsafe-sandbox":
+        arguments = ["--config", "sandbox_mode=danger-full-access"]
+    elif via == "permission-config":
+        arguments = ["--config", 'permissions_profile="custom"']
+    elif via == "auto-approve":
+        arguments = ["--approve-for-me"]
+    elif via == "approval-policy":
+        arguments = ["--config", 'approval_policy="on-request"']
+    elif via == "bypass-alias":
+        arguments = ["--yolo"]
+    elif via == "unknown-option":
+        arguments = ["--unmodeled-sandbox-option"]
+    elif via.startswith("add-dir-") and via.endswith("case-alias"):
+        alias = Path(root.swapcase())
+        if not alias.exists() or not alias.samefile(protected_codex_home):
+            pytest.skip("requires a case-insensitive filesystem")
+        if via == "add-dir-child-case-alias":
+            alias /= "future-child"
+        arguments = ["--add-dir", str(alias)]
+    else:
+        arguments = ["--add-dir", "relative-cache"]
+    with pytest.raises(ValueError, match="Native skill-loading evidence"):
+        validate_native_sandbox(tmp_path, arguments)
+
+
+def test_native_home_containment_preserves_distinct_case_sensitive_directories(tmp_path):
+    from pytest_codex_evals.codex_home import _is_within
+
+    lower = tmp_path / "home"
+    upper = tmp_path / "HOME"
+    lower.mkdir()
+    if upper.exists():
+        pytest.skip("requires a case-sensitive filesystem")
+    upper.mkdir()
+
+    assert not _is_within(lower, upper)
+    assert not _is_within(upper / "future-child", lower)
+    assert _is_within(lower / "future-child", lower)
+
+
+def test_native_sandbox_preserves_safe_model_network_and_cache_settings(tmp_path, monkeypatch, protected_codex_home):
+    from pytest_codex_evals.codex_home import validate_native_sandbox
+
+    monkeypatch.setenv("CODEX_EVAL_HOME", str(protected_codex_home))
+    (protected_codex_home / "config.toml").write_text('model_provider="openai"\n')
+    validate_native_sandbox(tmp_path, ["--config", 'model_reasoning_effort="high"',
+        "--config", "sandbox_workspace_write.network_access=true", "--add-dir", str(tmp_path / "cache")])
+
+
+@pytest.mark.parametrize("replacement", ["file", "symlink"])
+def test_native_guard_uses_captured_stdout_instead_of_actor_replaceable_trace(
+    tmp_path, monkeypatch, protected_codex_home, replacement,
+):
+    monkeypatch.setenv("CODEX_EVAL_HOME", str(protected_codex_home))
+    fixture = tmp_path / "fixture"
+    fixture.mkdir()
+    skill = tmp_path / "skills/sample-skill"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text("name: sample-skill\nFollow the original instructions.\n")
+    case = sanity_case(task="$sample-skill ./service", fixture_dir=fixture)
+    monkeypatch.setattr("pytest_codex_evals.backends._prepare_eval_python_dependencies", lambda _: None)
+    sentinel = protected_codex_home / "untouched.txt"
+    sentinel.write_text("Keep this value.")
+
+    def fake_process(command, *, stdout_path, stderr_path, **kwargs):
+        workspace = stdout_path.parent
+        target = workspace / ".agents/skills/sample-skill/SKILL.md"
+        records = [
+            {"type": "session_meta", "payload": {"id": "real-thread", "cwd": str(workspace)}},
+            {"type": "response_item", "payload": {"type": "message", "role": "user", "content": [
+                {"type": "input_text", "text": case.task}]}},
+        ]
+        session = protected_codex_home / "sessions/rollout-real-thread.jsonl"
+        session.parent.mkdir()
+        session.write_text("\n".join(json.dumps(record) for record in records))
+        read = codex_command_event("cat .agents/skills/sample-skill/SKILL.md", "completed",
+                                   item_id="read", output=target.read_text())
+        started = {"type": "thread.started", "thread_id": "real-thread"}
+        stdout_path.write_text("\n".join(json.dumps(record) for record in [started, read]))
+        if replacement == "symlink":
+            stdout_path.unlink()
+            stdout_path.symlink_to(sentinel)
+        stderr_path.write_text("")
+        Path(command[command.index("--output-last-message") + 1]).write_text("done")
+        actual = [started, codex_command_event("cat service/app.py", "completed", item_id="app", output="source"), read]
+        return StreamedCommandResult(0, "\n".join(json.dumps(record) for record in actual), "")
+
+    monkeypatch.setattr("pytest_codex_evals.backends.run_streamed_command", fake_process)
+    result = run_case(repo_root=tmp_path, run_root=tmp_path / "results", case=case,
+                      skill_dir=skill, rubric=False, sides=("with_skill",), backend=CodexBackend())
+    check = next(check for check in result.with_skill.grade.checks if check.id == "skill-instructions-read")
+    assert not check.passed
+    assert "cat service/app.py" in Path(result.with_skill.trace_path).read_text()
+    assert sentinel.read_text() == "Keep this value."
+
+
+@pytest.mark.parametrize("redirect", ["session-file", "sessions-directory", "nested-directory", "fifo"])
+def test_native_session_proof_rejects_redirected_or_nonregular_files(tmp_path, bare_cli_skill, redirect):
+    if redirect == "fifo" and not hasattr(os, "mkfifo"):
+        pytest.skip("Named pipes are unavailable on this platform")
+    target, session = bare_cli_skill
+    contents = session.read_text()
+    session.unlink()
+    outside = tmp_path / session.name
+    outside.write_text(contents)
+    if redirect == "session-file":
+        session.symlink_to(outside)
+    elif redirect == "sessions-directory":
+        session.parent.rmdir()
+        session.parent.symlink_to(tmp_path, target_is_directory=True)
+    elif redirect == "nested-directory":
+        (session.parent / "nested").symlink_to(tmp_path, target_is_directory=True)
+    else:
+        os.mkfifo(session)
+    events = [{"type": "thread.started", "thread_id": "bare-thread"},
+              codex_command_event("pwd", "completed", item_id="bootstrap", output=str(tmp_path))]
+    assert not instruction_guard_check(tmp_path, events, native_skill_invocation=True).passed
+
+
+@pytest.mark.parametrize("kind", ["sanity", "rubric", "runtime"])
+@pytest.mark.parametrize("native", [False, True])
+@pytest.mark.parametrize("shell", ["/opt/homebrew/bin/bash", "/usr/local/bin/bash", "/nix/store/host-shell/bin/bash"])
+def test_host_shell_skill_reads_preserve_legacy_behavior_without_weakening_native_fallback(tmp_path, kind, native, shell):
+    from pytest_codex_evals.graders import grade_side
+
+    target = write_loaded_skill(tmp_path, "otel-audit")
+    event = codex_command_event(f"{shell} -lc 'cat .agents/skills/otel-audit/SKILL.md'", "completed",
+                                item_id="read", output=target.read_text())
+    trace = TraceSummary([event], json.dumps(event))
+    case = sanity_case(skill="otel-audit")
+    if kind == "runtime":
+        case = runtime_case().model_copy(update={"skill": "otel-audit"})
+    elif kind == "rubric":
+        case = RubricEvalCase.model_validate({**case.model_dump(exclude={"checks"}), "rubric": ["Accurate"]})
+    grade = grade_side(case=case, run_dir=tmp_path, final_message="done", trace=trace, side="with_skill",
+                        native_skill_invocation=native)
+    check = next(check for check in grade.checks if check.id == "skill-instructions-read")
+    assert check.passed is not native
+
+
+def test_native_session_rejects_repeated_identity_record(tmp_path, bare_cli_skill):
+    target, session = bare_cli_skill
+    records = [json.loads(line) for line in session.read_text().splitlines()]
+    records.insert(1, records[0])
+    records.append({"type": "response_item", "payload": {"type": "message", "role": "user", "content": [
+        {"type": "input_text", "text": f"<skill>\n<name>otel-audit</name>\n<path>{target.resolve()}</path>\n{target.read_text()}\n</skill>"},
+    ]}})
+    session.write_text("\n".join(json.dumps(record) for record in records))
+    events = [{"type": "thread.started", "thread_id": "bare-thread"},
+              codex_command_event("pwd", "completed", item_id="bootstrap", output=str(tmp_path))]
+    assert not instruction_guard_check(tmp_path, events, native_skill_invocation=True).passed
+
+
+@pytest.mark.parametrize("fault", ["wrong-path", "wrong-body"])
+@pytest.mark.parametrize("conflict_first", [False, True])
+def test_native_conflicting_input_cannot_override_source_proof(tmp_path, bare_cli_skill, fault, conflict_first):
+    target, session = bare_cli_skill
+    original = [json.loads(line) for line in session.read_text().splitlines()]
+
+    def injection(path, body):
+        return {"type": "response_item", "payload": {"type": "message", "role": "user", "content": [
+            {"type": "input_text", "text": f"<skill>\n<name>otel-audit</name>\n<path>{path}</path>\n{body}\n</skill>"},
+        ]}}
+
+    matching = injection(target.resolve(), target.read_text())
+    conflicting = injection(tmp_path / "other/SKILL.md" if fault == "wrong-path" else target.resolve(),
+                            "Conflicting policy.\n" if fault == "wrong-body" else target.read_text())
+    inputs = [conflicting, matching] if conflict_first else [matching, conflicting]
+    session.write_text("\n".join(json.dumps(event) for event in [*original, *inputs]))
+    events = [
+        {"type": "thread.started", "thread_id": "bare-thread"},
+        codex_command_event("cat service/app.py", "completed", item_id="task", output="Application source."),
+    ]
+
+    assert not instruction_guard_check(tmp_path, events, native_skill_invocation=True).passed
+
+    session.write_text("\n".join(json.dumps(event) for event in [*original, matching]))
+    assert instruction_guard_check(tmp_path, events, native_skill_invocation=True).passed
+
+
+@pytest.mark.parametrize("wrapped", [False, True])
+def test_bare_cli_partial_reads_allow_only_instruction_bootstrap_between_segments(tmp_path, bare_cli_skill, wrapped):
+    target, session = bare_cli_skill
+    if wrapped:
+        data = session.read_text().replace("$otel-audit ./service", "Scan the service.")
+        session.write_text(data)
+    (tmp_path / "AGENTS.md").write_text("Project instructions.\n")
+    first, *remaining = target.read_text().splitlines(keepends=True)
+    events = [
+        {"type": "thread.started", "thread_id": "bare-thread"},
+        codex_command_event("sed -n '1p' .agents/skills/otel-audit/SKILL.md", "completed",
+                            item_id="first", output=first),
+        codex_command_event("cat AGENTS.md", "completed", item_id="instructions", output="Project instructions.\n"),
+        codex_command_event("sed -n '2,$p' .agents/skills/otel-audit/SKILL.md", "completed",
+                            item_id="remaining", output="".join(remaining)),
+    ]
+
+    assert instruction_guard_check(tmp_path, events, native_skill_invocation=True).passed is not wrapped
+
+
+def test_bare_cli_instruction_symlink_cannot_read_application_source(tmp_path, bare_cli_skill):
+    target, _ = bare_cli_skill
+    service = tmp_path / "service"
+    service.mkdir()
+    (service / "app.py").write_text("Application source.\n")
+    alias = service / "AGENTS.md"
+    alias.symlink_to("app.py")
+    events = [
+        {"type": "thread.started", "thread_id": "bare-thread"},
+        codex_command_event("cat service/AGENTS.md", "completed", item_id="instructions", output="Application source.\n"),
+        codex_command_event("cat .agents/skills/otel-audit/SKILL.md", "completed",
+                            item_id="skill", output=target.read_text()),
+    ]
+
+    assert not instruction_guard_check(tmp_path, events, native_skill_invocation=True).passed
+
+    (tmp_path / "AGENTS.md").write_text("Project instructions.\n")
+    alias.unlink()
+    alias.symlink_to("../AGENTS.md")
+    events[1]["item"]["aggregated_output"] = "Project instructions.\n"
+    assert instruction_guard_check(tmp_path, events, native_skill_invocation=True).passed
+
+
+@pytest.mark.parametrize("discovery_first", [False, True])
+def test_claude_guard_keeps_first_read_with_codex_session_present(tmp_path, bare_cli_skill, discovery_first):
+    target, _ = bare_cli_skill
+    events = [
+        claude_tool_use("read", "Read", {"file_path": ".agents/skills/otel-audit/SKILL.md"}),
+        claude_tool_result("read", target.read_text()),
+    ]
+    if discovery_first:
+        events[:0] = [
+            claude_tool_use("discovery", "Bash", {"command": "pwd"}),
+            claude_tool_result("discovery", str(tmp_path)),
+        ]
+    trace = write_claude_trace(tmp_path, events)
+
+    assert instruction_guard_check(tmp_path, events, trace=trace).passed is not discovery_first
+
+
+
 def test_codex_subprocess_env_uses_sandbox_local_package_caches(
     tmp_path: Path, monkeypatch
 ):
@@ -593,7 +1518,7 @@ def test_codex_subprocess_env_uses_sandbox_local_package_caches(
 
 
 def test_codex_subprocess_env_uses_isolated_eval_home(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ):
     eval_home = tmp_path / "codex-home"
     eval_home.mkdir()
@@ -2340,6 +3265,7 @@ def test_session_result_writer_writes_raw_json_without_markdown(tmp_path: Path):
                 "run_root": run_root,
                 "skill": "sample-skill",
                 "metadata": {
+                    "comparison_prompt": "shared_task",
                     "mode": "ab",
                     "eval_kind": "sanity",
                     "run_id": "run",
@@ -2762,12 +3688,29 @@ def test_known_v3_consumer_map_keeps_unrelated_reports_fresh(tmp_path: Path):
     )
 
 
-def test_report_freshness_allows_reports_without_legacy_manifests(tmp_path: Path):
+@pytest.mark.parametrize(
+    ("metadata", "needs_rerun"),
+    [
+        ({}, False),
+        ({"mode": "with_skill"}, False),
+        ({"mode": "ab"}, True),
+        ({"mode": "ab, with_skill"}, True),
+        ({"mode": "ab", "comparison_prompt": "shared_task"}, False),
+    ],
+)
+def test_report_freshness_checks_comparisons_without_manifests(tmp_path: Path, metadata, needs_rerun):
     report_path = tmp_path / "eval-reports" / "sample-skill" / "sanity" / "benchmark.json"
     report_path.parent.mkdir(parents=True)
-    report_path.write_text(json.dumps({"skill": "sample-skill", "kind": "sanity"}), encoding="utf-8")
+    report_path.write_text(
+        json.dumps({"skill": "sample-skill", "kind": "sanity", "metadata": metadata}),
+        encoding="utf-8",
+    )
 
-    assert verify_published_report_sources(tmp_path) == []
+    if needs_rerun:
+        with pytest.raises(ValueError, match="predate shared-prompt"):
+            verify_published_report_sources(tmp_path)
+    else:
+        assert verify_published_report_sources(tmp_path) == []
 
 
 def test_source_manifest_v3_binds_sibling_prompt_selection(tmp_path: Path):
@@ -3723,6 +4666,7 @@ def test_report_renders_partial_usage_unknown_and_explicit_zero(tmp_path: Path):
                 "run_root": run_root,
                 "skill": "sample-skill",
                 "metadata": {
+                    "comparison_prompt": "shared_task",
                     "mode": "ab",
                     "eval_kind": "sanity",
                     "run_id": "run",
@@ -4877,6 +5821,7 @@ def instruction_guard_check(
     events: list[dict[str, Any]],
     *,
     trace: TraceSummary | None = None,
+    native_skill_invocation: bool = False,
 ) -> GradeCheckResult:
     (root / "service").mkdir(exist_ok=True)
     if trace is None:
@@ -4892,7 +5837,7 @@ def instruction_guard_check(
         id="python/example/audit/direct",
         base_id="python/example/audit",
     )
-    grade = grade_sanity(case, root, "done", trace, "with_skill")
+    grade = grade_sanity(case, root, "done", trace, "with_skill", native_skill_invocation=native_skill_invocation)
     return next(
         check for check in grade.checks if check.id == "skill-instructions-read"
     )
