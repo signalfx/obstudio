@@ -378,6 +378,7 @@ def source_input_digests(
                         raise ValueError(
                             f"eval definition prompt must be an object: {path}"
                         )
+                    paths.extend(native_invocation_source_files(root, skill, prompt.get("task")))
                     eval_inputs = prompt.get("eval_inputs")
                     if eval_inputs is not None and (
                         not isinstance(eval_inputs, list)
@@ -420,6 +421,16 @@ def source_input_digests(
         relative = path.resolve().relative_to(root).as_posix()
         digests[relative] = hashlib.sha256(path.read_bytes()).hexdigest()
     return digests
+
+
+def native_invocation_source_files(repo_root: Path, skill: str, task: str | None) -> list[Path]:
+    if not isinstance(task, str) or task not in {f"${skill}", f"${skill} ./service"}:
+        return []
+    package = Path(__file__).resolve().parent
+    paths = [package / "ab.py", package / "graders/shared.py", package / "runner.py", package / "report.py"]
+    # Editable source checkouts bind direct-task prompt/loading behavior without
+    # invalidating unrelated legacy task reports.
+    return [path for path in paths if path.is_file() and path.is_relative_to(repo_root)]
 
 
 def selected_eval_source_files(
@@ -495,6 +506,7 @@ def selected_eval_source_files(
         )
 
     paths = [definition_source, *staged_fixture_source_files(resolved_fixture)]
+    paths.extend(native_invocation_source_files(repo_root, skill, matching_prompts[0].get("task")))
     paths.extend(
         source
         for _relative, source in fixture_eval_input_sources(

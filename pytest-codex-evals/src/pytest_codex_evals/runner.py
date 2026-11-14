@@ -61,7 +61,9 @@ def run_case(
                 side="with_skill",
                 exec_dir=exec_case_root / "with_skill",
                 artifact_dir=case_root / "with_skill",
-                prompt=side_prompt(case, "with_skill"),
+                prompt=side_prompt(
+                    case, "with_skill", native_skill_invocation=backend.name == "codex",
+                ),
                 skill_dir=skill_dir,
                 model=model,
                 judge_model=judge_model,

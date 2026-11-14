@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -149,6 +150,17 @@ def test_side_prompt_generates_loaded_and_not_loaded_variants():
         "follow the skill. Scan the service."
     )
     assert side_prompt(case, "baseline") == "Scan the service."
+
+
+@pytest.mark.parametrize("task", ["$sample-skill", "$sample-skill ./service"])
+def test_direct_skill_task_is_not_wrapped_with_an_extra_actor_prompt(task):
+    case = sanity_case(task=task)
+    assert side_prompt(case, "with_skill", native_skill_invocation=True) == task
+    wrapped = side_prompt(case, "with_skill")
+    assert wrapped.startswith("Use the $sample-skill skill.")
+    assert wrapped.endswith(task) and wrapped != task
+    assert side_prompt(case, "baseline", native_skill_invocation=True) == task
+    assert side_prompt(case, "baseline") == task
 
 
 def test_prompt_eval_inputs_require_safe_fixture_relative_paths():
@@ -376,6 +388,34 @@ def test_source_manifest_rejects_symlinked_eval_config(tmp_path: Path):
             skill_dir,
             linked,
         )
+
+
+@pytest.mark.parametrize("changed_source", ["ab.py", "graders/shared.py", "runner.py", "report.py"])
+@pytest.mark.parametrize("selected", [False, True])
+@pytest.mark.parametrize("direct", [False, True])
+def test_native_loading_source_change_invalidates_only_direct_task_reports(tmp_path, monkeypatch, selected, direct, changed_source):
+    import pytest_codex_evals.report as report_module
+
+    skill = tmp_path / "skills/sample-skill"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text("name: sample-skill\n")
+    fixture = tmp_path / "evals/python/example"
+    definitions = fixture / "eval/qual"
+    definitions.mkdir(parents=True)
+    definition = definitions / "native.json"
+    definition.write_text(json.dumps({"skill": "sample-skill", "prompts": [{"id": "direct", "eval_inputs": [],
+        "task": "$sample-skill ./service" if direct else "Scan the service."}], "rubric": ["Accurate"]}))
+    package = tmp_path / "editable-harness"
+    (package / "graders").mkdir(parents=True)
+    for relative in ("ab.py", "report.py", "runner.py", "graders/shared.py"):
+        (package / relative).write_text("original\n")
+    monkeypatch.setattr(report_module, "__file__", str(package / "report.py"))
+    kwargs = {"definition_path": definition, "fixture_dir": fixture, "prompt_id": "direct", "eval_inputs": []} if selected else {}
+    before = source_input_digests(tmp_path, "sample-skill", "rubric", skill, **kwargs)
+    (package / changed_source).write_text("changed invocation semantics\n")
+    after = source_input_digests(tmp_path, "sample-skill", "rubric", skill, **kwargs)
+    assert (before != after) is direct
+    assert (f"editable-harness/{changed_source}" in before) is direct
 
 
 def test_codex_subprocess_env_uses_sandbox_local_package_caches(
@@ -1284,6 +1324,364 @@ def test_with_skill_guard_fails_when_agent_does_not_read_instructions(tmp_path: 
     )
     assert instruction_check.passed is False
     assert "Did not successfully read all" in instruction_check.evidence
+
+
+@pytest.mark.parametrize("fault", [None, "wrong-body", "wrong-path", "wrong-thread", "wrong-cwd",
+                                 "missing-cwd", "empty-cwd", "null-cwd", "late", "wrapped", "malformed"])
+def test_direct_skill_guard_binds_complete_native_input_and_isolates_bad_sessions(tmp_path, monkeypatch, fault):
+    target = write_loaded_skill(tmp_path, "otel-audit").resolve()
+    home = tmp_path / "isolated-home"
+    sessions = home / "sessions"
+    sessions.mkdir(parents=True)
+    monkeypatch.setenv("CODEX_EVAL_HOME", str(home))
+    body = target.read_text() if fault != "wrong-body" else "name: otel-audit\ntruncated\n"
+    path = target if fault != "wrong-path" else tmp_path / "other/SKILL.md"
+    injected = f"<skill>\n<name>otel-audit</name>\n<path>{path}</path>\n{body}\n</skill>"
+    def message(text):
+        return {"type": "response_item", "payload": {"type": "message", "role": "user", "content": [{"type": "input_text", "text": text}]}}
+    events = [{"type": "session_meta", "payload": {"id": "other" if fault == "wrong-thread" else "native-thread",
+               "cwd": str(tmp_path / "other") if fault == "wrong-cwd" else str(tmp_path)}},
+              message("Use $otel-audit after another instruction" if fault == "wrapped" else "$otel-audit ./service")]
+    if fault in {"missing-cwd", "empty-cwd", "null-cwd"}:
+        monkeypatch.chdir(tmp_path)
+        if fault == "missing-cwd":
+            events[0]["payload"].pop("cwd")
+        else:
+            events[0]["payload"]["cwd"] = "" if fault == "empty-cwd" else None
+    if fault == "late":
+        events.append({"type": "response_item", "payload": {"type": "message", "role": "assistant", "content": []}})
+    events.append(message(injected))
+    session = sessions / "rollout-native-thread.jsonl"
+    session.write_text("invalid json" if fault == "malformed" else "\n".join(json.dumps(event) for event in events))
+    trace_events = [{"type": "thread.started", "thread_id": "native-thread"},
+                    codex_command_event("pwd", "completed", item_id="discovery", output=str(tmp_path))]
+    check = instruction_guard_check(tmp_path, trace_events)
+    assert check.passed is (fault is None)
+    if fault:
+        # A failed proof does not contaminate or abort a later independent run.
+        events[0]["payload"] = {"id": "native-thread", "cwd": str(tmp_path)}
+        session.write_text("\n".join(json.dumps(event) for event in [events[0], message("$otel-audit ./service"),
+            message(f"<skill>\n<name>otel-audit</name>\n<path>{target}</path>\n{target.read_text()}\n</skill>")]))
+        assert instruction_guard_check(tmp_path, trace_events).passed
+
+@pytest.fixture
+def bare_cli_skill(tmp_path, monkeypatch):
+    target = write_loaded_skill(tmp_path, "otel-audit")
+    target.write_text("name: otel-audit\n# Contract\nFollow the owned application policy.\n")
+    home = tmp_path / "home"
+    sessions = home / "sessions"
+    sessions.mkdir(parents=True)
+    monkeypatch.setenv("CODEX_EVAL_HOME", str(home))
+    events = [
+        {"type": "session_meta", "payload": {"id": "bare-thread", "cwd": str(tmp_path)}},
+        {"type": "response_item", "payload": {"type": "message", "role": "user",
+         "content": [{"type": "input_text", "text": "$otel-audit ./service"}]}},
+    ]
+    session = sessions / "rollout-bare-thread.jsonl"
+    session.write_text("\n".join(json.dumps(e) for e in events))
+    return target, session
+
+@pytest.mark.parametrize("before", [
+    [("/bin/zsh -lc \"pwd && rg --files -g AGENTS.md -g SKILL.md .agents service .observe 2>/dev/null\"", 2, "file names"),
+     ("cat CONTRIBUTING.md && cat .agents/skills/otel-audit/SKILL.md", 1, "missing CONTRIBUTING.md")],
+    [("ls -la", 0, "file names"), ("cat AGENTS.md", 0, "project instructions")],
+])
+def test_bare_cli_skill_read_allows_only_bootstrap_before_complete_source(tmp_path, bare_cli_skill, before):
+    target, _ = bare_cli_skill
+    trace = [{"type": "thread.started", "thread_id": "bare-thread"}]
+    for i, (command, exit_code, output) in enumerate(before):
+        event = codex_command_event(command, "completed" if exit_code == 0 else "failed",
+                                    item_id=f"bootstrap-{i}", output=output)
+        event["item"]["exit_code"] = exit_code
+        trace.append(event)
+    trace.append(codex_command_event("cat .agents/skills/otel-audit/SKILL.md", "completed",
+                                     item_id="complete-read", output=target.read_text()))
+    trace.append(codex_command_event("cat service/app.py", "completed", item_id="task", output="app source"))
+    assert instruction_guard_check(tmp_path, trace).passed
+
+@pytest.mark.parametrize("command", [
+    "cat service/app.py", "cat service/.env", "python service/app.py", "env",
+    "echo .agents/skills/otel-audit/SKILL.md", "touch service/app.py",
+    "rg OTEL service", "rg --files --pre python service", "ls /tmp",
+    "pwd && touch service/app.py", "pwd; cat AGENTS.md",
+    "./service/ls", "./service/rg --files", "./service/cat AGENTS.md", "./service/sh -c pwd",
+    "cat service/app.py && cat .agents/skills/otel-audit/SKILL.md",
+    "ls > service/output", "ls $(touch service/app.py)", "ls 2> service/error",
+])
+def test_bare_cli_bootstrap_cannot_hide_task_actions_or_execution(tmp_path, bare_cli_skill, command):
+    target, _ = bare_cli_skill
+    trace = [{"type": "thread.started", "thread_id": "bare-thread"},
+             codex_command_event(command, "completed", item_id="before", output="arbitrary output"),
+             codex_command_event("cat .agents/skills/otel-audit/SKILL.md", "completed",
+                                 item_id="read", output=target.read_text())]
+    assert not instruction_guard_check(tmp_path, trace).passed
+
+@pytest.mark.parametrize("fault", ["truncated", "wrong-body", "absent", "wrong-thread", "wrong-cwd", "wrapped"])
+def test_bare_cli_discovery_still_requires_bound_complete_source(tmp_path, bare_cli_skill, fault):
+    target, session = bare_cli_skill
+    events = [json.loads(line) for line in session.read_text().splitlines()]
+    if fault == "wrong-thread":
+        events[0]["payload"]["id"] = "another-thread"
+    elif fault == "wrong-cwd":
+        events[0]["payload"]["cwd"] = str(tmp_path / "another-workspace")
+    elif fault == "wrapped":
+        events[1]["payload"]["content"][0]["text"] = "Do something else, then $otel-audit ./service"
+    session.write_text("\n".join(json.dumps(e) for e in events))
+    trace = [{"type": "thread.started", "thread_id": "bare-thread"},
+             codex_command_event("pwd", "completed", item_id="bootstrap", output=str(tmp_path))]
+    if fault != "absent":
+        output = target.read_text()
+        if fault == "truncated":
+            output = output.splitlines()[0] + "\n"
+        elif fault == "wrong-body":
+            output = "name: otel-instrument\n"
+        trace.append(codex_command_event("cat .agents/skills/otel-audit/SKILL.md", "completed",
+                                         item_id="read", output=output))
+    assert not instruction_guard_check(tmp_path, trace).passed
+
+@pytest.mark.parametrize("injection_first", [False, True])
+def test_native_skill_input_order_is_irrelevant_before_assistant_actions(tmp_path, bare_cli_skill, injection_first):
+    target, session = bare_cli_skill
+    events = [json.loads(line) for line in session.read_text().splitlines()]
+    injected = {"type": "response_item", "payload": {"type": "message", "role": "user", "content": [
+        {"type": "input_text", "text": f"<skill>\n<name>otel-audit</name>\n<path>{target.resolve()}</path>\n{target.read_text()}\n</skill>"}]}}
+    events.insert(1 if injection_first else 2, injected)
+    session.write_text("\n".join(json.dumps(e) for e in events))
+    trace = [{"type": "thread.started", "thread_id": "bare-thread"},
+             codex_command_event("pwd", "completed", item_id="bootstrap", output=str(tmp_path))]
+    assert instruction_guard_check(tmp_path, trace).passed
+
+
+@pytest.mark.parametrize("bad_record", [[], {"payload": []}, {
+    "type": "response_item", "payload": {"type": "message", "role": "user", "content": [None]},
+}])
+def test_native_session_invalid_shapes_fail_closed_and_recover(tmp_path, bare_cli_skill, bad_record):
+    target, session = bare_cli_skill
+    original = session.read_text()
+    events = [
+        {"type": "thread.started", "thread_id": "bare-thread"},
+        codex_command_event("pwd", "completed", item_id="bootstrap", output=str(tmp_path)),
+        codex_command_event("cat .agents/skills/otel-audit/SKILL.md", "completed",
+                            item_id="skill", output=target.read_text()),
+    ]
+    session.write_text(original + "\n" + json.dumps(bad_record))
+
+    assert not instruction_guard_check(tmp_path, events).passed
+
+    session.write_text(original)
+    assert instruction_guard_check(tmp_path, events).passed
+
+
+@pytest.mark.parametrize("fault", [None, "truncated", "application-read"])
+def test_bound_bare_task_combined_instruction_and_skill_read(tmp_path, bare_cli_skill, fault):
+    target, session = bare_cli_skill
+    original = [json.loads(line) for line in session.read_text().splitlines()]
+    original.insert(1, {"type": "response_item", "payload": {
+        "type": "message", "role": "developer", "content": [{"type": "input_text", "text": "Host instructions."}],
+    }})
+    session.write_text("\n".join(json.dumps(event) for event in original))
+    (tmp_path / "AGENTS.md").write_text("Project instructions.\n")
+    command = "cat AGENTS.md && cat .agents/skills/otel-audit/SKILL.md"
+    if fault == "application-read":
+        command += " && cat service/app.py"
+    output = "Project instructions.\n" + (target.read_text().splitlines()[0] if fault == "truncated" else target.read_text())
+    events = [
+        {"type": "thread.started", "thread_id": "bare-thread"},
+        codex_command_event(command, "completed", item_id="combined", output=output),
+    ]
+
+    assert instruction_guard_check(tmp_path, events).passed is (fault is None)
+
+
+@pytest.mark.parametrize("backend_name", ["codex", "claude", "cursor"])
+@pytest.mark.parametrize("task", ["$sample-skill", "$sample-skill ./service"])
+def test_run_case_selects_native_prompt_only_for_codex(tmp_path, backend_name, task):
+    fixture = tmp_path / "fixture"
+    fixture.mkdir()
+    skill = tmp_path / "skills/sample-skill"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text("name: sample-skill\n")
+    case = SanityEvalCase(
+        id="sample/service/sanity/direct", base_id="sample/service/sanity", prompt_id="direct",
+        skill="sample-skill", language="sample", service="service", task=task,
+        fixture_dir=fixture, checks=[],
+    )
+
+    class PromptBackend(RecordingBackend):
+        def __init__(self):
+            super().__init__()
+            self.name = backend_name
+            self.prompts = []
+
+        def run_agent(self, *, prompt, **kwargs):
+            self.prompts.append(prompt)
+            return super().run_agent(prompt=prompt, **kwargs)
+
+    backend = PromptBackend()
+    run_case(
+        repo_root=tmp_path, run_root=tmp_path / "artifacts", case=case,
+        skill_dir=skill, rubric=False, backend=backend,
+    )
+
+    loaded, baseline = backend.prompts
+    if backend_name == "codex":
+        assert loaded == task
+    else:
+        assert loaded.startswith("Use the $sample-skill skill.")
+        assert loaded.endswith(task) and loaded != task
+    assert baseline == task
+
+
+@pytest.mark.parametrize("task", [
+    "$sample-skill ", "$sample-skill ./service\n", "Use $sample-skill", "$sample-skill ./other",
+])
+def test_native_prompt_keeps_wrapper_for_other_wording(task):
+    case = sanity_case(task=task)
+
+    prompt = side_prompt(case, "with_skill", native_skill_invocation=True)
+
+    assert prompt == side_prompt(case, "with_skill")
+    assert prompt.startswith("Use the $sample-skill skill.")
+    assert side_prompt(case, "baseline", native_skill_invocation=True) == task
+
+
+@pytest.mark.parametrize("home_form", ["whitespace", "relative", "tilde", "unset"])
+def test_bare_cli_home_matches_backend_normalization(tmp_path, bare_cli_skill, monkeypatch, home_form):
+    target, session = bare_cli_skill
+    home = session.parent.parent
+    if home_form == "whitespace":
+        value = f" {home} "
+    elif home_form == "relative":
+        monkeypatch.chdir(tmp_path)
+        value = "home"
+    elif home_form == "tilde":
+        try:
+            value = "~/" + os.path.relpath(home, Path.home())
+        except ValueError:
+            pytest.skip("Tilde test requires home and fixture on the same volume")
+    if home_form == "unset":
+        monkeypatch.delenv("CODEX_EVAL_HOME")
+    else:
+        monkeypatch.setenv("CODEX_EVAL_HOME", value)
+    events = [
+        {"type": "thread.started", "thread_id": "bare-thread"},
+        codex_command_event("pwd", "completed", item_id="bootstrap", output=str(tmp_path)),
+        codex_command_event("cat .agents/skills/otel-audit/SKILL.md", "completed",
+                            item_id="read", output=target.read_text()),
+    ]
+
+    assert instruction_guard_check(tmp_path, events).passed is (home_form != "unset")
+
+
+@pytest.mark.parametrize("duplicate", ["thread", "rollout"])
+def test_bare_cli_rejects_ambiguous_session_and_recovers(tmp_path, bare_cli_skill, duplicate):
+    target, session = bare_cli_skill
+    events = [
+        {"type": "thread.started", "thread_id": "bare-thread"},
+        codex_command_event("pwd", "completed", item_id="bootstrap", output=str(tmp_path)),
+        codex_command_event("cat .agents/skills/otel-audit/SKILL.md", "completed",
+                            item_id="read", output=target.read_text()),
+    ]
+    if duplicate == "thread":
+        events.insert(0, {"type": "thread.started", "thread_id": "another-thread"})
+    else:
+        extra = session.with_name("another-bare-thread.jsonl")
+        extra.write_text(session.read_text())
+
+    assert not instruction_guard_check(tmp_path, events).passed
+
+    if duplicate == "thread":
+        events.pop(0)
+    else:
+        extra.unlink()
+    assert instruction_guard_check(tmp_path, events).passed
+
+
+@pytest.mark.parametrize("fault", ["wrong-path", "wrong-body"])
+@pytest.mark.parametrize("conflict_first", [False, True])
+def test_native_conflicting_input_cannot_override_source_proof(tmp_path, bare_cli_skill, fault, conflict_first):
+    target, session = bare_cli_skill
+    original = [json.loads(line) for line in session.read_text().splitlines()]
+
+    def injection(path, body):
+        return {"type": "response_item", "payload": {"type": "message", "role": "user", "content": [
+            {"type": "input_text", "text": f"<skill>\n<name>otel-audit</name>\n<path>{path}</path>\n{body}\n</skill>"},
+        ]}}
+
+    matching = injection(target.resolve(), target.read_text())
+    conflicting = injection(tmp_path / "other/SKILL.md" if fault == "wrong-path" else target.resolve(),
+                            "Conflicting policy.\n" if fault == "wrong-body" else target.read_text())
+    inputs = [conflicting, matching] if conflict_first else [matching, conflicting]
+    session.write_text("\n".join(json.dumps(event) for event in [*original, *inputs]))
+    events = [
+        {"type": "thread.started", "thread_id": "bare-thread"},
+        codex_command_event("cat service/app.py", "completed", item_id="task", output="Application source."),
+    ]
+
+    assert not instruction_guard_check(tmp_path, events).passed
+
+    session.write_text("\n".join(json.dumps(event) for event in [*original, matching]))
+    assert instruction_guard_check(tmp_path, events).passed
+
+
+@pytest.mark.parametrize("wrapped", [False, True])
+def test_bare_cli_partial_reads_allow_only_instruction_bootstrap_between_segments(tmp_path, bare_cli_skill, wrapped):
+    target, session = bare_cli_skill
+    if wrapped:
+        data = session.read_text().replace("$otel-audit ./service", "Scan the service.")
+        session.write_text(data)
+    (tmp_path / "AGENTS.md").write_text("Project instructions.\n")
+    first, *remaining = target.read_text().splitlines(keepends=True)
+    events = [
+        {"type": "thread.started", "thread_id": "bare-thread"},
+        codex_command_event("sed -n '1p' .agents/skills/otel-audit/SKILL.md", "completed",
+                            item_id="first", output=first),
+        codex_command_event("cat AGENTS.md", "completed", item_id="instructions", output="Project instructions.\n"),
+        codex_command_event("sed -n '2,$p' .agents/skills/otel-audit/SKILL.md", "completed",
+                            item_id="remaining", output="".join(remaining)),
+    ]
+
+    assert instruction_guard_check(tmp_path, events).passed is not wrapped
+
+
+def test_bare_cli_instruction_symlink_cannot_read_application_source(tmp_path, bare_cli_skill):
+    target, _ = bare_cli_skill
+    service = tmp_path / "service"
+    service.mkdir()
+    (service / "app.py").write_text("Application source.\n")
+    alias = service / "AGENTS.md"
+    alias.symlink_to("app.py")
+    events = [
+        {"type": "thread.started", "thread_id": "bare-thread"},
+        codex_command_event("cat service/AGENTS.md", "completed", item_id="instructions", output="Application source.\n"),
+        codex_command_event("cat .agents/skills/otel-audit/SKILL.md", "completed",
+                            item_id="skill", output=target.read_text()),
+    ]
+
+    assert not instruction_guard_check(tmp_path, events).passed
+
+    (tmp_path / "AGENTS.md").write_text("Project instructions.\n")
+    alias.unlink()
+    alias.symlink_to("../AGENTS.md")
+    events[1]["item"]["aggregated_output"] = "Project instructions.\n"
+    assert instruction_guard_check(tmp_path, events).passed
+
+
+@pytest.mark.parametrize("discovery_first", [False, True])
+def test_claude_guard_keeps_first_read_with_codex_session_present(tmp_path, bare_cli_skill, discovery_first):
+    target, _ = bare_cli_skill
+    events = [
+        claude_tool_use("read", "Read", {"file_path": ".agents/skills/otel-audit/SKILL.md"}),
+        claude_tool_result("read", target.read_text()),
+    ]
+    if discovery_first:
+        events[:0] = [
+            claude_tool_use("discovery", "Bash", {"command": "pwd"}),
+            claude_tool_result("discovery", str(tmp_path)),
+        ]
+    trace = write_claude_trace(tmp_path, events)
+
+    assert instruction_guard_check(tmp_path, events, trace=trace).passed is not discovery_first
 
 
 def test_with_skill_guard_ignores_transport_error_before_skill_read(tmp_path: Path):
