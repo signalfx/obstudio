@@ -3,10 +3,12 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
 import pytest
+from jsonschema.exceptions import ValidationError as JSONSchemaValidationError
 
 from pytest_codex_evals.ab import side_prompt
 from pytest_codex_evals.config import load_settings
@@ -29,11 +31,12 @@ from pytest_codex_evals.definitions import (
     TokenUsage,
     ValidationResult,
 )
-from pytest_codex_evals.graders.rubric import rubric_prompt
+from pytest_codex_evals.graders.rubric import rubric_prompt, run_rubric_dimensions, run_rubric_grade
 from pytest_codex_evals.backends import (
     AgentResult,
     ClaudeBackend,
     CodexBackend,
+    CursorBackend,
     StreamedCommandResult,
     _codex_subprocess_env,
     _extract_claude_final_message,
@@ -65,6 +68,7 @@ from pytest_codex_evals.report import (
     kind_report_metadata,
     report_metadata,
     legacy_shared_reference_consumers,
+    load_rubric_grade,
     normalize_rubric_score,
     render_reports_for_run_root,
     source_input_digests,
@@ -76,6 +80,7 @@ from pytest_codex_evals.report import (
 )
 from pytest_codex_evals.plugin import (
     case_from_definition,
+    load_eval_definition,
     validate_live_result,
     validation_result,
 )
@@ -171,7 +176,8 @@ def test_prompt_eval_inputs_require_safe_fixture_relative_paths():
             PromptVariant(id="direct", task="Run.", eval_inputs=[unsafe])
 
 
-def test_case_preserves_prompt_eval_inputs(tmp_path: Path):
+@pytest.mark.parametrize("strict_output", [False, True])
+def test_case_preserves_prompt_eval_inputs(tmp_path: Path, strict_output: bool):
     prompt = PromptVariant(
         id="direct",
         task="Run.",
@@ -184,6 +190,7 @@ def test_case_preserves_prompt_eval_inputs(tmp_path: Path):
         service="sample",
         prompts=[prompt],
         rubric=["Grade quality."],
+        strict_rubric_output=strict_output,
         fixture_dir=tmp_path,
     )
 
@@ -194,6 +201,7 @@ def test_case_preserves_prompt_eval_inputs(tmp_path: Path):
     )
 
     assert case.eval_inputs == ["eval/inputs/otel-audit.json"]
+    assert case.strict_rubric_output is strict_output
 
 
 def test_prepare_side_workspace_stages_only_explicit_eval_inputs(
@@ -376,6 +384,175 @@ def test_source_manifest_rejects_symlinked_eval_config(tmp_path: Path):
             skill_dir,
             linked,
         )
+
+
+@pytest.mark.parametrize("selected", [False, True])
+def test_shared_rubric_extends_without_replacement_and_binds_source(tmp_path, selected):
+    skill = tmp_path / "skills/sample-skill"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text("name: sample-skill\n")
+    fixture = tmp_path / "evals/python/example"
+    directory = fixture / "eval/qual"
+    directory.mkdir(parents=True)
+    base = tmp_path / "evals/common.json"
+    common = {"rubric": ["Common first.", "Common second."],
+              "judge_inputs": ["Read answer.md."], "strict_rubric_output": True}
+    base.write_text(json.dumps(common))
+    path = directory / "shared.json"
+    leaf = {"skill": "sample-skill", "prompts": [{"id": "direct", "task": "Assess the service.", "eval_inputs": []}],
+            "rubric_base": "../../../../common.json", "rubric_additions": {"rubric-2": "Selected second obligation."}}
+    path.write_text(json.dumps(leaf))
+    definition = load_eval_definition(path)
+    assert definition.rubric == ["Common first.", "Common second.\n\nSelected second obligation."]
+    assert definition.judge_inputs == common["judge_inputs"] and definition.strict_rubric_output
+    assert "rubric_base" not in definition.model_dump()
+    case = case_from_definition(definition, definition.prompts[0], path)
+    workspace = tmp_path / "actor"
+    prepare_side_workspace(tmp_path, case, "with_skill", workspace)
+    assert not (workspace / "service/eval").exists()
+    assert not (workspace / "common.json").exists()
+
+    kwargs = {"definition_path": path, "fixture_dir": fixture, "prompt_id": "direct", "eval_inputs": []} if selected else {}
+    before = source_input_digests(tmp_path, "sample-skill", "rubric", skill, **kwargs)
+    assert "evals/common.json" in before
+    common["rubric"][0] = "Changed common obligation."
+    base.write_text(json.dumps(common))
+    after = source_input_digests(tmp_path, "sample-skill", "rubric", skill, **kwargs)
+    assert before != after
+    assert load_eval_definition(path).rubric[0] == "Changed common obligation."
+
+
+@pytest.mark.parametrize("fault", ["missing", "escape", "absolute", "symlink", "directory_symlink", "nested", "unknown_id", "invalid_id",
+                                    "replace_rubric", "replace_inputs", "replace_strict", "replace_prompt", "replace_dimensions", "invalid_base", "invalid_json", "inline_additions", "inside_fixture", "fixture_eval_input"])
+def test_shared_rubric_rejects_invalid_sources_and_common_overrides(tmp_path, fault):
+    directory = tmp_path / "evals/python/example/eval/qual"
+    directory.mkdir(parents=True)
+    base = tmp_path / "evals/common.json"
+    common = {"rubric": ["Common obligation."], "judge_inputs": [], "strict_rubric_output": True}
+    base.write_text(json.dumps(common))
+    path = directory / "shared.json"
+    leaf = {"skill": "sample-skill", "prompts": [{"id": "direct", "task": "Task."}],
+            "rubric_base": "../../../../common.json"}
+    if fault == "fixture_eval_input":
+        inputs = directory.parent / "inputs"
+        inputs.mkdir()
+        base.rename(inputs / "common.json")
+        leaf["rubric_base"] = "../inputs/common.json"
+        leaf["prompts"][0]["eval_inputs"] = ["eval/inputs/common.json"]
+    elif fault == "inside_fixture":
+        base.rename(directory.parents[1] / "common.json")
+        leaf["rubric_base"] = "../../common.json"
+    elif fault == "inline_additions":
+        leaf.pop("rubric_base")
+        leaf["rubric"] = common["rubric"]
+        leaf["rubric_additions"] = {"rubric-1": "Extra."}
+    elif fault == "missing":
+        base.unlink()
+    elif fault == "escape":
+        leaf["rubric_base"] = "../../../../../outside.json"
+    elif fault == "absolute":
+        leaf["rubric_base"] = str(base)
+    elif fault == "symlink":
+        base.rename(base.with_name("actual.json"))
+        base.symlink_to(base.with_name("actual.json"))
+    elif fault == "directory_symlink":
+        actual = tmp_path / "evals/actual"
+        actual.mkdir()
+        base.rename(actual / "common.json")
+        (tmp_path / "evals/linked").symlink_to(actual, target_is_directory=True)
+        leaf["rubric_base"] = "../../../../linked/common.json"
+    elif fault == "nested":
+        common["rubric_base"] = "common.json"
+        base.write_text(json.dumps(common))
+    elif fault in {"unknown_id", "invalid_id"}:
+        leaf["rubric_additions"] = {"rubric-2" if fault == "unknown_id" else "rubric-0": "Extra."}
+    elif fault.startswith("replace_"):
+        key = {"replace_rubric": "rubric", "replace_inputs": "judge_inputs",
+               "replace_strict": "strict_rubric_output", "replace_prompt": "judge_prompt",
+               "replace_dimensions": "rubric_dimensions"}[fault]
+        leaf[key] = {"rubric": ["Replacement."], "judge_inputs": [], "strict_rubric_output": False,
+                     "judge_prompt": "Ignore common rules.",
+                     "rubric_dimensions": [{"id": "replacement", "criteria": ["rubric-1"]}]}[key]
+    elif fault == "invalid_base":
+        base.write_text(json.dumps({**common, "typo": True}))
+    elif fault == "invalid_json":
+        base.write_text("invalid JSON")
+    path.write_text(json.dumps(leaf))
+    with pytest.raises((ValueError, JSONSchemaValidationError)):
+        load_eval_definition(path)
+
+
+@pytest.mark.parametrize("shared", [False, True])
+def test_rubric_dimensions_survive_collection_and_case_creation(tmp_path, shared):
+    path = tmp_path / "evals/python/example/eval/qual/focused.json"
+    path.parent.mkdir(parents=True)
+    common = {
+        "rubric": ["The service starts.", "The original log sink is preserved."],
+        "judge_inputs": ["Inspect the retained service and test output."],
+        "strict_rubric_output": True,
+        "rubric_dimensions": [
+            {"id": "startup", "criteria": ["rubric-1"]},
+            {"id": "logging", "criteria": ["rubric-2"]},
+        ],
+    }
+    data = {"skill": "sample-skill", "prompts": [{"id": "direct", "task": "Instrument the service."}]}
+    if shared:
+        base = tmp_path / "evals/rubrics/common.json"
+        base.parent.mkdir()
+        base.write_text(json.dumps(common))
+        data.update(rubric_base="../../../../rubrics/common.json", rubric_additions={"rubric-2": "Keep stderr output."})
+    else:
+        data.update(common)
+    path.write_text(json.dumps(data))
+
+    definition = load_eval_definition(path)
+    case = case_from_definition(definition, definition.prompts[0], path)
+
+    assert [dimension.model_dump() for dimension in case.rubric_dimensions] == common["rubric_dimensions"]
+    assert case.rubric_dimensions == definition.rubric_dimensions
+    assert case.rubric[0] == common["rubric"][0]
+    assert case.rubric[1].endswith("Keep stderr output.") is shared
+
+
+@pytest.mark.parametrize("fault", [
+    "non-strict", "duplicate-dimension", "duplicate-criterion", "missing-criterion",
+    "unknown-criterion", "empty-dimensions", "empty-criteria", "unsafe-id", "extra-field",
+])
+def test_rubric_dimensions_reject_ambiguous_or_non_strict_partitions(tmp_path, fault):
+    path = tmp_path / "evals/python/example/eval/qual/focused.json"
+    path.parent.mkdir(parents=True)
+    data = {
+        "skill": "sample-skill", "prompts": [{"id": "direct", "task": "Instrument the service."}],
+        "rubric": ["The service starts.", "The original log sink is preserved."],
+        "strict_rubric_output": True,
+        "rubric_dimensions": [
+            {"id": "startup", "criteria": ["rubric-1"]},
+            {"id": "logging", "criteria": ["rubric-2"]},
+        ],
+    }
+    dimensions = data["rubric_dimensions"]
+    if fault == "non-strict":
+        data["strict_rubric_output"] = False
+    elif fault == "duplicate-dimension":
+        dimensions[1]["id"] = dimensions[0]["id"]
+    elif fault == "duplicate-criterion":
+        dimensions[1]["criteria"].append("rubric-1")
+    elif fault == "missing-criterion":
+        dimensions.pop()
+    elif fault == "unknown-criterion":
+        dimensions[1]["criteria"] = ["rubric-3"]
+    elif fault == "empty-dimensions":
+        data["rubric_dimensions"] = []
+    elif fault == "empty-criteria":
+        dimensions[1]["criteria"] = []
+    elif fault == "unsafe-id":
+        dimensions[1]["id"] = "../logging"
+    else:
+        dimensions[1]["weight"] = 2
+    path.write_text(json.dumps(data))
+
+    with pytest.raises((ValueError, JSONSchemaValidationError)):
+        load_eval_definition(path)
 
 
 def test_codex_subprocess_env_uses_sandbox_local_package_caches(
@@ -1793,6 +1970,199 @@ def test_default_rubric_prompt_requires_percentage_style_score():
 
     assert "0-100 percentage-style quality score" in prompt
     assert "Do not put the number of passed checks" in prompt
+
+
+@pytest.mark.parametrize("with_inputs, expected", [
+    (False, (
+        "Evaluate the completed eval run in this directory.\n"
+        "\n"
+        "Case: sample/service/rubric\n"
+        "Prompt variant: direct\n"
+        "Task: Assess the answer.\n"
+        "\n"
+        "Return only JSON matching the provided schema. Grade against this rubric:\n"
+        "- Must cite evidence.\n"
+        "- Check ownership.\n"
+        "\n"
+        "Set `score` to a 0-100 percentage-style quality score. Do not put the number\n"
+        "of passed checks in `score`.\n"
+        "Use check ids derived from the rubric order, such as rubric-1, rubric-2, etc.\n"
+    )),
+    (True, (
+        "Evaluate the completed eval run in this directory.\n"
+        "\n"
+        "Case: sample/service/rubric\n"
+        "Prompt variant: direct\n"
+        "Task: Assess the answer.\n"
+        "\n"
+        "Suggested inputs:\n"
+        "- Read ./answer.md.\n"
+        "- Inspect ./result.json.\n"
+        "\n"
+        "Return only JSON matching the provided schema. Grade against this rubric:\n"
+        "- Must cite evidence.\n"
+        "- Check ownership.\n"
+        "\n"
+        "Set `score` to a 0-100 percentage-style quality score. Do not put the number\n"
+        "of passed checks in `score`.\n"
+        "Use check ids derived from the rubric order, such as rubric-1, rubric-2, etc.\n"
+    )),
+])
+def test_legacy_default_rubric_prompt_preserves_exact_contract(with_inputs, expected):
+    case = RubricEvalCase(
+        id="sample/service/rubric/direct", base_id="sample/service/rubric", prompt_id="direct",
+        skill="sample-skill", language="sample", service="service", task="Assess the answer.",
+        rubric=["Must cite evidence.", "Check ownership."],
+        judge_inputs=["Read ./answer.md.", "Inspect ./result.json."] if with_inputs else [],
+    )
+
+    assert rubric_prompt(case) == expected
+
+
+def test_legacy_custom_rubric_prompt_preserves_exact_inputs_and_rubric():
+    case = RubricEvalCase(
+        id="sample/service/rubric/direct", base_id="sample/service/rubric", prompt_id="direct",
+        skill="sample-skill", language="sample", service="service", task="Assess the answer.",
+        rubric=["Must cite evidence.", "Check ownership."],
+        judge_inputs=["Read ./answer.md.", "Inspect ./result.json."],
+        judge_prompt='Case={case_id}; Prompt={prompt_id}; Task={task}\nInputs:\n{inputs}\nRubric:\n{rubric}',
+    )
+    expected = (
+        "Case=sample/service/rubric; Prompt=direct; Task=Assess the answer.\n"
+        "Inputs:\n"
+        "- Read ./answer.md.\n"
+        "- Inspect ./result.json.\n"
+        "Rubric:\n"
+        "- Must cite evidence.\n"
+        "- Check ownership."
+    )
+
+    assert rubric_prompt(case) == expected
+
+
+@pytest.mark.parametrize("custom_prompt", [None, "Dimension={dimension}; {task}\nInputs:\n{inputs}\nRubric:\n{rubric}"])
+def test_dimension_grading_anchors_evidence_and_formats_only_assigned_criteria(tmp_path, custom_prompt):
+    workspace = tmp_path / "task"
+    workspace.mkdir()
+    case = dimension_case(2, judge_prompt=custom_prompt,
+                          judge_inputs=["Read ./answer.md.", "Inspect ./result.json."],
+                          rubric_dimensions=[{"id": "second", "criteria": ["rubric-2"]},
+                                             {"id": "first", "criteria": ["rubric-1"]}])
+    backend = DimensionBackend([dimension_grade("pass", start=2), dimension_grade("pass")])
+    path = run_rubric_dimensions(case=case, workspace_dir=workspace, output_dir=tmp_path / "grades",
+                                 model="judge", deadline=time.monotonic() + 30, backend=backend)
+    assert json.loads(path.read_text())["status"] == "complete"
+    prompt = backend.prompts[0]
+    assert str(workspace.resolve()) in prompt
+    assert "1. Read ./answer.md.\n2. Inspect ./result.json." in prompt
+    assert "rubric-2: Requirement 2." in prompt
+    assert "rubric-1:" not in prompt
+    if custom_prompt is None:
+        assert "read-only grader" in prompt
+        assert "not_proven" in prompt and "not_applicable" in prompt
+        assert "all applicable obligations" in prompt
+    else:
+        assert "Dimension=second" in prompt
+
+
+@pytest.mark.parametrize("custom_contract", ["legacy-default", "custom-prompt", "custom-schema"])
+def test_existing_judge_output_contracts_remain_unchanged(tmp_path, custom_contract):
+    case = RubricEvalCase(
+        id="sample/service/rubric/direct", base_id="sample/service/rubric", prompt_id="direct",
+        skill="sample-skill", language="sample", service="service", task="Assess the answer.",
+        rubric=["Correct answer."],
+        judge_prompt="Grade {task}." if custom_contract == "custom-prompt" else None,
+    )
+
+    class Judge:
+        def run_judge(self, **kwargs):
+            output = tmp_path / "rubric_grade.json"
+            output.write_text(json.dumps({"overall_pass": True, "score": 80, "checks": [
+                {"id": "quality", "pass": True, "notes": "", "evidence": ""},
+            ]}))
+            return AgentResult(0, tmp_path / "trace.jsonl", output, tmp_path / "stderr.txt")
+
+    schema = None
+    if custom_contract == "custom-schema":
+        schema = tmp_path / "custom.schema.json"
+        schema.write_text(json.dumps({"type": "object", "required": ["overall_pass", "score", "checks"]}))
+
+    result = run_rubric_grade(case=case, side_dir=tmp_path, model="test", backend=Judge(), schema_path=schema)
+
+    assert json.loads(result.read_text())["checks"][0]["id"] == "quality"
+    assert not (tmp_path / "rubric_prompt.txt").exists()
+    if custom_contract == "legacy-default":
+        assert "read-only grader" not in rubric_prompt(case)
+
+
+@pytest.mark.parametrize("custom_schema", [False, True])
+def test_strict_grading_uses_separate_api_before_inference(tmp_path, custom_schema):
+    case = RubricEvalCase(
+        id="sample/service/rubric/direct", base_id="sample/service/rubric", prompt_id="direct",
+        skill="sample-skill", language="sample", service="service", task="Assess the answer.",
+        rubric=["Correct answer."], strict_rubric_output=True,
+    )
+    backend = RecordingBackend()
+
+    with pytest.raises(ValueError, match="Use run_rubric_dimensions"):
+        run_rubric_grade(case=case, side_dir=tmp_path, model="test", backend=backend,
+                         schema_path=tmp_path / "custom.schema.json" if custom_schema else None)
+
+    assert backend.judge_timeouts == []
+
+
+@pytest.mark.parametrize("strict_output", [False, True])
+@pytest.mark.parametrize("valid_grade", [False, True])
+def test_live_result_requires_valid_grade_only_for_opted_in_rubric_runs(tmp_path, strict_output, valid_grade):
+    guards = GradeResult(checks=[
+        GradeCheckResult(id=name, description=name, passed=True, category="sanity")
+        for name in ("final-message-present", "skills-loaded", "skill-instructions-read")
+    ])
+    side = side_result("with_skill", guards)
+    side.strict_rubric_output = strict_output
+    if valid_grade and strict_output:
+        workspace = tmp_path / "task"
+        workspace.mkdir()
+        side.rubric_result_path = str(run_rubric_dimensions(
+            case=dimension_case(1), workspace_dir=workspace, output_dir=tmp_path / "grades",
+            model=None, deadline=time.monotonic() + 30, backend=DimensionBackend([dimension_grade("pass")]),
+        ))
+    elif valid_grade:
+        grade_path = tmp_path / "rubric_grade.json"
+        grade_path.write_text(json.dumps({"overall_pass": True, "score": 100, "checks": [
+            {"id": "rubric-1", "pass": True, "notes": "Requirement met.", "evidence": "answer.md:1"},
+        ]}))
+        side.rubric_grade_path = str(grade_path)
+    else:
+        side.errors = ["rubric grading failed: inconsistent checks"]
+    result = case_result(side, None)
+
+    if strict_output and not valid_grade:
+        with pytest.raises(AssertionError, match="with_skill rubric grading failed: .*inconsistent checks"):
+            validate_live_result(result, require_valid_rubric=True)
+    else:
+        validate_live_result(result, require_valid_rubric=strict_output)
+
+
+def test_legacy_grade_count_score_conversion_is_preserved(tmp_path):
+    raw = json.dumps({
+        "overall_pass": False,
+        "score": 10,
+        "checks": [{"id": f"rubric-{index}", "pass": index <= 10,
+                    "notes": "Observed result.", "evidence": "answer.md:1"}
+                   for index in range(1, 15)],
+    })
+    path = tmp_path / "rubric_grade.json"
+    path.write_text(raw)
+    side = side_result("with_skill", GradeResult())
+    side.rubric_grade_path = str(path)
+    restored = SideResult.model_validate_json(side.model_dump_json())
+
+    loaded = load_rubric_grade(restored)
+
+    assert loaded["score"] == 71
+    assert (loaded["passed"], loaded["total"]) == (10, 14)
+    assert path.read_text() == raw
 
 
 def test_report_normalizes_count_shaped_rubric_score():
@@ -4282,7 +4652,8 @@ def test_runtime_environment_overrides_are_isolated(monkeypatch, tmp_path: Path)
     assert env["COMPOSE_PROJECT_NAME"] == "project"
 
 
-def test_run_case_passes_configured_agent_and_judge_timeouts(tmp_path: Path):
+@pytest.mark.parametrize("strict_output", [False, True])
+def test_run_case_passes_configured_agent_and_judge_timeouts(tmp_path: Path, strict_output: bool):
     fixture_dir = tmp_path / "fixture"
     fixture_dir.mkdir()
     skill_dir = tmp_path / "skills" / "sample-skill"
@@ -4298,8 +4669,9 @@ def test_run_case_passes_configured_agent_and_judge_timeouts(tmp_path: Path):
         task="Evaluate the answer.",
         fixture_dir=fixture_dir,
         rubric=["Must pass."],
+        strict_rubric_output=strict_output,
     )
-    backend = RecordingBackend()
+    backend = DimensionBackend([dimension_grade("pass")]) if strict_output else RecordingBackend()
 
     result = run_case(
         repo_root=tmp_path,
@@ -4316,8 +4688,14 @@ def test_run_case_passes_configured_agent_and_judge_timeouts(tmp_path: Path):
     )
 
     assert backend.agent_timeouts == [2400]
-    assert backend.judge_timeouts == [1200]
+    assert len(backend.judge_timeouts) == 1
+    assert 0 < backend.judge_timeouts[0] <= 1200
+    if not strict_output:
+        assert backend.judge_timeouts == [1200]
     assert result.with_skill is not None
+    assert result.with_skill.strict_rubric_output is strict_output
+    assert result.with_skill.rubric_duration_seconds == round(result.with_skill.rubric_duration_seconds, 3)
+    assert not result.with_skill.errors
     assert result.with_skill.agent_tokens == 1
     assert result.with_skill.rubric_tokens == 1
     assert result.with_skill.tokens == 2
@@ -4332,6 +4710,7 @@ def test_run_case_passes_configured_agent_and_judge_timeouts(tmp_path: Path):
     )
     assert summary["agent_usage"]["provider_total_tokens"] == 1
     assert summary["rubric_usage"]["provider_total_tokens"] == 1
+    assert summary["strict_rubric_output"] is strict_output
 
 
 def write_loaded_skill(root: Path, skill: str) -> Path:
@@ -4475,11 +4854,13 @@ class RecordingBackend:
         model: str | None = None,
         schema_path: Path | None = None,
         timeout: int = 900,
+        output_dir: Path | None = None,
+        read_dirs: tuple[Path, ...] = (),
     ) -> AgentResult:
         self.judge_timeouts.append(timeout)
-        trace_path = exec_dir / "rubric_trace.jsonl"
-        output_path = exec_dir / "rubric_grade.json"
-        stderr_path = exec_dir / "rubric_stderr.txt"
+        trace_path = (output_dir or exec_dir) / "rubric_trace.jsonl"
+        output_path = (output_dir or exec_dir) / "rubric_grade.json"
+        stderr_path = (output_dir or exec_dir) / "rubric_stderr.txt"
         trace_path.write_text(
             json.dumps({"type": "turn.completed", "usage": {"total_tokens": 1}}) + "\n",
             encoding="utf-8",
@@ -4586,3 +4967,517 @@ def test_failed_judge_attempt_reports_absent_usage_in_rubric_artifacts(
     report = report_path.read_text(encoding="utf-8")
     assert "## Judge Token Usage" in report
     assert "| codex | unknown | absent |" in report
+
+
+def dimension_case(count=3, **updates):
+    return RubricEvalCase(
+        id="sample/service/rubric/direct", base_id="sample/service/rubric",
+        prompt_id="direct", skill="sample-skill", language="sample", service="service",
+        task="Assess the candidate.", rubric=[f"Requirement {index}." for index in range(1, count + 1)],
+        strict_rubric_output=True, **updates,
+    )
+
+
+def dimension_grade(*outcomes, start=1):
+    return {"checks": [
+        {"id": f"rubric-{index}", "result": outcome,
+         "notes": "Inspected the requirement.", "evidence": "service/answer.md:1"}
+        for index, outcome in enumerate(outcomes, start)
+    ]}
+
+
+class DimensionBackend(RecordingBackend):
+    def __init__(self, outputs, hook=None):
+        super().__init__()
+        self.outputs = outputs
+        self.hook = hook
+        self.directories = []
+        self.output_directories = []
+        self.prompts = []
+
+    def run_judge(self, **kwargs):
+        index = len(self.directories)
+        self.directories.append(kwargs["exec_dir"])
+        self.output_directories.append(kwargs["output_dir"])
+        self.prompts.append(kwargs["prompt"])
+        result = super().run_judge(**kwargs)
+        output = self.outputs[index]
+        if self.hook:
+            replacement = self.hook(index, kwargs, result)
+            if replacement is not None:
+                return replacement
+        if isinstance(output, BaseException):
+            raise output
+        result.final_message_path.write_text(
+            output if isinstance(output, str) else json.dumps(output), encoding="utf-8",
+        )
+        return result
+
+
+def test_dimension_grading_keeps_independent_artifacts_and_continues_after_error(tmp_path):
+    workspace = tmp_path / "task"
+    workspace.mkdir()
+    # Candidate files with grader-like names remain evidence and are never overwritten.
+    for name in ("rubric_grade.json", "rubric_trace.jsonl", "prompt.txt"):
+        (workspace / name).write_text("candidate evidence", encoding="utf-8")
+    case = dimension_case(rubric_dimensions=[
+        {"id": name, "criteria": [f"rubric-{index}"]}
+        for index, name in enumerate(("correctness", "proof", "scope"), 1)
+    ])
+    backend = DimensionBackend([
+        dimension_grade("pass"), RuntimeError("judge unavailable"), dimension_grade("fail", start=3),
+    ])
+    path = run_rubric_dimensions(
+        case=case, workspace_dir=workspace, output_dir=tmp_path / "grades",
+        model="judge-model", deadline=time.monotonic() + 30, backend=backend,
+    )
+    data = json.loads(path.read_text())
+    assert data["status"] == "incomplete"
+    assert data["acceptance"] == "incomplete"
+    assert data["overall_pass"] is None
+    assert data["score"] == 50
+    assert data["counts"] == {"pass": 1, "fail": 1, "not_proven": 0,
+                              "not_applicable": 0, "ungraded": 1, "total": 3}
+    assert [row["result"] for row in data["checks"]] == ["pass", "ungraded", "fail"]
+    assert [row["status"] for row in data["dimensions"]] == ["graded", "grader_error", "graded"]
+    assert len(set(backend.directories)) == 3
+    for index, (directory, prompt, dimension) in enumerate(zip(
+        backend.directories, backend.prompts, data["dimensions"], strict=True,
+    ), 1):
+        assert backend.output_directories[index - 1] == path.parent / f"dimension-{index}"
+        assert not directory.resolve().is_relative_to(path.parent)
+        assert not directory.resolve().is_relative_to(workspace.resolve())
+        assert not directory.exists()
+        assert str(workspace.resolve()) in prompt
+        assert f"rubric-{index}: Requirement {index}." in prompt
+        assert all(f"rubric-{other}:" not in prompt for other in range(1, 4) if other != index)
+        assert (path.parent / dimension["artifacts"]["prompt"]).read_text() == prompt
+        assert (path.parent / dimension["artifacts"]["trace"]).exists()
+        assert dimension["usage"]["provider_total_tokens"] == 1
+    assert "judge unavailable" in data["dimensions"][1]["error"]
+    assert all(path.read_text() == "candidate evidence" for path in workspace.iterdir())
+
+
+@pytest.mark.parametrize(("outcomes", "acceptance", "score"), [
+    (["pass", "pass"], "pass", 100),
+    (["pass", "fail"], "fail", 50),
+    (["pass", "not_proven"], "fail", 50),
+    (["pass", "not_applicable"], "pass", 100),
+    (["not_applicable", "not_applicable"], "vacuous", None),
+])
+def test_dimension_grading_computes_credit_without_awarding_inapplicability(tmp_path, outcomes, acceptance, score):
+    workspace = tmp_path / "task"
+    workspace.mkdir()
+    path = run_rubric_dimensions(
+        case=dimension_case(2), workspace_dir=workspace, output_dir=tmp_path / "grades",
+        model=None, deadline=time.monotonic() + 30,
+        backend=DimensionBackend([dimension_grade(*outcomes)]),
+    )
+    data = json.loads(path.read_text())
+    assert data["status"] == "complete"
+    assert data["acceptance"] == acceptance
+    assert data["score"] == score
+    assert data["overall_pass"] == ({"pass": True, "fail": False, "vacuous": None}[acceptance])
+    assert data["counts"]["not_applicable"] == outcomes.count("not_applicable")
+    assert data["counts"]["ungraded"] == 0
+
+
+@pytest.mark.parametrize("fault", ["missing", "duplicate", "reordered", "blank", "blank_notes", "unknown_result", "extra", "malformed", "exit"])
+def test_dimension_grading_rejects_invalid_results_and_preserves_raw_output(tmp_path, fault):
+    workspace = tmp_path / "task"
+    workspace.mkdir()
+    output = dimension_grade("pass", "pass")
+    if fault == "missing":
+        output["checks"].pop()
+    elif fault == "duplicate":
+        output["checks"][1]["id"] = "rubric-1"
+    elif fault == "reordered":
+        output["checks"].reverse()
+    elif fault == "blank":
+        output["checks"][0]["evidence"] = " \n "
+    elif fault == "blank_notes":
+        output["checks"][0]["notes"] = " \n "
+    elif fault == "unknown_result":
+        output["checks"][0]["result"] = "probably"
+    elif fault == "extra":
+        output["score"] = 100
+    elif fault == "malformed":
+        output = "not JSON"
+
+    def hook(index, kwargs, result):
+        if fault == "exit":
+            result.final_message_path.write_text(json.dumps(output))
+            return AgentResult(returncode=1, trace_path=result.trace_path,
+                               final_message_path=result.final_message_path, stderr_path=result.stderr_path)
+
+    path = run_rubric_dimensions(
+        case=dimension_case(2), workspace_dir=workspace, output_dir=tmp_path / "grades",
+        model=None, deadline=time.monotonic() + 30,
+        backend=DimensionBackend([output], hook),
+    )
+    data = json.loads(path.read_text())
+    assert data["status"] == "incomplete"
+    assert data["score"] is None
+    assert data["counts"]["ungraded"] == 2
+    assert data["dimensions"][0]["status"] == "grader_error"
+    assert data["dimensions"][0]["error"]
+    assert (path.parent / data["dimensions"][0]["artifacts"]["output"]).exists()
+
+
+def test_dimension_grading_uses_one_elapsed_budget(tmp_path, monkeypatch):
+    import pytest_codex_evals.graders.rubric as module
+
+    workspace = tmp_path / "task"
+    workspace.mkdir()
+    now = [100.0]
+    monkeypatch.setattr(module.time, "monotonic", lambda: now[0])
+    def advance(index, kwargs, result):
+        now[0] += [2.25, 7.25][index]
+    case = dimension_case(rubric_dimensions=[
+        {"id": f"group-{index}", "criteria": [f"rubric-{index}"]} for index in range(1, 4)
+    ])
+    backend = DimensionBackend([dimension_grade("pass"), dimension_grade("pass", start=2)], advance)
+    path = run_rubric_dimensions(case=case, workspace_dir=workspace, output_dir=tmp_path / "grades",
+                                 model=None, deadline=110.0, backend=backend)
+    data = json.loads(path.read_text())
+    assert backend.judge_timeouts == [10, 7]
+    assert now[0] == 109.5
+    assert [row["status"] for row in data["dimensions"]] == ["graded", "graded", "not_run"]
+    assert "budget exhausted" in data["dimensions"][2]["error"]
+    assert data["score"] == 100
+    assert data["overall_pass"] is None
+    assert data["counts"]["ungraded"] == 1
+
+
+def test_dimension_grading_discards_changed_evidence_and_stops_later_judges(tmp_path):
+    workspace = tmp_path / "task"
+    workspace.mkdir()
+    def mutate(index, kwargs, result):
+        (workspace / "answer.md").write_text("grader changed evidence")
+    case = dimension_case(2, rubric_dimensions=[
+        {"id": "first", "criteria": ["rubric-1"]}, {"id": "second", "criteria": ["rubric-2"]},
+    ])
+    backend = DimensionBackend([dimension_grade("pass")], mutate)
+    path = run_rubric_dimensions(case=case, workspace_dir=workspace, output_dir=tmp_path / "grades",
+                                 model=None, deadline=time.monotonic() + 30, backend=backend)
+    data = json.loads(path.read_text())
+    assert len(backend.directories) == 1
+    assert [row["status"] for row in data["dimensions"]] == ["grader_error", "not_run"]
+    assert all("modified" in row["error"] for row in data["dimensions"])
+    assert data["score"] is None
+    assert data["counts"]["ungraded"] == 2
+
+
+def test_dimension_grading_keeps_timeout_diagnostics(tmp_path):
+    workspace = tmp_path / "task"
+    workspace.mkdir()
+    class TimeoutBackend(RecordingBackend):
+        def run_judge(self, **kwargs):
+            raise subprocess.TimeoutExpired("judge", kwargs["timeout"], output=b"partial trace", stderr="partial error")
+    path = run_rubric_dimensions(case=dimension_case(1), workspace_dir=workspace, output_dir=tmp_path / "grades",
+                                 model=None, deadline=time.monotonic() + 30, backend=TimeoutBackend())
+    data = json.loads(path.read_text())
+    dimension = data["dimensions"][0]
+    assert dimension["status"] == "grader_error"
+    assert (path.parent / dimension["artifacts"]["trace"]).read_bytes() == b"partial trace"
+    assert (path.parent / dimension["artifacts"]["stderr"]).read_text() == "partial error"
+
+
+def test_dimension_grading_records_interruption_before_propagating(tmp_path):
+    workspace = tmp_path / "task"
+    workspace.mkdir()
+    output = tmp_path / "grades"
+    with pytest.raises(KeyboardInterrupt):
+        run_rubric_dimensions(case=dimension_case(1), workspace_dir=workspace, output_dir=output,
+                              model=None, deadline=time.monotonic() + 30,
+                              backend=DimensionBackend([KeyboardInterrupt()]))
+    data = json.loads((output / "rubric_result.json").read_text())
+    assert data["status"] == "incomplete"
+    assert data["dimensions"][0]["status"] == "grader_error"
+    assert "KeyboardInterrupt" in data["dimensions"][0]["error"]
+    assert (output / data["dimensions"][0]["artifacts"]["trace"]).exists()
+
+
+@pytest.mark.parametrize("placement", ["custom", "outside", "symlink"])
+def test_dimension_grading_requires_artifacts_owned_by_that_judge(tmp_path, placement):
+    workspace = tmp_path / "task"
+    workspace.mkdir()
+    def relocate(index, kwargs, result):
+        root = kwargs["output_dir"] if placement == "custom" else tmp_path
+        output = root / "custom-output.json"
+        output.write_text(json.dumps(dimension_grade("pass")))
+        if placement == "symlink":
+            link = kwargs["output_dir"] / "linked.json"
+            link.symlink_to(output)
+            output = link
+        return AgentResult(0, result.trace_path, output, result.stderr_path)
+    path = run_rubric_dimensions(case=dimension_case(1), workspace_dir=workspace, output_dir=tmp_path / "grades",
+                                 model=None, deadline=time.monotonic() + 30,
+                                 backend=DimensionBackend([None], relocate))
+    data = json.loads(path.read_text())
+    dimension = data["dimensions"][0]
+    if placement == "custom":
+        assert data["acceptance"] == "pass"
+        assert dimension["artifacts"]["output"] == "dimension-1/custom-output.json"
+    else:
+        assert data["status"] == "incomplete"
+        assert "inside their own output directory" in dimension["error"]
+
+
+@pytest.mark.parametrize("missing", ["metadata", "grade"])
+def test_dimension_grading_distinguishes_missing_usage_from_missing_verdict(tmp_path, missing):
+    workspace = tmp_path / "task"
+    workspace.mkdir()
+    def remove(index, kwargs, result):
+        result.final_message_path.write_text(json.dumps(dimension_grade("pass")))
+        paths = [result.trace_path, result.stderr_path] if missing == "metadata" else [result.final_message_path]
+        for path in paths:
+            path.unlink()
+        return result
+    path = run_rubric_dimensions(case=dimension_case(1), workspace_dir=workspace, output_dir=tmp_path / "grades",
+                                 model=None, deadline=time.monotonic() + 30,
+                                 backend=DimensionBackend([None], remove))
+    data = json.loads(path.read_text())
+    dimension = data["dimensions"][0]
+    if missing == "metadata":
+        assert data["acceptance"] == "pass"
+        assert dimension["usage"] is None
+        assert dimension["artifacts"]["trace"] is None
+        assert dimension["artifacts"]["stderr"] is None
+    else:
+        assert data["status"] == "incomplete"
+        assert data["counts"]["ungraded"] == 1
+        assert dimension["artifacts"]["output"] is None
+        assert "FileNotFoundError" in dimension["error"]
+
+
+@pytest.mark.parametrize("when", ["before", "after"])
+def test_dimension_grading_stops_if_evidence_cannot_be_inspected(tmp_path, monkeypatch, when):
+    workspace = tmp_path / "task"
+    workspace.mkdir()
+    original = Path.iterdir
+    inspections = []
+    def inspect(path):
+        if path == workspace.resolve():
+            inspections.append(path)
+            if when == "before" or len(inspections) > 1:
+                raise PermissionError("task evidence is unreadable")
+        return original(path)
+    monkeypatch.setattr(Path, "iterdir", inspect)
+    case = dimension_case(2, rubric_dimensions=[
+        {"id": "first", "criteria": ["rubric-1"]}, {"id": "second", "criteria": ["rubric-2"]},
+    ])
+    backend = DimensionBackend([dimension_grade("pass")])
+    path = run_rubric_dimensions(case=case, workspace_dir=workspace, output_dir=tmp_path / "grades",
+                                 model=None, deadline=time.monotonic() + 30, backend=backend)
+    data = json.loads(path.read_text())
+    assert len(backend.directories) == (0 if when == "before" else 1)
+    assert data["counts"]["ungraded"] == 2
+    assert all("unreadable" in row["error"] for row in data["dimensions"])
+
+
+def test_dimension_grading_rechecks_budget_after_preparing_prompt(tmp_path, monkeypatch):
+    import pytest_codex_evals.graders.rubric as module
+
+    workspace = tmp_path / "task"
+    workspace.mkdir()
+    ticks = iter([0.0, 0.0, 1.5])
+    monkeypatch.setattr(module.time, "monotonic", lambda: next(ticks, 1.5))
+    backend = DimensionBackend([])
+    path = run_rubric_dimensions(case=dimension_case(1), workspace_dir=workspace, output_dir=tmp_path / "grades",
+                                 model=None, deadline=2.0, backend=backend)
+    data = json.loads(path.read_text())
+    assert not backend.directories
+    assert data["dimensions"][0]["status"] == "not_run"
+    assert "budget exhausted" in data["dimensions"][0]["error"]
+
+
+def test_dimension_grading_refuses_temporary_cwd_inside_a_repository(tmp_path, monkeypatch):
+    import tempfile
+
+    repository = tmp_path / "consumer"
+    (repository / ".git").mkdir(parents=True)
+    temporary = repository / "tmp"
+    temporary.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(temporary))
+    workspace = tmp_path / "task"
+    workspace.mkdir()
+    backend = DimensionBackend([])
+    path = run_rubric_dimensions(case=dimension_case(1), workspace_dir=workspace, output_dir=tmp_path / "grades",
+                                 model=None, deadline=time.monotonic() + 30, backend=backend)
+    data = json.loads(path.read_text())
+    assert not backend.directories
+    assert data["status"] == "incomplete"
+    assert data["counts"]["ungraded"] == 1
+    assert "temporary location outside" in data["dimensions"][0]["error"]
+    assert not list(temporary.iterdir())
+
+
+@pytest.mark.parametrize("failure", ["mutation", "interruption"])
+def test_strict_runner_preserves_actor_evidence_before_grading(tmp_path, failure):
+    fixture = tmp_path / "fixture"
+    fixture.mkdir()
+    (fixture / "answer.md").write_text("original actor evidence")
+    skill = tmp_path / "skills/sample-skill"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text("name: sample-skill\n")
+    class MutatingBackend(DimensionBackend):
+        def run_agent(self, **kwargs):
+            self.task_dir = kwargs["exec_dir"]
+            return super().run_agent(**kwargs)
+    def change(index, kwargs, result):
+        (backend.task_dir / "service/answer.md").write_text("changed by grader")
+    backend = MutatingBackend([KeyboardInterrupt() if failure == "interruption" else dimension_grade("pass")], change)
+    run_root = tmp_path / ".workspace/codex-evals/sample-skill/run"
+    def execute():
+        return run_case(repo_root=tmp_path, run_root=run_root,
+                        case=dimension_case(1, fixture_dir=fixture), skill_dir=skill,
+                        sides=("with_skill",), backend=backend)
+    if failure == "interruption":
+        with pytest.raises(KeyboardInterrupt):
+            execute()
+    else:
+        assert execute().with_skill.errors
+    artifact = run_root / "cases/sample/service/direct/with_skill"
+    summary = json.loads((artifact / "summary.json").read_text())
+    assert (artifact / "service/answer.md").read_text() == "original actor evidence"
+    assert Path(summary["trace_path"]).is_file()
+    assert Path(summary["final_message_path"]).read_text() == "done"
+    assert (artifact / "grade.json").is_file()
+    assert json.loads(Path(summary["rubric_result_path"]).read_text())["status"] == "incomplete"
+    assert not backend.task_dir.exists()
+
+
+@pytest.mark.parametrize("outcomes", [["pass", "not_proven", "not_applicable"], ["not_applicable"] * 3,
+                                      ["pass", RuntimeError("unavailable"), "pass"]])
+def test_strict_results_survive_reports_without_hiding_gaps_or_missing_usage(tmp_path, outcomes):
+    fixture = tmp_path / "fixture"
+    fixture.mkdir()
+    skill = tmp_path / "skills/sample-skill"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text("name: sample-skill\n")
+    class PartialUsageBackend(DimensionBackend):
+        def parse_trace(self, path):
+            if path.parent.name == "dimension-2":
+                raise ValueError("usage unavailable")
+            return super().parse_trace(path)
+    case = dimension_case(3, fixture_dir=fixture, rubric_dimensions=[
+        {"id": f"group-{index}", "criteria": [f"rubric-{index}"]} for index in range(1, 4)
+    ])
+    backend = PartialUsageBackend([value if isinstance(value, Exception) else dimension_grade(value, start=index)
+                                   for index, value in enumerate(outcomes, 1)])
+    run_root = tmp_path / ".workspace/codex-evals/sample-skill/run"
+    result = run_case(repo_root=tmp_path, run_root=run_root, case=case, skill_dir=skill,
+                      sides=("with_skill",), backend=backend)
+    side = SideResult.model_validate_json(result.with_skill.model_dump_json())
+    assert side.rubric_tokens == 2
+    assert side.rubric_usage.provider_total_tokens is None
+    assert side.rubric_usage.total_tokens is None
+    loaded = load_rubric_grade(side)
+    assert loaded["counts"]["total"] == 3
+    assert len(loaded["dimensions"]) == 3
+    assert loaded["dimensions"][1]["usage"] is None
+    assert "usage unavailable" in loaded["dimensions"][1]["usage_error"]
+    write_session_results([{"mode": "with_skill", "eval_kind": "rubric", "repo_root": tmp_path,
+                            "run_root": run_root, "skill": "sample-skill", "results": [result]}])
+    report_path, benchmark_path = render_reports_for_run_root(run_root, "rubric")
+    benchmark = json.loads(benchmark_path.read_text())
+    summary = benchmark["evals"][0]["with_skill"]
+    strict = summary["rubric"]["strict"]
+    coverage = summary["rubric_usage"]["coverage"]
+    assert coverage["record_count"] == 3
+    assert coverage["preferred_total_count"] == 2
+    assert strict["counts"] == loaded["counts"]
+    report = report_path.read_text()
+    if isinstance(outcomes[1], Exception):
+        assert loaded["score"] == 100
+        assert loaded["overall_pass"] is None
+        assert summary["rubric"]["average_score"] is None
+        assert strict["incomplete"] == 1
+        assert "1/1 strict runs incomplete" in report
+        assert "1 ungraded" in report
+        assert "UNGRADED" in report
+    elif outcomes[0] == "not_applicable":
+        assert loaded["score"] is None
+        assert loaded["overall_pass"] is None
+        assert strict["vacuous"] == 1
+        assert "1 all-N/A" in report
+        assert "FAIL" not in report
+    else:
+        assert loaded["score"] == 50
+        assert loaded["overall_pass"] is False
+        assert "1 not proven" in report
+        assert "NOT_PROVEN" in report
+
+
+@pytest.mark.parametrize('extra_result', [None, 7, 'pass', 'not_applicable'])
+def test_custom_schema_metadata_does_not_change_legacy_failure_reporting(tmp_path, extra_result):
+    case = RubricEvalCase(id='sample/service/direct', base_id='sample/service', prompt_id='direct',
+                         skill='sample-skill', language='sample', service='service', task='Assess.',
+                         rubric=['Correct output.'])
+    payload = {'overall_pass': True, 'score': 0, 'checks': [
+        {'id': 'quality', 'pass': False, 'result': extra_result,
+         'notes': 'Observed failure.', 'evidence': 'answer.md:1'},
+    ]}
+    schema = tmp_path / 'custom.schema.json'
+    schema.write_text(json.dumps({'type': 'object', 'required': ['overall_pass', 'score', 'checks']}))
+    class Backend:
+        def run_judge(self, **kwargs):
+            output = tmp_path / 'rubric_grade.json'
+            output.write_text(json.dumps(payload))
+            return AgentResult(0, tmp_path / 'trace.jsonl', output, tmp_path / 'stderr.txt')
+    grade = run_rubric_grade(case=case, side_dir=tmp_path, schema_path=schema, model=None, backend=Backend())
+    side = SideResult(side='with_skill', exit_code=0, trace_path='trace.jsonl', final_message_path='last_message.md',
+                      grade=GradeResult(), rubric_grade_path=str(grade))
+    result = CaseResult(id=case.id, base_id=case.base_id, prompt_id=case.prompt_id, skill=case.skill,
+                        language=case.language, service=case.service, with_skill=side)
+    run_root = tmp_path / '.workspace/codex-evals/sample-skill/run'
+    write_session_results([{'mode': 'with_skill', 'eval_kind': 'rubric', 'repo_root': tmp_path,
+                            'run_root': run_root, 'skill': 'sample-skill', 'results': [result]}])
+    report, benchmark = render_reports_for_run_root(run_root, 'rubric')
+    assert 'rubric:quality FAIL' in report.read_text()
+    assert json.loads(benchmark.read_text())['evals'][0]['with_skill']['rubric']['passed'] == 0
+
+
+@pytest.mark.parametrize("backend_type", [CodexBackend, CursorBackend, ClaudeBackend])
+@pytest.mark.parametrize("separate_output", [False, True])
+def test_judge_backends_keep_working_directory_output_and_read_access_separate(tmp_path, monkeypatch, backend_type, separate_output):
+    working = tmp_path / "working"
+    output = tmp_path / "output" if separate_output else working
+    evidence = tmp_path / "evidence"
+    for directory in {working, output, evidence}:
+        directory.mkdir()
+    payload = dimension_grade("pass")
+    calls = []
+    def fake_run(command, **kwargs):
+        calls.append((command, kwargs))
+        if "--output-last-message" in command:
+            Path(command[command.index("--output-last-message") + 1]).write_text(json.dumps(payload))
+        return subprocess.CompletedProcess(command, 0, stdout=json.dumps({"result": json.dumps(payload)}), stderr="diagnostic")
+    monkeypatch.setattr("pytest_codex_evals.backends.subprocess.run", fake_run)
+    backend = backend_type(command="judge-cli", extra_args=["--test-extra"])
+    result = backend.run_judge(prompt="Grade it.", exec_dir=working, model="judge-model", timeout=17,
+                               output_dir=output if separate_output else None,
+                               read_dirs=(evidence,) if separate_output else ())
+    command, options = calls[0]
+    assert result.final_message_path == output / "rubric_grade.json"
+    assert json.loads(result.final_message_path.read_text()) == payload
+    assert result.trace_path == output / "rubric_trace.jsonl"
+    assert result.trace_path.is_file()
+    assert result.stderr_path.read_text() == "diagnostic"
+    assert options["timeout"] == 17
+    assert "--test-extra" in command
+    assert command[command.index("--model") + 1] == "judge-model"
+    if backend_type is ClaudeBackend:
+        assert options["cwd"] == working
+        assert ("--add-dir" in command) is separate_output
+        assert ("--setting-sources" in command) is separate_output
+        if separate_output:
+            assert command[command.index("--add-dir") + 1] == str(evidence)
+            assert command[command.index("--setting-sources") + 1] == "user"
+            assert command.index("--setting-sources") < command.index("--test-extra")
+    else:
+        assert command[command.index("--cd") + 1] == str(working)
+        assert options["cwd"] == (working if separate_output else None)
+    if separate_output:
+        assert not list(working.iterdir())

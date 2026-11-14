@@ -71,7 +71,7 @@ provided. The `skill` value is matched to the directory name passed with
 Role-specific schemas are strict:
 
 - `eval/sanity/*.json`: `skill`, `prompts`, optional `checks`.
-- `eval/qual/*.json`: `skill`, `prompts`, required `rubric`, optional `judge_prompt` and `judge_inputs`.
+- `eval/qual/*.json`: `skill`, `prompts`, either an inline `rubric` or a `rubric_base`, plus supported grading options.
 - `eval/runtime/*.json`: `skill`, `prompts`, required runtime `checks`.
 
 ### 0.2 runtime-expectation migration
@@ -86,6 +86,106 @@ empty `endpoints` list remains valid when `service_logs` is non-empty.
 use `{case_id}`, `{prompt_id}`, `{task}`, `{rubric}`, and `{inputs}` template
 fields. Use `judge_inputs` to tell the judge what artifacts matter for that
 skill; the default prompt does not assume every eval has service files.
+In strict mode, rendered evidence inputs are numbered separately from
+`rubric-N` verdicts. Legacy prompts retain bullet inputs.
+
+Use `rubric_base` to share `rubric`, `judge_inputs`, `strict_rubric_output` and
+optional `rubric_dimensions` from a JSON file relative to the definition, within the
+same eval root. `rubric_additions` appends text to existing criterion IDs:
+
+```json
+{
+  "skill": "sample-skill",
+  "prompts": [{ "id": "direct", "task": "Assess the service." }],
+  "rubric_base": "../../../../rubrics/common.json",
+  "rubric_additions": { "rubric-2": "Also assess the case-specific obligation." }
+}
+```
+
+An extending definition cannot replace common criteria, evidence inputs,
+strictness, grader groups or judge prompt. Invalid paths, symlinks, nested inheritance and
+unknown criterion IDs are rejected. Store bases outside the owning case's
+fixture tree so they cannot be staged as actor inputs. Resolution preserves
+criterion order and count, and source manifests include the shared file. Inline definitions remain
+supported. Moving unchanged requirements into a base is not new semantic coverage.
+
+Enable `strict_rubric_output` to require a result, explanation and evidence for
+every checklist item. Add `rubric_dimensions` to divide the checklist among
+focused judges that inspect the same completed task. The agent runs once;
+each group gets a separate judge call, temporary working directory, and retained
+output directory. Without groups,
+one judge grades the whole checklist. For example, an inline definition can use:
+
+```json
+{
+  "skill": "sample-skill",
+  "prompts": [{ "id": "direct", "task": "Assess the service." }],
+  "strict_rubric_output": true,
+  "rubric": ["The answer addresses the task.", "Claims cite inspectable evidence."],
+  "rubric_dimensions": [
+    { "id": "correctness", "criteria": ["rubric-1"] },
+    { "id": "evidence", "criteria": ["rubric-2"] }
+  ]
+}
+```
+
+Groups require strict mode, unique group IDs, and exactly one group for every
+`rubric-N` item. A shared base owns the grouping; cases can add requirements to
+its items but cannot replace its groups. Regrouping unchanged requirements does
+not count as new semantic coverage.
+
+Each judge returns ordered `checks` with `id`, `result`, nonblank `notes` and
+`evidence`. Results distinguish supported success (`pass`), an observed violation
+(`fail`), missing required proof (`not_proven`), and a wholly out-of-scope item
+(`not_applicable`). The harness calculates the score as the rounded percentage of
+passed applicable items; `fail` and `not_proven` count in the denominator, while
+`not_applicable` earns no credit. A complete grade passes only when every
+applicable item passes. An all-inapplicable grade has no score or pass verdict.
+
+Judge execution or format errors leave affected items `ungraded` and the result
+incomplete. Later groups still run while budget and evidence integrity allow it.
+An incomplete required grade fails the collected pytest case; a valid task
+failure is recorded as an eval outcome. Reports show missing coverage and exclude
+incomplete scores from completed-grade averages. `--no-rubric` skips all judges.
+
+Strict results are stored in `rubric_result.json`, with per-group status, usage,
+timing and raw artifact paths. Each side's grading archive is a sibling of its
+retained task directory, such as `with_skill.rubric/dimension-1/`. The runner saves
+the actor's artifacts before grading and never replaces them with grader edits.
+Direct callers use `run_rubric_dimensions` with separate task/output directories
+and a monotonic deadline; the caller must own and protect the output directory.
+The existing `run_rubric_grade` API and output schema serve non-strict callers.
+
+All groups share the existing `judge_timeout` budget; calls receive the remaining
+whole seconds, with no retries. Backend startup, cleanup and filesystem work can
+exceed that deadline. Fresh judge working directories and prompts separate judge
+outputs from candidate evidence. Working directories use the system temporary
+location to avoid inheriting the consumer repository's instructions. Strict
+grading refuses a temporary location inside a Git repository. Strict
+Claude calls explicitly grant access to the task directory and exclude its
+project settings from discovery; explicit backend extra arguments still apply.
+Global and managed host instructions remain subject to the backend's behavior.
+Stat checks detect ordinary local file changes,
+discard the affected verdict and stop later judges. They do not detect reads,
+changes outside the task tree, changes behind symlinks, or edits that preserve
+size and timestamps. Actual read-only enforcement belongs to the backend.
+
+A strict custom `judge_prompt` can also use `{dimension}` and must describe the
+four-result response format; custom output schemas remain a non-strict feature.
+Existing non-strict prompts, grading and score normalization remain unchanged.
+Usage totals are complete only when every attempted judge supplies them; flat
+token totals sum known usage, and reports retain missing-usage coverage.
+Custom backends using strict grading must support the optional `output_dir` and
+`read_dirs` judge arguments: write raw artifacts to the supplied output directory
+and permit evidence reads from the supplied directories. Existing non-strict
+calls omit both arguments and keep their existing working-directory behavior.
+
+This supports focused graders and partial credit described in
+[Anthropic's agent eval guidance](https://www.anthropic.com/research/demystifying-evals-for-ai-agents).
+Grouping and valid JSON do not establish grading accuracy. Prefer executable
+checks for deterministic outcomes, inspect trial transcripts, and calibrate
+model judgments against real expert labels on representative successes and
+failures before relying on a rubric. AI-written reference labels are provisional.
 
 Sanity checks can assert final text, files, trace command evidence, or
 run local commands in the produced `service/` workspace. Command checks use an

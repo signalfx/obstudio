@@ -19,6 +19,7 @@ from .eval_files import (
     fixture_eval_input_sources,
     iter_eval_files,
     regular_source_file,
+    rubric_base_source,
     runtime_definition_asset_files,
     runtime_repository_source_files,
     shared_runtime_source_files,
@@ -369,6 +370,9 @@ def source_input_digests(
                 raise ValueError(f"eval definition must be an object: {path}")
             if definition.get("skill") == skill:
                 paths.append(path)
+                base = rubric_base_source(path, definition)
+                if base is not None:
+                    paths.append(base)
                 paths.extend(staged_fixture_source_files(layout.fixture_dir))
                 prompts = definition.get("prompts", [])
                 if not isinstance(prompts, list):
@@ -495,6 +499,9 @@ def selected_eval_source_files(
         )
 
     paths = [definition_source, *staged_fixture_source_files(resolved_fixture)]
+    base = rubric_base_source(definition_source, definition)
+    if base is not None:
+        paths.append(base)
     paths.extend(
         source
         for _relative, source in fixture_eval_input_sources(
@@ -1210,12 +1217,14 @@ def aggregate_kind_side(kind: str, results: list[CaseResult], side_key: str) -> 
         rubric = [grade for side in sides if (grade := load_rubric_grade(side)) is not None]
         rubric_total = sum(int(grade["total"]) for grade in rubric)
         rubric_passed = sum(int(grade["passed"]) for grade in rubric)
-        scores = [int(grade["score"]) for grade in rubric if isinstance(grade.get("score"), int)]
+        scores = [int(grade["score"]) for grade in rubric if isinstance(grade.get("score"), int) and grade.get("status", "complete") == "complete"]
         summary["rubric"] = None if not rubric else {"passed": rubric_passed, "total": rubric_total, "average_score": average(scores) if scores else None}
+        if strict := strict_rubric_summary(rubric):
+            summary["rubric"]["strict"] = strict
         summary["rubric_tokens"] = sum(side.rubric_tokens for side in sides)
         summary["rubric_duration_seconds"] = round(sum(side.rubric_duration_seconds for side in sides), 3)
         summary["rubric_usage"] = aggregate_usage(
-            [side.rubric_usage for side in sides], expected_records=len(sides)
+            [rubric_usage_payload(side) for side in sides], expected_records=len(sides)
         )
     else:
         summary["checks"] = aggregate_check_category(sides, kind)
@@ -1247,6 +1256,8 @@ def aggregate_kind_evals(evals: list[dict[str, Any]], side_key: str, kind: str) 
             "total": sum(int(rubric["total"]) for rubric in rubric_summaries),
             "average_score": average(scores) if scores else None,
         }
+        if strict := strict_rubric_summary(rubric_summaries):
+            summary["rubric"]["strict"] = strict
         summary["rubric_tokens"] = sum(int(side.get("rubric_tokens") or 0) for side in sides)
         summary["rubric_duration_seconds"] = round(sum(float(side.get("rubric_duration_seconds") or 0.0) for side in sides), 3)
         summary["rubric_usage"] = aggregate_usage(
@@ -1794,12 +1805,13 @@ def side_summary(side: SideResult | None) -> dict[str, Any] | None:
         "agent_tokens": side.agent_tokens,
         "rubric_tokens": side.rubric_tokens,
         "agent_usage": usage_payload(side.agent_usage),
-        "rubric_usage": usage_payload(side.rubric_usage),
+        "rubric_usage": rubric_usage_payload(side),
         "errors": side.errors,
         "trace_path": side.trace_path,
         "final_message_path": side.final_message_path,
         "rubric_grade_path": side.rubric_grade_path,
         "rubric_trace_path": side.rubric_trace_path,
+        **({"rubric_result_path": side.rubric_result_path} if side.strict_rubric_output else {}),
     }
 
 
@@ -1852,8 +1864,8 @@ def aggregate_side(results: list[CaseResult], side_key: str) -> dict[str, Any] |
     rubric = [grade for side in sides if (grade := load_rubric_grade(side)) is not None]
     rubric_total = sum(int(grade["total"]) for grade in rubric)
     rubric_passed = sum(int(grade["passed"]) for grade in rubric)
-    scores = [int(grade["score"]) for grade in rubric if isinstance(grade.get("score"), int)]
-    return {
+    scores = [int(grade["score"]) for grade in rubric if isinstance(grade.get("score"), int) and grade.get("status", "complete") == "complete"]
+    summary = {
         "prompt_count": len(sides),
         "sanity": aggregate_check_category(sides, "sanity"),
         "runtime": aggregate_check_category(sides, "runtime"),
@@ -1875,10 +1887,13 @@ def aggregate_side(results: list[CaseResult], side_key: str) -> dict[str, Any] |
             [side.agent_usage for side in sides], expected_records=len(sides)
         ),
         "rubric_usage": aggregate_usage(
-            [side.rubric_usage for side in sides], expected_records=len(sides)
+            [rubric_usage_payload(side) for side in sides], expected_records=len(sides)
         ),
         "error_count": sum(len(side.errors) for side in sides),
     }
+    if strict := strict_rubric_summary(rubric):
+        summary["rubric"]["strict"] = strict
+    return summary
 
 
 def collect_failures(results: list[CaseResult]) -> list[dict[str, str]]:
@@ -1908,7 +1923,10 @@ def collect_failures(results: list[CaseResult]) -> list[dict[str, str]]:
                 continue
             rubric_failures = 0
             for check in rubric.get("checks", []):
-                if bool(check.get("pass")):
+                verdict = "pass" if check.get("pass") else "fail"
+                if rubric.get("mode") == "dimensions":
+                    verdict = check["result"]
+                if verdict in {"pass", "not_applicable"}:
                     continue
                 rubric_failures += 1
                 failures.append(
@@ -1917,7 +1935,7 @@ def collect_failures(results: list[CaseResult]) -> list[dict[str, str]]:
                         "side": side_key,
                         "prompt": result.prompt_id,
                         "category": "rubric",
-                        "result": f"rubric:{check.get('id', 'check')} FAIL",
+                        "result": f"rubric:{check.get('id', 'check')} {verdict.upper()}",
                         "evidence": str(check.get("evidence") or check.get("notes") or ""),
                     }
                 )
@@ -2120,6 +2138,12 @@ def side_for_key(result: CaseResult, side_key: str) -> SideResult | None:
 
 
 def load_rubric_grade(side: SideResult) -> dict[str, Any] | None:
+    if side.strict_rubric_output:
+        if not side.rubric_result_path or not Path(side.rubric_result_path).is_file():
+            return None
+        data = json.loads(Path(side.rubric_result_path).read_text(encoding="utf-8"))
+        return {**data, "mode": "dimensions", "passed": data["counts"]["pass"],
+                "total": data["counts"]["total"], "path": side.rubric_result_path}
     if not side.rubric_grade_path:
         return None
     path = Path(side.rubric_grade_path)
@@ -2140,6 +2164,29 @@ def load_rubric_grade(side: SideResult) -> dict[str, Any] | None:
     return normalized
 
 
+def strict_rubric_summary(grades: list[dict[str, Any]]) -> dict[str, Any] | None:
+    summaries = []
+    for grade in grades:
+        if grade.get("mode") == "dimensions":
+            summaries.append({"runs": 1, "incomplete": int(grade["status"] != "complete"),
+                              "vacuous": int(grade["acceptance"] == "vacuous"), "counts": grade["counts"]})
+        elif grade.get("strict"):
+            summaries.append(grade["strict"])
+    if not summaries:
+        return None
+    return {
+        **{key: sum(row[key] for row in summaries) for key in ("runs", "incomplete", "vacuous")},
+        "counts": {key: sum(row["counts"][key] for row in summaries) for key in summaries[0]["counts"]},
+    }
+
+
+def rubric_usage_payload(side: SideResult) -> dict[str, Any] | None:
+    if side.strict_rubric_output and (grade := load_rubric_grade(side)) is not None:
+        attempted = [row for row in grade["dimensions"] if row["timeout_seconds"] > 0]
+        return aggregate_usage([row["usage"] or TokenUsage() for row in attempted], expected_records=len(attempted))
+    return usage_payload(side.rubric_usage)
+
+
 def normalize_rubric_score(score: Any, passed: int, total: int) -> Any:
     if isinstance(score, int) and total > 0 and score == passed and score <= total:
         return round((passed / total) * 100)
@@ -2151,6 +2198,12 @@ def format_rubric(side: dict[str, Any] | None) -> str:
         return "-"
     rubric = side["rubric"]
     value = format_count(int(rubric["passed"]), int(rubric["total"]))
+    if strict := rubric.get("strict"):
+        counts = strict["counts"]
+        value = (f"{rubric['passed']}/{rubric['total']} criteria passed; strict: "
+                 f"{counts['fail']} fail, {counts['not_proven']} not proven, {counts['not_applicable']} N/A, "
+                 f"{counts['ungraded']} ungraded; {strict['incomplete']}/{strict['runs']} strict runs incomplete, "
+                 f"{strict['vacuous']} all-N/A")
     score = rubric.get("average_score")
     if score is None:
         return value
