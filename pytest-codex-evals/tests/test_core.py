@@ -4694,6 +4694,7 @@ def test_run_case_passes_configured_agent_and_judge_timeouts(tmp_path: Path, str
         assert backend.judge_timeouts == [1200]
     assert result.with_skill is not None
     assert result.with_skill.strict_rubric_output is strict_output
+    assert result.with_skill.rubric_duration_seconds == round(result.with_skill.rubric_duration_seconds, 3)
     assert not result.with_skill.errors
     assert result.with_skill.agent_tokens == 1
     assert result.with_skill.rubric_tokens == 1
