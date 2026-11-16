@@ -1583,20 +1583,38 @@ def _git_tree_paths(
     return paths
 
 
-def _rubric_base_reference(path: Path, definition: object) -> Path | None:
-    if not isinstance(definition, dict) or "rubric_base" not in definition:
+def _rubric_reference(path: Path, definition: object, field: str) -> Path | None:
+    if not isinstance(definition, dict) or field not in definition:
         return None
-    reference = definition["rubric_base"]
+    reference = definition[field]
     if (not isinstance(reference, str) or not reference.strip()
             or "\\" in reference or Path(reference).is_absolute()):
-        raise ValueError("rubric_base must be a relative JSON file within evals")
+        raise ValueError(f"{field} must be a relative JSON file within evals")
     source = Path(os.path.normpath(path.parent / reference))
     if not source.is_relative_to(Path("evals")) or source.suffix != ".json":
-        raise ValueError("rubric_base must stay within evals and reference JSON")
+        raise ValueError(f"{field} must stay within evals and reference JSON")
     fixture = path.parents[2]
     if source.is_relative_to(fixture):
-        raise ValueError("rubric_base must not be staged in the actor fixture workspace")
+        raise ValueError(f"{field} must not be staged in the actor fixture workspace")
     return source
+
+
+def _rubric_source_text(root: Path, source: Path, errors: list[str], base_tree: str | None) -> str:
+    if base_tree:
+        mode = subprocess.run(
+            ["git", "ls-tree", base_tree, "--", source.as_posix()],
+            cwd=root, capture_output=True, text=True, check=True, timeout=30,
+        ).stdout.split()
+        if not mode or mode[0] not in {"100644", "100755"}:
+            raise ValueError(f"rubric source must be a regular file: {source}")
+        text = _git_file_text(root, base_tree, source)
+    else:
+        if any((root / parent).is_symlink() for parent in (source, *source.parents)):
+            raise ValueError(f"rubric source must not be a symlink: {source}")
+        text = _read(root / source, errors)
+    if not text:
+        raise ValueError(f"cannot read rubric source {source}")
+    return text
 
 
 def _resolve_rubric_for_policy(
@@ -1604,14 +1622,14 @@ def _resolve_rubric_for_policy(
     errors: list[str], base_tree: str | None = None,
 ) -> object:
     try:
-        source = _rubric_base_reference(path, definition)
+        source = _rubric_reference(path, definition, "rubric_base")
         if source is None:
+            if isinstance(definition, dict) and "rubric_additions_source" in definition:
+                raise ValueError("rubric_additions_source requires rubric_base")
             return definition
         if any(key in definition for key in ("rubric", "judge_prompt", "judge_inputs", "strict_rubric_output", "rubric_dimensions")):
             raise ValueError("rubric_base cannot be combined with overridden common fields")
-        text = _git_file_text(root, base_tree, source) if base_tree else _read(root / source, errors)
-        if text is None:
-            raise ValueError(f"cannot read rubric base {source}")
+        text = _rubric_source_text(root, source, errors, base_tree)
         base = json.loads(text)
         required = {"rubric", "judge_inputs", "strict_rubric_output"}
         if (not isinstance(base, dict) or not required.issubset(base)
@@ -1624,6 +1642,17 @@ def _resolve_rubric_for_policy(
         additions = resolved.pop("rubric_additions", {})
         if not isinstance(additions, dict):
             raise ValueError("rubric_additions must be an object")
+        additions_source = _rubric_reference(path, definition, "rubric_additions_source")
+        if additions_source is not None:
+            shared = json.loads(_rubric_source_text(root, additions_source, errors, base_tree))
+            if (not isinstance(shared, dict) or set(shared) != {"rubric_additions"}
+                    or not isinstance(shared["rubric_additions"], dict)):
+                raise ValueError("invalid shared rubric_additions source")
+            shared_additions = shared["rubric_additions"]
+            if shared_additions.keys() & additions.keys():
+                raise ValueError("shared and inline rubric_additions must use different criterion IDs")
+            additions = {**shared_additions, **additions}
+            resolved.pop("rubric_additions_source")
         rubric = list(base["rubric"])
         for label, addition in additions.items():
             if (not re.fullmatch(r"rubric-[1-9][0-9]*", label)
@@ -1635,7 +1664,7 @@ def _resolve_rubric_for_policy(
             rubric[index] += "\n\n" + addition
         resolved["rubric"] = rubric
         return resolved
-    except (ValueError, OSError) as exc:
+    except (ValueError, OSError, subprocess.SubprocessError) as exc:
         errors.append(f"{path}: cannot resolve rubric base: {exc}")
         return definition
 
@@ -1688,10 +1717,12 @@ def _changed_rubric_evals(
             if path in changed_paths:
                 continue
             try:
-                source = _rubric_base_reference(path, json.loads(absolute.read_text(encoding="utf-8")))
+                data = json.loads(absolute.read_text(encoding="utf-8"))
+                sources = {_rubric_reference(path, data, field)
+                           for field in ("rubric_base", "rubric_additions_source")}
             except (ValueError, OSError):
                 continue
-            if source in changed_paths:
+            if sources & changed_paths:
                 changes.append(("M", path))
     for status, path in changes:
         path_case = _eval_definition_case(path, RUBRIC_DIRECTORY_NAMES)

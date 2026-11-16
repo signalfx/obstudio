@@ -7,99 +7,305 @@
     "mode": "with_skill",
     "eval_kind": "rubric",
     "skill": "splunk-configure",
-    "run_id": "20261105T164528858241Z",
+    "run_id": "20261116T170554Z-consolidated-report",
     "agent_model": "gpt-6.1-sol",
     "judge_model": "gpt-6.1-sol",
     "rubric_enabled": true,
     "runtime_enabled": false,
-    "workers": "1",
-    "config_path": "evals/codex-evals.toml"
+    "workers": "8",
+    "config_path": "evals/codex-evals.logging.toml"
   },
   "summary": {
-    "eval_count": 1,
-    "prompt_count": 1,
-    "failure_count": 0,
+    "eval_count": 3,
+    "prompt_count": 3,
+    "failure_count": 7,
     "with_skill": {
-      "prompt_count": 1,
-      "command_count": 17,
-      "duration_seconds": 466.041,
-      "agent_duration_seconds": 378.4,
-      "tokens": 1137081,
-      "agent_tokens": 666783,
+      "prompt_count": 3,
+      "command_count": 52,
+      "duration_seconds": 1144.044,
+      "agent_duration_seconds": 909.284,
+      "tokens": 2901030,
+      "agent_tokens": 1700591,
       "error_count": 0,
       "agent_usage": {
         "provider": "codex",
         "source": "cumulative",
         "observed": true,
-        "usage_record_count": 1,
-        "selected_record_count": 1,
-        "input_tokens": 650165,
-        "cached_input_tokens": 593408,
+        "usage_record_count": 3,
+        "selected_record_count": 3,
+        "input_tokens": 1659000,
+        "cached_input_tokens": 1406336,
         "cache_creation_input_tokens": 0,
-        "output_tokens": 16618,
-        "reasoning_output_tokens": 2374,
+        "output_tokens": 41591,
+        "reasoning_output_tokens": 4447,
         "provider_total_tokens": null,
-        "derived_total_tokens": 666783,
-        "effective_total_tokens": 666783,
+        "derived_total_tokens": 1700591,
+        "effective_total_tokens": 1700591,
         "coverage": {
-          "record_count": 1,
-          "modeled_count": 1,
-          "observed_count": 1,
-          "recognized_count": 1,
-          "preferred_total_count": 1,
+          "record_count": 3,
+          "modeled_count": 3,
+          "observed_count": 3,
+          "recognized_count": 3,
+          "preferred_total_count": 3,
           "field_counts": {
-            "input_tokens": 1,
-            "cached_input_tokens": 1,
-            "cache_creation_input_tokens": 1,
-            "output_tokens": 1,
-            "reasoning_output_tokens": 1,
+            "input_tokens": 3,
+            "cached_input_tokens": 3,
+            "cache_creation_input_tokens": 3,
+            "output_tokens": 3,
+            "reasoning_output_tokens": 3,
             "provider_total_tokens": 0,
-            "derived_total_tokens": 1
+            "derived_total_tokens": 3
           }
         }
       },
       "rubric": {
-        "passed": 7,
-        "total": 7,
-        "average_score": 100.0
+        "passed": 15,
+        "total": 22,
+        "average_score": 80.0
       },
-      "rubric_tokens": 470298,
-      "rubric_duration_seconds": 87.609,
+      "rubric_tokens": 1200439,
+      "rubric_duration_seconds": 234.639,
       "rubric_usage": {
         "provider": "codex",
         "source": "cumulative",
         "observed": true,
-        "usage_record_count": 1,
-        "selected_record_count": 1,
-        "input_tokens": 467006,
-        "cached_input_tokens": 398464,
+        "usage_record_count": 3,
+        "selected_record_count": 3,
+        "input_tokens": 1192312,
+        "cached_input_tokens": 1042688,
         "cache_creation_input_tokens": 0,
-        "output_tokens": 3292,
-        "reasoning_output_tokens": 403,
+        "output_tokens": 8127,
+        "reasoning_output_tokens": 778,
         "provider_total_tokens": null,
-        "derived_total_tokens": 470298,
-        "effective_total_tokens": 470298,
+        "derived_total_tokens": 1200439,
+        "effective_total_tokens": 1200439,
         "coverage": {
-          "record_count": 1,
-          "modeled_count": 1,
-          "observed_count": 1,
-          "recognized_count": 1,
-          "preferred_total_count": 1,
+          "record_count": 3,
+          "modeled_count": 3,
+          "observed_count": 3,
+          "recognized_count": 3,
+          "preferred_total_count": 3,
           "field_counts": {
-            "input_tokens": 1,
-            "cached_input_tokens": 1,
-            "cache_creation_input_tokens": 1,
-            "output_tokens": 1,
-            "reasoning_output_tokens": 1,
+            "input_tokens": 3,
+            "cached_input_tokens": 3,
+            "cache_creation_input_tokens": 3,
+            "output_tokens": 3,
+            "reasoning_output_tokens": 3,
             "provider_total_tokens": 0,
-            "derived_total_tokens": 1
+            "derived_total_tokens": 3
           }
         }
       }
     },
-    "with_baseline": null
+    "with_baseline": null,
+    "case_outcomes": {
+      "failed": 1,
+      "passed": 2
+    }
   },
   "evals": [
+    {
+      "id": "dashboards/checkout-configure/qual/configure",
+      "case": "dashboards/checkout-configure",
+      "language": "dashboards",
+      "service": "checkout-configure",
+      "prompt_count": 1,
+      "prompts": [
+        "generate"
+      ],
+      "with_skill": {
+        "prompt_count": 1,
+        "command_count": 22,
+        "duration_seconds": 220.455,
+        "agent_duration_seconds": 159.007,
+        "tokens": 723558,
+        "agent_tokens": 553894,
+        "error_count": 0,
+        "agent_usage": {
+          "provider": "codex",
+          "source": "cumulative",
+          "observed": true,
+          "usage_record_count": 1,
+          "selected_record_count": 1,
+          "input_tokens": 547501,
+          "cached_input_tokens": 485760,
+          "cache_creation_input_tokens": 0,
+          "output_tokens": 6393,
+          "reasoning_output_tokens": 1247,
+          "provider_total_tokens": null,
+          "derived_total_tokens": 553894,
+          "effective_total_tokens": 553894,
+          "coverage": {
+            "record_count": 1,
+            "modeled_count": 1,
+            "observed_count": 1,
+            "recognized_count": 1,
+            "preferred_total_count": 1,
+            "field_counts": {
+              "input_tokens": 1,
+              "cached_input_tokens": 1,
+              "cache_creation_input_tokens": 1,
+              "output_tokens": 1,
+              "reasoning_output_tokens": 1,
+              "provider_total_tokens": 0,
+              "derived_total_tokens": 1
+            }
+          }
+        },
+        "rubric": {
+          "passed": 4,
+          "total": 11,
+          "average_score": 40.0
+        },
+        "rubric_tokens": 169664,
+        "rubric_duration_seconds": 61.408,
+        "rubric_usage": {
+          "provider": "codex",
+          "source": "cumulative",
+          "observed": true,
+          "usage_record_count": 1,
+          "selected_record_count": 1,
+          "input_tokens": 167334,
+          "cached_input_tokens": 139008,
+          "cache_creation_input_tokens": 0,
+          "output_tokens": 2330,
+          "reasoning_output_tokens": 269,
+          "provider_total_tokens": null,
+          "derived_total_tokens": 169664,
+          "effective_total_tokens": 169664,
+          "coverage": {
+            "record_count": 1,
+            "modeled_count": 1,
+            "observed_count": 1,
+            "recognized_count": 1,
+            "preferred_total_count": 1,
+            "field_counts": {
+              "input_tokens": 1,
+              "cached_input_tokens": 1,
+              "cache_creation_input_tokens": 1,
+              "output_tokens": 1,
+              "reasoning_output_tokens": 1,
+              "provider_total_tokens": 0,
+              "derived_total_tokens": 1
+            }
+          }
+        }
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/splunk-configure/20261116T170554Z-consolidated-report/results/dashboards/checkout-configure/qual-configure/eval.json",
+        "with_skill": ".workspace/codex-evals/splunk-configure/20261116T170554Z-consolidated-report/results/dashboards/checkout-configure/qual-configure/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/splunk-configure/20261116T170554Z-consolidated-report/results/dashboards/checkout-configure/qual-configure/with_baseline.json"
+      },
+      "case_outcomes": {
+        "generate": {
+          "status": "failed",
+          "job": "job-182"
+        }
+      }
+    },
+    {
+      "id": "python/ai-assistant-demo/qual/ao-target-handoff-configure",
+      "case": "python/ai-assistant-demo",
+      "language": "python",
+      "service": "ai-assistant-demo",
+      "prompt_count": 1,
+      "prompts": [
+        "ao-target-handoff-configure"
+      ],
+      "with_skill": {
+        "prompt_count": 1,
+        "command_count": 17,
+        "duration_seconds": 472.929,
+        "agent_duration_seconds": 378.273,
+        "tokens": 1314469,
+        "agent_tokens": 662915,
+        "error_count": 0,
+        "agent_usage": {
+          "provider": "codex",
+          "source": "cumulative",
+          "observed": true,
+          "usage_record_count": 1,
+          "selected_record_count": 1,
+          "input_tokens": 645346,
+          "cached_input_tokens": 509952,
+          "cache_creation_input_tokens": 0,
+          "output_tokens": 17569,
+          "reasoning_output_tokens": 1346,
+          "provider_total_tokens": null,
+          "derived_total_tokens": 662915,
+          "effective_total_tokens": 662915,
+          "coverage": {
+            "record_count": 1,
+            "modeled_count": 1,
+            "observed_count": 1,
+            "recognized_count": 1,
+            "preferred_total_count": 1,
+            "field_counts": {
+              "input_tokens": 1,
+              "cached_input_tokens": 1,
+              "cache_creation_input_tokens": 1,
+              "output_tokens": 1,
+              "reasoning_output_tokens": 1,
+              "provider_total_tokens": 0,
+              "derived_total_tokens": 1
+            }
+          }
+        },
+        "rubric": {
+          "passed": 4,
+          "total": 4,
+          "average_score": 100.0
+        },
+        "rubric_tokens": 651554,
+        "rubric_duration_seconds": 94.615,
+        "rubric_usage": {
+          "provider": "codex",
+          "source": "cumulative",
+          "observed": true,
+          "usage_record_count": 1,
+          "selected_record_count": 1,
+          "input_tokens": 648447,
+          "cached_input_tokens": 578048,
+          "cache_creation_input_tokens": 0,
+          "output_tokens": 3107,
+          "reasoning_output_tokens": 321,
+          "provider_total_tokens": null,
+          "derived_total_tokens": 651554,
+          "effective_total_tokens": 651554,
+          "coverage": {
+            "record_count": 1,
+            "modeled_count": 1,
+            "observed_count": 1,
+            "recognized_count": 1,
+            "preferred_total_count": 1,
+            "field_counts": {
+              "input_tokens": 1,
+              "cached_input_tokens": 1,
+              "cache_creation_input_tokens": 1,
+              "output_tokens": 1,
+              "reasoning_output_tokens": 1,
+              "provider_total_tokens": 0,
+              "derived_total_tokens": 1
+            }
+          }
+        }
+      },
+      "with_baseline": null,
+      "mode": "with_skill",
+      "result_paths": {
+        "eval": ".workspace/codex-evals/splunk-configure/20261116T170554Z-consolidated-report/results/python/ai-assistant-demo/qual-ao-target-handoff-configure/eval.json",
+        "with_skill": ".workspace/codex-evals/splunk-configure/20261116T170554Z-consolidated-report/results/python/ai-assistant-demo/qual-ao-target-handoff-configure/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/splunk-configure/20261116T170554Z-consolidated-report/results/python/ai-assistant-demo/qual-ao-target-handoff-configure/with_baseline.json"
+      },
+      "case_outcomes": {
+        "ao-target-handoff-configure": {
+          "status": "passed",
+          "job": "job-183"
+        }
+      }
+    },
     {
       "id": "python/ai-assistant-demo/qual/finding-group-configure",
       "case": "python/ai-assistant-demo",
@@ -111,11 +317,11 @@
       ],
       "with_skill": {
         "prompt_count": 1,
-        "command_count": 17,
-        "duration_seconds": 466.041,
-        "agent_duration_seconds": 378.4,
-        "tokens": 1137081,
-        "agent_tokens": 666783,
+        "command_count": 13,
+        "duration_seconds": 450.66,
+        "agent_duration_seconds": 372.004,
+        "tokens": 863003,
+        "agent_tokens": 483782,
         "error_count": 0,
         "agent_usage": {
           "provider": "codex",
@@ -123,14 +329,14 @@
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 650165,
-          "cached_input_tokens": 593408,
+          "input_tokens": 466153,
+          "cached_input_tokens": 410624,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 16618,
-          "reasoning_output_tokens": 2374,
+          "output_tokens": 17629,
+          "reasoning_output_tokens": 1854,
           "provider_total_tokens": null,
-          "derived_total_tokens": 666783,
-          "effective_total_tokens": 666783,
+          "derived_total_tokens": 483782,
+          "effective_total_tokens": 483782,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -153,22 +359,22 @@
           "total": 7,
           "average_score": 100.0
         },
-        "rubric_tokens": 470298,
-        "rubric_duration_seconds": 87.609,
+        "rubric_tokens": 379221,
+        "rubric_duration_seconds": 78.616,
         "rubric_usage": {
           "provider": "codex",
           "source": "cumulative",
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 467006,
-          "cached_input_tokens": 398464,
+          "input_tokens": 376531,
+          "cached_input_tokens": 325632,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 3292,
-          "reasoning_output_tokens": 403,
+          "output_tokens": 2690,
+          "reasoning_output_tokens": 188,
           "provider_total_tokens": null,
-          "derived_total_tokens": 470298,
-          "effective_total_tokens": 470298,
+          "derived_total_tokens": 379221,
+          "effective_total_tokens": 379221,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -190,40 +396,109 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/splunk-configure/20261105T164528858241Z/results/python/ai-assistant-demo/qual-finding-group-configure/eval.json",
-        "with_skill": ".workspace/codex-evals/splunk-configure/20261105T164528858241Z/results/python/ai-assistant-demo/qual-finding-group-configure/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/splunk-configure/20261105T164528858241Z/results/python/ai-assistant-demo/qual-finding-group-configure/with_baseline.json"
+        "eval": ".workspace/codex-evals/splunk-configure/20261116T170554Z-consolidated-report/results/python/ai-assistant-demo/qual-finding-group-configure/eval.json",
+        "with_skill": ".workspace/codex-evals/splunk-configure/20261116T170554Z-consolidated-report/results/python/ai-assistant-demo/qual-finding-group-configure/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/splunk-configure/20261116T170554Z-consolidated-report/results/python/ai-assistant-demo/qual-finding-group-configure/with_baseline.json"
+      },
+      "case_outcomes": {
+        "finding-group-configure": {
+          "status": "passed",
+          "job": "job-184"
+        }
       }
     }
   ],
-  "failures": [],
+  "failures": [
+    {
+      "service": "dashboards/checkout-configure",
+      "side": "with_skill",
+      "prompt": "generate",
+      "category": "rubric",
+      "result": "rubric:rubric-1 FAIL",
+      "evidence": "detectors.md reports zero generated detectors in every category; no P99 threshold was generated.",
+      "mode": "with_skill"
+    },
+    {
+      "service": "dashboards/checkout-configure",
+      "side": "with_skill",
+      "prompt": "generate",
+      "category": "rubric",
+      "result": "rubric:rubric-2 FAIL",
+      "evidence": "detectors.md merges checkout.payment.errors into the /payment duration group; detectors.tf contains no detector resources.",
+      "mode": "with_skill"
+    },
+    {
+      "service": "dashboards/checkout-configure",
+      "side": "with_skill",
+      "prompt": "generate",
+      "category": "rubric",
+      "result": "rubric:rubric-3 FAIL",
+      "evidence": "detectors.tf contains only comments, required_providers, and provider configuration.",
+      "mode": "with_skill"
+    },
+    {
+      "service": "dashboards/checkout-configure",
+      "side": "with_skill",
+      "prompt": "generate",
+      "category": "rubric",
+      "result": "rubric:rubric-4 FAIL",
+      "evidence": "detectors.tf contains no program_text, data(), detect(), or baseline alerting expressions.",
+      "mode": "with_skill"
+    },
+    {
+      "service": "dashboards/checkout-configure",
+      "side": "with_skill",
+      "prompt": "generate",
+      "category": "rubric",
+      "result": "rubric:rubric-5 FAIL",
+      "evidence": "variables.tf declares realm, sensitive api_token, service_name, and notification_channel, followed by 'No threshold variables'; terraform.tfvars.example contains empty credentials.",
+      "mode": "with_skill"
+    },
+    {
+      "service": "dashboards/checkout-configure",
+      "side": "with_skill",
+      "prompt": "generate",
+      "category": "rubric",
+      "result": "rubric:rubric-6 FAIL",
+      "evidence": "detectors.md declares Result: Blocked and asks for verification or source-only acceptance before generation.",
+      "mode": "with_skill"
+    },
+    {
+      "service": "dashboards/checkout-configure",
+      "side": "with_skill",
+      "prompt": "generate",
+      "category": "rubric",
+      "result": "rubric:rubric-7 FAIL",
+      "evidence": "Its resource table lists 'No detector resources', metric 'None accepted', and severity 'N/A'.",
+      "mode": "with_skill"
+    }
+  ],
   "source": {
     "digest_version": 4,
-    "digest": "ac8718411c7760d5c44cbe22343c9dd702e13ed4f41a11ea36d88bf85d38eca4",
+    "digest": "60b02680bf3aa89a673660a2311371c4c1689fda3c137cee99ca45a20f0f6355",
     "eval_kinds": [
       "rubric"
     ],
     "evaluator_semantics_version": 1,
     "files": {
-      "evals/codex-evals.toml": "d89dac81794f47361a312db0b9e303f37a0e5ff60a075e2924ff3c9589ee472b",
-      "evals/python/ai-assistant-demo/Makefile": "3603e3404f82d150e09de40be763c2213a05185cd302c7d2426eee61f44260b1",
-      "evals/python/ai-assistant-demo/README.md": "eebd4711ef5b6d9325e15d0488b43da6b3fde8bc48ffff91fa44841fd1dfaf0e",
-      "evals/python/ai-assistant-demo/app.py": "fa5e1ef6707b71d0faec679ba88c81052382b85b42e895ee484454fbfd056f1e",
-      "evals/python/ai-assistant-demo/eval/inputs/finding-group-snapshot.json": "4d8ecff766c242dac8b4e48409681b6aa0b87487b62740128afe39ed2f41e5d6",
-      "evals/python/ai-assistant-demo/eval/qual/finding-group-configure.json": "53578b85f2053a0f828247ebf676c234b57f0f568325741f08fb3054587255da",
-      "evals/python/ai-assistant-demo/eval_runner.py": "6b685cf5472871a9b227e652e47fd23a68b5ffe38021d4b6f3802236be65e2c8",
-      "evals/python/ai-assistant-demo/load_demo.py": "a33aef8a368b24c3351f46722f2caab5ecf4b2791a998b058d7c4a458ff8f2e0",
-      "evals/python/ai-assistant-demo/pyproject.toml": "90be0bda1c6147fc324325b0f8a65a82499d65840df190a76b633c992e511f00",
-      "skills/references/consumers.json": "ffb910be59c07a0a555b7e0cbedea36c183298e686b404bd3c28fafa9ec46f71",
+      "evals/codex-evals.logging.toml": "d01d8212065f4a38e97980f1d8f75f7d6dd47d5ea8a79fb3efac1d370fb88382",
+      "evals/dashboards/checkout-configure/eval/qual/configure.json": "b28b67bc0e59e523648558ceb8eed23794cfcc29689bc218c89a20354b67c46f",
+      "evals/dashboards/checkout-configure/otel-audit.json": "ba1843457773445a06e59522e1572316d95075f2c007576fd4becd75da33ce7d",
+      "skills/references/consumers.json": "f0ea05c16628348545c7f4910a7179f254528d958dbde233a878c82f8098b67d",
       "skills/references/coverage-decision-tree.md": "f1b071d4d8365a98d0c21b1192a1f474d0b2944755a4b5cb51b3b5c102573ead",
       "skills/references/full-runtime-acceptance.md": "585f42079d71460bbf7c68e4320ceabab6fcc1ba7c711948806c78c9d46736c5",
       "skills/references/genai-readiness.md": "b06758e80805b09ab485d81c3cc6284acf5e2d18c2af1c0359644f61b80deff4",
       "skills/references/incident-readiness.md": "787fb441106abcb148f541befd403e5f7889a2234c6cbe590d0c6bce48a3b59a",
+      "skills/references/languages/go.md": "26f847c42e372c0e8029d505336ff242e9bf168c320f5b0869b335a0f9d18009",
+      "skills/references/languages/java.md": "96b86faea3fb833df00b530aaed3daf4f751167cb40623c7623ca7884c428d55",
+      "skills/references/languages/node.md": "ceb03b2d50bb2f4ea0985bb16a6533cd29859c2bc37dc91e0c64b23c14fe1506",
+      "skills/references/languages/python.md": "39440171621ec44d5752852b16ddc5ee485cbf2c6c517145e2f5235b9e835c60",
       "skills/references/ledger-template.md": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc",
-      "skills/references/local-otlp-receiver.md": "6f58148de9ef2fd3e617ddc2622ee09ba785b202100b91261a727af6e3dc7cec",
+      "skills/references/local-otlp-receiver.md": "c8da4654fc54350a29fa55d23c171cacb848d28430f9768dd359014be42fd3b7",
+      "skills/references/logging-readiness.md": "2a9f332fa16a5a7082c71de5d55acdfa10e3f01ea60755e64d48febf5f1e2d82",
       "skills/references/report-flow-contract.md": "d00ca857d4a875dcdb8a699cbf82eda612f42a4f88152ff7a83b4a74eb1b4d0f",
-      "skills/references/scripts/observe_report.py": "3c1dc1386357e2cc9dc4f2d0f183cc8f4d0c7f45bb064de15196d071212be8cc",
-      "skills/references/scripts/observe_report_core.py": "88419036c5c1a1096361b10da730dc5bbae931f2c890d6dba2c7791cd78b96c4",
+      "skills/references/scripts/observe_report.py": "54deb13b407fc5b4f0ba91b2c054a12f9a87eea5cf53f7d0d93ddee165c2ce04",
+      "skills/references/scripts/observe_report_core.py": "f4eccaeebf606a76bb07365bd6dec8d9e976cdc13846c73c04931e5039e4926e",
       "skills/references/scripts/observe_report_html.py": "88862e521c30897c8cc0f0ede33cdac92857cfdfb8d1ed846b85a1c74fa1be53",
       "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
       "skills/references/splunk-agent-observability.md": "819faa9e9f27d2b1b41c13980809801fa242c9b6309eb4eae854688a538f4bf4",
@@ -238,7 +513,17 @@
       "skills/splunk-configure/references/detector-classification.md": "c389dc47e64719b46fe0ee8674231e6dc8f61c27d59d828c2bc10b5032971295",
       "skills/splunk-configure/references/terraform-templates.md": "68dabdd5c40321baf57522de55cfa9c182557ed7791475998d814f004da835fc",
       "skills/splunk-configure/scripts/validate_configure_output.py": "21e9f845308434499c6ae19d7d9043e5fcca01ae8840d6a68cc782e82c9fc09e",
-      "skills/splunk-configure/tests/test_validate_configure_output.py": "fdc01a7ef27c712df29a53b5ab5c21ad4de6ab5816301d337235226c113b8953"
+      "skills/splunk-configure/tests/test_validate_configure_output.py": "fdc01a7ef27c712df29a53b5ab5c21ad4de6ab5816301d337235226c113b8953",
+      "evals/python/ai-assistant-demo/Makefile": "3603e3404f82d150e09de40be763c2213a05185cd302c7d2426eee61f44260b1",
+      "evals/python/ai-assistant-demo/README.md": "eebd4711ef5b6d9325e15d0488b43da6b3fde8bc48ffff91fa44841fd1dfaf0e",
+      "evals/python/ai-assistant-demo/app.py": "fa5e1ef6707b71d0faec679ba88c81052382b85b42e895ee484454fbfd056f1e",
+      "evals/python/ai-assistant-demo/eval/inputs/ao-target-handoff-validator-snapshot.json": "41d3cda84a15678d1e2030ab3ffce5aba1cb16cb304b20533056610d0607e124",
+      "evals/python/ai-assistant-demo/eval/inputs/finding-group-snapshot.json": "d22b29e7d05153e774a640766f944fbfe8fb8bc7c24c451b4d1d6a4420b90b23",
+      "evals/python/ai-assistant-demo/eval/qual/ao-target-handoff-configure.json": "bbd7f126dffc36de16adae1a3d30fa0f2efa8fc77a6e1093eaaa37570fddf519",
+      "evals/python/ai-assistant-demo/eval_runner.py": "6b685cf5472871a9b227e652e47fd23a68b5ffe38021d4b6f3802236be65e2c8",
+      "evals/python/ai-assistant-demo/load_demo.py": "a33aef8a368b24c3351f46722f2caab5ecf4b2791a998b058d7c4a458ff8f2e0",
+      "evals/python/ai-assistant-demo/pyproject.toml": "90be0bda1c6147fc324325b0f8a65a82499d65840df190a76b633c992e511f00",
+      "evals/python/ai-assistant-demo/eval/qual/finding-group-configure.json": "53578b85f2053a0f828247ebf676c234b57f0f568325741f08fb3054587255da"
     },
     "skill_path": "skills/splunk-configure",
     "shared_reference_consumers": [
@@ -246,6 +531,23 @@
       "skills/references/signalflow-patterns.md"
     ],
     "selections": [
+      {
+        "definition_path": "evals/dashboards/checkout-configure/eval/qual/configure.json",
+        "fixture_dir": "evals/dashboards/checkout-configure",
+        "prompt_id": "generate",
+        "eval_kind": "rubric",
+        "eval_inputs": []
+      },
+      {
+        "definition_path": "evals/python/ai-assistant-demo/eval/qual/ao-target-handoff-configure.json",
+        "fixture_dir": "evals/python/ai-assistant-demo",
+        "prompt_id": "ao-target-handoff-configure",
+        "eval_kind": "rubric",
+        "eval_inputs": [
+          "eval/inputs/ao-target-handoff-validator-snapshot.json",
+          "eval/inputs/finding-group-snapshot.json"
+        ]
+      },
       {
         "definition_path": "evals/python/ai-assistant-demo/eval/qual/finding-group-configure.json",
         "fixture_dir": "evals/python/ai-assistant-demo",
@@ -256,6 +558,13 @@
         ]
       }
     ],
-    "config_path": "evals/codex-evals.toml"
+    "config_path": "evals/codex-evals.logging.toml"
+  },
+  "recorded_execution": {
+    "source_revision": "7db9a57ada23292c0047e9d5cac24fbf0208847b",
+    "batch_id": "20261116T170554Z",
+    "executor_limit": 8,
+    "model_rerun": false,
+    "graded_prompts": 3
   }
 }
