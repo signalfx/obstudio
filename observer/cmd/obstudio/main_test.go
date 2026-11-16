@@ -245,7 +245,7 @@ func TestObserverBrowserURLContainsNoControlCredential(t *testing.T) {
 }
 
 func TestRenderStartupBannerUsesFullProductName(t *testing.T) {
-	got := renderStartupBanner("127.0.0.1:3000", "127.0.0.1:4318", "127.0.0.1:4317")
+	got := renderStartupBanner("127.0.0.1:3000", "127.0.0.1:4318", "127.0.0.1:4317", false)
 	if !strings.HasPrefix(got, "\nSplunk Observability Studio (collector)\n") {
 		t.Fatalf("renderStartupBanner() = %q, want full product name", got)
 	}
