@@ -388,6 +388,28 @@
       "normal_profile_override": {},
       "injected_failure": "otlploghttp.New returns a hypothetical constructor error with configuration text",
       "fact": "The log exporter failed before its provider/bridge installation; trace/metric providers and original logger are already usable. Diagnostic must not expose raw error/config text."
+    },
+    {
+      "id": "generic-header-conflict",
+      "normal_profile_override": {
+        "OTEL_EXPORTER_OTLP_HEADERS": "Authorization=synthetic-generic-marker"
+      },
+      "fact": "Generic headers may belong to another signal. Skip only the added local log path, preserve operator values, traces, metrics and the original sink, and expose no values in diagnostics. This is a fictional planned case, not an executed SDK observation."
+    },
+    {
+      "id": "generic-plus-logs-headers",
+      "normal_profile_override": {
+        "OTEL_EXPORTER_OTLP_HEADERS": "Authorization=synthetic-generic-marker",
+        "OTEL_EXPORTER_OTLP_LOGS_HEADERS": "X-Local=synthetic-local-marker"
+      },
+      "fact": "A logs-specific value does not cancel the generic-header conflict. Plan the same isolated local-log skip, preserving both supplied values and unrelated signals."
+    },
+    {
+      "id": "signal-specific-local-headers",
+      "normal_profile_override": {
+        "OTEL_EXPORTER_OTLP_LOGS_HEADERS": "X-Local=synthetic-local-marker"
+      },
+      "fact": "Generic headers are absent. Keep the approved local OTLP log route enabled and preserve the logs-specific header for the selected official exporter to parse; do not replace supported SDK parsing or mask it with an empty header override. Actual installed-SDK header parsing and delivery remain unexecuted."
     }
   ]
 }

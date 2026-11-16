@@ -1,0 +1,27 @@
+{
+  "skill": "otel-instrument",
+  "prompts": [
+    {
+      "id": "logging-trial-1",
+      "eval_inputs": [],
+      "task": "$otel-instrument ./service"
+    },
+    {
+      "id": "logging-trial-2",
+      "eval_inputs": [],
+      "task": "$otel-instrument ./service"
+    },
+    {
+      "id": "logging-trial-3",
+      "eval_inputs": [],
+      "task": "$otel-instrument ./service"
+    }
+  ],
+  "rubric_base": "../../../../rubrics/logging-common.json",
+  "rubric_additions": {
+    "rubric-11": "Rule: If we add or change Go code that builds the Resource by combining supplied attributes with detected ones, check the detector order and which value wins.\nExample: The operator supplies host.name=payments-host and the selected host detector finds machine-host. Run the actual setup and check that the promised payments-host value survives.\nEvidence: Scope and required checks: When this change adds or modifies application-owned Go Resource initialization that combines supplied attributes with native/default detectors, inspect the actual detector order and merge precedence. If the selected initialization sources can overwrite an operator-owned attribute we promise to preserve, test a representative collision through that same initialization and proof boundary. Checking only service.name would not prove that host.name survives a later detector. Other representative colliding keys and values are valid; do not add a host detector just to reproduce this example. Audit plans the check; implementation and verification prove the selected owned path. Do not add custom parsers or certify unchanged, unselected detectors.\nInsufficient evidence: A service.name-only helper used to claim another attribute survives a later detector.",
+    "rubric-12": "Rule: If the Go code in scope reads a standard OTel true/false setting, test that it follows OTel's rules.\nExample: For the selected standard Boolean reader, TrUe means true; 1, t and a space-padded true do not.\nEvidence: Sources: OpenTelemetry Boolean environment rules (https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/#boolean) and Go strconv.ParseBool (https://pkg.go.dev/strconv#ParseBool). Scope and required checks: For a selected or newly application-owned Go reader of a standard environment Boolean, test the actual reader and resulting branch with raw true/TrUe, nontrue 1/t/T, and space-padded true. Only the raw literal true, ignoring letter case, is true: TrUe qualifies, but ' true ' does not. Trimming a selector or using strconv.ParseBool without qualification is not equivalent. Keep invalid-nonempty warning behavior at SHOULD strength. Preserve unchanged SDK and file-loader ownership; do not require tests for unused SDK parser combinations.\nInsufficient evidence: Trimming the input or relying on strconv.ParseBool as if it had the required raw-literal behavior.",
+    "rubric-22": "Rule: Before replacing Go's process-wide slog default, inspect where the captured handler really writes.\nExample: A captured built-in slog handler can route through the standard logger that SetDefault subsequently redirects, creating a cycle when that handler is nested in the new default.\nEvidence: The built-in default can route dynamically through the standard logger, which SetDefault rewires; putting that captured handler inside the new default can therefore recurse or deadlock. An application-owned logger may retain the handler without changing the process default. A writer adapter alone does not prove preservation of native formatting or level markers. Assert the original enablement, format, sinks, owner and record count. Keep this native-logging cycle separate from SDK diagnostic feedback. Reuse an existing safe route rather than forcing a handler replacement.\nInsufficient evidence: A writer adapter without checking the actual output route, native format, enablement and record counts.",
+    "rubric-25": "Rule: The untouched Go fixture logs with slog.Warn inside a goroutine without request context. Plan, repair or check that log's join to the real request, according to your role.\nExample: The fixture calls slog.Warn inside a goroutine without caller context. A selected repair must join that goroutine log to its real request SDK context.\nEvidence: Audit must plan request-context transfer and acceptance checks for a context-aware log call. Instrumentation repairs this boundary if it is still missing. Verification checks the current real request-to-async SDK-context join without editing code. Do not report a path that is already repaired as a remaining context-transfer gap.\nInsufficient evidence: Calling a context helper separately without testing the actual request-to-goroutine log path."
+  }
+}
