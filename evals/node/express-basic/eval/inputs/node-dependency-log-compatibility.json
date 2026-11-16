@@ -10,7 +10,7 @@
   "actual_fixture_source": {
     "files": {
       "app.js": {
-        "sha256": "e21a658ea62dd0aba6890cb8514a37eb08d10282ae078165473371db042934b5"
+        "sha256": "7dc0b120a9cb78d104c8c5de73f45cc07e44cf1648421d7849daa159326ceaef"
       },
       "package.json": {
         "sha256": "9a6b2e4619c27d59d7911017d38caf37cecc4c5dc0a443b7eabd54ce0c554ae9"
@@ -594,12 +594,12 @@
       "required_plan": "Skip only added local logs before exporter construction; value-free diagnostic, preserve source console/traces/metrics/environment, normal log profile still intended. Require future separate negative proof; no cloud headers copied to local logs."
     },
     {
-      "id": "signal-header-conflict",
+      "id": "signal-specific-local-headers",
       "provided_env": {
         "OTEL_LOGS_EXPORTER": "otlp",
         "OTEL_EXPORTER_OTLP_LOGS_HEADERS": "fictional-nonempty-credential-marker"
       },
-      "required_plan": "Independent logs-header fault with same isolation/ownership/privacy obligations as generic-header case."
+      "required_plan": "Preserve explicitly supplied signal-specific local log headers for the selected official SDK exporter to parse when generic OTLP headers are absent. Do not add an empty headers override or disable the approved local log path solely for this value. Keep generic credential isolation as its separate negative case, never log the synthetic value, and retain native sinks and trace/metric settings. Future real configuration and runtime proof remain unexecuted."
     },
     {
       "id": "late-constructor-failure",
