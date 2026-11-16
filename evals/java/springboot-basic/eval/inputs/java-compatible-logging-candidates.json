@@ -312,7 +312,7 @@
         "OTEL_LOGS_EXPORTER": "otlp",
         "OTEL_EXPORTER_OTLP_HEADERS": "Authorization=SYNTHETIC_CLOUD_HEADER"
       },
-      "expected": "The Java guide guard rejects this effective generic header before JVM startup. Mark that launch blocked; do not claim its traces/metrics continued in an unstarted process. Propose reviewed move to trace/metric-specific headers and removal from generic local log path without mutating user/global configuration here."
+      "expected": "The current Java guard disables only the added OTLP log exporter for this invocation and executes Java with the original arguments. Preserve generic operator headers and independent trace/metric configuration; plan future native-sink and trace/metric continuity proof, without claiming execution now. Resolve reviewed migration to signal-specific trace/metric headers during preflight, never through runtime/global credential rewriting. Keep the normal OTLP profile distinct from this isolated conflict."
     },
     {
       "id": "unsupported-log-protocol",
@@ -320,7 +320,7 @@
         "OTEL_LOGS_EXPORTER": "otlp",
         "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL": "http/json"
       },
-      "expected": "The supplied selected agent supports grpc/http-protobuf, not http/json; the Java launcher guard blocks before Java. Keep exact cause and intended normal OTLP profile in the plan, retain unrelated target configuration, and do not silently disable logs or claim successful app/trace/metric execution."
+      "expected": "The supplied selected agent supports grpc/http-protobuf, not http/json. The current launcher skips only the added OTLP log member and starts Java with its original arguments and other settings. Retain the exact unresolved logs capability and normal profile; future startup/trace/metric/native-sink continuity assertions remain unexecuted. Do not report a blocked JVM for this log-only conflict or persist none as the normal profile."
     }
   ],
   "required_unexecuted_proof_plan": [

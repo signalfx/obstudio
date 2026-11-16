@@ -43,11 +43,9 @@
                 "match": {
                   "body": "runtime request completed"
                 },
-                "field_contains": {
-                  "severityText": "WARN"
-                },
                 "field_equals": {
-                  "resource.serviceName": "go-kvstore"
+                  "resource.serviceName": "go-kvstore",
+                  "severityNumber": 13
                 },
                 "non_empty": ["traceId", "spanId"],
                 "exact_count": 3,
@@ -59,11 +57,9 @@
                 "match": {
                   "body": "runtime shutdown completed"
                 },
-                "field_contains": {
-                  "severityText": "WARN"
-                },
                 "field_equals": {
-                  "resource.serviceName": "go-kvstore"
+                  "resource.serviceName": "go-kvstore",
+                  "severityNumber": 13
                 },
                 "exact_count": 1
               }

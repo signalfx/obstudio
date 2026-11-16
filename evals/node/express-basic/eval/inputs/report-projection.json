@@ -1,0 +1,287 @@
+{
+  "purpose": "Synthetic report compatibility inputs. These checkout/Go report records are fictional schema fixtures, not observations about the Express service or proof of real telemetry.",
+  "audit": {
+    "schema_version": 2,
+    "kind": "otel-audit",
+    "meta": {
+      "audit_id": "checkout-20260717",
+      "service_name": "checkout",
+      "commit": "abc1234",
+      "language": "go",
+      "framework": "chi",
+      "date": "2026-07-17",
+      "status": "Partial",
+      "genai_ownership_detected": false
+    },
+    "summary": [
+      "Checkout telemetry needs route-level latency coverage."
+    ],
+    "flow": "audit -> instrument -> verify -> configure",
+    "evidence": [
+      {
+        "check": "Manifest",
+        "finding": "Go module",
+        "source": "go.mod"
+      },
+      {
+        "check": "Entry point",
+        "finding": "HTTP API",
+        "source": "main.go"
+      },
+      {
+        "check": "Route source",
+        "finding": "GET /checkout",
+        "source": "main.go:42"
+      },
+      {
+        "check": "Runtime/startup",
+        "finding": "go run",
+        "source": "Makefile"
+      },
+      {
+        "check": "GenAI ownership",
+        "finding": "No",
+        "source": "bounded repository scan"
+      }
+    ],
+    "routes": [
+      {
+        "method": "GET",
+        "path": "/checkout"
+      }
+    ],
+    "signal_flow": {
+      "component_flow_map": "main.go [SOURCE-COVERED] -> checkout [GAP: Checkout latency]"
+    },
+    "current_instrumentation": {
+      "spans": [],
+      "metrics": [],
+      "logs": [],
+      "incident_readiness": []
+    },
+    "genai_readiness": [],
+    "findings": [
+      {
+        "id": "OTEL-001",
+        "title": "Checkout latency is not measured",
+        "severity": "high",
+        "priority": "required",
+        "effort": "small",
+        "status": "proposed",
+        "area": "Checkout latency",
+        "gap": "No route-level latency metric or span timing exists.",
+        "impact": "Operators cannot isolate slow checkout requests.",
+        "product_outcome": "Each checkout request has one route-named trace that can be filtered in the waterfall.",
+        "required_fix": "Add HTTP server instrumentation and route span attributes.",
+        "instrument_mode": "default",
+        "verification_scenarios": [
+          "http.checkout.success"
+        ],
+        "dependencies": [],
+        "evidence": [
+          "main.go:42"
+        ],
+        "acceptance_criteria": [
+          "A request emits one server span with http.route."
+        ],
+        "constraints": [
+          "Keep route values low cardinality."
+        ],
+        "expected_telemetry": [
+          {
+            "type": "span",
+            "name": "GET /checkout",
+            "attributes": [
+              "http.route"
+            ],
+            "product_view": "Trace waterfall and route filtering"
+          }
+        ],
+        "follow_up_actions": [
+          "Verify the span in ObStudio before merge."
+        ],
+        "resolution": null,
+        "resolved_commit": null
+      }
+    ],
+    "verification": {
+      "environments": [
+        {
+          "id": "go.local",
+          "surface": "checkout service",
+          "config_evidence": "go.mod",
+          "runner": "go test ./...",
+          "scope": "module",
+          "prerequisites": "none"
+        }
+      ],
+      "scenarios": [
+        {
+          "id": "http.checkout.success",
+          "trigger": "GET /checkout",
+          "entrypoint": "main.go:42",
+          "expected_signals": "GET /checkout span and payment.request.duration metric",
+          "proof_level": "full runtime",
+          "acceptance_criteria": "span is emitted with route attribute",
+          "environments": [
+            "go.local"
+          ]
+        }
+      ]
+    },
+    "anti_patterns": [],
+    "recommendation": [
+      "Run $otel-instrument for OTEL-001."
+    ],
+    "scan_blockers": []
+  },
+  "selection": {
+    "schema_version": 1,
+    "kind": "otel-selection",
+    "audit_id": "checkout-20260717",
+    "audit_sha256": "sha256:1adf51734815b5b7f344bb54c43829857dab41f9e3d33e3ec835887c70eb7aa8",
+    "requested_ids": [
+      "OTEL-001"
+    ],
+    "approved_ids": [
+      "OTEL-001"
+    ],
+    "approved_by": null,
+    "approved_at": null
+  },
+  "instrumentation": {
+    "schema_version": 1,
+    "kind": "otel-instrumentation",
+    "audit_id": "checkout-20260717",
+    "audit_sha256": "sha256:1adf51734815b5b7f344bb54c43829857dab41f9e3d33e3ec835887c70eb7aa8",
+    "selection_sha256": "sha256:7aeb245d72dc6bac837be6e32d669027a2886eaf995af48d0630894987c2a69d",
+    "meta": {
+      "service_name": "checkout",
+      "date": "2026-07-17",
+      "result": "Partial"
+    },
+    "findings": [
+      {
+        "id": "OTEL-001",
+        "status": "not_proven",
+        "changes": [
+          "Wrapped the handler."
+        ],
+        "telemetry_changes": [
+          {
+            "id": "OTEL-001.http-server-span",
+            "change_kind": "modified",
+            "change": "Wrapped the server handler with route-aware tracing.",
+            "type": "span",
+            "name": "GET /checkout",
+            "source": "main.go:42",
+            "added_attributes": [
+              "http.route"
+            ],
+            "product_view": "Route trace waterfall",
+            "follow_up_actions": [
+              "Filter the trace waterfall by http.route."
+            ],
+            "verification_scenarios": [
+              "http.checkout.success"
+            ]
+          }
+        ],
+        "tests": [
+          "go test ./..."
+        ],
+        "evidence": [
+          "main.go:42"
+        ],
+        "follow_up_actions": [
+          "Run verification, then review the route trace."
+        ],
+        "resolved_commit": null
+      }
+    ],
+    "next_steps": [
+      "Run verification."
+    ]
+  },
+  "verify": {
+    "schema_version": 1,
+    "kind": "otel-verify",
+    "audit_id": "checkout-20260717",
+    "audit_sha256": "sha256:1adf51734815b5b7f344bb54c43829857dab41f9e3d33e3ec835887c70eb7aa8",
+    "instrumentation_sha256": "sha256:4d2fa37248e192e70fd7364bf714d502bdc0483e43985039921efe0f43b12449",
+    "meta": {
+      "service_name": "checkout",
+      "date": "2026-07-20",
+      "result": "Partial"
+    },
+    "findings": [
+      {
+        "id": "OTEL-001",
+        "status": "not_proven",
+        "scenarios": [
+          {
+            "id": "http.checkout.success",
+            "status": "not_proven",
+            "commands": [
+              "go test ./..."
+            ],
+            "evidence": [
+              ".observe/projection-checks/scalar.json"
+            ],
+            "observed_telemetry": [
+              "Synthetic scalar assertion only; no application telemetry proof."
+            ],
+            "trace_ids": [],
+            "product_validation": [
+              "Unit report-shape contract only; no receiver or Explorer credit."
+            ],
+            "proof_mode": "unit",
+            "visibility": "not_explorer_visible"
+          }
+        ],
+        "item_results": [
+          {
+            "id": "OTEL-001.http-server-span",
+            "status": "not_proven",
+            "direct_assertion_passed": false,
+            "scenarios": [
+              "http.checkout.success"
+            ],
+            "proof_mode": "app_test",
+            "visibility": "not_explorer_visible",
+            "evidence": [
+              ".observe/evidence/run/test.txt"
+            ],
+            "observed_telemetry": [],
+            "product_validation": [
+              "Target-product query was not run."
+            ]
+          }
+        ],
+        "remaining": [
+          "Capture the remaining route topology proof."
+        ]
+      }
+    ],
+    "next_steps": [
+      "Capture the remaining route topology proof."
+    ]
+  },
+  "control": {
+    "id": "control.scalar",
+    "scenario_id": "http.checkout.success",
+    "run_id": "synthetic.unit",
+    "operation_ids": [
+      "operation.scalar"
+    ],
+    "phase": "unit-fixture",
+    "expected": {
+      "scalar_assertion": true
+    }
+  },
+  "scalar_artifact": {
+    "scalar_assertion": true,
+    "telemetry_credit": false
+  },
+  "caller_remaining": "Operator must approve the selected rollout."
+}
