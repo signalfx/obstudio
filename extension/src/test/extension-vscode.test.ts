@@ -95,6 +95,31 @@ async function waitFor<T>(load: () => Promise<T>, ready: (value: T) => boolean, 
 	throw new Error(`Timed out waiting for condition; last value: ${lastDescription}`);
 }
 
+type CloudMigrationState = {
+	hasToken: boolean;
+	enabled: boolean;
+	complete: boolean;
+	forgetPending?: boolean;
+};
+
+async function migrationState(): Promise<CloudMigrationState | undefined> {
+	const state = await vscode.commands.executeCommand<CloudMigrationState>('observability-studio.internal.cloudMigrationStateForTest');
+	return state && { ...state, enabled: state.enabled === true };
+}
+
+async function waitForMigrationState(expected: CloudMigrationState, cleanupPending = false): Promise<void> {
+	// VS Code can replay an older storage notification after update resolves.
+	// Observe raw migration state and its cleanup marker before the next mutation.
+	let matches = 0;
+	await waitFor(async () => ({
+		migration: await vscode.commands.executeCommand<CloudMigrationState>('observability-studio.internal.cloudMigrationStateForTest'),
+		cleanupPending: await vscode.commands.executeCommand<boolean>('observability-studio.internal.cloudCleanupPendingForTest'),
+	}), state => {
+		matches = isDeepStrictEqual(state, { migration: expected, cleanupPending }) ? matches + 1 : 0;
+		return matches === 2;
+	}, 5_000);
+}
+
 async function getExtension() {
 	const extension = vscode.extensions.all.find((item) => item.packageJSON.name === 'observability-studio');
 	assert.ok(extension, 'observability-studio extension should be installed in the test host');
@@ -1741,19 +1766,6 @@ suite('VS Code Host', () => {
 				fs.renameSync(next, fixture.failure);
 			};
 			const connection = { realm: 'us1', accessToken: 'migration-synthetic-token' };
-			const migrationState = async () => {
-				const state = await vscode.commands.executeCommand<{ hasToken: boolean; enabled?: boolean; complete: boolean; forgetPending?: boolean }>('observability-studio.internal.cloudMigrationStateForTest');
-				return state && { ...state, enabled: state.enabled === true };
-			};
-			const waitForMigrationState = async (expected: { hasToken: boolean; enabled: boolean; complete: boolean; forgetPending?: boolean }): Promise<void> => {
-				// VS Code can replay an older storage notification after update resolves.
-				// Observe settled state before the test starts its next mutation.
-				let matches = 0;
-				await waitFor(migrationState, state => {
-					matches = isDeepStrictEqual(state, expected) ? matches + 1 : 0;
-					return matches === 2;
-				}, 5_000);
-			};
 			const initialize = async () => vscode.commands.executeCommand<{ status: Record<string, unknown>; warning?: string }>('observability-studio.internal.cloudActionForTest', 'initialize');
 			const seed = async (enabled: boolean) => {
 				await vscode.commands.executeCommand('observability-studio.internal.seedCloudMigrationForTest', JSON.stringify(connection), enabled);
@@ -1803,7 +1815,7 @@ suite('VS Code Host', () => {
 				await seed(enabled);
 				await vscode.commands.executeCommand('observability-studio.internal.failCloudCleanupForTest', false, true);
 				const { status: disconnected } = await initialize();
-				await waitForMigrationState({ hasToken: false, enabled, complete: false });
+				await waitForMigrationState({ hasToken: false, enabled, complete: false }, true);
 				assert.equal(disconnected?.connected, false);
 				assert.equal((await migrationState())?.hasToken, false);
 				assert.equal((await migrationState())?.complete, false);
@@ -1969,7 +1981,10 @@ suite('VS Code Host', () => {
 		});
 		await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
 		const address = server.address() as net.AddressInfo;
-		const seed = () => vscode.commands.executeCommand('observability-studio.internal.seedCloudMigrationForTest', JSON.stringify({ realm: 'us1', accessToken: 'migration-test-token' }), false);
+		const seed = async () => {
+			await vscode.commands.executeCommand('observability-studio.internal.seedCloudMigrationForTest', JSON.stringify({ realm: 'us1', accessToken: 'migration-test-token' }), false);
+			await waitForMigrationState({ hasToken: true, enabled: false, complete: false });
+		};
 		const state = () => vscode.commands.executeCommand<{ hasToken: boolean; complete: boolean; enabled?: boolean; forgetPending?: boolean }>('observability-studio.internal.cloudMigrationStateForTest');
 		const action = (action: string, payload?: Record<string, unknown>) => vscode.commands.executeCommand('observability-studio.internal.cloudActionForTest', action, payload);
 		try {
@@ -1983,6 +1998,7 @@ suite('VS Code Host', () => {
 			await vscode.commands.executeCommand('observability-studio.internal.failCloudCleanupForTest', true, true);
 			const saved = await action('connect', { realm: 'us1', accessToken: 'test-token' }) as { status: { cleanupPending?: boolean } };
 			assert.equal(saved.status.cleanupPending, true);
+			await waitForMigrationState({ hasToken: true, enabled: false, complete: false }, true);
 			const pollStatus = async () => {
 				const response = await vscode.commands.executeCommand<{ body: string }>('observability-studio.internal.hostRequestForTest', {
 					type: 'obstudio.host.request', requestId: 'cleanup-status', request: { kind: 'http', method: 'GET', path: '/api/splunk/export' },
@@ -1995,6 +2011,7 @@ suite('VS Code Host', () => {
 			assert.equal(await vscode.commands.executeCommand('observability-studio.internal.cloudCleanupPendingForTest'), true);
 			await vscode.commands.executeCommand('observability-studio.internal.failCloudCleanupForTest', false);
 			await action('initialize');
+			await waitForMigrationState({ hasToken: false, enabled: false, complete: true });
 			assert.equal((await state())?.hasToken, false);
 			assert.equal((await state())?.complete, true);
 			assert.equal(await vscode.commands.executeCommand('observability-studio.internal.cloudCleanupPendingForTest'), false);
