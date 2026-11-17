@@ -106,10 +106,15 @@ type splunkExportService struct {
 	rollbackTraces                otlp.SplunkTracesExporterConfig
 	registrationAndAuthProtocol   registrationAndAuthProtocol
 	configurationChanged          bool
-	stateVersionKey               [32]byte
-	mutationMu                    sync.Mutex
-	agentResourceMu               sync.Mutex
-	mu                            sync.Mutex
+	// o11yOAuthToken is the access token applyO11yOAuthToken put on the exporters, so a
+	// disconnect can tell whether the exporters still use it. o11yOAuthPriorSessionOnly is
+	// the session-only mode in effect before sign-in, restored when the token is cleared.
+	o11yOAuthToken            string
+	o11yOAuthPriorSessionOnly bool
+	stateVersionKey           [32]byte
+	mutationMu                sync.Mutex
+	agentResourceMu           sync.Mutex
+	mu                        sync.Mutex
 }
 
 // ErrConnectionCleanupPending means saved settings must be applied before reporting cleanup failure.
@@ -379,6 +384,65 @@ func (s *splunkExportService) applyCloudConnection(
 	status := s.snapshotLocked()
 	status.RollbackToken = rollbackToken
 	writeSameOriginJSON(w, status)
+}
+
+// applyO11yOAuthToken replaces the export connection's access token with the one obtained
+// by an O11y OAuth sign-in, so metrics/traces export and the agent observability proxy stop
+// using any pasted X-SF-TOKEN. It is session-only (never saved to credential storage, in
+// keeping with the OAuth token being memory-only) and preserves the enabled state.
+func (s *splunkExportService) applyO11yOAuthToken(realm, accessToken string) error {
+	realm, err := validateSplunkRealm(realm)
+	if err != nil {
+		return err
+	}
+	accessToken, err = validateSplunkAccessToken(accessToken)
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	previousMetrics, previousTraces := s.metrics.Config(), s.traces.Config()
+	priorSessionOnly := s.sessionOnly
+	if s.o11yOAuthToken != "" {
+		// Signing in again while a previous sign-in's token is applied: keep the mode from
+		// before the first sign-in, not the session-only mode that sign-in set.
+		priorSessionOnly = s.o11yOAuthPriorSessionOnly
+	}
+	if err := s.applyConnection(
+		otlp.SplunkMetricsExporterConfig{Realm: realm, AccessToken: accessToken, Enabled: previousMetrics.Enabled},
+		otlp.SplunkTracesExporterConfig{Realm: realm, AccessToken: accessToken, Enabled: previousTraces.Enabled},
+		true, nil,
+	); err != nil {
+		return err
+	}
+	s.o11yOAuthToken, s.o11yOAuthPriorSessionOnly = accessToken, priorSessionOnly
+	s.sessionOnly = true
+	s.configurationChanged = true
+	return nil
+}
+
+// clearO11yOAuthToken removes the OAuth-sourced token from the exporters when the user
+// disconnects the sign-in, so export and the agent observability proxy stop using it. It
+// only acts if both exporters still hold exactly that token: if the user has since pasted
+// or saved a different connection, that connection is left alone. Nothing is saved or
+// deleted in credential storage, so a connection saved before sign-in returns after a
+// restart. Export is off until the user signs in again or connects with a pasted token.
+func (s *splunkExportService) clearO11yOAuthToken() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	token := s.o11yOAuthToken
+	if token == "" {
+		return nil
+	}
+	if s.metrics.Config().AccessToken == token && s.traces.Config().AccessToken == token {
+		if err := s.applyConnection(otlp.SplunkMetricsExporterConfig{}, otlp.SplunkTracesExporterConfig{}, false, nil); err != nil {
+			return err
+		}
+		s.sessionOnly = s.o11yOAuthPriorSessionOnly
+		s.configurationChanged = true
+	}
+	s.o11yOAuthToken, s.o11yOAuthPriorSessionOnly = "", false
+	return nil
 }
 
 func (s *splunkExportService) rollback(w http.ResponseWriter, r *http.Request) {

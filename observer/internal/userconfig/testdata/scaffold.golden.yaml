@@ -9,3 +9,22 @@ telemetry:
   # collects from your agents or shows you locally.
   # Values: true or false.
   enabled: true
+
+# O11y OAuth sign-in
+# Saved values for signing in to Splunk Observability Cloud with O11y OAuth.
+o11yOAuth:
+  # The Splunk Observability Cloud realm to sign in to, for example us0. Leave
+  # empty to enter it at sign-in.
+  realm: ""
+
+  # The Splunk Observability Cloud organization ID to sign in to. Leave empty to
+  # enter it at sign-in.
+  orgId: ""
+
+  # The client ID of the O11y OAuth client an organization admin registered.
+  # Leave empty to enter it at sign-in.
+  clientId: ""
+
+  # The client secret of the O11y OAuth client, stored in plain text in this
+  # file. Leave empty to enter it at sign-in.
+  clientSecret: ""
