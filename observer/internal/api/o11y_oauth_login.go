@@ -10,7 +10,9 @@ package api
 // from environment variables, since there is no single global client for this flow (every
 // customer org registers its own). The resulting O11y access token is held only in this
 // process's memory (globalO11yOAuthLoginState below); it is never written to disk, never
-// returned to the browser, and is lost on restart.
+// returned to the browser, and is lost on restart. On success it is also handed to an
+// o11yOAuthTokenApplier (the Splunk export service), replacing any pasted X-SF-TOKEN for
+// the rest of the process (session-only, so nothing new is persisted).
 
 import (
 	"context"
@@ -323,80 +325,104 @@ type o11yOAuthExchangeConfig struct {
 // exclusive via OBSTUDIO_REGISTRATION_AND_AUTH_PROTOCOL), and returns the authorization
 // URL for the browser to open. The actual code exchange happens in the background; poll
 // o11yOAuthSessionStatusHandler for the result.
-func startO11yOAuthLoginHandler(w http.ResponseWriter, r *http.Request) {
-	var request o11yOAuthLoginRequest
-	if err := decodeStrictJSON(w, r, &request); err != nil {
-		writeO11yOAuthRegistrationError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	realm, err := validateSplunkRealm(request.Realm)
-	if err != nil {
-		writeO11yOAuthRegistrationError(w, http.StatusBadRequest, "enter a valid Splunk Observability Cloud realm")
-		return
-	}
-	orgID, err := validateO11yOAuthOrgID(request.OrgID)
-	if err != nil {
-		writeO11yOAuthRegistrationError(w, http.StatusBadRequest, "enter the O11y organization ID")
-		return
-	}
-	clientID := strings.TrimSpace(request.ClientID)
-	if clientID == "" {
-		writeO11yOAuthRegistrationError(w, http.StatusBadRequest, "paste the client ID from your O11y OAuth registration")
-		return
-	}
-	clientSecret := strings.TrimSpace(request.ClientSecret)
-	if clientSecret == "" {
-		writeO11yOAuthRegistrationError(w, http.StatusBadRequest, "paste the client secret from your O11y OAuth registration")
-		return
-	}
+func startO11yOAuthLoginHandler(applier o11yOAuthTokenApplier) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var request o11yOAuthLoginRequest
+		if err := decodeStrictJSON(w, r, &request); err != nil {
+			writeO11yOAuthRegistrationError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		realm, err := validateSplunkRealm(request.Realm)
+		if err != nil {
+			writeO11yOAuthRegistrationError(w, http.StatusBadRequest, "enter a valid Splunk Observability Cloud realm")
+			return
+		}
+		orgID, err := validateO11yOAuthOrgID(request.OrgID)
+		if err != nil {
+			writeO11yOAuthRegistrationError(w, http.StatusBadRequest, "enter the O11y organization ID")
+			return
+		}
+		clientID := strings.TrimSpace(request.ClientID)
+		if clientID == "" {
+			writeO11yOAuthRegistrationError(w, http.StatusBadRequest, "paste the client ID from your O11y OAuth registration")
+			return
+		}
+		clientSecret := strings.TrimSpace(request.ClientSecret)
+		if clientSecret == "" {
+			writeO11yOAuthRegistrationError(w, http.StatusBadRequest, "paste the client secret from your O11y OAuth registration")
+			return
+		}
 
-	client := newO11yOAuthHTTPClient()
-	issuer := resolveO11yOAuthIssuer(realm, orgID)
-	discovery, err := resolveO11yOAuthDiscovery(client, issuer)
-	if err != nil {
-		writeO11yOAuthRegistrationError(w, http.StatusBadGateway, err.Error())
-		return
-	}
+		client := newO11yOAuthHTTPClient()
+		issuer := resolveO11yOAuthIssuer(realm, orgID)
+		discovery, err := resolveO11yOAuthDiscovery(client, issuer)
+		if err != nil {
+			writeO11yOAuthRegistrationError(w, http.StatusBadGateway, err.Error())
+			return
+		}
 
-	authorizationURL, state, verifier, err := buildO11yOAuthAuthorizationURL(discovery.AuthorizationEndpoint, clientID)
-	if err != nil {
-		writeO11yOAuthRegistrationError(w, http.StatusBadGateway, err.Error())
-		return
-	}
+		authorizationURL, state, verifier, err := buildO11yOAuthAuthorizationURL(discovery.AuthorizationEndpoint, clientID)
+		if err != nil {
+			writeO11yOAuthRegistrationError(w, http.StatusBadGateway, err.Error())
+			return
+		}
 
-	exchangeConfig := o11yOAuthExchangeConfig{
-		realm:         realm,
-		orgID:         orgID,
-		clientID:      clientID,
-		clientSecret:  clientSecret,
-		issuer:        discovery.Issuer,
-		tokenEndpoint: discovery.TokenEndpoint,
-		exchangeURL:   resolveO11yOAuthExchangeURL(realm),
-	}
+		exchangeConfig := o11yOAuthExchangeConfig{
+			realm:         realm,
+			orgID:         orgID,
+			clientID:      clientID,
+			clientSecret:  clientSecret,
+			issuer:        discovery.Issuer,
+			tokenEndpoint: discovery.TokenEndpoint,
+			exchangeURL:   resolveO11yOAuthExchangeURL(realm),
+		}
 
-	listener, err := startO11yOAuthCallbackListener(state, client, discovery.Issuer, verifier, exchangeConfig)
-	if err != nil {
-		writeO11yOAuthRegistrationError(w, http.StatusConflict, err.Error())
-		return
-	}
-	generation, ok := globalO11yOAuthLoginState.beginPending(listener.cancel)
-	if !ok {
-		_ = listener.close()
-		writeO11yOAuthRegistrationError(w, http.StatusConflict, "an O11y OAuth sign-in is already in progress")
-		return
-	}
-	listener.run(generation)
+		listener, err := startO11yOAuthCallbackListener(state, client, discovery.Issuer, verifier, exchangeConfig, applier)
+		if err != nil {
+			writeO11yOAuthRegistrationError(w, http.StatusConflict, err.Error())
+			return
+		}
+		generation, ok := globalO11yOAuthLoginState.beginPending(listener.cancel)
+		if !ok {
+			_ = listener.close()
+			writeO11yOAuthRegistrationError(w, http.StatusConflict, "an O11y OAuth sign-in is already in progress")
+			return
+		}
+		listener.run(generation)
 
-	writeSameOriginJSON(w, o11yOAuthLoginStartResult{AuthorizationURL: authorizationURL})
+		writeSameOriginJSON(w, o11yOAuthLoginStartResult{AuthorizationURL: authorizationURL})
+	}
 }
 
 func o11yOAuthSessionStatusHandler(w http.ResponseWriter, _ *http.Request) {
 	writeSameOriginJSON(w, globalO11yOAuthLoginState.status())
 }
 
-func disconnectO11yOAuthSessionHandler(w http.ResponseWriter, _ *http.Request) {
-	globalO11yOAuthLoginState.disconnect()
-	writeSameOriginJSON(w, globalO11yOAuthLoginState.status())
+// disconnectO11yOAuthSessionHandler ends the sign-in and, via the applier, stops the export
+// connection from using the O11y access token that sign-in produced. If the token cannot
+// be cleared the request fails (the sign-in session is still disconnected, but the user is
+// told export may still be using the token) rather than reporting a clean disconnect.
+func disconnectO11yOAuthSessionHandler(applier o11yOAuthTokenApplier) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		globalO11yOAuthLoginState.disconnect()
+		if applier != nil {
+			if err := applier.clearO11yOAuthToken(); err != nil {
+				writeO11yOAuthRegistrationError(w, http.StatusInternalServerError, "signed out, but could not stop export from using the O11y access token")
+				return
+			}
+		}
+		writeSameOriginJSON(w, globalO11yOAuthLoginState.status())
+	}
+}
+
+// o11yOAuthTokenApplier receives the O11y access token after a successful sign-in so the
+// rest of obstudio (metrics/traces export, agent observability proxy) uses it instead of
+// a manually pasted token. Implemented by splunkExportService; nil disables the hand-off.
+type o11yOAuthTokenApplier interface {
+	applyO11yOAuthToken(realm, accessToken string) error
+	// clearO11yOAuthToken stops using the token applied by applyO11yOAuthToken, if it is
+	// still the one in use. Called when the user disconnects the sign-in.
+	clearO11yOAuthToken() error
 }
 
 type o11yOAuthCallbackListener struct {
@@ -415,6 +441,7 @@ func startO11yOAuthCallbackListener(
 	expectedIssuer string,
 	verifier string,
 	exchangeConfig o11yOAuthExchangeConfig,
+	applier o11yOAuthTokenApplier,
 ) (*o11yOAuthCallbackListener, error) {
 	mux := http.NewServeMux()
 	server := &http.Server{Handler: mux}
@@ -506,6 +533,12 @@ func startO11yOAuthCallbackListener(
 			if result.err != nil {
 				globalO11yOAuthLoginState.fail(generation, result.err)
 				return
+			}
+			if applier != nil {
+				if err := applier.applyO11yOAuthToken(result.session.realm, result.session.accessToken); err != nil {
+					globalO11yOAuthLoginState.fail(generation, errors.New("signed in, but could not apply the O11y access token to the export connection"))
+					return
+				}
 			}
 			globalO11yOAuthLoginState.succeed(generation, result.session)
 		}()
@@ -628,11 +661,11 @@ func exchangeO11ySISTokenForAccessToken(ctx context.Context, client *http.Client
 // registerO11yOAuthLoginRoutes wires the local-only login/session routes onto mux,
 // alongside registerO11yOAuthRoutes's registration route. Same local-request gate as
 // everywhere else in this file family.
-func registerO11yOAuthLoginRoutes(mux *http.ServeMux) {
+func registerO11yOAuthLoginRoutes(mux *http.ServeMux, applier o11yOAuthTokenApplier) {
 	gate := func(next http.HandlerFunc) http.HandlerFunc {
 		return requireLocalObserverRequest(next, writeO11yOAuthRegistrationError)
 	}
-	mux.HandleFunc("POST /api/splunk/o11y-oauth/login", gate(startO11yOAuthLoginHandler))
+	mux.HandleFunc("POST /api/splunk/o11y-oauth/login", gate(startO11yOAuthLoginHandler(applier)))
 	mux.HandleFunc("GET /api/splunk/o11y-oauth/session", gate(o11yOAuthSessionStatusHandler))
-	mux.HandleFunc("POST /api/splunk/o11y-oauth/session/disconnect", gate(disconnectO11yOAuthSessionHandler))
+	mux.HandleFunc("POST /api/splunk/o11y-oauth/session/disconnect", gate(disconnectO11yOAuthSessionHandler(applier)))
 }

@@ -346,7 +346,7 @@ func run(config runConfig) error {
 		}
 	}()
 
-	fmt.Fprint(os.Stderr, renderStartupBanner(mainAddr, otlpHTTPAddr, otlpGRPCAddr))
+	fmt.Fprint(os.Stderr, renderStartupBanner(mainAddr, otlpHTTPAddr, otlpGRPCAddr, configManager))
 	warnStaleMCPPortConfigs(os.Stderr, port)
 
 	go mcp.RunStdio(s, os.Stdin, os.Stdout, mcpParams...)
@@ -741,7 +741,21 @@ func buildSharedObserverState(host, port string, publicMCPURLs ...string) shared
 	}
 }
 
-func renderStartupBanner(mainAddr, otlpHTTPAddr, otlpGRPCAddr string) string {
+func boolToOneOrZero(v bool) string {
+	if v {
+		return "1"
+	}
+	return "0"
+}
+
+func enabledStringOrDisabled(oneOrZero string) string {
+	if strings.TrimSpace(oneOrZero) == "1" {
+		return "Enabled"
+	}
+	return "Disabled"
+}
+
+func renderStartupBanner(mainAddr, otlpHTTPAddr, otlpGRPCAddr string, configManager bool) string {
 	return fmt.Sprintf(
 		"\nSplunk Observability Studio (collector)\n"+
 			"  Telemetry Explorer:  %s\n"+
@@ -751,13 +765,18 @@ func renderStartupBanner(mainAddr, otlpHTTPAddr, otlpGRPCAddr string) string {
 			"  Agent setup:         obstudio install --target=<agent>[,<agent>...]\n"+
 			"\nEnvironment Variables\n"+
 			"  OBSTUDIO_REGISTRATION_AND_AUTH_PROTOCOL: %s\n"+
-			"  OBSTUDIO_O11Y_OAUTH_REGISTRATION_URL: %s\n\n",
+			"  OBSTUDIO_O11Y_OAUTH_REGISTRATION_URL: %s\n"+
+			"  %s: %s\n"+
+			"  OBSTUDIO_O11Y_OAUTH_RANDOM_CLIENT_NAME: %s\n\n",
 		observerBrowserURL(mainAddr),
 		otlpHTTPAddr,
 		otlpGRPCAddr,
 		mainAddr,
 		strings.TrimSpace(os.Getenv("OBSTUDIO_REGISTRATION_AND_AUTH_PROTOCOL")),
 		strings.TrimSpace(os.Getenv("OBSTUDIO_O11Y_OAUTH_REGISTRATION_URL")),
+		configManagerGateEnv,
+		enabledStringOrDisabled(boolToOneOrZero(configManager)),
+		enabledStringOrDisabled(strings.TrimSpace(os.Getenv("OBSTUDIO_O11Y_OAUTH_RANDOM_CLIENT_NAME"))),
 	)
 }
 

@@ -116,6 +116,16 @@ func scaffoldWith(old, new string) string {
 	return strings.Replace(userconfig.Scaffold(), old, new, 1)
 }
 
+// o11yAbsent is what a file without the o11yOAuth section reports for it.
+var o11yAbsent = []kk{
+	{"o11yOAuth.realm", "absent"}, {"o11yOAuth.orgId", "absent"},
+	{"o11yOAuth.clientId", "absent"}, {"o11yOAuth.clientSecret", "absent"},
+}
+
+func withO11yAbsent(first ...kk) []kk {
+	return append(append([]kk(nil), first...), o11yAbsent...)
+}
+
 func noSection() string {
 	sc := userconfig.Scaffold()
 	return sc[:strings.Index(sc, "telemetry:")]
@@ -181,9 +191,9 @@ func TestStateTable(t *testing.T) {
 		{name: "none", change: func(*testing.T, *userconfig.Manager, string) {}, state: StateOK, enabled: true},
 		{name: "maybe", change: writeRow(maybe), state: StateInvalid, problem: true, diags: []kk{{"telemetry.enabled", "invalid"}}},
 		{name: "line removed", change: writeRow(scaffoldWith("  enabled: true\n", "")), state: StateInvalid, problem: true, diags: []kk{{"telemetry.enabled", "absent"}}},
-		{name: "section removed", change: writeRow(noSection()), state: StateInvalid, problem: true, diags: []kk{{"telemetry.enabled", "absent"}}},
-		{name: "section not mapping", change: writeRow(noSection() + "telemetry: true\n"), state: StateInvalid, problem: true, diags: []kk{{"telemetry", "invalid"}}},
-		{name: "empty", change: writeRow(""), state: StateInvalid, problem: true, diags: []kk{{"telemetry.enabled", "absent"}}},
+		{name: "section removed", change: writeRow(noSection()), state: StateInvalid, problem: true, diags: withO11yAbsent(kk{"telemetry.enabled", "absent"})},
+		{name: "section not mapping", change: writeRow(noSection() + "telemetry: true\n"), state: StateInvalid, problem: true, diags: withO11yAbsent(kk{"telemetry", "invalid"})},
+		{name: "empty", change: writeRow(""), state: StateInvalid, problem: true, diags: withO11yAbsent(kk{"telemetry.enabled", "absent"})},
 		{name: "version", change: writeRow("version: 1\n" + sc), state: StateOK, enabled: true, diags: []kk{{"version", "unknown_key"}}},
 		{name: "server", change: writeRow(sc + "server: {port: 9000}\n"), state: StateOK, enabled: true, diags: []kk{{"server", "unknown_key"}}},
 		{name: "broken", change: writeRow("telemetry: [unclosed"), state: StateUnparseable, problem: true, enabled: true},
