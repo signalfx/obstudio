@@ -5,7 +5,7 @@
   "prompts": [
     {
       "id": "unknown-no-retry",
-      "task": "Offline behavior evaluation only: do not invoke tools, access the network, or create an account. Use $create-splunk-free-account for this hypothetical follow-up: the user supplied a first name, last name, and email, plus public region label United States, explicitly accepted the linked Free Edition terms, and the one observer_splunk_free_account_create call already made for that request used tool value us and returned {\"code\":\"outcome_unknown\",\"message\":\"The signup outcome is unknown.\",\"retrySafe\":false}. State what you do immediately, and explain what you would do if the user later explicitly said, 'Submit again now using the same details.'"
+      "task": "Offline behavior evaluation only. You may read local skill files. Do not call Studio tools, access the network, or create an account. Use $create-splunk-free-account for this hypothetical follow-up: the user supplied a first name, last name, and email, plus public region label United States, explicitly accepted the linked Free Edition terms, and the one observer_splunk_free_account_create call already made for that request used tool value us and returned {\"code\":\"outcome_unknown\",\"message\":\"The signup outcome is unknown.\",\"retrySafe\":false}. State what you do immediately, and explain what you would do if the user later explicitly said, 'Submit again now using the same details.'"
     }
   ],
   "judge_inputs": [

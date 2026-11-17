@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | create-splunk-free-account |
-| Run ID | 20261105T170125063309Z |
+| Run ID | 20261119T020253058918Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -23,7 +23,6 @@ This report validates eval JSON, eval directory availability, and skill source a
 | plugins/obstudio/qual/free-account-native-form | plugins/obstudio | 1 | evals/plugins/obstudio/eval/qual/free-account-native-form.json | 0 | 8 | 0 |
 | plugins/obstudio/qual/free-account-outcome-unknown | plugins/obstudio | 1 | evals/plugins/obstudio/eval/qual/free-account-outcome-unknown.json | 0 | 6 | 0 |
 | plugins/obstudio/qual/free-account-region-review-gate | plugins/obstudio | 1 | evals/plugins/obstudio/eval/qual/free-account-region-review-gate.json | 0 | 5 | 0 |
-| plugins/obstudio/qual/free-account-resubmit-same-email | plugins/obstudio | 1 | evals/plugins/obstudio/eval/qual/free-account-resubmit-same-email.json | 0 | 6 | 0 |
+| plugins/obstudio/qual/free-account-resubmit-same-email | plugins/obstudio | 1 | evals/plugins/obstudio/eval/qual/free-account-resubmit-same-email.json | 0 | 4 | 0 |
 | plugins/obstudio/qual/free-account-setup-pending | plugins/obstudio | 1 | evals/plugins/obstudio/eval/qual/free-account-setup-pending.json | 0 | 5 | 0 |
-| plugins/obstudio/qual/free-account-submit-after-consent | plugins/obstudio | 1 | evals/plugins/obstudio/eval/qual/free-account-submit-after-consent.json | 0 | 2 | 0 |
 | plugins/obstudio/qual/free-account-tool-unavailable | plugins/obstudio | 1 | evals/plugins/obstudio/eval/qual/free-account-tool-unavailable.json | 0 | 5 | 0 |
