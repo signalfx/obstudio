@@ -546,6 +546,19 @@ test('Splunk Observability Studio-mutating Cloud actions serialize with lifecycl
 	);
 });
 
+test('HEC help uses the expected documentation sections and IDE actions', () => {
+	const { hecEndpointHelpURL, hecTokenHelpURL } = require('../../../shared/hec-help.cjs') as { hecEndpointHelpURL: string; hecTokenHelpURL: string };
+	const source = fs.readFileSync(path.join(extensionRoot, 'src', 'extension.ts'), 'utf-8');
+	const guideURL = 'https://help.splunk.com/en/splunk-cloud-platform/get-data-in/get-started-with-getting-data-in/10.2.2510/get-data-with-http-event-collector/set-up-and-use-http-event-collector-in-splunk-web';
+	for (const [action, name, url, section, anchor] of [
+		['open-hec-endpoint-help', 'hecEndpointHelpURL', hecEndpointHelpURL, 'Send data to HTTP Event Collector on Splunk Cloud Platform', 'id_4626b983_5022_4b94_b071_22646bce88c3--en__Send_data_to_HTTP_Event_Collector_on_Splunk_Cloud_Platform'],
+		['open-hec-token-help', 'hecTokenHelpURL', hecTokenHelpURL, 'Create an Event Collector token on Splunk Cloud Platform', 'create-an-event-collector-token-on-splunk-cloud-platform-0'],
+	]) {
+		assert.equal(url, `${guideURL}#${anchor}:~:text=${encodeURIComponent(section)}`);
+		assert.match(source, new RegExp(`case '${action}':\\s+await openCloudExternalUrl\\(${name}\\);\\s+return \\{\\};`));
+	}
+});
+
 test('Free Edition actions use the generic IDE host transport and fixed Splunk Observability Studio routes', () => {
 	const extensionSourcePath = path.join(extensionRoot, 'src', 'extension.ts');
 	const source = fs.readFileSync(extensionSourcePath, 'utf-8');
@@ -2731,7 +2744,7 @@ test('IDE connection edits accept explicit reuse flags without accepting destina
  for (const key of ['reuseSavedToken', 'preserveEnabled']) {
   assert.equal(isObserverHostRequestEnvelope(request('connect', { ...payload, [key]: 'true' })), false);
  }
- for (const action of ['open-hec-token-help', 'open-splunk-platform-trial', 'open-observability-cloud', 'open-observability-metrics', 'open-observability-traces', 'open-splunk-search'] as const) {
+ for (const action of ['open-hec-endpoint-help', 'open-hec-token-help', 'open-splunk-platform-trial', 'open-observability-cloud', 'open-observability-metrics', 'open-observability-traces', 'open-splunk-search'] as const) {
   assert.equal(isObserverHostRequestEnvelope(request(action)), true);
   assert.equal(isObserverHostRequestEnvelope(request(action, { destination: 'https://example.test' })), false);
   assert.equal(cloudBridgeActionRequiresLifecycleSerialization(action), false);
