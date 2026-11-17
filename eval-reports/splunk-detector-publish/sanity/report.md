@@ -1,5 +1,7 @@
 # splunk-detector-publish Sanity Codex Eval Report
 
+Evaluated source: `7db9a57ada23292c0047e9d5cac24fbf0208847b`. Case outcomes: 2 passed. These are the saved run's results; no actor or judge was rerun for this publication.
+
 ## Environment
 
 | Field | Value |
@@ -7,22 +9,22 @@
 | Mode | with_skill |
 | Eval kind | sanity |
 | Skill | splunk-detector-publish |
-| Run ID | 20261103T223232387618Z |
+| Run ID | 20261116T170554Z-consolidated-report |
 | Agent model | gpt-6.1-sol |
-| Workers | 1 |
-| Config | evals/codex-evals.toml |
+| Workers | 8 |
+| Config | evals/codex-evals.logging.toml |
 
 ## Sanity Summary
 
-| Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
-|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | sanity/skill-smoke/sanity/detector-publish | sanity/skill-smoke | 2 | 100% (6/6) | 90.5K | 18.1s | - | - | - |
+| Mode | Eval | Service | Prompts | Case outcomes | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
+|---|---|---|---:|---|---:|---:|---:|---:|---:|---:|
+| with_skill | sanity/skill-smoke/sanity/detector-publish | sanity/skill-smoke | 2 | 2 passed | 100% (6/6) | 87.2K | 22.7s | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | sanity/skill-smoke/sanity/detector-publish | sanity/skill-smoke | with_skill | codex | cumulative | measured | 2/2 recognized | 90328 | 51840 | 0 | 198 | 61 | unknown | 90526 |
+| with_skill | sanity/skill-smoke/sanity/detector-publish | sanity/skill-smoke | with_skill | codex | cumulative | measured | 2/2 recognized | 86943 | 38144 | 0 | 221 | 82 | unknown | 87164 |
 
 ## Sanity Failures
 

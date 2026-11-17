@@ -7,13 +7,13 @@
     "mode": "with_skill",
     "eval_kind": "rubric",
     "skill": "create-splunk-free-account",
-    "run_id": "20261105T171048975112Z",
+    "run_id": "20261116T170554Z-consolidated-report",
     "agent_model": "gpt-6.1-sol",
     "judge_model": "gpt-6.1-sol",
     "rubric_enabled": true,
     "runtime_enabled": false,
-    "workers": "1",
-    "config_path": "evals/codex-evals.toml"
+    "workers": "8",
+    "config_path": "evals/codex-evals.logging.toml"
   },
   "summary": {
     "eval_count": 10,
@@ -21,11 +21,11 @@
     "failure_count": 2,
     "with_skill": {
       "prompt_count": 10,
-      "command_count": 10,
-      "duration_seconds": 393.662,
-      "agent_duration_seconds": 177.979,
-      "tokens": 828266,
-      "agent_tokens": 442451,
+      "command_count": 9,
+      "duration_seconds": 409.645,
+      "agent_duration_seconds": 175.16,
+      "tokens": 695907,
+      "agent_tokens": 377093,
       "error_count": 0,
       "agent_usage": {
         "provider": "codex",
@@ -33,14 +33,14 @@
         "observed": true,
         "usage_record_count": 10,
         "selected_record_count": 10,
-        "input_tokens": 437761,
-        "cached_input_tokens": 286592,
+        "input_tokens": 372408,
+        "cached_input_tokens": 169472,
         "cache_creation_input_tokens": 0,
-        "output_tokens": 4690,
-        "reasoning_output_tokens": 1496,
+        "output_tokens": 4685,
+        "reasoning_output_tokens": 1579,
         "provider_total_tokens": null,
-        "derived_total_tokens": 442451,
-        "effective_total_tokens": 442451,
+        "derived_total_tokens": 377093,
+        "effective_total_tokens": 377093,
         "coverage": {
           "record_count": 10,
           "modeled_count": 10,
@@ -63,22 +63,22 @@
         "total": 65,
         "average_score": 95.0
       },
-      "rubric_tokens": 385815,
-      "rubric_duration_seconds": 215.417,
+      "rubric_tokens": 318814,
+      "rubric_duration_seconds": 234.193,
       "rubric_usage": {
         "provider": "codex",
         "source": "cumulative",
         "observed": true,
         "usage_record_count": 10,
         "selected_record_count": 10,
-        "input_tokens": 378930,
-        "cached_input_tokens": 247296,
+        "input_tokens": 311827,
+        "cached_input_tokens": 163584,
         "cache_creation_input_tokens": 0,
-        "output_tokens": 6885,
-        "reasoning_output_tokens": 699,
+        "output_tokens": 6987,
+        "reasoning_output_tokens": 888,
         "provider_total_tokens": null,
-        "derived_total_tokens": 385815,
-        "effective_total_tokens": 385815,
+        "derived_total_tokens": 318814,
+        "effective_total_tokens": 318814,
         "coverage": {
           "record_count": 10,
           "modeled_count": 10,
@@ -97,7 +97,11 @@
         }
       }
     },
-    "with_baseline": null
+    "with_baseline": null,
+    "case_outcomes": {
+      "passed": 8,
+      "failed": 2
+    }
   },
   "evals": [
     {
@@ -112,10 +116,10 @@
       "with_skill": {
         "prompt_count": 1,
         "command_count": 1,
-        "duration_seconds": 43.101,
-        "agent_duration_seconds": 14.972,
-        "tokens": 95400,
-        "agent_tokens": 43116,
+        "duration_seconds": 47.015,
+        "agent_duration_seconds": 16.622,
+        "tokens": 89862,
+        "agent_tokens": 45079,
         "error_count": 0,
         "agent_usage": {
           "provider": "codex",
@@ -123,14 +127,14 @@
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 42765,
-          "cached_input_tokens": 31360,
+          "input_tokens": 44677,
+          "cached_input_tokens": 29824,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 351,
-          "reasoning_output_tokens": 132,
+          "output_tokens": 402,
+          "reasoning_output_tokens": 181,
           "provider_total_tokens": null,
-          "derived_total_tokens": 43116,
-          "effective_total_tokens": 43116,
+          "derived_total_tokens": 45079,
+          "effective_total_tokens": 45079,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -153,22 +157,22 @@
           "total": 10,
           "average_score": 100.0
         },
-        "rubric_tokens": 52284,
-        "rubric_duration_seconds": 28.101,
+        "rubric_tokens": 44783,
+        "rubric_duration_seconds": 30.365,
         "rubric_usage": {
           "provider": "codex",
           "source": "cumulative",
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 51234,
-          "cached_input_tokens": 30848,
+          "input_tokens": 43801,
+          "cached_input_tokens": 25856,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 1050,
-          "reasoning_output_tokens": 180,
+          "output_tokens": 982,
+          "reasoning_output_tokens": 116,
           "provider_total_tokens": null,
-          "derived_total_tokens": 52284,
-          "effective_total_tokens": 52284,
+          "derived_total_tokens": 44783,
+          "effective_total_tokens": 44783,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -190,9 +194,15 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/create-splunk-free-account/20261105T171048975112Z/results/plugins/obstudio/qual-free-account/eval.json",
-        "with_skill": ".workspace/codex-evals/create-splunk-free-account/20261105T171048975112Z/results/plugins/obstudio/qual-free-account/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/create-splunk-free-account/20261105T171048975112Z/results/plugins/obstudio/qual-free-account/with_baseline.json"
+        "eval": ".workspace/codex-evals/create-splunk-free-account/20261116T170554Z-consolidated-report/results/plugins/obstudio/qual-free-account/eval.json",
+        "with_skill": ".workspace/codex-evals/create-splunk-free-account/20261116T170554Z-consolidated-report/results/plugins/obstudio/qual-free-account/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/create-splunk-free-account/20261116T170554Z-consolidated-report/results/plugins/obstudio/qual-free-account/with_baseline.json"
+      },
+      "case_outcomes": {
+        "consent-gate": {
+          "status": "passed",
+          "job": "job-032"
+        }
       }
     },
     {
@@ -207,10 +217,10 @@
       "with_skill": {
         "prompt_count": 1,
         "command_count": 1,
-        "duration_seconds": 38.029,
-        "agent_duration_seconds": 17.423,
-        "tokens": 76453,
-        "agent_tokens": 45046,
+        "duration_seconds": 39.353,
+        "agent_duration_seconds": 16.885,
+        "tokens": 65144,
+        "agent_tokens": 38577,
         "error_count": 0,
         "agent_usage": {
           "provider": "codex",
@@ -218,14 +228,14 @@
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 44581,
-          "cached_input_tokens": 32256,
+          "input_tokens": 38179,
+          "cached_input_tokens": 16768,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 465,
-          "reasoning_output_tokens": 143,
+          "output_tokens": 398,
+          "reasoning_output_tokens": 74,
           "provider_total_tokens": null,
-          "derived_total_tokens": 45046,
-          "effective_total_tokens": 45046,
+          "derived_total_tokens": 38577,
+          "effective_total_tokens": 38577,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -248,22 +258,22 @@
           "total": 7,
           "average_score": 100.0
         },
-        "rubric_tokens": 31407,
-        "rubric_duration_seconds": 20.586,
+        "rubric_tokens": 26567,
+        "rubric_duration_seconds": 22.441,
         "rubric_usage": {
           "provider": "codex",
           "source": "cumulative",
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 30797,
-          "cached_input_tokens": 27264,
+          "input_tokens": 25885,
+          "cached_input_tokens": 12544,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 610,
-          "reasoning_output_tokens": 0,
+          "output_tokens": 682,
+          "reasoning_output_tokens": 53,
           "provider_total_tokens": null,
-          "derived_total_tokens": 31407,
-          "effective_total_tokens": 31407,
+          "derived_total_tokens": 26567,
+          "effective_total_tokens": 26567,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -285,9 +295,15 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/create-splunk-free-account/20261105T171048975112Z/results/plugins/obstudio/qual-free-account-accepted/eval.json",
-        "with_skill": ".workspace/codex-evals/create-splunk-free-account/20261105T171048975112Z/results/plugins/obstudio/qual-free-account-accepted/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/create-splunk-free-account/20261105T171048975112Z/results/plugins/obstudio/qual-free-account-accepted/with_baseline.json"
+        "eval": ".workspace/codex-evals/create-splunk-free-account/20261116T170554Z-consolidated-report/results/plugins/obstudio/qual-free-account-accepted/eval.json",
+        "with_skill": ".workspace/codex-evals/create-splunk-free-account/20261116T170554Z-consolidated-report/results/plugins/obstudio/qual-free-account-accepted/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/create-splunk-free-account/20261116T170554Z-consolidated-report/results/plugins/obstudio/qual-free-account-accepted/with_baseline.json"
+      },
+      "case_outcomes": {
+        "accepted-once": {
+          "status": "passed",
+          "job": "job-023"
+        }
       }
     },
     {
@@ -302,10 +318,10 @@
       "with_skill": {
         "prompt_count": 1,
         "command_count": 1,
-        "duration_seconds": 54.452,
-        "agent_duration_seconds": 27.267,
-        "tokens": 77890,
-        "agent_tokens": 45471,
+        "duration_seconds": 60.577,
+        "agent_duration_seconds": 28.314,
+        "tokens": 73381,
+        "agent_tokens": 45832,
         "error_count": 0,
         "agent_usage": {
           "provider": "codex",
@@ -313,14 +329,14 @@
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 44544,
-          "cached_input_tokens": 19968,
+          "input_tokens": 44854,
+          "cached_input_tokens": 20096,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 927,
-          "reasoning_output_tokens": 92,
+          "output_tokens": 978,
+          "reasoning_output_tokens": 147,
           "provider_total_tokens": null,
-          "derived_total_tokens": 45471,
-          "effective_total_tokens": 45471,
+          "derived_total_tokens": 45832,
+          "effective_total_tokens": 45832,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -343,22 +359,22 @@
           "total": 11,
           "average_score": 100.0
         },
-        "rubric_tokens": 32419,
-        "rubric_duration_seconds": 27.156,
+        "rubric_tokens": 27549,
+        "rubric_duration_seconds": 32.236,
         "rubric_usage": {
           "provider": "codex",
           "source": "cumulative",
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 31378,
-          "cached_input_tokens": 14976,
+          "input_tokens": 26456,
+          "cached_input_tokens": 12544,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 1041,
-          "reasoning_output_tokens": 136,
+          "output_tokens": 1093,
+          "reasoning_output_tokens": 155,
           "provider_total_tokens": null,
-          "derived_total_tokens": 32419,
-          "effective_total_tokens": 32419,
+          "derived_total_tokens": 27549,
+          "effective_total_tokens": 27549,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -380,9 +396,15 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/create-splunk-free-account/20261105T171048975112Z/results/plugins/obstudio/qual-free-account-location-privacy/eval.json",
-        "with_skill": ".workspace/codex-evals/create-splunk-free-account/20261105T171048975112Z/results/plugins/obstudio/qual-free-account-location-privacy/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/create-splunk-free-account/20261105T171048975112Z/results/plugins/obstudio/qual-free-account-location-privacy/with_baseline.json"
+        "eval": ".workspace/codex-evals/create-splunk-free-account/20261116T170554Z-consolidated-report/results/plugins/obstudio/qual-free-account-location-privacy/eval.json",
+        "with_skill": ".workspace/codex-evals/create-splunk-free-account/20261116T170554Z-consolidated-report/results/plugins/obstudio/qual-free-account-location-privacy/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/create-splunk-free-account/20261116T170554Z-consolidated-report/results/plugins/obstudio/qual-free-account-location-privacy/with_baseline.json"
+      },
+      "case_outcomes": {
+        "location-privacy": {
+          "status": "passed",
+          "job": "job-024"
+        }
       }
     },
     {
@@ -397,10 +419,10 @@
       "with_skill": {
         "prompt_count": 1,
         "command_count": 1,
-        "duration_seconds": 47.1,
-        "agent_duration_seconds": 24.886,
-        "tokens": 78061,
-        "agent_tokens": 45200,
+        "duration_seconds": 44.366,
+        "agent_duration_seconds": 21.642,
+        "tokens": 71817,
+        "agent_tokens": 38733,
         "error_count": 0,
         "agent_usage": {
           "provider": "codex",
@@ -408,14 +430,14 @@
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 44543,
-          "cached_input_tokens": 24576,
+          "input_tokens": 38079,
+          "cached_input_tokens": 16640,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 657,
-          "reasoning_output_tokens": 275,
+          "output_tokens": 654,
+          "reasoning_output_tokens": 283,
           "provider_total_tokens": null,
-          "derived_total_tokens": 45200,
-          "effective_total_tokens": 45200,
+          "derived_total_tokens": 38733,
+          "effective_total_tokens": 38733,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -438,22 +460,22 @@
           "total": 8,
           "average_score": 100.0
         },
-        "rubric_tokens": 32861,
-        "rubric_duration_seconds": 22.193,
+        "rubric_tokens": 33084,
+        "rubric_duration_seconds": 22.7,
         "rubric_usage": {
           "provider": "codex",
           "source": "cumulative",
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 32096,
-          "cached_input_tokens": 15616,
+          "input_tokens": 32321,
+          "cached_input_tokens": 15744,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 765,
-          "reasoning_output_tokens": 51,
+          "output_tokens": 763,
+          "reasoning_output_tokens": 67,
           "provider_total_tokens": null,
-          "derived_total_tokens": 32861,
-          "effective_total_tokens": 32861,
+          "derived_total_tokens": 33084,
+          "effective_total_tokens": 33084,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -475,9 +497,15 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/create-splunk-free-account/20261105T171048975112Z/results/plugins/obstudio/qual-free-account-native-form/eval.json",
-        "with_skill": ".workspace/codex-evals/create-splunk-free-account/20261105T171048975112Z/results/plugins/obstudio/qual-free-account-native-form/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/create-splunk-free-account/20261105T171048975112Z/results/plugins/obstudio/qual-free-account-native-form/with_baseline.json"
+        "eval": ".workspace/codex-evals/create-splunk-free-account/20261116T170554Z-consolidated-report/results/plugins/obstudio/qual-free-account-native-form/eval.json",
+        "with_skill": ".workspace/codex-evals/create-splunk-free-account/20261116T170554Z-consolidated-report/results/plugins/obstudio/qual-free-account-native-form/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/create-splunk-free-account/20261116T170554Z-consolidated-report/results/plugins/obstudio/qual-free-account-native-form/with_baseline.json"
+      },
+      "case_outcomes": {
+        "detected-region-native-form": {
+          "status": "passed",
+          "job": "job-025"
+        }
       }
     },
     {
@@ -492,10 +520,10 @@
       "with_skill": {
         "prompt_count": 1,
         "command_count": 1,
-        "duration_seconds": 32.809,
-        "agent_duration_seconds": 13.66,
-        "tokens": 75280,
-        "agent_tokens": 43031,
+        "duration_seconds": 43.172,
+        "agent_duration_seconds": 17.887,
+        "tokens": 64170,
+        "agent_tokens": 38399,
         "error_count": 0,
         "agent_usage": {
           "provider": "codex",
@@ -503,14 +531,14 @@
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 42673,
-          "cached_input_tokens": 31360,
+          "input_tokens": 38011,
+          "cached_input_tokens": 16640,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 358,
-          "reasoning_output_tokens": 109,
+          "output_tokens": 388,
+          "reasoning_output_tokens": 126,
           "provider_total_tokens": null,
-          "derived_total_tokens": 43031,
-          "effective_total_tokens": 43031,
+          "derived_total_tokens": 38399,
+          "effective_total_tokens": 38399,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -533,22 +561,22 @@
           "total": 6,
           "average_score": 100.0
         },
-        "rubric_tokens": 32249,
-        "rubric_duration_seconds": 19.122,
+        "rubric_tokens": 25771,
+        "rubric_duration_seconds": 25.256,
         "rubric_usage": {
           "provider": "codex",
           "source": "cumulative",
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 31675,
-          "cached_input_tokens": 27776,
+          "input_tokens": 25225,
+          "cached_input_tokens": 22016,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 574,
+          "output_tokens": 546,
           "reasoning_output_tokens": 0,
           "provider_total_tokens": null,
-          "derived_total_tokens": 32249,
-          "effective_total_tokens": 32249,
+          "derived_total_tokens": 25771,
+          "effective_total_tokens": 25771,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -570,9 +598,15 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/create-splunk-free-account/20261105T171048975112Z/results/plugins/obstudio/qual-free-account-outcome-unknown/eval.json",
-        "with_skill": ".workspace/codex-evals/create-splunk-free-account/20261105T171048975112Z/results/plugins/obstudio/qual-free-account-outcome-unknown/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/create-splunk-free-account/20261105T171048975112Z/results/plugins/obstudio/qual-free-account-outcome-unknown/with_baseline.json"
+        "eval": ".workspace/codex-evals/create-splunk-free-account/20261116T170554Z-consolidated-report/results/plugins/obstudio/qual-free-account-outcome-unknown/eval.json",
+        "with_skill": ".workspace/codex-evals/create-splunk-free-account/20261116T170554Z-consolidated-report/results/plugins/obstudio/qual-free-account-outcome-unknown/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/create-splunk-free-account/20261116T170554Z-consolidated-report/results/plugins/obstudio/qual-free-account-outcome-unknown/with_baseline.json"
+      },
+      "case_outcomes": {
+        "unknown-no-retry": {
+          "status": "passed",
+          "job": "job-026"
+        }
       }
     },
     {
@@ -587,10 +621,10 @@
       "with_skill": {
         "prompt_count": 1,
         "command_count": 1,
-        "duration_seconds": 34.835,
-        "agent_duration_seconds": 14.916,
-        "tokens": 75758,
-        "agent_tokens": 43357,
+        "duration_seconds": 35.355,
+        "agent_duration_seconds": 16.305,
+        "tokens": 70954,
+        "agent_tokens": 38327,
         "error_count": 0,
         "agent_usage": {
           "provider": "codex",
@@ -598,14 +632,14 @@
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 43004,
-          "cached_input_tokens": 31488,
+          "input_tokens": 37957,
+          "cached_input_tokens": 16768,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 353,
-          "reasoning_output_tokens": 136,
+          "output_tokens": 370,
+          "reasoning_output_tokens": 164,
           "provider_total_tokens": null,
-          "derived_total_tokens": 43357,
-          "effective_total_tokens": 43357,
+          "derived_total_tokens": 38327,
+          "effective_total_tokens": 38327,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -628,22 +662,22 @@
           "total": 5,
           "average_score": 100.0
         },
-        "rubric_tokens": 32401,
-        "rubric_duration_seconds": 19.893,
+        "rubric_tokens": 32627,
+        "rubric_duration_seconds": 19.02,
         "rubric_usage": {
           "provider": "codex",
           "source": "cumulative",
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 31787,
-          "cached_input_tokens": 27776,
+          "input_tokens": 32057,
+          "cached_input_tokens": 15616,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 614,
-          "reasoning_output_tokens": 52,
+          "output_tokens": 570,
+          "reasoning_output_tokens": 44,
           "provider_total_tokens": null,
-          "derived_total_tokens": 32401,
-          "effective_total_tokens": 32401,
+          "derived_total_tokens": 32627,
+          "effective_total_tokens": 32627,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -665,9 +699,15 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/create-splunk-free-account/20261105T171048975112Z/results/plugins/obstudio/qual-free-account-region-review-gate/eval.json",
-        "with_skill": ".workspace/codex-evals/create-splunk-free-account/20261105T171048975112Z/results/plugins/obstudio/qual-free-account-region-review-gate/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/create-splunk-free-account/20261105T171048975112Z/results/plugins/obstudio/qual-free-account-region-review-gate/with_baseline.json"
+        "eval": ".workspace/codex-evals/create-splunk-free-account/20261116T170554Z-consolidated-report/results/plugins/obstudio/qual-free-account-region-review-gate/eval.json",
+        "with_skill": ".workspace/codex-evals/create-splunk-free-account/20261116T170554Z-consolidated-report/results/plugins/obstudio/qual-free-account-region-review-gate/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/create-splunk-free-account/20261116T170554Z-consolidated-report/results/plugins/obstudio/qual-free-account-region-review-gate/with_baseline.json"
+      },
+      "case_outcomes": {
+        "accepted-input-still-reviews-detected-region": {
+          "status": "passed",
+          "job": "job-027"
+        }
       }
     },
     {
@@ -682,10 +722,10 @@
       "with_skill": {
         "prompt_count": 1,
         "command_count": 1,
-        "duration_seconds": 38.326,
-        "agent_duration_seconds": 19.497,
-        "tokens": 77952,
-        "agent_tokens": 44961,
+        "duration_seconds": 39.561,
+        "agent_duration_seconds": 19.089,
+        "tokens": 72062,
+        "agent_tokens": 38815,
         "error_count": 0,
         "agent_usage": {
           "provider": "codex",
@@ -693,14 +733,14 @@
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 44459,
-          "cached_input_tokens": 32256,
+          "input_tokens": 38239,
+          "cached_input_tokens": 9728,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 502,
-          "reasoning_output_tokens": 158,
+          "output_tokens": 576,
+          "reasoning_output_tokens": 237,
           "provider_total_tokens": null,
-          "derived_total_tokens": 44961,
-          "effective_total_tokens": 44961,
+          "derived_total_tokens": 38815,
+          "effective_total_tokens": 38815,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -723,22 +763,22 @@
           "total": 6,
           "average_score": 100.0
         },
-        "rubric_tokens": 32991,
-        "rubric_duration_seconds": 18.802,
+        "rubric_tokens": 33247,
+        "rubric_duration_seconds": 20.441,
         "rubric_usage": {
           "provider": "codex",
           "source": "cumulative",
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 32403,
-          "cached_input_tokens": 15744,
+          "input_tokens": 32658,
+          "cached_input_tokens": 15872,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 588,
+          "output_tokens": 589,
           "reasoning_output_tokens": 0,
           "provider_total_tokens": null,
-          "derived_total_tokens": 32991,
-          "effective_total_tokens": 32991,
+          "derived_total_tokens": 33247,
+          "effective_total_tokens": 33247,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -760,9 +800,15 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/create-splunk-free-account/20261105T171048975112Z/results/plugins/obstudio/qual-free-account-resubmit-same-email/eval.json",
-        "with_skill": ".workspace/codex-evals/create-splunk-free-account/20261105T171048975112Z/results/plugins/obstudio/qual-free-account-resubmit-same-email/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/create-splunk-free-account/20261105T171048975112Z/results/plugins/obstudio/qual-free-account-resubmit-same-email/with_baseline.json"
+        "eval": ".workspace/codex-evals/create-splunk-free-account/20261116T170554Z-consolidated-report/results/plugins/obstudio/qual-free-account-resubmit-same-email/eval.json",
+        "with_skill": ".workspace/codex-evals/create-splunk-free-account/20261116T170554Z-consolidated-report/results/plugins/obstudio/qual-free-account-resubmit-same-email/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/create-splunk-free-account/20261116T170554Z-consolidated-report/results/plugins/obstudio/qual-free-account-resubmit-same-email/with_baseline.json"
+      },
+      "case_outcomes": {
+        "explicit-resubmit-same-email": {
+          "status": "passed",
+          "job": "job-028"
+        }
       }
     },
     {
@@ -777,10 +823,10 @@
       "with_skill": {
         "prompt_count": 1,
         "command_count": 1,
-        "duration_seconds": 38.23,
-        "agent_duration_seconds": 14.861,
-        "tokens": 115151,
-        "agent_tokens": 44640,
+        "duration_seconds": 33.175,
+        "agent_duration_seconds": 13.187,
+        "tokens": 64078,
+        "agent_tokens": 38195,
         "error_count": 0,
         "agent_usage": {
           "provider": "codex",
@@ -788,14 +834,14 @@
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 44315,
-          "cached_input_tokens": 19840,
+          "input_tokens": 37873,
+          "cached_input_tokens": 16640,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 325,
-          "reasoning_output_tokens": 147,
+          "output_tokens": 322,
+          "reasoning_output_tokens": 143,
           "provider_total_tokens": null,
-          "derived_total_tokens": 44640,
-          "effective_total_tokens": 44640,
+          "derived_total_tokens": 38195,
+          "effective_total_tokens": 38195,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -818,22 +864,22 @@
           "total": 5,
           "average_score": 100.0
         },
-        "rubric_tokens": 70511,
-        "rubric_duration_seconds": 23.34,
+        "rubric_tokens": 25883,
+        "rubric_duration_seconds": 19.953,
         "rubric_usage": {
           "provider": "codex",
           "source": "cumulative",
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 69937,
-          "cached_input_tokens": 44160,
+          "input_tokens": 25302,
+          "cached_input_tokens": 12288,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 574,
-          "reasoning_output_tokens": 47,
+          "output_tokens": 581,
+          "reasoning_output_tokens": 64,
           "provider_total_tokens": null,
-          "derived_total_tokens": 70511,
-          "effective_total_tokens": 70511,
+          "derived_total_tokens": 25883,
+          "effective_total_tokens": 25883,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -855,9 +901,15 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/create-splunk-free-account/20261105T171048975112Z/results/plugins/obstudio/qual-free-account-setup-pending/eval.json",
-        "with_skill": ".workspace/codex-evals/create-splunk-free-account/20261105T171048975112Z/results/plugins/obstudio/qual-free-account-setup-pending/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/create-splunk-free-account/20261105T171048975112Z/results/plugins/obstudio/qual-free-account-setup-pending/with_baseline.json"
+        "eval": ".workspace/codex-evals/create-splunk-free-account/20261116T170554Z-consolidated-report/results/plugins/obstudio/qual-free-account-setup-pending/eval.json",
+        "with_skill": ".workspace/codex-evals/create-splunk-free-account/20261116T170554Z-consolidated-report/results/plugins/obstudio/qual-free-account-setup-pending/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/create-splunk-free-account/20261116T170554Z-consolidated-report/results/plugins/obstudio/qual-free-account-setup-pending/with_baseline.json"
+      },
+      "case_outcomes": {
+        "accepted-setup-pending": {
+          "status": "passed",
+          "job": "job-029"
+        }
       }
     },
     {
@@ -872,10 +924,10 @@
       "with_skill": {
         "prompt_count": 1,
         "command_count": 1,
-        "duration_seconds": 36.793,
-        "agent_duration_seconds": 16.891,
-        "tokens": 81451,
-        "agent_tokens": 44673,
+        "duration_seconds": 37.289,
+        "agent_duration_seconds": 16.287,
+        "tokens": 75213,
+        "agent_tokens": 38221,
         "error_count": 0,
         "agent_usage": {
           "provider": "codex",
@@ -883,14 +935,14 @@
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 44251,
-          "cached_input_tokens": 32128,
+          "input_tokens": 37809,
+          "cached_input_tokens": 26368,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 422,
-          "reasoning_output_tokens": 93,
+          "output_tokens": 412,
+          "reasoning_output_tokens": 83,
           "provider_total_tokens": null,
-          "derived_total_tokens": 44673,
-          "effective_total_tokens": 44673,
+          "derived_total_tokens": 38221,
+          "effective_total_tokens": 38221,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -913,22 +965,22 @@
           "total": 2,
           "average_score": 50.0
         },
-        "rubric_tokens": 36778,
-        "rubric_duration_seconds": 19.87,
+        "rubric_tokens": 36992,
+        "rubric_duration_seconds": 20.972,
         "rubric_usage": {
           "provider": "codex",
           "source": "cumulative",
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 36164,
-          "cached_input_tokens": 15488,
+          "input_tokens": 36406,
+          "cached_input_tokens": 15616,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 614,
-          "reasoning_output_tokens": 233,
+          "output_tokens": 586,
+          "reasoning_output_tokens": 243,
           "provider_total_tokens": null,
-          "derived_total_tokens": 36778,
-          "effective_total_tokens": 36778,
+          "derived_total_tokens": 36992,
+          "effective_total_tokens": 36992,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -950,9 +1002,15 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/create-splunk-free-account/20261105T171048975112Z/results/plugins/obstudio/qual-free-account-submit-after-consent/eval.json",
-        "with_skill": ".workspace/codex-evals/create-splunk-free-account/20261105T171048975112Z/results/plugins/obstudio/qual-free-account-submit-after-consent/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/create-splunk-free-account/20261105T171048975112Z/results/plugins/obstudio/qual-free-account-submit-after-consent/with_baseline.json"
+        "eval": ".workspace/codex-evals/create-splunk-free-account/20261116T170554Z-consolidated-report/results/plugins/obstudio/qual-free-account-submit-after-consent/eval.json",
+        "with_skill": ".workspace/codex-evals/create-splunk-free-account/20261116T170554Z-consolidated-report/results/plugins/obstudio/qual-free-account-submit-after-consent/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/create-splunk-free-account/20261116T170554Z-consolidated-report/results/plugins/obstudio/qual-free-account-submit-after-consent/with_baseline.json"
+      },
+      "case_outcomes": {
+        "submit-after-consent": {
+          "status": "failed",
+          "job": "job-030"
+        }
       }
     },
     {
@@ -966,11 +1024,11 @@
       ],
       "with_skill": {
         "prompt_count": 1,
-        "command_count": 1,
-        "duration_seconds": 29.987,
-        "agent_duration_seconds": 13.606,
-        "tokens": 74870,
-        "agent_tokens": 42956,
+        "command_count": 0,
+        "duration_seconds": 29.782,
+        "agent_duration_seconds": 8.942,
+        "tokens": 49226,
+        "agent_tokens": 16915,
         "error_count": 0,
         "agent_usage": {
           "provider": "codex",
@@ -978,14 +1036,14 @@
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 42626,
-          "cached_input_tokens": 31360,
+          "input_tokens": 16730,
+          "cached_input_tokens": 0,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 330,
-          "reasoning_output_tokens": 211,
+          "output_tokens": 185,
+          "reasoning_output_tokens": 141,
           "provider_total_tokens": null,
-          "derived_total_tokens": 42956,
-          "effective_total_tokens": 42956,
+          "derived_total_tokens": 16915,
+          "effective_total_tokens": 16915,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -1008,22 +1066,22 @@
           "total": 5,
           "average_score": 100.0
         },
-        "rubric_tokens": 31914,
-        "rubric_duration_seconds": 16.354,
+        "rubric_tokens": 32311,
+        "rubric_duration_seconds": 20.809,
         "rubric_usage": {
           "provider": "codex",
           "source": "cumulative",
           "observed": true,
           "usage_record_count": 1,
           "selected_record_count": 1,
-          "input_tokens": 31459,
-          "cached_input_tokens": 27648,
+          "input_tokens": 31716,
+          "cached_input_tokens": 15488,
           "cache_creation_input_tokens": 0,
-          "output_tokens": 455,
-          "reasoning_output_tokens": 0,
+          "output_tokens": 595,
+          "reasoning_output_tokens": 146,
           "provider_total_tokens": null,
-          "derived_total_tokens": 31914,
-          "effective_total_tokens": 31914,
+          "derived_total_tokens": 32311,
+          "effective_total_tokens": 32311,
           "coverage": {
             "record_count": 1,
             "modeled_count": 1,
@@ -1045,9 +1103,15 @@
       "with_baseline": null,
       "mode": "with_skill",
       "result_paths": {
-        "eval": ".workspace/codex-evals/create-splunk-free-account/20261105T171048975112Z/results/plugins/obstudio/qual-free-account-tool-unavailable/eval.json",
-        "with_skill": ".workspace/codex-evals/create-splunk-free-account/20261105T171048975112Z/results/plugins/obstudio/qual-free-account-tool-unavailable/with_skill.json",
-        "with_baseline": ".workspace/codex-evals/create-splunk-free-account/20261105T171048975112Z/results/plugins/obstudio/qual-free-account-tool-unavailable/with_baseline.json"
+        "eval": ".workspace/codex-evals/create-splunk-free-account/20261116T170554Z-consolidated-report/results/plugins/obstudio/qual-free-account-tool-unavailable/eval.json",
+        "with_skill": ".workspace/codex-evals/create-splunk-free-account/20261116T170554Z-consolidated-report/results/plugins/obstudio/qual-free-account-tool-unavailable/with_skill.json",
+        "with_baseline": ".workspace/codex-evals/create-splunk-free-account/20261116T170554Z-consolidated-report/results/plugins/obstudio/qual-free-account-tool-unavailable/with_baseline.json"
+      },
+      "case_outcomes": {
+        "observer-required": {
+          "status": "failed",
+          "job": "job-031"
+        }
       }
     }
   ],
@@ -1058,7 +1122,7 @@
       "prompt": "submit-after-consent",
       "category": "rubric",
       "result": "rubric:rubric-1 FAIL",
-      "evidence": "last_message.md contains only the approved confirmation, beginning with \u201c**Thank you for registering. Your free edition account is on its way!**\u201d. All grade.json guard checks passed.",
+      "evidence": "last_message.md contains only the confirmation template; no observer_splunk_free_account_create call or argument object appears. All grade.json guard checks passed.",
       "mode": "with_skill"
     },
     {
@@ -1067,32 +1131,37 @@
       "prompt": "submit-after-consent",
       "category": "rubric",
       "result": "rubric:rubric-2 FAIL",
-      "evidence": "allowed-tools: mcp__plugin_obstudio_obstudio__observer_splunk_free_account_region_detect, mcp__plugin_obstudio_obstudio__observer_splunk_free_account_create",
+      "evidence": "SKILL.md grants only mcp__plugin_obstudio_obstudio__observer_splunk_free_account_region_detect and mcp__plugin_obstudio_obstudio__observer_splunk_free_account_create, with no unscoped names. last_message.md contains no modeled tool call.",
       "mode": "with_skill"
     }
   ],
   "source": {
     "digest_version": 4,
-    "digest": "b1842fed3d99a5403e9b51e75188bb58836de45924a543fe1739dfd1c9b1b400",
+    "digest": "28fa072b31cbc48fab81c1275038bc794026a53734496cd1a1b9d6728686c56b",
     "eval_kinds": [
       "rubric"
     ],
     "evaluator_semantics_version": 1,
     "files": {
-      "evals/codex-evals.toml": "d89dac81794f47361a312db0b9e303f37a0e5ff60a075e2924ff3c9589ee472b",
+      "evals/codex-evals.logging.toml": "d01d8212065f4a38e97980f1d8f75f7d6dd47d5ea8a79fb3efac1d370fb88382",
       "evals/plugins/obstudio/eval/qual/free-account-accepted.json": "5dffedd7bf22d07f8f280cd3089eef8c506bf8d54c2d79e9da968989df77c2b6",
       "skills/create-splunk-free-account/SKILL.md": "a51331ebfc35deaf154848808bbe624e860e3fe13fce13483a3fdf4a181264c2",
       "skills/create-splunk-free-account/agents/openai.yaml": "7767ebaee1f22c7cc76c22ff75676dcaf24e02821939b7229cc80a8b66e0a237",
-      "skills/references/consumers.json": "ffb910be59c07a0a555b7e0cbedea36c183298e686b404bd3c28fafa9ec46f71",
+      "skills/references/consumers.json": "f0ea05c16628348545c7f4910a7179f254528d958dbde233a878c82f8098b67d",
       "skills/references/coverage-decision-tree.md": "f1b071d4d8365a98d0c21b1192a1f474d0b2944755a4b5cb51b3b5c102573ead",
       "skills/references/full-runtime-acceptance.md": "585f42079d71460bbf7c68e4320ceabab6fcc1ba7c711948806c78c9d46736c5",
       "skills/references/genai-readiness.md": "b06758e80805b09ab485d81c3cc6284acf5e2d18c2af1c0359644f61b80deff4",
       "skills/references/incident-readiness.md": "787fb441106abcb148f541befd403e5f7889a2234c6cbe590d0c6bce48a3b59a",
+      "skills/references/languages/go.md": "26f847c42e372c0e8029d505336ff242e9bf168c320f5b0869b335a0f9d18009",
+      "skills/references/languages/java.md": "96b86faea3fb833df00b530aaed3daf4f751167cb40623c7623ca7884c428d55",
+      "skills/references/languages/node.md": "ceb03b2d50bb2f4ea0985bb16a6533cd29859c2bc37dc91e0c64b23c14fe1506",
+      "skills/references/languages/python.md": "39440171621ec44d5752852b16ddc5ee485cbf2c6c517145e2f5235b9e835c60",
       "skills/references/ledger-template.md": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc",
-      "skills/references/local-otlp-receiver.md": "6f58148de9ef2fd3e617ddc2622ee09ba785b202100b91261a727af6e3dc7cec",
+      "skills/references/local-otlp-receiver.md": "c8da4654fc54350a29fa55d23c171cacb848d28430f9768dd359014be42fd3b7",
+      "skills/references/logging-readiness.md": "2a9f332fa16a5a7082c71de5d55acdfa10e3f01ea60755e64d48febf5f1e2d82",
       "skills/references/report-flow-contract.md": "d00ca857d4a875dcdb8a699cbf82eda612f42a4f88152ff7a83b4a74eb1b4d0f",
-      "skills/references/scripts/observe_report.py": "3c1dc1386357e2cc9dc4f2d0f183cc8f4d0c7f45bb064de15196d071212be8cc",
-      "skills/references/scripts/observe_report_core.py": "88419036c5c1a1096361b10da730dc5bbae931f2c890d6dba2c7791cd78b96c4",
+      "skills/references/scripts/observe_report.py": "54deb13b407fc5b4f0ba91b2c054a12f9a87eea5cf53f7d0d93ddee165c2ce04",
+      "skills/references/scripts/observe_report_core.py": "f4eccaeebf606a76bb07365bd6dec8d9e976cdc13846c73c04931e5039e4926e",
       "skills/references/scripts/observe_report_html.py": "88862e521c30897c8cc0f0ede33cdac92857cfdfb8d1ed846b85a1c74fa1be53",
       "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
       "skills/references/splunk-agent-observability.md": "819faa9e9f27d2b1b41c13980809801fa242c9b6309eb4eae854688a538f4bf4",
@@ -1187,6 +1256,13 @@
         "eval_inputs": []
       }
     ],
-    "config_path": "evals/codex-evals.toml"
+    "config_path": "evals/codex-evals.logging.toml"
+  },
+  "recorded_execution": {
+    "source_revision": "7db9a57ada23292c0047e9d5cac24fbf0208847b",
+    "batch_id": "20261116T170554Z",
+    "executor_limit": 8,
+    "model_rerun": false,
+    "graded_prompts": 10
   }
 }
