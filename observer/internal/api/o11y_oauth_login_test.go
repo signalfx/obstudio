@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
@@ -8,6 +9,8 @@ import (
 	"net/url"
 	"testing"
 	"time"
+
+	"github.com/signalfx/obstudio/observer/internal/otlp"
 )
 
 // mockO11yOAuthForLogin serves a discovery document, an authorize endpoint that
@@ -156,7 +159,7 @@ func startO11yOAuthLogin(t *testing.T, loginMux *http.ServeMux) o11yOAuthLoginSt
 
 func TestO11yOAuthLoginRequiresAllFields(t *testing.T) {
 	loginMux := http.NewServeMux()
-	registerO11yOAuthLoginRoutes(loginMux)
+	registerO11yOAuthLoginRoutes(loginMux, nil)
 
 	cases := []string{
 		`{"realm":"","orgId":"org","clientId":"id","clientSecret":"secret"}`,
@@ -178,7 +181,7 @@ func TestO11yOAuthLoginSucceedsAfterCallback(t *testing.T) {
 	mock.setEnv(t)
 
 	loginMux := http.NewServeMux()
-	registerO11yOAuthLoginRoutes(loginMux)
+	registerO11yOAuthLoginRoutes(loginMux, nil)
 
 	start := startO11yOAuthLogin(t, loginMux)
 
@@ -245,7 +248,7 @@ func TestO11yOAuthLoginSurfacesExchangeFailureWithoutReflectingBody(t *testing.T
 	mock.setEnv(t)
 
 	loginMux := http.NewServeMux()
-	registerO11yOAuthLoginRoutes(loginMux)
+	registerO11yOAuthLoginRoutes(loginMux, nil)
 
 	start := startO11yOAuthLogin(t, loginMux)
 
@@ -267,7 +270,7 @@ func TestO11yOAuthLoginRoutesRejectCrossOriginRequests(t *testing.T) {
 	mock.setEnv(t)
 
 	loginMux := http.NewServeMux()
-	registerO11yOAuthLoginRoutes(loginMux)
+	registerO11yOAuthLoginRoutes(loginMux, nil)
 
 	for _, route := range []struct {
 		method string
@@ -295,7 +298,7 @@ func TestO11yOAuthLoginRejectsAConcurrentLoginAttempt(t *testing.T) {
 	mock.setEnv(t)
 
 	loginMux := http.NewServeMux()
-	registerO11yOAuthLoginRoutes(loginMux)
+	registerO11yOAuthLoginRoutes(loginMux, nil)
 
 	startO11yOAuthLogin(t, loginMux)
 
@@ -340,5 +343,108 @@ func TestO11yOAuthHTTPClientDoesNotFollowRedirects(t *testing.T) {
 	}
 	if targetHit {
 		t.Fatal("redirect target must never be contacted")
+	}
+}
+
+func TestO11yOAuthLoginReplacesPastedExportTokenAndPreservesEnabledState(t *testing.T) {
+	resetGlobalO11yOAuthLoginState(t)
+	mock := startMockO11yOAuthForLogin(t)
+	mock.setEnv(t)
+
+	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{Realm: "us1", AccessToken: testSplunkAccessToken, Enabled: true})
+	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{Realm: "us1", AccessToken: testSplunkAccessToken, Enabled: false})
+	defer metrics.Shutdown(context.Background())
+	defer traces.Shutdown(context.Background())
+	service := newTestSplunkExportService(metrics, traces, nil)
+
+	loginMux := http.NewServeMux()
+	registerO11yOAuthLoginRoutes(loginMux, service)
+	start := startO11yOAuthLogin(t, loginMux)
+	callbackResponse := simulateO11yOAuthBrowserFollowingAuthorizationURL(t, start.AuthorizationURL)
+	defer callbackResponse.Body.Close()
+	waitForO11yOAuthLoginPhase(t, o11yOAuthLoginPhaseConnected)
+
+	for name, got := range map[string]otlp.SplunkMetricsExporterConfig{"metrics": metrics.Config()} {
+		if got.AccessToken != "o11y-access-token" || got.Realm != "lab0" || !got.Enabled {
+			t.Fatalf("%s config = realm %q token %q enabled %v", name, got.Realm, got.AccessToken, got.Enabled)
+		}
+	}
+	if got := traces.Config(); got.AccessToken != "o11y-access-token" || got.Realm != "lab0" || got.Enabled {
+		t.Fatalf("traces config = realm %q token %q enabled %v", got.Realm, got.AccessToken, got.Enabled)
+	}
+	if !service.snapshot().SessionOnly {
+		t.Fatal("OAuth token should be applied session-only")
+	}
+}
+
+func signInWithO11yOAuthAgainstService(t *testing.T, service *splunkExportService) *http.ServeMux {
+	t.Helper()
+	mock := startMockO11yOAuthForLogin(t)
+	mock.setEnv(t)
+	loginMux := http.NewServeMux()
+	registerO11yOAuthLoginRoutes(loginMux, service)
+	start := startO11yOAuthLogin(t, loginMux)
+	callbackResponse := simulateO11yOAuthBrowserFollowingAuthorizationURL(t, start.AuthorizationURL)
+	callbackResponse.Body.Close()
+	waitForO11yOAuthLoginPhase(t, o11yOAuthLoginPhaseConnected)
+	return loginMux
+}
+
+func newO11yOAuthTestExporters(t *testing.T) (*otlp.SplunkMetricsExportController, *otlp.SplunkTracesExportController) {
+	t.Helper()
+	metrics, _ := otlp.NewSplunkMetricsExportController(otlp.SplunkMetricsExporterConfig{Realm: "us1", AccessToken: testSplunkAccessToken, Enabled: true})
+	traces, _ := otlp.NewSplunkTracesExportController(otlp.SplunkTracesExporterConfig{Realm: "us1", AccessToken: testSplunkAccessToken, Enabled: true})
+	t.Cleanup(func() {
+		metrics.Shutdown(context.Background())
+		traces.Shutdown(context.Background())
+	})
+	return metrics, traces
+}
+
+func TestO11yOAuthDisconnectStopsExportUsingTheOAuthToken(t *testing.T) {
+	resetGlobalO11yOAuthLoginState(t)
+	metrics, traces := newO11yOAuthTestExporters(t)
+	service := newTestSplunkExportService(metrics, traces, nil)
+	loginMux := signInWithO11yOAuthAgainstService(t, service)
+
+	response := splunkExportRequest(t, loginMux, http.MethodPost, "/api/splunk/o11y-oauth/session/disconnect", "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("disconnect status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if got := metrics.Config(); got.AccessToken != "" || got.Realm != "" || got.Enabled {
+		t.Fatalf("metrics still configured after disconnect: %+v", got)
+	}
+	if got := traces.Config(); got.AccessToken != "" || got.Realm != "" || got.Enabled {
+		t.Fatalf("traces still configured after disconnect: %+v", got)
+	}
+	if service.snapshot().SessionOnly {
+		t.Fatal("session-only mode should return to its pre-sign-in value")
+	}
+}
+
+func TestO11yOAuthDisconnectLeavesAConnectionConfiguredAfterSignIn(t *testing.T) {
+	resetGlobalO11yOAuthLoginState(t)
+	metrics, traces := newO11yOAuthTestExporters(t)
+	service := newTestSplunkExportService(metrics, traces, nil)
+	loginMux := signInWithO11yOAuthAgainstService(t, service)
+
+	// The user pastes a different token after signing in; disconnecting the sign-in must
+	// not take that connection down.
+	service.mu.Lock()
+	err := service.applyConnection(
+		otlp.SplunkMetricsExporterConfig{Realm: "us1", AccessToken: testSplunkAccessToken, Enabled: true},
+		otlp.SplunkTracesExporterConfig{Realm: "us1", AccessToken: testSplunkAccessToken, Enabled: true},
+		false, nil)
+	service.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	response := splunkExportRequest(t, loginMux, http.MethodPost, "/api/splunk/o11y-oauth/session/disconnect", "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("disconnect status = %d", response.Code)
+	}
+	if metrics.Config().AccessToken != testSplunkAccessToken || traces.Config().AccessToken != testSplunkAccessToken {
+		t.Fatal("disconnect cleared a token that did not come from the sign-in")
 	}
 }

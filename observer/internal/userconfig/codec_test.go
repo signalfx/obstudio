@@ -126,7 +126,8 @@ func ttValues(vals map[string]any) func(def) any {
 
 func TestEncodeSettings(t *testing.T) {
 	results := []string{string(EncodeSettings(DefaultSettings())), string(EncodeSettings(FailSafeSettings()))}
-	if results[0] != `{"telemetry":{"enabled":true}}` || results[1] != `{"telemetry":{"enabled":false}}` {
+	const o11y = `"o11yOAuth":{"realm":"","orgId":"","clientId":"","clientSecret":""}`
+	if results[0] != `{"telemetry":{"enabled":true},`+o11y+`}` || results[1] != `{"telemetry":{"enabled":false},`+o11y+`}` {
 		t.Errorf("v1 encode = %v", results)
 	}
 	tt := newTT()

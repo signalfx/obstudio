@@ -33,6 +33,7 @@ export const cloudBridgeActions = [
 	'open-free-edition-terms',
 	'open-ingest-token-help',
 	'open-credential-storage-help',
+	'open-hec-endpoint-help',
 	'open-hec-token-help',
 	'open-splunk-platform-trial',
 	'open-observability-cloud',
