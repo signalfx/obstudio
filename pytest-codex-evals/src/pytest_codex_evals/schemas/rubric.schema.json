@@ -4,7 +4,7 @@
   "type": "object",
   "required": ["skill", "prompts"],
   "oneOf": [
-    { "required": ["rubric"], "not": { "anyOf": [{ "required": ["rubric_base"] }, { "required": ["rubric_additions"] }] } },
+    { "required": ["rubric"], "not": { "anyOf": [{ "required": ["rubric_base"] }, { "required": ["rubric_additions"] }, { "required": ["rubric_additions_source"] }] } },
     { "required": ["rubric_base"], "not": { "anyOf": [{ "required": ["rubric"] }, { "required": ["judge_prompt"] }, { "required": ["judge_inputs"] }, { "required": ["strict_rubric_output"] }, { "required": ["rubric_dimensions"] }] } }
   ],
   "allOf": [{"if": {"required": ["rubric_dimensions"]}, "then": {"required": ["strict_rubric_output"], "properties": {"strict_rubric_output": {"const": true}}}}],
@@ -17,11 +17,8 @@
     "service": { "type": "string" },
     "prompts": { "$ref": "common.schema.json#/$defs/prompts" },
     "rubric_base": { "type": "string", "minLength": 1 },
-    "rubric_additions": {
-      "type": "object",
-      "propertyNames": { "pattern": "^rubric-[1-9][0-9]*$" },
-      "additionalProperties": { "type": "string", "minLength": 1 }
-    },
+    "rubric_additions_source": { "type": "string", "minLength": 1 },
+    "rubric_additions": { "$ref": "#/$defs/additions" },
     "rubric": {
       "type": "array",
       "minItems": 1,
@@ -37,6 +34,17 @@
     }
   },
   "$defs": {
+    "additions": {
+      "type": "object",
+      "propertyNames": { "pattern": "^rubric-[1-9][0-9]*$" },
+      "additionalProperties": { "type": "string", "minLength": 1 }
+    },
+    "additions_source": {
+      "type": "object",
+      "required": ["rubric_additions"],
+      "additionalProperties": false,
+      "properties": { "rubric_additions": { "$ref": "#/$defs/additions" } }
+    },
     "dimensions": {
       "type": "array",
       "minItems": 1,

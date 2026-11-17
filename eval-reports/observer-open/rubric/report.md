@@ -1,5 +1,11 @@
 # observer-open Rubric Codex Eval Report
 
+Evaluated source: `7db9a57ada23292c0047e9d5cac24fbf0208847b`. Case outcomes: 2 passed. These are the saved run's results; no actor or judge was rerun for this publication.
+
+Rubric grades are available for **2 of 2 prompts**. Case outcomes also include execution and workflow checks; they are not a count of checklist items.
+
+The legacy judge marked `claude-cli-fallback` as passing overall while marking `rubric-5` false. Both original answers are preserved; the failed checklist item appears below.
+
 ## Environment
 
 | Field | Value |
@@ -7,37 +13,36 @@
 | Mode | with_skill |
 | Eval kind | rubric |
 | Skill | observer-open |
-| Run ID | 20261019T181052306620Z |
+| Run ID | 20261116T170554Z-consolidated-report |
 | Agent model | gpt-6.1-sol |
 | Judge model | gpt-6.1-sol |
 | Rubric enabled | True |
-| Workers | 1 |
-| Config | evals/codex-evals.model-override.toml |
+| Workers | 8 |
+| Config | evals/codex-evals.logging.toml |
 
 ## Rubric Summary
 
-| Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
-|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | plugins/obstudio/qual/observer-open | plugins/obstudio | 2 | 80% (8/10), avg score 82 | 154.4K | 1.5m | - | - | - |
+| Mode | Eval | Service | Prompts | Case outcomes | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
+|---|---|---|---:|---|---:|---:|---:|---:|---:|---:|
+| with_skill | plugins/obstudio/qual/observer-open | plugins/obstudio | 2 | 2 passed | 90% (9/10), avg score 98 | 53.5K | 1.5m | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | plugins/obstudio/qual/observer-open | plugins/obstudio | with_skill | codex | cumulative | measured | 2/2 recognized | 153754 | 128128 | 0 | 680 | 241 | unknown | 154434 |
+| with_skill | plugins/obstudio/qual/observer-open | plugins/obstudio | with_skill | codex | cumulative | measured | 2/2 recognized | 52736 | 45056 | 0 | 729 | 393 | unknown | 53465 |
 
 ## Judge Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | plugins/obstudio/qual/observer-open | plugins/obstudio | with_skill | codex | cumulative | measured | 2/2 recognized | 141041 | 115328 | 0 | 1693 | 324 | unknown | 142734 |
+| with_skill | plugins/obstudio/qual/observer-open | plugins/obstudio | with_skill | codex | cumulative | measured | 2/2 recognized | 90462 | 62208 | 0 | 1519 | 382 | unknown | 91981 |
 
 ## Rubric Failures
 
 | Mode | Service | Side | Prompt | Result | Evidence |
 |---|---|---|---|---|---|
-| with_skill | plugins/obstudio | with_skill | claude-cli-fallback | rubric:rubric-5 FAIL | Final response says “Reachability is sandbox-unverified” and proposes a health check without explaining its UI-verification limitation. |
-| with_skill | plugins/obstudio | with_skill | codex-browser | rubric:rubric-1 FAIL | trace.jsonl records only reading SKILL.md and sending messages; no browser invocation. The final response claims no browser capability was exposed. |
+| with_skill | plugins/obstudio | with_skill | claude-cli-fallback | rubric:rubric-5 FAIL | Status: `sandbox-unverified`; no UI-rendering claim is made. |
 
 ## Result JSON
 

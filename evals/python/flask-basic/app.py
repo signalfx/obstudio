@@ -1,5 +1,6 @@
 import atexit
 import signal
+from concurrent.futures import ThreadPoolExecutor
 
 from flask import Flask, jsonify, request
 
@@ -31,6 +32,14 @@ atexit.register(log_completed_shutdown)
 
 @app.get("/health")
 def health():
+    return {"status": "ok"}
+
+
+@app.get("/logging-workflow/<any(left,right):slot>")
+def logging_workflow(slot):
+    app.logger.warning("workflow sync completed %s", slot)
+    with ThreadPoolExecutor(max_workers=1) as worker:
+        worker.submit(app.logger.warning, "workflow async completed %s", slot).result(timeout=2)
     return {"status": "ok"}
 
 
@@ -78,3 +87,6 @@ def delete_task(task_id):
     if len(tasks) == before:
         return {"error": "not found"}, 404
     return "", 204
+
+
+app.logger.warning("workflow outside completed")
