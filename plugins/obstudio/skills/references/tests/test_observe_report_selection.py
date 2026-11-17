@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import html
 import json
 import os
 import re
@@ -1034,7 +1035,11 @@ class ObserveReportTest(unittest.TestCase):
             "audit_sha256": MODULE.audit_digest(report), "requested_ids": ["AO-002"],
             "ao_target": {"project_id": "project-123", "agent_stream_id": "stream-123"},
         }, report)
+        selection_before = copy.deepcopy(selection)
+        digest_before = MODULE.selection_digest(selection)
         rendered = MODULE.render_html(report, selection)
+        self.assertEqual(selection, selection_before)
+        self.assertEqual(MODULE.selection_digest(selection), digest_before)
         self.assertIn('for="ao-project-value">Project name (required)</label>', rendered)
         self.assertIn('This saved selection uses resource IDs.', rendered)
         self.assertNotIn('value="project-123"', rendered)
@@ -1097,6 +1102,16 @@ assert(!nodes.instrumentCommand.value.startsWith("$otel-instrument"), "missing r
 selected.clear();
 renderTray();
 assert(nodes["ao-target-controls"].hidden, "deselecting AO hides destination controls");
+assert(!nodes.instrumentCommand.value.includes("--ao-"), "deselected AO adds no target flags");
+selected.add("AO-002");
+renderTray();
+assert(!nodes["ao-target-controls"].hidden, "reselecting AO restores destination controls");
+assert(nodes["ao-project-value"].value === "", "reselection preserves the missing project");
+assert(nodes["ao-agent_stream-value"].value === "saved stream", "reselection preserves the known stream");
+assert(!nodes.instrumentCommand.value.startsWith("$otel-instrument"), "required validation applies after reselection");
+nodes["ao-project-value"].value = "saved project";
+renderInstrumentCommand();
+assert(nodes.instrumentCommand.value === legacyCommand, "repair restores the same restricted command");
 process.stdout.write(JSON.stringify({command, negativeCommand, legacyCommand}));
 """.replace("REPORT_VALUE", json.dumps(report)).replace("DATA_VALUE", json.dumps(payload)).replace("FUNCTIONS_VALUE", functions)
         result = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=False)
@@ -1121,6 +1136,85 @@ process.stdout.write(JSON.stringify({command, negativeCommand, legacyCommand}));
         self.assertIn('value="saved project"', names_html)
         self.assertIn('This saved selection forbids resource creation;', names_html)
         self.assertEqual(names_selection, before)
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for JavaScript behavior validation")
+    def test_html_legacy_mixed_and_policy_targets_keep_names_scope_and_creation_policy(self) -> None:
+        fixture = SCRIPT.parents[3] / "evals/python/splunk-ao-langchain-demo/eval/inputs/otel-audit.json"
+        reports = [
+            (MODULE.normalize_audit_report(sample_splunk_agent_observability_report()), "AO-002"),
+            (MODULE.normalize_audit_report(json.loads(fixture.read_text())), "OTEL-001"),
+        ]
+        targets = [
+            ({"project_id": "project-123", "agent_stream_id": "stream-123", "create_if_missing": False}, ""),
+            ({"project_id": "project-123", "agent_stream_name": "checkout-stream", "create_if_missing": False}, "checkout-stream"),
+            ({"create_if_missing": False}, ""),
+        ]
+        for report, finding_id in reports:
+            for target, stream_name in targets:
+                with self.subTest(finding_id=finding_id, target=target):
+                    selection = MODULE.normalize_selection({
+                        "schema_version": 3, "kind": "otel-selection",
+                        "audit_id": report["meta"]["audit_id"], "audit_sha256": MODULE.audit_digest(report),
+                        "requested_ids": [finding_id], "ao_target": target,
+                    }, report)
+                    before = copy.deepcopy(selection)
+                    digest = MODULE.selection_digest(selection)
+                    rendered = MODULE.render_html(report, selection)
+                    self.assertEqual(selection, before)
+                    self.assertEqual(MODULE.selection_digest(selection), digest)
+                    values = {}
+                    for resource in ("project", "agent_stream"):
+                        field = re.search(rf'<input[^>]*id="ao-{resource}-value"[^>]*>', rendered).group()
+                        values[resource] = html.unescape(re.search(r'\svalue="([^"]*)"', field).group(1))
+                    self.assertEqual(values, {"project": "", "agent_stream": stream_name})
+                    payload = json.loads(rendered.split("const DATA = ", 1)[1].split(";\nconst REPORT", 1)[0])
+                    payload["service_root"] = "."
+                    functions = rendered[rendered.index("function shellQuote(value)"):rendered.index("function syncDependencyClosure()")]
+                    script = """
+const REPORT = REPORT_VALUE;
+const DATA = DATA_VALUE;
+const values = VALUES_VALUE;
+const selected = new Set(DATA.selection.requested_ids);
+const decisionAnswers = new Map();
+const nodes = {};
+for (const id of ["ao-project-value", "ao-agent_stream-value", "ao-target-error", "ao-target-controls", "tray", "instrumentCommand"]) {
+  nodes[id] = {value: "", textContent: "", hidden: true, attributes: {}, checked: false,
+    toggleAttribute() {}, setAttribute(name, value) {this.attributes[name] = value;}, querySelectorAll() {return [];}};
+}
+nodes["ao-project-value"].value = values.project;
+nodes["ao-agent_stream-value"].value = values.agent_stream;
+const document = {getElementById(id) {return nodes[id];}};
+function orderedRequested() {return DATA.selection.requested_ids.filter(id => selected.has(id));}
+function orderedDecisionAnswers() {return [];}
+function assert(condition, message) {if (!condition) throw new Error(message);}
+function invalid(resource) {return nodes[`ao-${resource}-value`].attributes["aria-invalid"] === "true";}
+FUNCTIONS_VALUE
+const saved = JSON.stringify(DATA.selection);
+renderTray();
+assert(!nodes.instrumentCommand.value.startsWith("$otel-instrument"), "saved selectors do not bypass required names");
+assert(invalid("project"), "missing project name is invalid");
+assert(invalid("agent_stream") === !values.agent_stream, "known stream name remains valid");
+if (!values.agent_stream) {
+  nodes["ao-project-value"].value = "checkout";
+  renderInstrumentCommand();
+  assert(!invalid("project") && invalid("agent_stream"), "only the still-missing stream is invalid");
+}
+nodes["ao-project-value"].value = "checkout";
+if (!nodes["ao-agent_stream-value"].value) nodes["ao-agent_stream-value"].value = "checkout-stream";
+renderInstrumentCommand();
+assert(!invalid("project") && !invalid("agent_stream"), "completed names clear field errors");
+assert(JSON.stringify(DATA.selection) === saved, "rendering and input edits preserve saved selectors and scope");
+assert(DATA.selection.ao_target.create_if_missing === false, "creation stays forbidden");
+process.stdout.write(JSON.stringify({command: nodes.instrumentCommand.value}));
+""".replace("REPORT_VALUE", json.dumps(report)).replace("DATA_VALUE", json.dumps(payload)).replace(
+                        "VALUES_VALUE", json.dumps(values)
+                    ).replace("FUNCTIONS_VALUE", functions)
+                    result = subprocess.run(["node", "-e", script], capture_output=True, text=True, timeout=10)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(shlex.split(json.loads(result.stdout)["command"]), [
+                        "$otel-instrument", "--ids", finding_id, "--ao-project", "checkout",
+                        "--ao-agent-stream", "checkout-stream", "--ao-reuse-only", ".",
+                    ])
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is required for JavaScript behavior validation")
     def test_html_ao_resource_invalid_state_is_specific_to_each_field(self) -> None:
