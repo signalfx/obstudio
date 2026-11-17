@@ -538,7 +538,8 @@ describe("CloudTab", () => {
   });
   it("keeps both forms hidden until their own connection is disconnected", async () => {
     const logs = { version: "logs-v1", connected: true, configured: true, enabled: false, endpoint: "https://logs.example/services/collector", index: "studio", source: "otel", sourcetype: "otel:logs", insecureSkipVerify: false, tokenConfigured: true, exportedRecords: 1, failedBatches: 0 };
-    vi.mocked(fetchSplunkLogsStatus).mockResolvedValue(logs);
+    let logsStatus = logs;
+    vi.mocked(fetchSplunkLogsStatus).mockImplementation(async () => logsStatus);
     const bridge = installBridge();
     const user = userEvent.setup();
     render(<CloudTab />);
@@ -549,15 +550,26 @@ describe("CloudTab", () => {
     expect(screen.queryByRole("form", { name: "Logs connection" })).toBeNull();
     await user.click(screen.getByRole("button", { name: "Disconnect Observability Cloud" }));
     await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Disconnect Observability Cloud" }));
+    let finishLogsRefresh!: () => void;
+    vi.mocked(fetchSplunkLogsStatus).mockImplementationOnce(() => new Promise((resolve) => {
+      finishLogsRefresh = () => resolve(logsStatus);
+    }));
     bridge.respond(await bridge.next("forget"), { status: disconnectedStatus() });
     await screen.findByRole("form", { name: "Cloud connection" });
     expect(screen.queryByRole("form", { name: "Logs connection" })).toBeNull();
     expect(screen.getByRole("switch", { name: "Logs export is off" })).toBeTruthy();
     const disconnectedLogs = { ...logs, version: "logs-v2", connected: false };
-    vi.mocked(disconnectSplunkLogs).mockResolvedValueOnce(disconnectedLogs);
-    vi.mocked(fetchSplunkLogsStatus).mockResolvedValue(disconnectedLogs);
+    vi.mocked(disconnectSplunkLogs).mockImplementationOnce(async () => {
+      logsStatus = disconnectedLogs;
+      return disconnectedLogs;
+    });
+    await waitFor(() => expect(finishLogsRefresh).toBeTypeOf("function"));
+    await act(async () => finishLogsRefresh());
+    expect(screen.queryByRole("form", { name: "Logs connection" })).toBeNull();
     await user.click(screen.getByRole("button", { name: "Disconnect Splunk Platform" }));
-    await user.click(within(screen.getByRole("dialog", { name: "Disconnect Splunk Platform?" })).getByRole("button", { name: "Disconnect Splunk Platform" }));
+    const dialog = await screen.findByRole("dialog", { name: "Disconnect Splunk Platform?" });
+    expect(disconnectSplunkLogs).not.toHaveBeenCalled();
+    await user.click(within(dialog).getByRole("button", { name: "Disconnect Splunk Platform" }));
     await screen.findByRole("form", { name: "Logs connection" });
     expect(screen.getByRole("form", { name: "Cloud connection" })).toBeTruthy();
     expect(vi.mocked(disconnectSplunkLogs)).toHaveBeenCalledWith("logs-v1");
