@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .definitions.base import validate_eval_input_paths
 from .schema_resources import schema_validator
-from .rubric_base import resolve_rubric_base, rubric_base_reference, validate_rubric_source
+from .rubric_base import resolve_rubric_base, rubric_base_reference, rubric_source_reference, validate_rubric_source
 
 
 EVAL_ROLE_DIRS = {
@@ -208,13 +208,20 @@ def rubric_base_source(definition_path: Path, data: dict) -> Path | None:
 
 
 def resolve_rubric_definition(definition_path: Path, data: dict) -> dict:
-    if rubric_base_reference(definition_path, data) is None:
+    if rubric_base_reference(definition_path, data) is None and "rubric_additions_source" not in data:
         return data
     validator = schema_validator("rubric.schema.json")
     validator.validate(data)
     resolved = resolve_rubric_base(definition_path, data)
     validator.validate(resolved)
     return resolved
+
+
+def rubric_additions_source(definition_path: Path, data: dict) -> Path | None:
+    source = rubric_source_reference(definition_path, data, "rubric_additions_source")
+    if source is not None:
+        validate_rubric_source(source, definition_path.absolute().parents[2].parent.parent)
+    return source
 
 
 def runtime_repository_source_files(repo_root: Path) -> list[Path]:

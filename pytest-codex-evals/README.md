@@ -109,6 +109,29 @@ fixture tree so they cannot be staged as actor inputs. Resolution preserves
 criterion order and count, and source manifests include the shared file. Inline definitions remain
 supported. Moving unchanged requirements into a base is not new semantic coverage.
 
+When several tasks also share the same additions, set `rubric_additions_source`
+alongside `rubric_base`, for example
+`"rubric_additions_source": "../../../../rubrics/language-additions.json"`.
+That file contains only the shared additions:
+
+```json
+{ "rubric_additions": { "rubric-1": "Also assess the language-specific obligation." } }
+```
+
+Keep task-specific additions inline. Shared and inline additions must name
+different criterion IDs; neither can replace a common rule. The additions file
+uses the same path restrictions as the base, cannot reference another file, and
+is included in full and selected source manifests. Moving existing additions
+into a shared file does not count as new semantic coverage.
+
+Criterion IDs are positions: `rubric-2` means the second item in the common
+rubric, not a permanent name for that rule. Appending a rule preserves existing
+positions. Inserting, removing or reordering rules requires reviewing and
+updating shared additions, inline additions and grading groups together.
+For example, moving the second rule to first place also requires changing an
+addition for that rule from `rubric-2` to `rubric-1`. Source tracking invalidates
+the saved report, but it cannot infer which rule an author meant to extend.
+
 Enable `strict_rubric_output` to require a result, explanation and evidence for
 every checklist item. Add `rubric_dimensions` to divide the checklist among
 focused judges that inspect the same completed task. The agent runs once;
