@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-instrument",
-    "run_id": "20261116T204932697234Z",
+    "run_id": "20261117T101403207160Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-6-luna",
     "judge_model": "",
@@ -986,7 +986,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "6f46db16fd552eb5078f5da3d7e40f43c288ae13b03525e755eb9b809dc72ac4",
+    "digest": "46a35163dc9edcf5f4f6cd51fb75d315492e9287487a255064c1cecd2e628769",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -1257,8 +1257,8 @@
       "observer/internal/otlp/conntrack_test.go": "8231ec440c98a2c2dcc8081d9849eaa4a13d19e03a28f48ff05a49643756a2fa",
       "observer/internal/otlp/convert.go": "f1f8d01a7c752d532ba4e4d4a8585cc315d9d81b3c831f7f1a09abdacea039b4",
       "observer/internal/otlp/convert_test.go": "9ea00c39723d1febd44fd03586438c97cd9af4fae678ab8b94bcf1de43a94507",
-      "observer/internal/otlp/httphandler.go": "e72d034abe938a3628766afa589a6cbb0a3fea897687060383d8c574b770cec6",
-      "observer/internal/otlp/httphandler_test.go": "0c3740d2ffa57c16a695f16d3dd3f5baaea219051ee46203ea52555f35c76a3f",
+      "observer/internal/otlp/httphandler.go": "9d0d1ef8bbba67ce19b44e0662cd0940f6ec1e7e060598a9a0cd29150aa80c06",
+      "observer/internal/otlp/httphandler_test.go": "a33572457a719c8138892aa19131633d816cd95da5fda86394de1e11e0b8fd82",
       "observer/internal/otlp/pidresolver_common.go": "06b97ae47be407cfc9fe84af5a9d372cf22dfc1a7051fdbb3eed3b1a9225a795",
       "observer/internal/otlp/pidresolver_unix.go": "f97f9f2014a6a3c4fcc6541949e83a837743bc92f01d2f2420a0f02ed4cf1679",
       "observer/internal/otlp/pidresolver_windows.go": "2f7592fdd29cd4cdd6602adefc8d6c17d7bf602fa1f3d8bc689d498e7fc13967",

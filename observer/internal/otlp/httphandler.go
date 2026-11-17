@@ -115,9 +115,20 @@ func (h *otlpHTTPHandler) handleTraces(ctx context.Context, w http.ResponseWrite
 		h.store.AddSpansForConnection(connID, ConvertTraces(td))
 		exportTracesAsync(h.tracesExporter, td)
 	}
-	w.Header().Set("Content-Type", "application/json")
+	writeEmptyExportResponse(w, isProto)
+}
+
+func writeEmptyExportResponse(w http.ResponseWriter, isProto bool) {
+	contentType := "application/json"
+	body := []byte("{}")
+	if isProto {
+		contentType = "application/x-protobuf"
+		// A protobuf response with no fields has a zero-length encoding.
+		body = nil
+	}
+	w.Header().Set("Content-Type", contentType)
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte("{}"))
+	_, _ = w.Write(body)
 }
 
 func writeAgentTraceResponse(w http.ResponseWriter, response ptraceotlp.ExportResponse, isProto bool) {
@@ -154,9 +165,7 @@ func (h *otlpHTTPHandler) handleMetrics(w http.ResponseWriter, body []byte, isPr
 	}
 	h.store.AddMetricsForConnection(connID, ConvertMetrics(md))
 	exportMetricsAsync(h.exporter, md)
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte("{}"))
+	writeEmptyExportResponse(w, isProto)
 }
 
 func (h *otlpHTTPHandler) handleLogs(w http.ResponseWriter, body []byte, isProto bool, connID string) {
@@ -175,9 +184,7 @@ func (h *otlpHTTPHandler) handleLogs(w http.ResponseWriter, body []byte, isProto
 	exporter := logsExporterForIngest(h.logsExporter)
 	h.store.AddLogsForConnection(connID, ConvertLogs(ld))
 	exportLogsAsync(exporter, ld)
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte("{}"))
+	writeEmptyExportResponse(w, isProto)
 }
 
 // readBody preserves the existing ordinary OTLP limit behavior while bounding

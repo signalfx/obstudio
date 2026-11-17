@@ -15,7 +15,9 @@ import (
 	"go.opentelemetry.io/collector/pdata/plog"
 	"go.opentelemetry.io/collector/pdata/plog/plogotlp"
 	"go.opentelemetry.io/collector/pdata/pmetric"
+	"go.opentelemetry.io/collector/pdata/pmetric/pmetricotlp"
 	"go.opentelemetry.io/collector/pdata/ptrace"
+	"go.opentelemetry.io/collector/pdata/ptrace/ptraceotlp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -664,34 +666,72 @@ func TestPostTracesInvalidProtobuf(t *testing.T) {
 
 // Test 12: Response headers and body format
 func TestResponseFormat(t *testing.T) {
-	s := store.New()
-	handler := &otlpHTTPHandler{
-		store: s,
-		ct:    &ConnTracker{},
+	type requestMarshaler interface {
+		MarshalJSON() ([]byte, error)
+		MarshalProto() ([]byte, error)
 	}
-
-	td := createTestSpan()
-	marshaler := ptrace.JSONMarshaler{}
-	body, err := marshaler.MarshalTraces(td)
-	if err != nil {
-		t.Fatalf("failed to marshal traces: %v", err)
+	type responseDecoder interface {
+		UnmarshalJSON([]byte) error
+		UnmarshalProto([]byte) error
 	}
-
-	req := httptest.NewRequest("POST", "/v1/traces", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	handler.ServeHTTP(w, req)
-
-	// Check Content-Type header
-	contentType := w.Header().Get("Content-Type")
-	if contentType != "application/json" {
-		t.Errorf("expected Content-Type 'application/json', got '%s'", contentType)
+	cases := []struct {
+		path     string
+		request  requestMarshaler
+		response func() (responseDecoder, func() bool)
+	}{
+		{"/v1/traces", ptraceotlp.NewExportRequestFromTraces(createTestSpan()), func() (responseDecoder, func() bool) {
+			response := ptraceotlp.NewExportResponse()
+			return response, func() bool {
+				return response.PartialSuccess().RejectedSpans() == 0 && response.PartialSuccess().ErrorMessage() == ""
+			}
+		}},
+		{"/v1/metrics", pmetricotlp.NewExportRequestFromMetrics(createTestMetric()), func() (responseDecoder, func() bool) {
+			response := pmetricotlp.NewExportResponse()
+			return response, func() bool {
+				return response.PartialSuccess().RejectedDataPoints() == 0 && response.PartialSuccess().ErrorMessage() == ""
+			}
+		}},
+		{"/v1/logs", plogotlp.NewExportRequestFromLogs(createTestLog()), func() (responseDecoder, func() bool) {
+			response := plogotlp.NewExportResponse()
+			return response, func() bool {
+				return response.PartialSuccess().RejectedLogRecords() == 0 && response.PartialSuccess().ErrorMessage() == ""
+			}
+		}},
 	}
-
-	// Check response body is "{}"
-	if w.Body.String() != "{}" {
-		t.Errorf("expected response body '{}', got '%s'", w.Body.String())
+	for _, tc := range cases {
+		for _, contentType := range []string{"application/json", "application/x-protobuf"} {
+			t.Run(tc.path+"/"+contentType, func(t *testing.T) {
+				response, accepted := tc.response()
+				marshal, unmarshal := tc.request.MarshalJSON, response.UnmarshalJSON
+				if contentType == "application/x-protobuf" {
+					marshal, unmarshal = tc.request.MarshalProto, response.UnmarshalProto
+				}
+				body, err := marshal()
+				if err != nil {
+					t.Fatal(err)
+				}
+				handler := &otlpHTTPHandler{store: store.New()}
+				req := httptest.NewRequest(http.MethodPost, tc.path, bytes.NewReader(body))
+				req.Header.Set("Content-Type", contentType)
+				w := httptest.NewRecorder()
+				handler.ServeHTTP(w, req)
+				if w.Code != http.StatusOK {
+					t.Fatalf("status=%d, want 200: %s", w.Code, w.Body.String())
+				}
+				if got := w.Header().Get("Content-Type"); got != contentType {
+					t.Errorf("Content-Type=%q, want %q", got, contentType)
+				}
+				if err := unmarshal(w.Body.Bytes()); err != nil {
+					t.Fatalf("response cannot be decoded as %s: %v", contentType, err)
+				}
+				if !accepted() {
+					t.Error("local success response unexpectedly rejects telemetry")
+				}
+				if contentType == "application/json" && w.Body.String() != "{}" {
+					t.Errorf("JSON success body=%q, want {}", w.Body.String())
+				}
+			})
+		}
 	}
 }
 
