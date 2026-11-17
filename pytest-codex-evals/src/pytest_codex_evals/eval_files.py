@@ -199,33 +199,41 @@ def regular_source_file(path: Path) -> Path | None:
     return path if path.is_file() else None
 
 
-def rubric_base_source(definition_path: Path, data: dict) -> Path | None:
-    reference = data.get("rubric_base")
+def _rubric_source(definition_path: Path, data: dict, field: str) -> Path | None:
+    reference = data.get(field)
     if reference is None:
         return None
     layout = eval_file_layout(definition_path)
     if layout is None or layout.role != "rubric":
-        raise ValueError("rubric_base requires a nested rubric eval definition")
+        raise ValueError(f"{field} requires a nested rubric eval definition")
     if (not isinstance(reference, str) or not reference.strip()
             or "\\" in reference or Path(reference).is_absolute()):
-        raise ValueError("rubric_base must be a relative JSON file within the eval root")
+        raise ValueError(f"{field} must be a relative JSON file within the eval root")
     root = layout.fixture_dir.parent.parent.absolute()
     source = Path(os.path.abspath(definition_path.parent / reference))
     try:
         source.relative_to(root)
     except ValueError as exc:
-        raise ValueError("rubric_base must stay within the eval root") from exc
+        raise ValueError(f"{field} must stay within the eval root") from exc
     fixture = layout.fixture_dir.absolute()
     if source.is_relative_to(fixture):
-        raise ValueError("rubric_base must not be staged in the actor fixture workspace")
+        raise ValueError(f"{field} must not be staged in the actor fixture workspace")
     if source.suffix != ".json":
-        raise ValueError("rubric_base must reference a JSON file")
+        raise ValueError(f"{field} must reference a JSON file")
     parents = (parent for parent in (source, *source.parents) if parent.is_relative_to(root))
     if any(parent.is_symlink() for parent in parents):
-        raise ValueError("rubric_base source must not be a symlink")
+        raise ValueError(f"{field} source must not be a symlink")
     if regular_source_file(source) is None:
-        raise ValueError(f"rubric_base source is missing: {source}")
+        raise ValueError(f"{field} source is missing: {source}")
     return source
+
+
+def rubric_base_source(definition_path: Path, data: dict) -> Path | None:
+    return _rubric_source(definition_path, data, "rubric_base")
+
+
+def rubric_additions_source(definition_path: Path, data: dict) -> Path | None:
+    return _rubric_source(definition_path, data, "rubric_additions_source")
 
 
 def resolve_rubric_definition(definition_path: Path, data: dict) -> dict:
@@ -239,6 +247,15 @@ def resolve_rubric_definition(definition_path: Path, data: dict) -> dict:
     resolved = {**base, **data}
     resolved.pop("rubric_base")
     additions = resolved.pop("rubric_additions", {})
+    additions_source = rubric_additions_source(definition_path, data)
+    if additions_source is not None:
+        shared = json.loads(additions_source.read_text(encoding="utf-8"))
+        validator.evolve(schema=validator.schema["$defs"]["additions_source"]).validate(shared)
+        shared_additions = shared["rubric_additions"]
+        if shared_additions.keys() & additions.keys():
+            raise ValueError("shared and inline rubric_additions must use different criterion IDs")
+        additions = {**shared_additions, **additions}
+        resolved.pop("rubric_additions_source")
     rubric = list(base["rubric"])
     for label, text in additions.items():
         index = int(label.removeprefix("rubric-")) - 1

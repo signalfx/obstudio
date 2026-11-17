@@ -754,7 +754,7 @@ def test_prompt_eval_inputs_schema_rejects_unsafe_paths():
             schema_validator("rubric.schema.json").validate(payload)
 
 
-@pytest.mark.parametrize("contract", ["legacy", "strict-valid", "strict-fail", "strict-not-proven", "strict-na", "strict-invalid", "strict-middle-error", "strict-disabled"])
+@pytest.mark.parametrize("contract", ["legacy", "strict-valid", "strict-shared-additions", "strict-fail", "strict-not-proven", "strict-na", "strict-invalid", "strict-middle-error", "strict-disabled"])
 def test_collected_strict_grading_preserves_legacy_skip_and_failure_isolation(pytester: pytest.Pytester, contract: str):
     write_eval_repo(pytester)
     sample = pytester.path / "evals/sample/service/eval/qual/sample.json"
@@ -770,6 +770,12 @@ def test_collected_strict_grading_preserves_legacy_skip_and_failure_isolation(py
                 {"id": f"group-{index}", "criteria": [f"rubric-{index}"]} for index in range(1, 4)
             ]
         (pytester.path / "evals/common.json").write_text(json.dumps(common))
+        if contract == "strict-shared-additions":
+            definition["rubric_additions_source"] = "../../../../additions.json"
+            sample.write_text(json.dumps(definition))
+            (pytester.path / "evals/additions.json").write_text(json.dumps({
+                "rubric_additions": {"rubric-1": "Keep the original native log sink."},
+            }))
     other = pytester.path / "evals/sample/other"
     legacy = other / "eval/qual/other.json"
     definition = json.loads(legacy.read_text())
@@ -800,6 +806,8 @@ def test_collected_strict_grading_preserves_legacy_skip_and_failure_isolation(py
                 return AgentResult(0, trace, final, stderr)
 
             def run_judge(self, *, exec_dir, schema_path, output_dir=None, **kwargs):
+                if {contract!r} == "strict-shared-additions" and schema_path.name == "rubric_dimension_grade.schema.json":
+                    assert "Keep the original native log sink." in kwargs["prompt"]
                 with Path({str(calls)!r}).open("a") as output:
                     output.write("judge\\n")
                 trace, grade, stderr = [(output_dir or exec_dir) / name for name in ("rubric_trace.jsonl", "rubric_grade.json", "rubric_stderr.txt")]
@@ -871,7 +879,7 @@ def test_collected_strict_grading_preserves_legacy_skip_and_failure_isolation(py
             else:
                 assert not summary["errors"]
                 assert grade["status"] == "complete"
-                expected = {"strict-valid": "pass", "strict-fail": "fail",
+                expected = {"strict-valid": "pass", "strict-shared-additions": "pass", "strict-fail": "fail",
                             "strict-not-proven": "not_proven", "strict-na": "not_applicable"}[contract]
                 assert grade["checks"][0]["result"] == expected
                 assert grade["overall_pass"] == {"pass": True, "fail": False, "not_proven": False,

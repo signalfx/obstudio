@@ -19,6 +19,7 @@ from .eval_files import (
     fixture_eval_input_sources,
     iter_eval_files,
     regular_source_file,
+    rubric_additions_source,
     rubric_base_source,
     runtime_definition_asset_files,
     runtime_repository_source_files,
@@ -373,6 +374,9 @@ def source_input_digests(
                 base = rubric_base_source(path, definition)
                 if base is not None:
                     paths.append(base)
+                additions = rubric_additions_source(path, definition)
+                if additions is not None:
+                    paths.append(additions)
                 paths.extend(staged_fixture_source_files(layout.fixture_dir))
                 prompts = definition.get("prompts", [])
                 if not isinstance(prompts, list):
@@ -502,6 +506,9 @@ def selected_eval_source_files(
     base = rubric_base_source(definition_source, definition)
     if base is not None:
         paths.append(base)
+    additions = rubric_additions_source(definition_source, definition)
+    if additions is not None:
+        paths.append(additions)
     paths.extend(
         source
         for _relative, source in fixture_eval_input_sources(
