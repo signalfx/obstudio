@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchDashboardPreview } from "../api/client";
+import { fetchDashboardPreview, fetchWorkspace } from "../api/client";
 import type { PreviewResponse } from "./types";
 
 const AUTO_REFRESH_MS = 5_000;
 
 interface UseDashboardPreview {
   data: PreviewResponse | null;
+  /** Repo the preview is read from; null until known or when unavailable. */
+  workspace: string | null;
   loading: boolean;
   error: string | null;
   refresh: () => void;
@@ -13,6 +15,7 @@ interface UseDashboardPreview {
 
 export function useDashboardPreview(paused = false): UseDashboardPreview {
   const [data, setData] = useState<PreviewResponse | null>(null);
+  const [workspace, setWorkspace] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
@@ -34,6 +37,16 @@ export function useDashboardPreview(paused = false): UseDashboardPreview {
     // failure banner does not linger once a new attempt is in flight. Note we
     // never clear `data` here, so a failing refresh keeps the last good preview.
     setError(null);
+
+    // The workspace name is context only: a failure leaves the label out
+    // without affecting the preview itself.
+    fetchWorkspace(controller.signal)
+      .then((info) => {
+        if (active) setWorkspace(info.name || null);
+      })
+      .catch(() => {
+        if (active && !controller.signal.aborted) setWorkspace(null);
+      });
 
     fetchDashboardPreview(controller.signal)
       .then((resp) => {
@@ -74,5 +87,5 @@ export function useDashboardPreview(paused = false): UseDashboardPreview {
     return () => clearInterval(id);
   }, [paused]);
 
-  return { data, loading, error, refresh };
+  return { data, workspace, loading, error, refresh };
 }

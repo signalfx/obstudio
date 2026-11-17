@@ -146,8 +146,8 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 		splunkExport.register(mux)
 	}
 	registerSplunkLogs(mux, s, logsSettings)
-	dashboardResolver := dashboards.NewResolver(s, dashboardsConfig)
-	auditResolver := audit.NewResolver(auditConfig)
+	workspace := newWorkspaceResolvers(s, dashboardsConfig, auditConfig)
+	workspace.register(mux)
 	mux.HandleFunc("OPTIONS /api/", corsPreflightHandler())
 	mux.HandleFunc("GET /api/health", queryHealth(s, info, endpointConfig))
 	mux.HandleFunc("GET /api/query/traces", queryTraces(s))
@@ -159,13 +159,13 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	mux.HandleFunc("GET /api/query/logs/filter-values", queryLogFilterValues(s))
 	mux.HandleFunc("GET /api/query/stats", queryStats(s))
 	mux.HandleFunc("GET /api/query/stats/services", queryServiceStats(s))
-	mux.HandleFunc("GET /api/dashboards/preview", queryDashboardPreview(dashboardResolver))
-	mux.HandleFunc("GET /api/audit/score", queryAuditScore(auditResolver))
-	mux.HandleFunc("GET /api/audit/report", queryAuditReport(auditResolver))
+	mux.HandleFunc("GET /api/dashboards/preview", queryDashboardPreview(workspace.dashboards))
+	mux.HandleFunc("GET /api/audit/score", queryAuditScore(workspace.audit))
+	mux.HandleFunc("GET /api/audit/report", queryAuditReport(workspace.audit))
 	// The report links to its siblings relatively, so they must resolve under
 	// the same path prefix or those links 404.
 	for name := range audit.ReportArtifacts {
-		mux.HandleFunc("GET /api/audit/"+name, queryAuditArtifact(auditResolver, name))
+		mux.HandleFunc("GET /api/audit/"+name, queryAuditArtifact(workspace.audit, name))
 	}
 	mux.HandleFunc("GET /api/query/validation/summary", queryValidationStatus(validationService))
 	mux.HandleFunc("GET /api/query/validation/status", queryValidationStatus(validationService))
@@ -213,18 +213,18 @@ func queryMetrics(s *store.Store) http.HandlerFunc {
 	}
 }
 
-func queryDashboardPreview(resolver *dashboards.Resolver) http.HandlerFunc {
+func queryDashboardPreview(resolver func() *dashboards.Resolver) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, resolver.Build())
+		writeJSON(w, resolver().Build())
 	}
 }
 
 // queryAuditScore returns the scored audit. Like queryAuditReport it carries
 // content derived from the developer's working tree — finding text and file
 // paths — so it omits the wildcard CORS header the telemetry routes use.
-func queryAuditScore(resolver *audit.Resolver) http.HandlerFunc {
+func queryAuditScore(resolver func() *audit.Resolver) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		writeSameOriginJSON(w, resolver.Build())
+		writeSameOriginJSON(w, resolver().Build())
 	}
 }
 
@@ -264,9 +264,9 @@ const auditReportCSP = "sandbox allow-scripts; default-src 'none'; style-src 'un
 // queryAuditArtifact serves one allowlisted file the report links to, so the
 // generated report's own relative links ("Canonical audit data (JSON)", the
 // audit/instrumentation cross-links) resolve instead of 404ing.
-func queryAuditArtifact(resolver *audit.Resolver, name string) http.HandlerFunc {
+func queryAuditArtifact(resolver func() *audit.Resolver, name string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		raw, contentType, err := resolver.ReadArtifact(name)
+		raw, contentType, err := resolver().ReadArtifact(name)
 		if err != nil {
 			status := http.StatusInternalServerError
 			if errors.Is(err, audit.ErrNoReport) {
@@ -303,8 +303,9 @@ func queryAuditArtifact(resolver *audit.Resolver, name string) http.HandlerFunc 
 // Unlike the telemetry routes, this returns a file from the developer's working
 // tree, so it deliberately omits the wildcard CORS header: only the Splunk Observability Studio UI
 // itself, which is same-origin, needs to read it.
-func queryAuditReport(resolver *audit.Resolver) http.HandlerFunc {
+func queryAuditReport(getResolver func() *audit.Resolver) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		resolver := getResolver()
 		raw, err := resolver.ReadHTML()
 		if err != nil {
 			status := http.StatusInternalServerError

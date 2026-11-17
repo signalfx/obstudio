@@ -50,6 +50,7 @@ import {
 } from './observer-lifecycle';
 import {
 	loopbackPortsAreSimultaneouslyAvailable,
+	registerObserverWorkspace,
 	uniqueLoopbackPorts,
 } from './observer-port-handoff';
 import {
@@ -458,6 +459,13 @@ export async function activate(context: vscode.ExtensionContext) {
 		void enqueueObserverConfigurationRestart(context).catch((error) => {
 			logObserverLifecycle(`Splunk Observability Studio configuration restart failed: ${getErrorMessage(error)}`);
 		});
+	}));
+	// The observer is one shared instance, so the focused window decides which
+	// repo's .observe artifacts the Explorer reads.
+	context.subscriptions.push(vscode.window.onDidChangeWindowState((state) => {
+		if (state.focused) {
+			registerWindowWorkspaceWithObserver();
+		}
 	}));
 
 	// Status bar item reflects observer state and opens the observer menu.
@@ -1153,7 +1161,23 @@ async function ensureObserverRunning(
 		throw new Error('Splunk Observability Studio output channel is not initialized.');
 	}
 
-	return startObserver(context);
+	await startObserver(context);
+	registerWindowWorkspaceWithObserver();
+}
+
+function registerWindowWorkspaceWithObserver(): void {
+	if (observerLifecycleState.status !== 'running') {
+		return;
+	}
+	const folder = vscode.workspace.workspaceFolders?.[0];
+	const root = folder?.uri.scheme === 'file' ? folder.uri.fsPath : undefined;
+	void registerObserverWorkspace(observerBaseUrl, root).then((result) => {
+		if (result.status === 'registered') {
+			logObserverLifecycle(`Splunk Observability Studio is reading workspace artifacts from ${result.name}.`);
+		} else if (result.status === 'failed') {
+			appendObserverOutputLine(`Could not point Splunk Observability Studio at this workspace: ${result.reason}`);
+		}
+	});
 }
 
 async function startObserver(context: vscode.ExtensionContext): Promise<void> {

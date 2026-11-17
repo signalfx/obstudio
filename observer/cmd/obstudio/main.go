@@ -3,7 +3,9 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -12,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -214,6 +217,9 @@ func run(config runConfig) error {
 		// crash. The extension decodes exit-0 as "attach to the running one".
 		if !config.portExplicit && isAddrInUseError(err) {
 			fmt.Fprintln(os.Stderr, "obstudio already running (OTLP ports already in use); deferring to the existing instance")
+			if err := registerWorkspaceWithRunningObserver(observerState.BaseURL); err != nil {
+				fmt.Fprintf(os.Stderr, "could not point the running obstudio at this workspace: %v\n", err)
+			}
 			return nil
 		}
 		log.Fatalf("failed to start OTLP receiver: %v", err)
@@ -718,6 +724,44 @@ func normalizePublicMCPURL(raw string) (string, error) {
 		parsed.Host = hostname
 	}
 	return parsed.String(), nil
+}
+
+// registerWorkspaceWithRunningObserver tells the singleton that owns the OTLP
+// ports to read .observe artifacts from this launch's workspace. A plain CLI
+// launch registers its working directory; a launcher-owned process (extension
+// or agent plugin) registers only an explicit OBSTUDIO_WORKSPACE_ROOT, so it
+// never repoints the instance at an install directory. Failure is reported but
+// never changes the exit-0 attach contract.
+func registerWorkspaceWithRunningObserver(baseURL string) error {
+	root := strings.TrimSpace(os.Getenv("OBSTUDIO_WORKSPACE_ROOT"))
+	if root == "" {
+		if envOr("OBSTUDIO_OWNER", "cli") != "cli" {
+			return nil
+		}
+		cwd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		root = cwd
+	}
+	root, err := filepath.Abs(root)
+	if err != nil {
+		return err
+	}
+	body, err := json.Marshal(map[string]string{"root": root})
+	if err != nil {
+		return err
+	}
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Post(baseURL+api.WorkspacePath, "application/json", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("%s returned %s", api.WorkspacePath, resp.Status)
+	}
+	return nil
 }
 
 func buildSharedObserverState(host, port string, publicMCPURLs ...string) sharedObserverState {
