@@ -620,7 +620,7 @@ function writeNativeLegacyObserverProcessFixture(
 	version: string,
 	options: {
 		healthFailureGatePath?: string;
-		postOtlpShutdownLingerMs?: number;
+		postOtlpShutdownGatePath?: string;
 		shutdownDelayMs?: number;
 		shutdownStartGatePath?: string;
 		vacateWhenFileExists?: string;
@@ -765,7 +765,15 @@ func main() {
 	time.Sleep(time.Duration(${options.shutdownDelayMs ?? 0}) * time.Millisecond)
 	_ = otlpHTTPServer.Close()
 	_ = otlpGRPCListener.Close()
-	time.Sleep(time.Duration(${options.postOtlpShutdownLingerMs ?? 0}) * time.Millisecond)
+	if gate := ${JSON.stringify(options.postOtlpShutdownGatePath ?? '')}; gate != "" {
+		deadline := time.Now().Add(30 * time.Second)
+		for time.Now().Before(deadline) {
+			if _, err := os.Stat(gate); err == nil {
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
 }
 `;
 	fs.mkdirSync(path.dirname(binaryPath), { recursive: true });
@@ -2309,6 +2317,7 @@ suite('VS Code Host', () => {
 		const statePath = path.join(stateDir, 'shared-observer.json');
 		const readyHealthFailureGatePath = path.join(tempHome, 'fail-ready-observer-health');
 		const readyShutdownGatePath = path.join(tempHome, 'allow-ready-observer-shutdown');
+		const priorExitGatePath = path.join(tempHome, 'allow-prior-observer-exit');
 		const observerPorts = await resolveSharedObserverPorts({});
 		const baseUrl = `http://127.0.0.1:${observerPorts.ui}`;
 		const priorBackendPath = path.join(tempHome, 'prior-extension', 'dist', 'observer', 'obstudio');
@@ -2334,7 +2343,7 @@ suite('VS Code Host', () => {
 			writeNativeLegacyObserverProcessFixture(
 				priorBackendPath,
 				String(extension.packageJSON.version),
-				{ postOtlpShutdownLingerMs: 5_000, shutdownDelayMs: 5_200 },
+				{ postOtlpShutdownGatePath: priorExitGatePath, shutdownDelayMs: 5_200 },
 			);
 			priorProcess = cp.spawn(priorBackendPath, [], {
 				env: {
@@ -2401,6 +2410,7 @@ suite('VS Code Host', () => {
 			assert.equal(currentHealth.mode, 'managed');
 			assert.equal(priorProcess.exitCode, null, 'startup should proceed once ports are free, before old process exit');
 			assert.equal(priorProcess.signalCode, null, 'the old PID must still be alive after releasing its listeners');
+			fs.writeFileSync(priorExitGatePath, '', { mode: 0o600 });
 
 			await waitFor(
 				() => Promise.resolve(

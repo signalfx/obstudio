@@ -32,6 +32,25 @@ telemetry:
   # collects from your agents or shows you locally.
   # Values: true or false.
   enabled: true
+
+# O11y OAuth sign-in
+# Saved values for signing in to Splunk Observability Cloud with O11y OAuth.
+o11yOAuth:
+  # The Splunk Observability Cloud realm to sign in to, for example us0. Leave
+  # empty to enter it at sign-in.
+  realm: ""
+
+  # The Splunk Observability Cloud organization ID to sign in to. Leave empty to
+  # enter it at sign-in.
+  orgId: ""
+
+  # The client ID of the O11y OAuth client an organization admin registered.
+  # Leave empty to enter it at sign-in.
+  clientId: ""
+
+  # The client secret of the O11y OAuth client, stored in plain text in this
+  # file. Leave empty to enter it at sign-in.
+  clientSecret: ""
 `
 
 func writeFile(t *testing.T, content string) string {
@@ -219,6 +238,14 @@ func TestParseMatrix(t *testing.T) {
 		return strings.Replace(sc, old, new, 1)
 	}
 	noSection := sc[:strings.Index(sc, "telemetry:")]
+	// A file without the o11yOAuth section reports each of its settings absent.
+	o11yAbsent := []diagKK{
+		{"o11yOAuth.realm", DiagAbsent}, {"o11yOAuth.orgId", DiagAbsent},
+		{"o11yOAuth.clientId", DiagAbsent}, {"o11yOAuth.clientSecret", DiagAbsent},
+	}
+	withO11yAbsent := func(first ...diagKK) []diagKK {
+		return append(append([]diagKK(nil), first...), o11yAbsent...)
+	}
 	rows := []struct {
 		name    string
 		content string
@@ -237,16 +264,16 @@ func TestParseMatrix(t *testing.T) {
 		{"list", replace("enabled: true", "enabled: [a]"), false, []diagKK{{"telemetry.enabled", DiagInvalid}}},
 		{"key removed", replace("  enabled: true\n", "  other: 1\n"), false, []diagKK{{"telemetry.enabled", DiagAbsent}, {"telemetry.other", DiagUnknownKey}}},
 		{"key line removed", replace("  enabled: true\n", ""), false, []diagKK{{"telemetry.enabled", DiagAbsent}}},
-		{"section removed", noSection, false, []diagKK{{"telemetry.enabled", DiagAbsent}}},
-		{"section not mapping", noSection + "telemetry: true\n", false, []diagKK{{"telemetry", DiagInvalid}}},
-		{"section null", noSection + "telemetry: ~\n", false, []diagKK{{"telemetry.enabled", DiagAbsent}}},
-		{"section empty string", noSection + "telemetry: \"\"\n", false, []diagKK{{"telemetry", DiagInvalid}}},
-		{"section list", noSection + "telemetry: [a]\n", false, []diagKK{{"telemetry", DiagInvalid}}},
+		{"section removed", noSection, false, withO11yAbsent(diagKK{"telemetry.enabled", DiagAbsent})},
+		{"section not mapping", noSection + "telemetry: true\n", false, withO11yAbsent(diagKK{"telemetry", DiagInvalid})},
+		{"section null", noSection + "telemetry: ~\n", false, withO11yAbsent(diagKK{"telemetry.enabled", DiagAbsent})},
+		{"section empty string", noSection + "telemetry: \"\"\n", false, withO11yAbsent(diagKK{"telemetry", DiagInvalid})},
+		{"section list", noSection + "telemetry: [a]\n", false, withO11yAbsent(diagKK{"telemetry", DiagInvalid})},
 		{"version", "version: 1\n" + sc, true, []diagKK{{"version", DiagUnknownKey}}},
 		{"server", sc + "server: {port: 9000}\n", true, []diagKK{{"server", DiagUnknownKey}}},
-		{"level", sc + "  level: high\n", true, []diagKK{{"telemetry.level", DiagUnknownKey}}},
+		{"level", replace("  enabled: true\n", "  enabled: true\n  level: high\n"), true, []diagKK{{"telemetry.level", DiagUnknownKey}}},
 		{"zz and on", "zz: 1\n" + replace("enabled: true", "enabled: on"), false, []diagKK{{"telemetry.enabled", DiagInvalid}, {"zz", DiagUnknownKey}}},
-		{"empty", "", false, []diagKK{{"telemetry.enabled", DiagAbsent}}},
+		{"empty", "", false, withO11yAbsent(diagKK{"telemetry.enabled", DiagAbsent})},
 	}
 	for _, r := range rows {
 		t.Run(r.name, func(t *testing.T) {
@@ -480,7 +507,10 @@ func TestWritePreservesComments(t *testing.T) {
 }
 
 func TestWritePreservesUnknownKeys(t *testing.T) {
-	path := writeFile(t, Scaffold()+"  level: high\nserver:\n  port: 9000  # mine\n")
+	// level belongs to telemetry, so it goes after telemetry's own settings and
+	// before the next section.
+	withLevel := strings.Replace(Scaffold(), "  enabled: true\n", "  enabled: true\n  level: high\n", 1)
+	path := writeFile(t, withLevel+"server:\n  port: 9000  # mine\n")
 	if err := Write(path, TelemetryEnabled, false); err != nil {
 		t.Fatal(err)
 	}
@@ -592,7 +622,7 @@ func TestWriteChangesOneRename(t *testing.T) {
 	for i := 0; i < len(root.Content); i += 2 {
 		keys = append(keys, root.Content[i].Value)
 	}
-	if !reflect.DeepEqual(keys, []string{"telemetry", "server", "t"}) {
+	if !reflect.DeepEqual(keys, []string{"telemetry", "o11yOAuth", "server", "t"}) {
 		t.Errorf("root keys %v", keys)
 	}
 	_, tNode := lookup(root, "t")
@@ -694,7 +724,8 @@ func TestWriteInsertsMissingSection(t *testing.T) {
 		t.Error("value not written")
 	}
 	for _, d := range diags {
-		if d.Kind == DiagAbsent {
+		// Only telemetry.enabled was written; the other sections stay absent.
+		if d.Kind == DiagAbsent && d.Key == "telemetry.enabled" {
 			t.Errorf("absent diagnostic %+v", d)
 		}
 	}
@@ -965,9 +996,12 @@ func TestWriteThroughSymlink(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertLinksTo(t, link, target)
-	if got := readFile(t, target); got != scaffoldWith("false") {
-		t.Errorf("target holds %q", got)
+	// The encoder drops the scaffold's blank lines between sections, so compare
+	// what the file means rather than its exact bytes.
+	if s, diags := mustLoad(t, target); s.Telemetry.Enabled || len(diags) != 0 {
+		t.Errorf("target holds %+v %v", s, diags)
 	}
+	assertCommentsKept(t, readFile(t, target))
 	if got := dirEntries(t, filepath.Dir(link)); !reflect.DeepEqual(got, []string{"config.yaml"}) {
 		t.Errorf("link directory holds %v", got)
 	}
@@ -1015,5 +1049,64 @@ func TestWriteThroughDanglingSymlink(t *testing.T) {
 	}
 	if got := dirEntries(t, filepath.Dir(link)); !reflect.DeepEqual(got, []string{"config.yaml"}) {
 		t.Errorf("link directory holds %v", got)
+	}
+}
+
+func TestO11yOAuthSettingsRoundTripThroughTheManager(t *testing.T) {
+	path := writeFile(t, Scaffold())
+	m, err := NewManager(path, WithLogf(func(string, ...any) {}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { m.Close() })
+
+	if got := m.Get().O11yOAuth; got != (O11yOAuthSettings{}) {
+		t.Fatalf("fresh settings = %+v, want all empty", got)
+	}
+
+	var c Changes
+	Put(&c, O11yOAuthRealm, "us0")
+	Put(&c, O11yOAuthOrgID, "org-123")
+	Put(&c, O11yOAuthClientID, "the-client-id")
+	Put(&c, O11yOAuthClientSecret, "s3cret: with # yaml-ish chars")
+	if err := Update(m, c); err != nil {
+		t.Fatal(err)
+	}
+	want := O11yOAuthSettings{Realm: "us0", OrgId: "org-123", ClientId: "the-client-id", ClientSecret: "s3cret: with # yaml-ish chars"}
+	if got := m.Get().O11yOAuth; got != want {
+		t.Errorf("after Update = %+v, want %+v", got, want)
+	}
+
+	// A fresh read of the file, not the Manager's cache, sees the same values and
+	// the write left the telemetry setting and the comments alone.
+	s, diags := mustLoad(t, path)
+	if s.O11yOAuth != want || !s.Telemetry.Enabled || len(diags) != 0 {
+		t.Errorf("reloaded = %+v %v", s, diags)
+	}
+	assertCommentsKept(t, readFile(t, path))
+
+	// Writing one key leaves the others.
+	if err := Set(m, O11yOAuthRealm, "lab0"); err != nil {
+		t.Fatal(err)
+	}
+	if got := m.Get().O11yOAuth; got.Realm != "lab0" || got.ClientSecret != want.ClientSecret {
+		t.Errorf("after Set = %+v", got)
+	}
+	if fi, err := os.Stat(path); err != nil || fi.Mode().Perm()&0o077 != 0 {
+		t.Errorf("config file mode = %v, %v; the secret must not be readable by others", fi.Mode(), err)
+	}
+}
+
+func TestO11yOAuthRealmValidation(t *testing.T) {
+	path := writeFile(t, Scaffold())
+	for _, ok := range []string{"", "us0", "lab0", "eu-1"} {
+		if err := Write(path, O11yOAuthRealm, ok); err != nil {
+			t.Errorf("realm %q rejected: %v", ok, err)
+		}
+	}
+	for _, bad := range []string{"US0", "us0.signalfx.com", "us 0", "../x", "us0\n"} {
+		if err := Write(path, O11yOAuthRealm, bad); !errors.Is(err, ErrInvalidValue) {
+			t.Errorf("realm %q: err = %v, want ErrInvalidValue", bad, err)
+		}
 	}
 }

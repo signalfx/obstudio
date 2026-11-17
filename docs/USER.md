@@ -196,6 +196,35 @@ and logs to Splunk Platform. Received telemetry stays available locally.
 Enter the realm and an organization access token with ingest scope,
 then select **Connect**. Metrics and traces share this connection and token.
 
+#### Sign in with O11y OAuth
+
+When Studio is started with `OBSTUDIO_REGISTRATION_AND_AUTH_PROTOCOL=O11Y_OAUTH`,
+**Cloud** offers **Sign in** with O11y OAuth in place of pasting a token. You
+need the realm, organization ID, and the client ID and client secret of an
+OAuth client that an organization admin registered for Studio (admins can do
+this from the collapsed **client registration** section).
+
+- When sign-in completes, Studio replaces the access token of the metrics and
+  traces connection with the O11y access token it received. Export, and the
+  features that use the same connection, use that token from then on. You do
+  not paste an `X-SF-TOKEN`. Each export switch keeps its current on or off
+  state.
+- The signed-in token is held in memory only, like **Connect for this session**.
+  It is not saved to the credential store, and it is not refreshed. After
+  Studio restarts, or if export starts failing because the token expired,
+  sign in again. Selecting **Disconnect** on the sign-in stops export from
+  using the token, and export stays off until you sign in again or paste a
+  token. A token you saved by pasting it before signing in is used again after
+  Studio restarts.
+- If `OBSTUDIO_REGISTRATION_AND_AUTH_PROTOCOL` is not `O11Y_OAUTH`, sign-in is
+  not available and Studio keeps using the copy-and-paste token described
+  above.
+- Saving the sign-in details (realm, organization ID, client ID and client
+  secret) between sessions needs the Config Manager, which is off by default.
+  With it off, Studio does not remember them and you enter them for each
+  sign-in. With it on, they are stored in `~/.obstudio/config.yaml`, with the
+  client secret in plain text in that file.
+
 ### Secure token storage
 
 Studio uses secure storage on the computer running the collector:
