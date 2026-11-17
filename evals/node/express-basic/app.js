@@ -13,6 +13,17 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
 
+app.get("/logging-workflow/:slot", async (req, res) => {
+  const slot = req.params.slot;
+  if (!["left", "right"].includes(slot)) return res.status(404).json({ error: "not found" });
+  console.warn(`workflow sync completed ${slot}`);
+  await new Promise((resolve) => setImmediate(() => {
+    console.warn(`workflow async completed ${slot}`);
+    resolve();
+  }));
+  res.json({ status: "ok" });
+});
+
 app.get("/tasks", (_req, res) => {
   res.json(tasks);
 });
@@ -46,8 +57,9 @@ app.delete("/tasks/:id", (req, res) => {
 });
 
 const port = process.env.PORT || 8000;
-const server = app.listen(port, () => {
+const server = app.listen(port, process.env.HOST || undefined, () => {
   console.log(`listening on :${port}`);
+  console.warn("workflow outside completed");
 });
 
 let shutdownStarted = false;

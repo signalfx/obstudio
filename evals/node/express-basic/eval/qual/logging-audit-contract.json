@@ -1,0 +1,25 @@
+{
+  "skill": "otel-audit",
+  "prompts": [
+    {
+      "id": "logging-trial-1",
+      "eval_inputs": [],
+      "task": "$otel-audit ./service"
+    },
+    {
+      "id": "logging-trial-2",
+      "eval_inputs": [],
+      "task": "$otel-audit ./service"
+    },
+    {
+      "id": "logging-trial-3",
+      "eval_inputs": [],
+      "task": "$otel-audit ./service"
+    }
+  ],
+  "rubric_base": "../../../../rubrics/logging-common.json",
+  "rubric_additions_source": "../../../../rubrics/logging-node-additions.json",
+  "rubric_additions": {
+    "rubric-22": "Rule: Audit: plan source-supported ownership and tests that can detect incorrect behavior.\nExample: An SDK console exporter may write after Resource resolution. A selected console bridge must not recapture that SDK output as another application log.\nEvidence: For a selected Node setup that combines a console bridge and SDK console exporter, prove that SDK console output is not captured again as application LogRecords. Include selected deferred-Resource resolution or direct-SDK emission paths. Do not add a second or incompatible bridge, or remove the operator's console exporter to hide duplicate records. Reuse a producer proven compatible with the selected setup. Otherwise keep the console-to-OTLP path Not configured/unsupported; constructing processors does not prove application delivery.\nInsufficient evidence: Processor construction alone, dropping the operator console exporter, or, when deferred Resource output is selected, testing only an immediate console write."
+  }
+}

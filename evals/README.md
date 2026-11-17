@@ -69,6 +69,132 @@ returns quickly.
 Rubric evals may set `judge_inputs` or `judge_prompt` when the judge should
 inspect artifacts other than a service directory.
 
+Use model-based evals to assess skill decisions, planning and application
+workflows. Test report-state transitions, generated command arguments and
+launcher branches with ordinary automated tests. Those checks have exact
+expected results and do not need an agent to write and run another test script.
+The report CLI checks live in `test_evidence_reports.py`; Python launcher checks
+live in `test_default_local_log_export_guidance.py`. Selection and generated
+command checks live in `skills/references/tests/test_observe_report_selection.py`.
+
+### Logging workflows
+
+The four basic service fixtures define bare `$otel-audit ./service`,
+`$otel-instrument ./service` and `$otel-verify ./service` tasks. Run the stages
+on the same workspace with the eval environment active:
+
+```sh
+uv run python run_logging_workflow.py --language python --trial 1 \
+  --studio-binary /path/to/obstudio \
+  --codex-home ../.workspace/codex-evals/codex-home \
+  --output ../.workspace/logging-workflow/python-trial-1
+```
+
+For basic regression, select `python`, `java`, `go` or `node` and run trial 1
+once per language. Trials 2 and 3 repeat the same task to measure reliability;
+run them explicitly when measuring variation, rather than counting them as new
+scenarios. Each invocation runs only its selected trial. The runner needs
+a POSIX host and the language toolchain on `PATH`, including Java 21 and Go 1.24 for those
+fixtures. It creates an isolated local receiver without cloud credentials,
+retains source and execution evidence, and preserves application reports for
+stage handoff. Judge feedback stays outside later actor inputs. Actor and judge
+execution must use the `codex-evals.logging.toml` configuration's
+`gpt-6.1-sol` with high reasoning effort.
+
+After instrumentation and verification, the host checker launches the generated
+service through `make dev` and checks concurrent synchronous/asynchronous log
+joins to real SDK spans, original native output and operator Resource identity.
+Identity profiles cover Resource-only service name, an explicit name overriding
+a conflicting Resource name, and SDK-supported whitespace, checking name,
+version and an unrelated attribute on logs and spans. They do not establish
+metrics Resources, absent/default identity, percent encoding or header behavior.
+Receipts are captured while the producer is alive, before bounded cleanup;
+this check does not establish final-record drain or post-exit persistence.
+A standalone verify task lacking audit/selection prerequisites is a negative
+control and supplies no instrumented runtime coverage.
+
+The 12 role definitions extend one [logging rubric](rubrics/logging-common.json)
+and share one additions file per language. Role-specific checks stay in their
+own definitions. Eight focused judges inspect the same completed
+task, covering 63 checklist items in total. Each item receives its own result,
+explanation and evidence. Judges run in separate temporary folders and share
+one 2400-second budget per stage, configured by `agent.judge_timeout` in
+`codex-evals.logging.toml`. The paired runner's `--judge-timeout` explicitly
+overrides that value and records the resolved budget and its source. The general
+eval configuration keeps its existing budget. Raw judge answers, diagnostics and
+combined result are retained under `<role>.rubric/`. Successful judge calls
+must bind the actual configured model, effort and working directory before
+their temporary folders are removed. Required runtime and evidence-receipt gates remain independent of
+semantic grades. The receipt gate checks declared controls, derived statuses
+and final report hashes; semantic review still assesses contract completeness
+and whether the controls prove it. See the
+[shared-rubric and strict-output options](../pytest-codex-evals/README.md)
+for definition and output formats. Bare tasks are sent unchanged, with the
+loading guard requiring source-bound full skill input or a complete skill read
+before application work.
+
+To run one logging eval through Make, select this configuration explicitly. From the
+repository root:
+
+```sh
+make eval-rubric SKILL=skills/otel-audit CASE=python/flask-basic \
+  PROMPT=logging-trial-1 EVAL_CONFIG=codex-evals.logging.toml
+```
+
+Use this configuration for rubric runs that publish the latest `otel-audit`,
+`otel-instrument` and `otel-verify` reports. Validation and sanity runs keep
+their existing configurations. Publish each skill's report for a given eval
+kind from one configuration; do not combine runs from different configurations.
+
+The FastAPI/Celery instrumentation case runs a web server, worker and Redis,
+then writes verification and evidence reports. Give that work a bounded
+30-minute actor budget with the existing per-run option:
+
+```sh
+PYTEST_ADDOPTS=--agent-timeout=1800 make eval-rubric \
+  SKILL=skills/otel-instrument \
+  CASE=python/fastapi-celery/eval/qual/instrument.json \
+  PROMPT=runtime-preserving EVAL_CONFIG=codex-evals.logging.toml
+```
+
+This changes only that invocation's execution limit. It preserves the task,
+checklist, models and judge budget; `run.json` records the effective
+`agent_timeout`. A timeout remains a failed run, so inspect its progress and
+retain the result before deciding whether another run is justified.
+
+The 2400-second judge budget covers all eight judges together. If it expires, remaining items stay
+ungraded and the required result is incomplete.
+
+Use the paired runner for bare logging instrumentation and verification tasks
+that need live evidence. Native Make instrumentation runs should select the
+compatibility cases with `CASE` and `PROMPT`; standalone verification remains a
+prerequisite-negative control. Only the paired runner configures the host checker
+and isolated receiver. An ordinary `make eval-rubric` run does not provision them
+automatically;
+missing required runtime proof remains unproven. For one standalone
+missing-prerequisite negative control, use:
+
+```sh
+make eval-rubric SKILL=skills/otel-verify CASE=python/flask-basic \
+  PROMPT=logging-trial-1 EVAL_CONFIG=codex-evals.logging.toml
+```
+
+That command checks whether verification reports the missing audit/selection
+honestly. Repeating it across languages or trials does not add positive runtime
+coverage. Avoid unfiltered logging selections: they also collect the repeated
+trials and standalone cases without the paired prerequisites.
+
+Checker filenames alone do
+not establish independent proof. The paired runner passes its current receipt
+validation and exact checker-returned capture paths to judges, with hashes.
+
+A failed stage stops the workflow. `--collect-semantic-failures` permits later
+diagnostic stages after a valid failing semantic grade or receipt-gate failure
+when execution, guards, bindings, prerequisites and required runtime checks remain
+valid. It retains the failure and unsuccessful workflow status. Broken,
+incomplete or all-inapplicable grading always stops later actors, as do execution
+or required runtime failures.
+
 ## A/B Sides
 
 | Side | Skill visibility |

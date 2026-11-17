@@ -46,12 +46,17 @@ Use this precedence and stop at the first compatible source:
    host/native fallbacks `http://127.0.0.1:4318` for OTLP/HTTP and
    `127.0.0.1:4317` for OTLP/gRPC.
 
-For OTLP/HTTP, append exactly one `/v1/traces`, `/v1/metrics`, or `/v1/logs`
-path when the selected exporter requires a signal-specific URL. Preserve a
-configured non-default port and base path; replace a trailing `/v1/<signal>`
-leaf instead of stacking a second signal path. Pair gRPC with a gRPC endpoint
-and HTTP/protobuf with an HTTP endpoint; never infer one signal's success from
-another.
+Follow the [OTLP/HTTP endpoint rules](https://opentelemetry.io/docs/specs/otel/protocol/exporter/#endpoint-urls-for-otlphttp):
+use a signal-specific URL as supplied, with `/` for an absent path. For a generic
+base URL, preserve its configured non-default port and entire path, ensure a
+trailing slash, and append
+the relative `v1/traces`, `v1/metrics`, or `v1/logs` path. A generic base ending
+in `/collector/v1/traces` therefore resolves logs at
+`/collector/v1/traces/v1/logs`; do not guess that its last segment is a different
+signal's endpoint and replace it. Let the supported SDK resolve these settings
+when possible; a constructor taking a final URL needs the same resolution.
+Pair gRPC with a gRPC endpoint and HTTP/protobuf with an HTTP endpoint; never
+infer one signal's success from another.
 
 Persist the resolved receiver through standard `OTEL_EXPORTER_OTLP_*`
 application or deployment configuration. Do not introduce an Obstudio runtime

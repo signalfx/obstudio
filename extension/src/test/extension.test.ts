@@ -2445,6 +2445,8 @@ test('stageSkills bundles the embedded runtime tree with sibling resources and r
 			'otel-audit/SKILL.md',
 			'otel-audit/scripts/scan.py',
 			'otel-instrument/references/languages/go.md',
+			'references/languages/go.md',
+			'references/logging-readiness.md',
 			'references/report-flow-contract.md',
 		];
 		const calls: string[][] = [];
