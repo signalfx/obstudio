@@ -142,6 +142,29 @@ Titles and descriptions come from the table everywhere. A client test
 the `telemetry` section title or of the `telemetry.enabled` title or
 description.
 
+## O11y OAuth sign-in settings
+
+The `o11yOAuth` section (`realm`, `orgId`, `clientId`, `clientSecret`) holds
+the values the Cloud tab pre-fills for O11y OAuth sign-in. It exists so the
+user does not retype them; it does not hold the access token.
+
+- **The access token is not a setting.** A successful sign-in hands the O11y
+  access token to the Splunk export service (`applyO11yOAuthToken`), which
+  replaces the token on both the metrics and traces exporters for the life of
+  the process. It is session-only, so it never reaches `config.yaml` or the
+  credential store, and it is not refreshed. Disconnecting the sign-in clears it from the
+  exporters (`clearO11yOAuthToken`), but only if they still hold that exact token, so a
+  connection the user pasted afterwards is left alone.
+- **`clientSecret` is plain text.** It is stored unmasked in `config.yaml`
+  (private to the user), and the HTTP API and Config tab show it as is.
+- **Two separate switches.** Sign-in itself is selected by
+  `OBSTUDIO_REGISTRATION_AND_AUTH_PROTOCOL=O11Y_OAUTH`, not by the Config
+  Manager. The Config Manager only decides whether the four values are saved.
+  With the Config Manager off, the sign-in still works and still replaces the
+  token, but the user enters the four values each time. With the protocol not
+  set to `O11Y_OAUTH`, there is no sign-in and the Cloud tab keeps the
+  copy-and-paste access token.
+
 ## Sections and keys
 
 A section name is also the YAML top-level key and the prefix of every key path
