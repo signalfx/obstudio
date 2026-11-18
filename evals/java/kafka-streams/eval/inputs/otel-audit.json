@@ -1,0 +1,298 @@
+{
+  "schema_version": 2,
+  "kind": "otel-audit",
+  "meta": {
+    "audit_id": "kafka-streams-selected-work",
+    "service_name": "kafka-streams",
+    "commit": "82f4013bd65ce4db2cca40a0ef53272baf4e5448",
+    "language": "Java 21",
+    "framework": "Kafka Streams / Guice",
+    "date": "2026-11-17",
+    "status": "Partial",
+    "genai_ownership_detected": false
+  },
+  "summary": [
+    "Maven/Guice [GAP: Agent bootstrap and Kafka trace continuity] -> orders -> parser [GAP: Silent parse drops] -> enrichment -> orders.enriched and conditional orders.fraud-alerts; stream lifecycle [GAP: Stream lifecycle visibility]; native client metric samples [GAP: Consumer lag visibility]."
+  ],
+  "evidence": [
+    {
+      "check": "Manifest",
+      "finding": "Maven module with Kafka Streams, Guice, Jackson and slf4j-simple; no active OTel setup.",
+      "source": "pom.xml"
+    },
+    {
+      "check": "Entry point",
+      "finding": "Main creates the Guice service, registers close on shutdown, starts the stream and joins.",
+      "source": "src/main/java/com/example/streaming/KafkaStreamsApplication.java:11-17"
+    },
+    {
+      "check": "Route source",
+      "finding": "No HTTP routes; one input and two output topic paths are defined by the topology.",
+      "source": "src/main/java/com/example/streaming/OrderStreamTopology.java:25-46"
+    },
+    {
+      "check": "Runtime/startup",
+      "finding": "Maven exec runs the main class; the service owns the KafkaStreams instance and its existing handler/close behavior.",
+      "source": "pom.xml:99-107; src/main/java/com/example/streaming/OrderStreamService.java:14-33"
+    },
+    {
+      "check": "GenAI ownership",
+      "finding": "No",
+      "source": "src/main/java/com/example/streaming/OrderStreamTopology.java; pom.xml"
+    }
+  ],
+  "routes": [],
+  "signal_flow": {
+    "component_flow_map": "Maven/Guice [GAP: Agent bootstrap and Kafka trace continuity] -> orders -> parser [GAP: Silent parse drops] -> enrichment -> orders.enriched and conditional orders.fraud-alerts; stream lifecycle [GAP: Stream lifecycle visibility]; native client metric samples [GAP: Consumer lag visibility]."
+  },
+  "current_instrumentation": {
+    "spans": [],
+    "metrics": [],
+    "logs": [
+      {
+        "integration": "SLF4J simple stderr",
+        "source": "pom.xml:68-72; src/main/java/com/example/streaming/OrderStreamService.java:21-33",
+        "detail": "Existing lifecycle and failure logs; no local OTLP log pipeline is proven."
+      }
+    ],
+    "incident_readiness": []
+  },
+  "genai_readiness": [],
+  "findings": [
+    {
+      "id": "OTEL-001",
+      "title": "Trace orders through Kafka Streams",
+      "severity": "high",
+      "priority": "required",
+      "effort": "medium",
+      "status": "proposed",
+      "area": "Agent bootstrap and Kafka trace continuity",
+      "gap": "No Java agent, OTel dependencies/provider, propagation setup, exporter or resource setup exists in the runnable service. Kafka input processing and both output topics have no OTel coverage; source logs alone cannot localize broker/processor failures.",
+      "instrument_mode": "default",
+      "dependencies": [],
+      "impact": "Operators cannot follow a delayed or failed order across the processor and its output topics or associate a fault with the running release.",
+      "product_outcome": "Operators should see a Kafka processing waterfall, both output destinations, and JVM capacity charts for the same service.",
+      "required_fix": "Use the standard Java-agent path for Kafka traces and metrics with one provider owner, preserved topology/Guice structure, configured resources and transport, and observed shutdown behavior.",
+      "verification_scenarios": [
+        "agent.baseline"
+      ],
+      "evidence": [
+        "pom.xml",
+        "src/main/java/com/example/streaming/KafkaStreamsApplication.java:11-17",
+        "src/main/java/com/example/streaming/StreamProcessingModule.java:12-29"
+      ],
+      "acceptance_criteria": [
+        "Use the standard Java-agent path for Kafka traces and metrics with one provider owner, preserved topology/Guice structure, configured resources and transport, and observed shutdown behavior."
+      ],
+      "constraints": [
+        "Preserve existing business behavior and telemetry ownership; keep private data and unbounded identities out of telemetry dimensions.",
+        "Preserve the documented Maven runner, existing logging and one agent-owned provider; no second SDK or Guice Tracer binding."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "span",
+          "name": "Kafka client and stream operations",
+          "attributes": [],
+          "product_view": "Operators should see a Kafka processing waterfall, both output destinations, and JVM capacity charts for the same service."
+        }
+      ],
+      "follow_up_actions": [
+        "Select this finding in otel.html and use the bundled instrumentation handoff."
+      ]
+    },
+    {
+      "id": "OTEL-002",
+      "title": "Make silent record drops visible",
+      "severity": "medium",
+      "priority": "recommended",
+      "effort": "medium",
+      "status": "proposed",
+      "area": "Silent parse drops",
+      "gap": "OrderEventParser.parse returns Optional.empty for null payloads and JsonProcessingException; flatMapValues removes them without any telemetry. An agent process span may complete successfully for these handled drops. toJson throws and is not a silent-drop gap.",
+      "instrument_mode": "fix all",
+      "dependencies": [
+        "OTEL-001"
+      ],
+      "impact": "Bad input can disappear while the consumer appears healthy, making data loss difficult to detect or quantify.",
+      "product_outcome": "Operators should see a chart of intentionally dropped records by a bounded parse reason.",
+      "required_fix": "Bounded app-owned metrics distinguish successful processing from handled null/malformed parse drops without changing parser returns or output routing.",
+      "verification_scenarios": [
+        "parser.outcomes"
+      ],
+      "evidence": [
+        "src/main/java/com/example/streaming/OrderEventParser.java:17-25",
+        "src/main/java/com/example/streaming/OrderStreamTopology.java:31-35",
+        "src/test/java/com/example/streaming/OrderStreamTopologyTest.java:123-160"
+      ],
+      "acceptance_criteria": [
+        "Bounded app-owned metrics distinguish successful processing from handled null/malformed parse drops without changing parser returns or output routing."
+      ],
+      "constraints": [
+        "Preserve existing business behavior and telemetry ownership; keep private data and unbounded identities out of telemetry dimensions.",
+        "A JSON literal null is distinct from a null payload: preserve the source's uncaught failure rather than reclassifying it as a handled parse drop."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "metric",
+          "name": "Record processing and handled-drop outcomes",
+          "attributes": [],
+          "product_view": "Operators should see a chart of intentionally dropped records by a bounded parse reason."
+        }
+      ],
+      "follow_up_actions": [
+        "Select this finding in otel.html and use the bundled instrumentation handoff."
+      ]
+    },
+    {
+      "id": "OTEL-003",
+      "title": "Detect a stopped stream in a live JVM",
+      "severity": "medium",
+      "priority": "recommended",
+      "effort": "medium",
+      "status": "proposed",
+      "area": "Stream lifecycle visibility",
+      "gap": "The uncaught handler requests SHUTDOWN_CLIENT, but main joins indefinitely. No observable stream state or failure metric exists. The started/stopped logs are asynchronous/unchecked status hints, and jvm uptime does not prove Kafka processing readiness.",
+      "instrument_mode": "fix all",
+      "dependencies": [
+        "OTEL-001"
+      ],
+      "impact": "A process-level health check can stay green after stream threads have stopped processing orders.",
+      "product_outcome": "Operators should see the current stream state and a failure count even when the JVM remains alive.",
+      "required_fix": "Bounded failure/lifecycle telemetry distinguishes a stopped stream from a live JVM while preserving the existing handler response and close ownership.",
+      "verification_scenarios": [
+        "stream.lifecycle"
+      ],
+      "evidence": [
+        "src/main/java/com/example/streaming/OrderStreamService.java:21-33",
+        "src/main/java/com/example/streaming/KafkaStreamsApplication.java:14-17"
+      ],
+      "acceptance_criteria": [
+        "Bounded failure/lifecycle telemetry distinguishes a stopped stream from a live JVM while preserving the existing handler response and close ownership."
+      ],
+      "constraints": [
+        "Preserve existing business behavior and telemetry ownership; keep private data and unbounded identities out of telemetry dimensions.",
+        "Do not change SHUTDOWN_CLIENT, main-thread joining, shutdown timeout, liveness policy or fixed native log messages."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "metric",
+          "name": "Stream lifecycle and processing failure outcomes",
+          "attributes": [],
+          "product_view": "Operators should see the current stream state and a failure count even when the JVM remains alive."
+        }
+      ],
+      "follow_up_actions": [
+        "Select this finding in otel.html and use the bundled instrumentation handoff."
+      ]
+    },
+    {
+      "id": "OTEL-004",
+      "title": "Expose consumer backlog",
+      "severity": "medium",
+      "priority": "recommended",
+      "effort": "medium",
+      "status": "proposed",
+      "area": "Consumer lag visibility",
+      "gap": "The service owns Kafka consumers, but no OTel bridge exports their native lag samples. Kafka process spans and JVM memory do not measure backlog. Records contain no event timestamp or expected cadence to justify an event-freshness gauge.",
+      "instrument_mode": "fix all",
+      "dependencies": [
+        "OTEL-001"
+      ],
+      "impact": "Operators cannot distinguish a healthy idle service from input accumulating faster than the processor can drain it.",
+      "product_outcome": "Operators should see a consumer-lag chart that rises under backlog and falls as processing catches up.",
+      "required_fix": "Expose the maximum valid app-visible records-lag-max sample, in records, from the owned native clients; absent, NaN or negative samples remain unavailable instead of becoming a synthetic healthy zero.",
+      "verification_scenarios": [
+        "consumer.lag"
+      ],
+      "evidence": [
+        "src/main/java/com/example/streaming/OrderStreamService.java:14-18",
+        "src/main/java/com/example/streaming/StreamProcessingModule.java:26-29",
+        "src/main/java/com/example/streaming/StreamConfig.java:26-34",
+        "https://kafka.apache.org/42/javadoc/org/apache/kafka/streams/KafkaStreams.html"
+      ],
+      "acceptance_criteria": [
+        "Expose the maximum valid app-visible records-lag-max sample, in records, from the owned native clients; absent, NaN or negative samples remain unavailable instead of becoming a synthetic healthy zero."
+      ],
+      "constraints": [
+        "Preserve existing business behavior and telemetry ownership; keep private data and unbounded identities out of telemetry dimensions.",
+        "Use only KafkaStreams.metrics() samples exposed by the owned client; records-lag-max is not total broker backlog, topic availability or event-time freshness. Preserve native values, one measurement owner and bounded series."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "metric",
+          "name": "Application-visible consumer lag",
+          "attributes": [
+            "unit={record}",
+            "maximum of valid native consumer-fetch-manager-metrics/records-lag-max samples"
+          ],
+          "product_view": "Operators should see a consumer-lag chart that rises under backlog and falls as processing catches up."
+        }
+      ],
+      "follow_up_actions": [
+        "Select this finding in otel.html and use the bundled instrumentation handoff."
+      ]
+    }
+  ],
+  "verification": {
+    "environments": [
+      {
+        "id": "java.local",
+        "surface": "Existing Maven parser/topology tests and selected local Kafka/agent runtime",
+        "config_evidence": "pom.xml; src/test/java/com/example/streaming/OrderStreamTopologyTest.java; README.md",
+        "runner": "mvn test; documented mvn exec:java launch for live proof",
+        "scope": "Only the four selected findings; test-only doubles do not prove live agent delivery or broker state.",
+        "prerequisites": "Compatible declared JDK/Maven/dependencies. Live Kafka/agent/export proof additionally needs isolated local Kafka and OTLP receivers. No runtime result or cloud receipt is supplied."
+      }
+    ],
+    "scenarios": [
+      {
+        "id": "agent.baseline",
+        "trigger": "Exercise the documented service launch and normal record paths, then stop it.",
+        "entrypoint": "pom.xml",
+        "expected_signals": "Kafka client and stream operations",
+        "proof_level": "full runtime",
+        "acceptance_criteria": "Verify OTEL-001 against its acceptance criteria; record missing prerequisites and unrun checks.",
+        "environments": [
+          "java.local"
+        ]
+      },
+      {
+        "id": "parser.outcomes",
+        "trigger": "Exercise valid, null-payload and malformed records through the existing parser/topology paths.",
+        "entrypoint": "src/main/java/com/example/streaming/OrderEventParser.java:17-25",
+        "expected_signals": "Record processing and handled-drop outcomes",
+        "proof_level": "focused call-site",
+        "acceptance_criteria": "Verify OTEL-002 against its acceptance criteria; record missing prerequisites and unrun checks.",
+        "environments": [
+          "java.local"
+        ]
+      },
+      {
+        "id": "stream.lifecycle",
+        "trigger": "Exercise the stream lifecycle and an actual processing failure.",
+        "entrypoint": "src/main/java/com/example/streaming/OrderStreamService.java:21-33",
+        "expected_signals": "Stream lifecycle and processing failure outcomes",
+        "proof_level": "full runtime",
+        "acceptance_criteria": "Verify OTEL-003 against its acceptance criteria; record missing prerequisites and unrun checks.",
+        "environments": [
+          "java.local"
+        ]
+      },
+      {
+        "id": "consumer.lag",
+        "trigger": "Observe available native records-lag-max samples and a missing/invalid sample case.",
+        "entrypoint": "src/main/java/com/example/streaming/OrderStreamService.java:14-18",
+        "expected_signals": "Application-visible consumer lag",
+        "proof_level": "full runtime",
+        "acceptance_criteria": "Verify OTEL-004 against its acceptance criteria; record missing prerequisites and unrun checks.",
+        "environments": [
+          "java.local"
+        ]
+      }
+    ]
+  },
+  "anti_patterns": [],
+  "recommendation": [
+    "Review the selected findings in otel.html and use the bundled selection flow before instrumentation."
+  ]
+}

@@ -1,0 +1,662 @@
+{
+  "schema_version": 2,
+  "kind": "otel-audit",
+  "meta": {
+    "audit_id": "native-genai-demo-selected-work",
+    "service_name": "native-genai",
+    "commit": "82f4013bd65ce4db2cca40a0ef53272baf4e5448",
+    "language": "Go",
+    "framework": "stdlib net/http application seams",
+    "date": "2026-11-17",
+    "status": "Partial",
+    "genai_ownership_detected": true
+  },
+  "summary": [
+    "Telemetry setup [GAP: Native providers and lifecycle]; runAgent [GAP: Agent root and orchestration] -> retrieval [GAP: Local retrieval content] -> lookupOrder [GAP: Order tool content and failures] -> actual model HTTP [GAP: HTTP model lifecycle and content]; model measurements [GAP: Inference latency and observed usage]; agent/tool measurements [GAP: Agent and tool metrics and token distributions]; selected local Project [GAP: Runtime Project resolution] -> Agent Stream [GAP: Dedicated runtime Agent Stream resolution] -> trace export [GAP: Native trace routing and recovery]."
+  ],
+  "evidence": [
+    {
+      "check": "Manifest",
+      "finding": "Native OTel libraries/exporters are declared, but dependencies alone are not active instrumentation.",
+      "source": "go.mod; telemetry.go:5-7"
+    },
+    {
+      "check": "Entry point",
+      "finding": "Main builds the app, calls the no-op telemetry factory, runs source scenarios, then calls shutdown.",
+      "source": "main.go:223-267; telemetry.go:5-7"
+    },
+    {
+      "check": "Route source",
+      "finding": "The client calls a numeric-loopback /model endpoint; the app has no inbound HTTP route.",
+      "source": "main.go:112-125,156-177"
+    },
+    {
+      "check": "Runtime/startup",
+      "finding": "Observe is initially nil; the telemetry factory returns a no-op shutdown. The app owns its HTTP client and business JSON output.",
+      "source": "main.go:38-46,128-132,233-267; telemetry.go"
+    },
+    {
+      "check": "GenAI ownership",
+      "finding": "Yes",
+      "source": "main.go:135-209"
+    }
+  ],
+  "routes": [],
+  "signal_flow": {
+    "component_flow_map": "Telemetry setup [GAP: Native providers and lifecycle]; runAgent [GAP: Agent root and orchestration] -> retrieval [GAP: Local retrieval content] -> lookupOrder [GAP: Order tool content and failures] -> actual model HTTP [GAP: HTTP model lifecycle and content]; model measurements [GAP: Inference latency and observed usage]; agent/tool measurements [GAP: Agent and tool metrics and token distributions]; selected local Project [GAP: Runtime Project resolution] -> Agent Stream [GAP: Dedicated runtime Agent Stream resolution] -> trace export [GAP: Native trace routing and recovery]."
+  },
+  "current_instrumentation": {
+    "spans": [],
+    "metrics": [],
+    "logs": [],
+    "incident_readiness": []
+  },
+  "genai_readiness": [
+    {
+      "surface": "Agent root and orchestration",
+      "status": "missing",
+      "evidence": "main.go:180-209",
+      "required_signals": "Source-owned agent root with truthful metadata, context, content and outcomes.",
+      "owner": "Application-owned Agent root and orchestration",
+      "acceptance_criteria": "Source-owned agent root with truthful metadata, context, content and outcomes.",
+      "impact": "Source operations are currently unobservable."
+    },
+    {
+      "surface": "Local retrieval content",
+      "status": "missing",
+      "evidence": "main.go:135-142",
+      "required_signals": "Local retrieval context and safe actual query/document evidence.",
+      "owner": "Application-owned Local retrieval content",
+      "acceptance_criteria": "Local retrieval context and safe actual query/document evidence.",
+      "impact": "Source operations are currently unobservable."
+    },
+    {
+      "surface": "Order tool content and failures",
+      "status": "missing",
+      "evidence": "main.go:144-154",
+      "required_signals": "Tool arguments, produced results and actual error/cancellation outcomes.",
+      "owner": "Application-owned Order tool content and failures",
+      "acceptance_criteria": "Tool arguments, produced results and actual error/cancellation outcomes.",
+      "impact": "Source operations are currently unobservable."
+    },
+    {
+      "surface": "HTTP model lifecycle and content",
+      "status": "missing",
+      "evidence": "main.go:156-177",
+      "required_signals": "Only actual model HTTP attempts with safe request/produced-response fields and truthful inference measurements.",
+      "owner": "Application-owned HTTP model lifecycle and content",
+      "acceptance_criteria": "Only actual model HTTP attempts with safe request/produced-response fields and truthful inference measurements.",
+      "impact": "Source operations are currently unobservable."
+    }
+  ],
+  "findings": [
+    {
+      "id": "OTEL-001",
+      "title": "Native providers and lifecycle",
+      "severity": "high",
+      "priority": "required",
+      "effort": "medium",
+      "status": "proposed",
+      "area": "Native providers and lifecycle",
+      "gap": "configureTelemetry returns a no-op and leaves Observe nil; all signals have no provider/exporter or effective endpoint.",
+      "instrument_mode": "default",
+      "dependencies": [],
+      "impact": "No trace or metric can be received or drained.",
+      "product_outcome": "Operators should receive native traces and metrics with stable service identity.",
+      "required_fix": "Native traces/metrics initialize and shut down through the existing configureTelemetry/Observe seams, preserving operator configuration, app lifecycle and one export owner.",
+      "verification_scenarios": [
+        "native.lifecycle"
+      ],
+      "evidence": [
+        "telemetry.go:5-7",
+        "main.go:128-132,233-267",
+        "go.mod",
+        "eval/inputs/native-module-evidence.json"
+      ],
+      "acceptance_criteria": [
+        "Native traces/metrics initialize and shut down through the existing configureTelemetry/Observe seams, preserving operator configuration, app lifecycle and one export owner."
+      ],
+      "constraints": [
+        "Preserve existing business behavior and telemetry ownership; keep private data and unbounded identities out of telemetry dimensions.",
+        "No Python sidecar, speculative AO package or second trace creator. Preserve production independence from eval/report artifacts."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "configuration",
+          "name": "Native telemetry lifecycle",
+          "attributes": [],
+          "product_view": "Operators should receive native traces and metrics with stable service identity."
+        }
+      ],
+      "follow_up_actions": [
+        "Select this finding in otel.html and use the bundled instrumentation handoff."
+      ]
+    },
+    {
+      "id": "OTEL-002",
+      "title": "Agent root and orchestration",
+      "severity": "high",
+      "priority": "required",
+      "effort": "medium",
+      "status": "proposed",
+      "area": "Agent root and orchestration",
+      "gap": "runAgent has no span or source-visible canonical agent metadata/content/status.",
+      "instrument_mode": "default",
+      "dependencies": [
+        "OTEL-001"
+      ],
+      "impact": "A complete request and its failing stage cannot be located.",
+      "product_outcome": "Operators should see one complete support-agent trace for each request.",
+      "required_fix": "The actual agent operation owns its trace root and applicable source-known metadata, safe content and truthful completed/error outcomes without a duplicate workflow.",
+      "verification_scenarios": [
+        "agent.root"
+      ],
+      "evidence": [
+        "main.go:21-28,180-209,239-249"
+      ],
+      "acceptance_criteria": [
+        "The actual agent operation owns its trace root and applicable source-known metadata, safe content and truthful completed/error outcomes without a duplicate workflow."
+      ],
+      "constraints": [
+        "Preserve existing business behavior and telemetry ownership; keep private data and unbounded identities out of telemetry dimensions.",
+        "No Python sidecar, speculative AO package or second trace creator. Preserve production independence from eval/report artifacts."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "span",
+          "name": "invoke_agent support_agent",
+          "attributes": [],
+          "product_view": "Operators should see one complete support-agent trace for each request."
+        }
+      ],
+      "follow_up_actions": [
+        "Select this finding in otel.html and use the bundled instrumentation handoff."
+      ]
+    },
+    {
+      "id": "OTEL-003",
+      "title": "Local retrieval content",
+      "severity": "high",
+      "priority": "required",
+      "effort": "medium",
+      "status": "proposed",
+      "area": "Local retrieval content",
+      "gap": "retrieveDocuments exposes query and knowledge_base policy but emits no retrieval span or content.",
+      "instrument_mode": "default",
+      "dependencies": [
+        "OTEL-001",
+        "OTEL-002"
+      ],
+      "impact": "Retrieved context cannot be distinguished from order tool or model work.",
+      "product_outcome": "Operators should see the local policy retrieval and useful safe context.",
+      "required_fix": "The existing local retrieval owns safe query/document input and produced output with correct context and applicability.",
+      "verification_scenarios": [
+        "retrieval.content"
+      ],
+      "evidence": [
+        "main.go:135-142,183-192",
+        "eval/inputs/genai-profile-evidence.json"
+      ],
+      "acceptance_criteria": [
+        "The existing local retrieval owns safe query/document input and produced output with correct context and applicability."
+      ],
+      "constraints": [
+        "Preserve existing business behavior and telemetry ownership; keep private data and unbounded identities out of telemetry dimensions.",
+        "No Python sidecar, speculative AO package or second trace creator. Preserve production independence from eval/report artifacts."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "span",
+          "name": "Local policy retrieval",
+          "attributes": [],
+          "product_view": "Operators should see the local policy retrieval and useful safe context."
+        }
+      ],
+      "follow_up_actions": [
+        "Select this finding in otel.html and use the bundled instrumentation handoff."
+      ]
+    },
+    {
+      "id": "OTEL-004",
+      "title": "Order tool content and failures",
+      "severity": "high",
+      "priority": "required",
+      "effort": "medium",
+      "status": "proposed",
+      "area": "Order tool content and failures",
+      "gap": "lookupOrder lacks a canonical tool span, same-tool message mappings and error/cancel status.",
+      "instrument_mode": "default",
+      "dependencies": [
+        "OTEL-001",
+        "OTEL-002"
+      ],
+      "impact": "Tool failure and cancelled execution are invisible even though they stop the agent.",
+      "product_outcome": "Operators should see the order-tool inputs, produced result and failure outcome.",
+      "required_fix": "The existing order tool owns safe arguments, produced results and same-operation content mappings; actual error/cancellation does not fabricate successful output.",
+      "verification_scenarios": [
+        "tool.outcomes"
+      ],
+      "evidence": [
+        "main.go:21-28,144-154,192-195",
+        "eval/inputs/genai-profile-evidence.json"
+      ],
+      "acceptance_criteria": [
+        "The existing order tool owns safe arguments, produced results and same-operation content mappings; actual error/cancellation does not fabricate successful output."
+      ],
+      "constraints": [
+        "Preserve existing business behavior and telemetry ownership; keep private data and unbounded identities out of telemetry dimensions.",
+        "No Python sidecar, speculative AO package or second trace creator. Preserve production independence from eval/report artifacts."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "span",
+          "name": "execute_tool lookup_order",
+          "attributes": [],
+          "product_view": "Operators should see the order-tool inputs, produced result and failure outcome."
+        }
+      ],
+      "follow_up_actions": [
+        "Select this finding in otel.html and use the bundled instrumentation handoff."
+      ]
+    },
+    {
+      "id": "OTEL-005",
+      "title": "HTTP model lifecycle and content",
+      "severity": "high",
+      "priority": "required",
+      "effort": "medium",
+      "status": "proposed",
+      "area": "HTTP model lifecycle and content",
+      "gap": "callModel makes two actual nonstreaming HTTP calls without a CLIENT chat span, request fields, produced response or failure evidence.",
+      "instrument_mode": "default",
+      "dependencies": [
+        "OTEL-001",
+        "OTEL-002"
+      ],
+      "impact": "Provider latency, offered tools, model controls and actual usage cannot be attributed.",
+      "product_outcome": "Operators should see the actual model request and its success or provider failure.",
+      "required_fix": "Only actual model HTTP attempts own model spans with source-known controls/tools/messages and produced response/usage fields; failures retain truthful status and missing output.",
+      "verification_scenarios": [
+        "model.outcomes"
+      ],
+      "evidence": [
+        "main.go:65-92,156-177,196-209",
+        "eval/inputs/genai-profile-evidence.json"
+      ],
+      "acceptance_criteria": [
+        "Only actual model HTTP attempts own model spans with source-known controls/tools/messages and produced response/usage fields; failures retain truthful status and missing output."
+      ],
+      "constraints": [
+        "Preserve existing business behavior and telemetry ownership; keep private data and unbounded identities out of telemetry dimensions.",
+        "No Python sidecar, speculative AO package or second trace creator. Preserve production independence from eval/report artifacts."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "span",
+          "name": "chat fixture-model-v1",
+          "attributes": [],
+          "product_view": "Operators should see the actual model request and its success or provider failure."
+        }
+      ],
+      "follow_up_actions": [
+        "Select this finding in otel.html and use the bundled instrumentation handoff."
+      ]
+    },
+    {
+      "id": "OTEL-006",
+      "title": "Inference latency and observed usage",
+      "severity": "high",
+      "priority": "required",
+      "effort": "medium",
+      "status": "proposed",
+      "area": "Inference latency and observed usage",
+      "gap": "No meter/provider or instruments record the actual model attempts and observed tokens.",
+      "instrument_mode": "default",
+      "dependencies": [
+        "OTEL-001",
+        "OTEL-005"
+      ],
+      "impact": "Provider failure and latency cannot feed charts or detectors.",
+      "product_outcome": "Operators should see inference duration and truthful input/output token totals.",
+      "required_fix": "Current applicable inference measurements reflect real attempt durations and source-returned token usage, with bounded dimensions and the supplied profile's missing-usage semantics.",
+      "verification_scenarios": [
+        "inference.metrics"
+      ],
+      "evidence": [
+        "main.go:85-92,156-177",
+        "eval/inputs/genai-profile-evidence.json"
+      ],
+      "acceptance_criteria": [
+        "Current applicable inference measurements reflect real attempt durations and source-returned token usage, with bounded dimensions and the supplied profile's missing-usage semantics."
+      ],
+      "constraints": [
+        "Preserve existing business behavior and telemetry ownership; keep private data and unbounded identities out of telemetry dimensions.",
+        "No Python sidecar, speculative AO package or second trace creator. Preserve production independence from eval/report artifacts."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "metric",
+          "name": "Inference duration and observed usage",
+          "attributes": [],
+          "product_view": "Operators should see inference duration and truthful input/output token totals."
+        }
+      ],
+      "follow_up_actions": [
+        "Select this finding in otel.html and use the bundled instrumentation handoff."
+      ]
+    },
+    {
+      "id": "OTEL-007",
+      "title": "Agent and tool metrics and token distributions",
+      "severity": "medium",
+      "priority": "recommended",
+      "effort": "medium",
+      "status": "proposed",
+      "area": "Agent and tool metrics and token distributions",
+      "gap": "Six additional applicable current metric capabilities have no instruments; usage totals do not prove distributions or agent/tool measurements.",
+      "instrument_mode": "fix all",
+      "dependencies": [
+        "OTEL-002",
+        "OTEL-004",
+        "OTEL-005",
+        "OTEL-006"
+      ],
+      "impact": "End-to-end and tool latency and call-count distributions cannot support charts.",
+      "product_outcome": "Operators should see agent/tool timing, actual call counts and per-inference token distributions.",
+      "required_fix": "Assess and implement the additional source-applicable agent/tool measurements and token distributions without substituting them for inference usage totals or inventing unsupported operations.",
+      "verification_scenarios": [
+        "extended.metrics"
+      ],
+      "evidence": [
+        "main.go:135-209",
+        "eval/inputs/genai-profile-evidence.json"
+      ],
+      "acceptance_criteria": [
+        "Assess and implement the additional source-applicable agent/tool measurements and token distributions without substituting them for inference usage totals or inventing unsupported operations."
+      ],
+      "constraints": [
+        "Preserve existing business behavior and telemetry ownership; keep private data and unbounded identities out of telemetry dimensions.",
+        "No Python sidecar, speculative AO package or second trace creator. Preserve production independence from eval/report artifacts."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "metric",
+          "name": "Source-applicable agent and tool measurements",
+          "attributes": [],
+          "product_view": "Operators should see agent/tool timing, actual call counts and per-inference token distributions."
+        }
+      ],
+      "follow_up_actions": [
+        "Select this finding in otel.html and use the bundled instrumentation handoff."
+      ]
+    },
+    {
+      "id": "AO-001",
+      "title": "Runtime Project resolution",
+      "severity": "high",
+      "priority": "required",
+      "effort": "medium",
+      "status": "proposed",
+      "area": "Runtime Project resolution",
+      "gap": "main does not consume resource selectors or resolve a selected Project.",
+      "instrument_mode": "default",
+      "dependencies": [],
+      "impact": "Runtime traces cannot be bound to the intended Project.",
+      "product_outcome": "Operators should have a verified, reusable Project destination.",
+      "required_fix": "Resolve the explicitly accepted Project through the selected local resource API, preserving business behavior and accurate lookup/create outcomes.",
+      "verification_scenarios": [
+        "resources.project"
+      ],
+      "evidence": [
+        "main.go:223-234",
+        "telemetry.go",
+        "eval/inputs/nativeprobe/main.go:129-161"
+      ],
+      "acceptance_criteria": [
+        "Resolve the explicitly accepted Project through the selected local resource API, preserving business behavior and accurate lookup/create outcomes."
+      ],
+      "constraints": [
+        "Preserve existing business behavior and telemetry ownership; keep private data and unbounded identities out of telemetry dimensions.",
+        "No Python sidecar, speculative AO package or second trace creator. Preserve production independence from eval/report artifacts."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "configuration",
+          "name": "Selected Project binding",
+          "attributes": [],
+          "product_view": "Operators should have a verified, reusable Project destination."
+        }
+      ],
+      "follow_up_actions": [
+        "Select this finding in otel.html and use the bundled instrumentation handoff."
+      ],
+      "finding_group": "splunk-agent-observability",
+      "ao_target_scope": "resource-routing"
+    },
+    {
+      "id": "AO-002",
+      "title": "Dedicated runtime Agent Stream resolution",
+      "severity": "high",
+      "priority": "required",
+      "effort": "medium",
+      "status": "proposed",
+      "area": "Dedicated runtime Agent Stream resolution",
+      "gap": "No stream selector/lookup/create is reachable from main.",
+      "instrument_mode": "default",
+      "dependencies": [
+        "AO-001"
+      ],
+      "impact": "The selected live agent has no dedicated verified stream binding.",
+      "product_outcome": "Operators should have a verified Agent Stream inside their selected Project.",
+      "required_fix": "Resolve the explicitly accepted Agent Stream within the resolved Project and preserve the validated current association.",
+      "verification_scenarios": [
+        "resources.stream"
+      ],
+      "evidence": [
+        "main.go:223-234",
+        "telemetry.go",
+        "eval/inputs/nativeprobe/main.go:155-184"
+      ],
+      "acceptance_criteria": [
+        "Resolve the explicitly accepted Agent Stream within the resolved Project and preserve the validated current association."
+      ],
+      "constraints": [
+        "Preserve existing business behavior and telemetry ownership; keep private data and unbounded identities out of telemetry dimensions.",
+        "No Python sidecar, speculative AO package or second trace creator. Preserve production independence from eval/report artifacts."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "configuration",
+          "name": "Selected Agent Stream binding",
+          "attributes": [],
+          "product_view": "Operators should have a verified Agent Stream inside their selected Project."
+        }
+      ],
+      "follow_up_actions": [
+        "Select this finding in otel.html and use the bundled instrumentation handoff."
+      ],
+      "finding_group": "splunk-agent-observability",
+      "ao_target_scope": "resource-routing"
+    },
+    {
+      "id": "AO-003",
+      "title": "Native trace routing and recovery",
+      "severity": "high",
+      "priority": "required",
+      "effort": "medium",
+      "status": "proposed",
+      "area": "Native trace routing and recovery",
+      "gap": "There is no exporter or consumed Studio profile, no actual resource-bound headers and no trace Resource binding or recovery path.",
+      "instrument_mode": "default",
+      "dependencies": [
+        "AO-001",
+        "AO-002",
+        "OTEL-001",
+        "OTEL-002",
+        "OTEL-003",
+        "OTEL-004",
+        "OTEL-005",
+        "OTEL-006"
+      ],
+      "impact": "Agent traces cannot be reliably routed while business execution stays independent.",
+      "product_outcome": "Operators should see complete agent traces in the selected destination after routing is verified.",
+      "required_fix": "Bind only trace export to the validated selected local Studio resources, preserving harmless headers and independent metrics; failed lookup or export remains failed without stale routing or speculative creation.",
+      "verification_scenarios": [
+        "routing.failures"
+      ],
+      "evidence": [
+        "telemetry.go",
+        "main.go:112-125,223-267",
+        "eval/inputs/nativeprobe/main.go"
+      ],
+      "acceptance_criteria": [
+        "Bind only trace export to the validated selected local Studio resources, preserving harmless headers and independent metrics; failed lookup or export remains failed without stale routing or speculative creation."
+      ],
+      "constraints": [
+        "Preserve existing business behavior and telemetry ownership; keep private data and unbounded identities out of telemetry dimensions.",
+        "No Python sidecar, speculative AO package or second trace creator. Preserve production independence from eval/report artifacts."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "configuration",
+          "name": "Selected trace routing and recovery",
+          "attributes": [],
+          "product_view": "Operators should see complete agent traces in the selected destination after routing is verified."
+        }
+      ],
+      "follow_up_actions": [
+        "Select this finding in otel.html and use the bundled instrumentation handoff."
+      ],
+      "finding_group": "splunk-agent-observability",
+      "ao_target_scope": "resource-routing"
+    }
+  ],
+  "verification": {
+    "environments": [
+      {
+        "id": "go.local",
+        "surface": "Native app process, supplied local resource/model/OTLP probe and schema checker",
+        "config_evidence": "go.mod; main.go; eval/inputs/nativeprobe/main.go; eval/inputs/schemacheck/main.go",
+        "runner": "Build the application with go build; exercise it with eval/inputs/nativeprobe and validate emitted content with eval/inputs/schemacheck.",
+        "scope": "Selected source-owned application instrumentation and local compatibility only; the supplied test controller is not production telemetry.",
+        "prerequisites": "Declared Go runtime, compatible dependencies and the supplied profile/schema evidence. Approved resource names are fixture-project and fixture-agent. Servers use isolated numeric-loopback addresses; cloud/browser access is unnecessary. No runtime result is supplied."
+      }
+    ],
+    "scenarios": [
+      {
+        "id": "native.lifecycle",
+        "trigger": "Compare the pristine baseline with native export, repeated process starts and shutdown.",
+        "entrypoint": "telemetry.go:5-7",
+        "expected_signals": "Native telemetry lifecycle",
+        "proof_level": "full runtime",
+        "acceptance_criteria": "Verify OTEL-001 against its acceptance criteria; record missing prerequisites and unrun checks.",
+        "environments": [
+          "go.local"
+        ]
+      },
+      {
+        "id": "agent.root",
+        "trigger": "Run success, tool_error, provider_error and cancel; inspect each completed agent trace.",
+        "entrypoint": "main.go:21-28,180-209,239-249",
+        "expected_signals": "invoke_agent support_agent",
+        "proof_level": "full runtime",
+        "acceptance_criteria": "Verify OTEL-002 against its acceptance criteria; record missing prerequisites and unrun checks.",
+        "environments": [
+          "go.local"
+        ]
+      },
+      {
+        "id": "retrieval.content",
+        "trigger": "Run the local policy retrieval and inspect its safe query and produced documents.",
+        "entrypoint": "main.go:135-142,183-192",
+        "expected_signals": "Local policy retrieval",
+        "proof_level": "full runtime",
+        "acceptance_criteria": "Verify OTEL-003 against its acceptance criteria; record missing prerequisites and unrun checks.",
+        "environments": [
+          "go.local"
+        ]
+      },
+      {
+        "id": "tool.outcomes",
+        "trigger": "Run successful, failing and cancelled order lookups; inspect tool content and outcomes.",
+        "entrypoint": "main.go:21-28,144-154,192-195",
+        "expected_signals": "execute_tool lookup_order",
+        "proof_level": "full runtime",
+        "acceptance_criteria": "Verify OTEL-004 against its acceptance criteria; record missing prerequisites and unrun checks.",
+        "environments": [
+          "go.local"
+        ]
+      },
+      {
+        "id": "model.outcomes",
+        "trigger": "Run the actual model HTTP success and provider failure; inspect request and response fields.",
+        "entrypoint": "main.go:65-92,156-177,196-209",
+        "expected_signals": "chat fixture-model-v1",
+        "proof_level": "full runtime",
+        "acceptance_criteria": "Verify OTEL-005 against its acceptance criteria; record missing prerequisites and unrun checks.",
+        "environments": [
+          "go.local"
+        ]
+      },
+      {
+        "id": "inference.metrics",
+        "trigger": "Inspect durations for both model HTTP attempts and token usage returned by the successful response.",
+        "entrypoint": "main.go:85-92,156-177",
+        "expected_signals": "Inference duration and observed usage",
+        "proof_level": "full runtime",
+        "acceptance_criteria": "Verify OTEL-006 against its acceptance criteria; record missing prerequisites and unrun checks.",
+        "environments": [
+          "go.local"
+        ]
+      },
+      {
+        "id": "extended.metrics",
+        "trigger": "Run the agent and tool paths; inspect applicable durations, call counts and token distributions.",
+        "entrypoint": "main.go:135-209",
+        "expected_signals": "Source-applicable agent and tool measurements",
+        "proof_level": "full runtime",
+        "acceptance_criteria": "Verify OTEL-007 against its acceptance criteria; record missing prerequisites and unrun checks.",
+        "environments": [
+          "go.local"
+        ]
+      },
+      {
+        "id": "resources.project",
+        "trigger": "Resolve the approved Project, then repeat in a clean process to check reuse.",
+        "entrypoint": "main.go:223-234",
+        "expected_signals": "Selected Project binding",
+        "proof_level": "full runtime",
+        "acceptance_criteria": "Verify AO-001 against its acceptance criteria; record missing prerequisites and unrun checks.",
+        "environments": [
+          "go.local"
+        ]
+      },
+      {
+        "id": "resources.stream",
+        "trigger": "Resolve the approved Agent Stream within its Project, then check scoped reuse.",
+        "entrypoint": "main.go:223-234",
+        "expected_signals": "Selected Agent Stream binding",
+        "proof_level": "full runtime",
+        "acceptance_criteria": "Verify AO-002 against its acceptance criteria; record missing prerequisites and unrun checks.",
+        "environments": [
+          "go.local"
+        ]
+      },
+      {
+        "id": "routing.failures",
+        "trigger": "Exercise resource lookup denial and rejected trace export while checking business results and independent metrics.",
+        "entrypoint": "telemetry.go",
+        "expected_signals": "Selected trace routing and recovery",
+        "proof_level": "full runtime",
+        "acceptance_criteria": "Verify AO-003 against its acceptance criteria; record missing prerequisites and unrun checks.",
+        "environments": [
+          "go.local"
+        ]
+      }
+    ]
+  },
+  "anti_patterns": [],
+  "recommendation": [
+    "Review the selected findings in otel.html and use the bundled selection flow before instrumentation."
+  ]
+}

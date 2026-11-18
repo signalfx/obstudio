@@ -204,7 +204,7 @@ def test_genai_instrumentation_keeps_token_metric_dimensions_when_known():
         assert "gen_ai.operation.name" in text
         assert "gen_ai.provider.name" in text
         assert "gen_ai.request.model" in text
-        assert "on the token metric" in text
+        assert ("on the token metric" in text or "Token metrics also include" in text)
 
 
 def test_new_inference_metrics_use_current_contract_and_preserve_legacy():
@@ -996,15 +996,15 @@ def test_ai_assistant_instrument_case_requires_nested_retrieval_closure():
         assert term in scenario
 
     prompt = instrument_eval["prompts"][0]["task"]
-    assert "OTEL-002 and AO-003" in prompt
+    assert prompt.splitlines()[0] == "$otel-instrument --ids OTEL-002,AO-003"
     rubric = " ".join(instrument_eval["rubric"]).lower()
     for term in (
-        "exactly one execute_tool search_docs",
-        "exactly one nested retrieval demo-knowledge-base",
+        "exactly one search_docs tool span",
+        "one direct-child retrieval span for demo-knowledge-base",
         "gen_ai.operation.name=retrieval",
         "gen_ai.data_source.id=demo-knowledge-base",
-        "direct child",
-        "no raw retrieval query or document content",
+        "retrieval parent id equals the search_docs span id",
+        "raw queries/documents in telemetry",
     ):
         assert term in rubric
 
@@ -1067,10 +1067,11 @@ def test_ai_assistant_instrument_case_selects_distinct_ao_routing(tmp_path):
         "AO-002",
         "AO-003",
     ]
-    assert "OTEL-002 and AO-003" in instrument_eval["prompts"][0]["task"]
+    assert instrument_eval["prompts"][0]["task"].splitlines()[0] == (
+        "$otel-instrument --ids OTEL-002,AO-003"
+    )
     rubric = " ".join(instrument_eval["rubric"]).lower()
-    for term in ("project resource", "agent stream resource", "runtime routing"):
-        assert term in rubric
+    assert "keep project, agent stream and routing as distinct work" in rubric
 
 
 @pytest.mark.parametrize("mode,connection", [
@@ -1163,10 +1164,10 @@ def test_ao_endpoint_rubrics_require_mode_specific_delivery_evidence():
     contract = " ".join(route["acceptance_criteria"] + route["constraints"])
     rubric = " ".join(instrument["rubric"])
     for term in (
-        "normal SDK/API calls", "active connection/realm",
-        "no application cloud token", "per-request project/stream isolation",
-        "old-organization IDs", "explicit direct-cloud mode remains valid",
-        "upstream ingest acknowledgement", "ordinary APM receipt is not that proof",
+        "normal resource API calls", "Studio supplying gateway realm/auth from its active connection",
+        "without an application cloud token", "Two configured streams can route their requests separately",
+        "another organization's IDs", "Preserve explicit operator endpoints and direct-cloud settings",
+        "Local API/OTLP receipt and upstream ingest acknowledgement are separate", "ordinary APM receipt is not that proof",
     ):
         assert term in rubric
     for term in (
@@ -1413,8 +1414,9 @@ def test_instrument_selected_tools_keep_other_tool_behavior_without_new_spans():
         "same result or error",
     ):
         assert term in instrument
-    assert "unselected tool names" in rubric
-    assert "existing behavior" in rubric
+    assert "Preserve unselected tool behavior" in rubric
+    assert "keeps its existing name" in rubric
+    assert "does not gain another span" in rubric
 
 
 def test_instrument_retrieval_proof_compares_actual_span_ids():
@@ -1430,8 +1432,9 @@ def test_instrument_retrieval_proof_compares_actual_span_ids():
         "object-parent equality",
     ):
         assert term in instrument
-    assert "actual parent span ID" in rubric
-    assert "tool span ID" in rubric
+    assert "completed OTel spans and exact parent IDs/attributes" in rubric
+    assert "spans from the SDK" in rubric
+    assert "Only a custom recorder that compares Python parent objects" in rubric
 
 
 def test_instrument_persists_selected_export_dependencies_separately_from_credentials():
@@ -1449,8 +1452,9 @@ def test_instrument_persists_selected_export_dependencies_separately_from_creden
         "dependency resolution",
     ):
         assert term in instrument
-    assert "locked dependencies" in rubric
-    assert "credential" in rubric
+    assert "active locked dependency consumed by the normal app launch" in rubric
+    assert "dependency, identity, credential or gateway blockers" in rubric
+    assert "temporary credentials are not durable configuration" in rubric
 
 
 def test_instrument_runs_local_verify_when_remote_export_is_blocked():
@@ -1470,7 +1474,8 @@ def test_instrument_runs_local_verify_when_remote_export_is_blocked():
     ):
         assert term in instrument
     assert "local otel-verify" in rubric
-    assert "remote export" in rubric
+    assert "without remote credentials" in rubric
+    assert "status Partial while selected proof is incomplete" in rubric
 
 
 def test_ai_assistant_rubric_distinguishes_selection_refresh_from_instrument_overwrite():
@@ -1478,9 +1483,9 @@ def test_ai_assistant_rubric_distinguishes_selection_refresh_from_instrument_ove
         _read(REPO_ROOT / "evals/python/ai-assistant-demo/eval/qual/instrument.json")
     )
     reader_rubric = instrument_eval["rubric"][10].lower()
-    assert "explicit selection-aware refresh" in reader_rubric
-    assert "instrumentation renderer" in reader_rubric
-    assert "must not overwrite" in reader_rubric
+    assert "audit refresh during selection is allowed" in reader_rubric
+    assert "after selection, instrumentation rendering must preserve the canonical audit and selected scope" in reader_rubric
+    assert "overwriting the audit during instrumentation rendering" in reader_rubric
 
 
 def test_genai_reference_covers_evaluation_quality_contract():
