@@ -79,7 +79,7 @@ command checks live in `skills/references/tests/test_observe_report_selection.py
 
 ### Logging workflows
 
-The Go, Java and Python basic service fixtures define bare `$otel-audit ./service`,
+The four basic service fixtures define bare `$otel-audit ./service`,
 `$otel-instrument ./service` and `$otel-verify ./service` tasks. Run the stages
 on the same workspace with the eval environment active:
 
@@ -90,11 +90,12 @@ uv run python run_logging_workflow.py --language python --trial 1 \
   --output ../.workspace/logging-workflow/python-trial-1
 ```
 
-For basic regression, select `go` or `java` or `python` and run trial 1
-once per enabled language. Trials 2 and 3 repeat the same task to measure reliability;
+For basic regression, select `python`, `java`, `go` or `node` and run trial 1
+once per language. Trials 2 and 3 repeat the same task to measure reliability;
 run them explicitly when measuring variation, rather than counting them as new
 scenarios. Each invocation runs only its selected trial. The runner needs
-a POSIX host and the language toolchain on `PATH`, including Java 21 and Go 1.24 for the enabled fixtures. It creates an isolated local receiver without cloud credentials,
+a POSIX host and the language toolchain on `PATH`, including Java 21 and Go 1.24 for those
+fixtures. It creates an isolated local receiver without cloud credentials,
 retains source and execution evidence, and preserves application reports for
 stage handoff. Judge feedback stays outside later actor inputs. Actor and judge
 execution must use the `codex-evals.logging.toml` configuration's
@@ -112,7 +113,7 @@ this check does not establish final-record drain or post-exit persistence.
 A standalone verify task lacking audit/selection prerequisites is a negative
 control and supplies no instrumented runtime coverage.
 
-The 9 enabled role definitions extend one [logging rubric](rubrics/logging-common.json)
+The 12 role definitions extend one [logging rubric](rubrics/logging-common.json)
 and share one additions file per language. Role-specific checks stay in their
 own definitions. Eight focused judges inspect the same completed
 task, covering 63 checklist items in total. Each item receives its own result,

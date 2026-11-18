@@ -2,6 +2,12 @@
 
 Language-specific instrumentation guidance for Node.js and TypeScript services.
 
+For a logging path, first resolve the effective configuration and collection
+owner using [the shared logging reference](../logging-readiness.md#source-and-applicability).
+The environment-based setup recipes below apply only after that check; they
+do not supersede an active supported declarative loader, an intentional SDK
+opt-out, or an established operator-owned forwarding route.
+
 ---
 
 ## Auto-Instrumentation Library Map
@@ -11,7 +17,7 @@ detected in the codebase. Only install what the project actually uses.
 
 | Dependency in package.json | Auto-instrumentation Package | What It Covers |
 |----------------------------|------------------------------|----------------|
-| `express` | `@opentelemetry/instrumentation-express` | HTTP server spans with route, method, status code |
+| `express` | `@opentelemetry/instrumentation-express` | Express middleware/router/handler spans and route enrichment; HTTP instrumentation owns SERVER spans |
 | `fastify` | `@opentelemetry/instrumentation-fastify` | HTTP server spans with route, method, status code |
 | `koa` | `@opentelemetry/instrumentation-koa` | HTTP server spans with route, method, status code |
 | `@nestjs/core` | `@opentelemetry/instrumentation-nestjs-core` | NestJS handler and interceptor spans |
@@ -48,6 +54,14 @@ graph, and exporter protocol together before installation. Use `npm view` to
 inspect current registry metadata, then inspect the installed documented APIs
 and run a bounded compatibility probe. Do not use a floating latest tag as
 compatibility proof or force an application/runtime upgrade to copy a snippet.
+If neither root `engines.node` nor checked-in runtime configuration establishes
+the supported range, inspect the installed dependencies' combined `engines`
+constraints and keep any remaining uncertainty explicit. One dependency's range
+is not a complete application support policy, and the developer shell's version
+does not authorize narrowing it. A proposed set that raises the supported
+minimum needs a `manual decision` with the exact change, rather than default
+work, even when the narrowing is disclosed. Use package metadata and existing
+tools; do not add a version parser or require a runtime upgrade.
 Record exact resolved releases, metadata/source receipts, and probe results in
 run evidence; keep skill guidance independent of a particular release.
 
@@ -60,10 +74,8 @@ resulting installed graph/APIs. Preserve the resulting lockfile.
 ```bash
 npm install '@opentelemetry/sdk-node@<resolved-node-sdk-release>' \
   '@opentelemetry/api@<resolved-api-release>' \
-  '@opentelemetry/exporter-trace-otlp-http@<resolved-trace-exporter-release>' \
-  '@opentelemetry/exporter-metrics-otlp-http@<resolved-metric-exporter-release>' \
+  '@opentelemetry/core@<resolved-core-release>' \
   '@opentelemetry/exporter-logs-otlp-proto@<resolved-log-exporter-release>' \
-  '@opentelemetry/sdk-metrics@<resolved-metric-sdk-release>' \
   '@opentelemetry/sdk-logs@<resolved-log-sdk-release>' \
   '@opentelemetry/instrumentation-http@<resolved-http-bridge-release>' \
   '@opentelemetry/resources@<resolved-resources-release>' \
@@ -131,15 +143,23 @@ or bridge. A late constructor failure must leave the operator's original
 environment untouched. The explicit local exporter URL needs no environment
 mutation.
 
+Classify `OTEL_LOGS_EXPORTER` with the selected SDK's public list reader, not
+whole-string equality or case conversion. The example uses its empty-list
+default, deduplication and whole-`none` behavior. Any `otlp` member, including
+`otlp,otlp` or `otlp,console`, must pass the same local guard. Recheck the
+installed SDK's supported exporter names before adapting its public factories.
+
 **File**: `instrumentation.ts` (or `instrumentation.js`)
 
 ```typescript
 import { NodeSDK } from '@opentelemetry/sdk-node';
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
-import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
+import { diag } from '@opentelemetry/api';
+import { getNumberFromEnv, getStringFromEnv, getStringListFromEnv } from '@opentelemetry/core';
 import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-proto';
-import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs';
-import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
+import {
+  BatchLogRecordProcessor, ConsoleLogRecordExporter, SimpleLogRecordProcessor,
+  type LogRecordProcessor,
+} from '@opentelemetry/sdk-logs';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { HttpInstrumentation } from '@opentelemetry/instrumentation-http';
 import { ExpressInstrumentation } from '@opentelemetry/instrumentation-express';
@@ -157,24 +177,37 @@ function reportLocalLogSkip() {
   );
 }
 
+// Match the selected NodeSDK's positive BLRP environment reader. The public
+// processor constructor owns defaults and the batch-size/queue-size clamp.
+function positiveSdkNumberFromEnv(name: string): number | undefined {
+  const value = getNumberFromEnv(name);
+  if (value !== undefined && value <= 0) {
+    diag.warn(name + ' must be greater than zero; using the SDK default.');
+    return undefined;
+  }
+  return value;
+}
+
 function defaultLocalLogConfiguration() {
-  const configured = process.env.OTEL_LOGS_EXPORTER?.trim().toLowerCase();
-  if (configured && configured !== 'otlp') {
-    // `none` disables logs. Any other explicit exporter and its bridge belong
-    // entirely to a proven operator-owned setup; do not add a Splunk Observability Studio bridge.
+  const exporters = Array.from(new Set(getStringListFromEnv('OTEL_LOGS_EXPORTER') ?? []));
+  if (exporters.length === 0) exporters.push('otlp');
+  if (exporters.includes('none') || !exporters.includes('otlp')) {
+    // Preserve the native whole-none and non-OTLP paths and their bridge owner.
     return {
       logRecordProcessors: undefined,
       logInstrumentations: [],
       suppressAutoLogs: false,
+      fallbackLogsExporter: undefined,
     };
   }
+  const remainingExporters = exporters.filter(exporter => exporter !== 'otlp');
+  const fallbackLogsExporter = remainingExporters.join(',') || 'none';
 
   try {
     const protocol = (
-      process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL ||
-      process.env.OTEL_EXPORTER_OTLP_PROTOCOL ||
-      'http/protobuf'
-    ).trim().toLowerCase();
+      getStringFromEnv('OTEL_EXPORTER_OTLP_LOGS_PROTOCOL') ??
+      getStringFromEnv('OTEL_EXPORTER_OTLP_PROTOCOL')
+    )?.trim() || 'http/protobuf';
     if (protocol !== 'http/protobuf') {
       throw new Error('unsupported local logs protocol');
     }
@@ -185,22 +218,42 @@ function defaultLocalLogConfiguration() {
       throw new Error('logs endpoint differs from preflight-approved receiver');
     }
 
-    // The OTLP exporter can read both environment header sources even when
-    // given an explicit URL. Keep credentials out of the local log path.
-    if (process.env.OTEL_EXPORTER_OTLP_HEADERS?.trim() ||
-        process.env.OTEL_EXPORTER_OTLP_LOGS_HEADERS?.trim()) {
+    // Reject generic credentials while preserving signal-specific local log
+    // headers for official SDK parsing without an empty headers override.
+    if (process.env.OTEL_EXPORTER_OTLP_HEADERS?.trim()) {
       throw new Error('OTLP headers conflict with local logs');
     }
 
     // Never derive this destination from OTEL_EXPORTER_OTLP_ENDPOINT at runtime.
-    const exporter = new OTLPLogExporter({
-      url: PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT,
-    });
-    const processor = new BatchLogRecordProcessor({ exporter });
+    const logRecordProcessors: LogRecordProcessor[] = [];
+    for (const exporter of exporters) {
+      if (exporter === 'otlp') {
+        logRecordProcessors.push(new BatchLogRecordProcessor({
+          exporter: new OTLPLogExporter({ url: PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT }),
+          maxQueueSize: positiveSdkNumberFromEnv('OTEL_BLRP_MAX_QUEUE_SIZE'),
+          maxExportBatchSize: positiveSdkNumberFromEnv('OTEL_BLRP_MAX_EXPORT_BATCH_SIZE'),
+          scheduledDelayMillis: positiveSdkNumberFromEnv('OTEL_BLRP_SCHEDULE_DELAY'),
+          exportTimeoutMillis: positiveSdkNumberFromEnv('OTEL_BLRP_EXPORT_TIMEOUT'),
+        }));
+      } else if (exporter === 'console') {
+        logRecordProcessors.push(new SimpleLogRecordProcessor({
+          exporter: new ConsoleLogRecordExporter(),
+        }));
+      } else {
+        diag.warn('Unsupported OTEL_LOGS_EXPORTER member; ignoring it.');
+      }
+    }
+    const sdkConsoleExporterSelected = [
+      exporters,
+      getStringListFromEnv('OTEL_TRACES_EXPORTER') ?? [],
+      getStringListFromEnv('OTEL_METRICS_EXPORTER') ?? [],
+    ].some(selected => selected.includes('console') && !selected.includes('none'));
     return {
-      logRecordProcessors: [processor],
-      logInstrumentations: [new ConsoleInstrumentation()],
+      logRecordProcessors,
+      // Keep SDK console output outside the application console bridge.
+      logInstrumentations: sdkConsoleExporterSelected ? [] : [new ConsoleInstrumentation()],
       suppressAutoLogs: false,
+      fallbackLogsExporter,
     };
   } catch {
     reportLocalLogSkip();
@@ -208,6 +261,7 @@ function defaultLocalLogConfiguration() {
       logRecordProcessors: undefined,
       logInstrumentations: [],
       suppressAutoLogs: true,
+      fallbackLogsExporter,
     };
   }
 }
@@ -215,19 +269,14 @@ function defaultLocalLogConfiguration() {
 // Capture this before any optional log construction. The helper must not
 // mutate it, and a late constructor failure must restore this exact value.
 const originalLogsExporter = process.env.OTEL_LOGS_EXPORTER;
-const { logRecordProcessors, logInstrumentations, suppressAutoLogs: skipLocalLogs } =
+const { logRecordProcessors, logInstrumentations, fallbackLogsExporter,
+  suppressAutoLogs: skipLocalLogs } =
   defaultLocalLogConfiguration();
 
 function baseSdkOptions() {
   return {
     resource: resourceFromAttributes({
       'service.name': process.env.OTEL_SERVICE_NAME || 'my-service',
-    }),
-    traceExporter: new OTLPTraceExporter(),
-    metricReader: new PeriodicExportingMetricReader({
-      exporter: new OTLPMetricExporter(),
-      exportIntervalMillis: Number(process.env.OTEL_METRIC_EXPORT_INTERVAL || 1000),
-      exportTimeoutMillis: Number(process.env.OTEL_METRIC_EXPORT_TIMEOUT || 500),
     }),
     instrumentations: [
       new HttpInstrumentation(),
@@ -242,29 +291,33 @@ let sdk: NodeSDK;
 let suppressAutoLogs = skipLocalLogs;
 // Empty or absent processors mean no local log owner: omit the NodeSDK option.
 // Passing logRecordProcessors: [] still changes ownership for explicit exporters.
-if (logRecordProcessors?.length) {
-  try {
-    sdk = new NodeSDK({
-      ...base,
-      logRecordProcessors,
-      // Preflight must prove this bridge is supported and no other owns it.
-      instrumentations: [...base.instrumentations, ...logInstrumentations],
-    });
-  } catch {
-    // The optional log integration must not stop trace and metric startup.
-    reportLocalLogSkip();
-    sdk = new NodeSDK(base);
-    suppressAutoLogs = true;
-  }
-} else {
-  sdk = new NodeSDK(base);
-}
-
-// Inspect the resolved SDK's automatic log-export behavior before using this
-// skipped-path guard. Preserve the operator's value after synchronous startup.
-if (suppressAutoLogs) process.env.OTEL_LOGS_EXPORTER = 'none';
+// Keep the skip guard active for SDKs that read log settings in either phase.
+if (suppressAutoLogs) process.env.OTEL_LOGS_EXPORTER = fallbackLogsExporter ?? 'none';
 try {
+  if (logRecordProcessors?.length) {
+    try {
+      sdk = new NodeSDK({
+        ...base,
+        logRecordProcessors,
+        // Preflight must prove this bridge is supported and no other owns it.
+        instrumentations: [...base.instrumentations, ...logInstrumentations],
+      });
+    } catch {
+      // The optional log integration must not stop trace and metric startup.
+      // Instrumentation constructors can already have patched native sinks.
+      for (const instrumentation of logInstrumentations) instrumentation.disable();
+      reportLocalLogSkip();
+      suppressAutoLogs = true;
+      process.env.OTEL_LOGS_EXPORTER = fallbackLogsExporter ?? 'none';
+      sdk = new NodeSDK(base);
+    }
+  } else {
+    sdk = new NodeSDK(base);
+  }
   sdk.start();
+} catch (error) {
+  for (const instrumentation of logInstrumentations) instrumentation.disable();
+  throw error;
 } finally {
   if (suppressAutoLogs) {
     if (originalLogsExporter === undefined) delete process.env.OTEL_LOGS_EXPORTER;
@@ -294,7 +347,7 @@ export function installGracefulSignalHandlers(
   let signalShutdownStarted = false;
   const handleSignal = (forcedExitCode: number): void => {
     if (signalShutdownStarted) {
-      process.exit(forcedExitCode);
+      return;
     }
     signalShutdownStarted = true;
     const forcedExit = setTimeout(() => process.exit(forcedExitCode), 10_000);
@@ -318,8 +371,8 @@ export function installGracefulSignalHandlers(
     })();
   };
 
-  process.once('SIGTERM', () => handleSignal(143));
-  process.once('SIGINT', () => handleSignal(130));
+  process.on('SIGTERM', () => handleSignal(143));
+  process.on('SIGINT', () => handleSignal(130));
 }
 ```
 
@@ -332,10 +385,11 @@ stack on an older Node runtime, do not change the toolchain or invent a bridge;
 report `unsupported-stack` with the required Node version. Integrate
 `shutdownOnce()` into the app's existing graceful shutdown sequence after it
 stops accepting work and emits final application logs, then let that owner
-terminate the process. That existing owner must also arm a bounded timeout
-before draining and force a nonzero exit on timeout or a second signal;
-`process.exitCode` alone cannot stop a hung drain or exporter. Do not install
-another signal owner in that case. When the application has no graceful owner,
+terminate the process. Preserve that owner's stop budget and repeated-signal
+policy; telemetry does not authorize a different exit policy.
+`process.exitCode` alone cannot stop a hung drain or exporter when bounded
+termination is required. Do not install another signal owner in that case.
+When the application has no graceful owner,
 use the complete `installGracefulSignalHandlers` implementation above with its
 actual stop-and-drain primitive after creating the server or worker:
 
@@ -354,11 +408,18 @@ Adapt the callback to drain every detected queue/worker as well as the HTTP
 server. The handler always attempts telemetry shutdown after that callback
 settles, even when draining reports an error. Its bounded timeout prevents a
 stalled drain or exporter from leaving the process alive indefinitely; a
-successful drain and flush exits `0`, a drain/export failure exits `1`, and a
-timeout or second signal uses the conventional nonzero signal exit code.
-Do not replace this handler with a bare `server.close` callback: it must arm
-the timer before drain, attempt `shutdownOnce()` after final logs, and force
-process exit when the timer expires or a second signal arrives.
+completed drain and resolved SDK shutdown exit `0`; a drain failure or rejected
+SDK shutdown exits `1`. A timeout uses the conventional nonzero signal exit code.
+An unchanged SDK may report an exporter failure or export timeout through its
+diagnostics and still resolve shutdown; do not add a wrapper or global error
+handler only to convert that into an exit code. A resolved shutdown or exit `0`
+does not prove delivery. Repeated signals share
+the pending shutdown without interrupting final logs, starting another drain or
+resetting its budget. The shown ten-second budget is an example; use the
+application's selected budget. If operator policy instead requires a forced
+second-stop exit, implement and test that explicit policy in its lifecycle owner.
+Do not replace the ordered drain and `shutdownOnce()` calls with a bare
+`server.close` callback.
 
 During instrumentation preflight, resolve the complete local `/v1/logs` URL and
 replace `PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT` with that exact value,
@@ -375,25 +436,30 @@ processor, bridge, or NodeSDK log options fails before startup, the example
 emits one value-free diagnostic and starts tracing and metrics without the
 added log pipeline. Keep all three constructors inside the guarded log helper
 and the optional NodeSDK integration inside its guarded branch. On a skipped
-local path, temporarily set `OTEL_LOGS_EXPORTER=none` during `NodeSDK.start()`;
-first inspect the resolved `NodeSDK` source/API to establish whether omitted
+local path, temporarily remove only the `otlp` member before fallback
+`NodeSDK` construction and keep that filtered value through `start()`; use
+`none` only when no exporter members remain. The SDK constructs the remaining
+operator exporters itself. Inspect the resolved `NodeSDK` source/API before
+copying the pattern to establish whether omitted
 log options otherwise create an automatic OTLP exporter. The temporary guard
 is failure isolation, not a generated profile or a verified log path. Restore
-the original value afterward. Preserve an explicit non-OTLP
+the original value in `finally`, even if construction or startup throws. Preserve an explicit non-OTLP
 operator exporter, and do not retry `start()` after partial global registration.
 Never turn a log-only protocol conflict into a process-wide exception or move
 the optional log-enabled `new NodeSDK(...)` outside its pre-start `try`/`catch`.
 Do not set log exporter, endpoint, or protocol environment variables during
 optional log construction: if a later constructor throws, those writes would
 survive the skip path and could re-enable NodeSDK's default OTLP logs.
-The original console/file sink stays active. Both generic and signal-specific
-OTLP log headers must have no non-empty value on this local path; move generic
-OTLP headers to trace/metric signal variables and remove signal-specific log
-headers. For a different logs protocol, select the official exporter matching
+The original console/file sink stays active. Nonempty generic OTLP headers
+conflict with this local path; move generic OTLP headers to trace/metric signal
+variables and remove the generic setting only as an explicitly authorized
+operator preflight change. Application startup must preserve those settings
+and skip the added OTLP member while the conflict remains. Preserve operator-owned signal-specific local log
+headers for official SDK parsing. For a different logs protocol, select the official exporter matching
 that protocol during instrumentation preflight.
 
-With `OTEL_LOGS_EXPORTER=none`, both the added processor and bridge are omitted.
-For another explicit exporter such as `console`, leave provider, exporter, and
+With any native `none` member, both the added processor and bridge are omitted.
+For a list without `otlp`, such as `console`, leave provider, exporter, and
 bridge ownership entirely to the proven operator-owned setup; this helper adds
 none of them. In both cases, omit the `logRecordProcessors` property from
 `new NodeSDK(...)` entirely; an empty array is not an equivalent opt-out.
@@ -403,10 +469,24 @@ value alone is not evidence of a working pipeline. Adding
 `ConsoleInstrumentation` here would duplicate console output when NodeSDK owns
 the console exporter.
 
-The processor construction above uses an options object containing
-`{ exporter }`. Check the resolved `@opentelemetry/sdk-logs` public constructor
-before copying it; if the constrained API instead accepts the exporter
-directly, use its documented `new BatchLogRecordProcessor(exporter)` signature.
+For the shown native environment setup, the helper adds no console bridge when
+an active logs, traces or metrics exporter selects `console`. It preserves the
+operator's SDK exporters and native output. Recheck the selected SDK's list and
+`none` behavior, and any programmatic exporter owner, before adapting this guard.
+Reuse an existing application producer only after proving it does not recapture SDK console output,
+including deferred Resource resolution and direct SDK emission where selected.
+Some supported SDK/bridge pairs turn that output into extra LogRecords despite
+a synchronous recursion guard. If no compatible producer is established, keep
+the console-to-OTLP path `Not configured` or unsupported; processor construction
+does not establish delivery. Do not remove the operator's console member to
+hide the incompatibility. When no SDK console exporter is active, the normal OTLP path still needs
+exactly one supported detected application bridge, reusing an existing owner
+when present.
+
+Both processor constructors above use an options object containing
+`{ exporter }`. Check each resolved `@opentelemetry/sdk-logs` public constructor
+before copying it; if the constrained API accepts the exporter directly,
+use that processor's documented signature instead.
 Verify batching, resource/context ownership, and protocol compatibility with
 the resolved Node SDK and exporter. Do not change dependencies solely to copy
 the example signature.
@@ -437,12 +517,28 @@ do not combine Pino instrumentation sending with
 already uses one of those transports, keep it as the single owner and do not
 add instrumentation log sending.
 
-The explicit `exportIntervalMillis` and `exportTimeoutMillis` are required for
-local and eval runs. Do not rely on metric reader defaults; they can be too slow
-for short-lived runtime checks, causing valid HTTP metrics to never reach the
-collector before the process stops. Keep the timeout less than or equal to the
-interval; the Node SDK rejects configurations such as interval `1000` ms with
-the default timeout `30000` ms.
+Leave trace exporters and metric readers to the selected `NodeSDK` environment
+configuration unless an existing supported integration owns them. This preserves
+exporter selection, signal/generic protocol precedence, and SDK timing parsing,
+fallbacks and timeout clamping. The short-run profile below supplies timing
+defaults only when absent; these are application launch policy, not SDK defaults.
+When this native path owns metrics, set `OTEL_METRICS_EXPORTER=otlp` only if
+absent before SDK construction. Some compatible releases create no metric
+reader without that setting. Preserve explicit values, including `none` and
+empty text, and verify the selected SDK actually registers the expected reader.
+
+The explicit local-log processor is needed to isolate logs-only constructor
+failures and bind the approved local URL. Verify its public options and the
+selected SDK's BLRP reader before using the small adapter above. Use this mapping
+only when native logger setup uses the public numeric getter plus positive-value
+validation for all four BLRP fields, and the processor constructor itself does
+not read the environment. The adapter preserves fractions and SDK fallback
+behavior without importing internal helpers.
+Unsupported exporter spellings remain unchanged for the native SDK to handle.
+Protocol selection uses the public SDK string reader and its signal/generic
+precedence, preserving case and trimming the selected protocol. The added local
+branch accepts only `http/protobuf`; unsupported spellings skip that branch with
+its diagnostic, even if the native SDK would warn and choose a fallback.
 
 ### Loading the SDK
 
@@ -473,6 +569,7 @@ If the repo already uses `npm run start`, `npm run dev`, `tsx`, `ts-node`, or `n
 If the project already runs in Docker:
 ```dockerfile
 ENV OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+ENV OTEL_METRICS_EXPORTER=otlp
 ENV OTEL_LOGS_EXPORTER=otlp
 ENV OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://otel-collector:4318/v1/logs
 CMD ["node", "--require", "./instrumentation.js", "app.js"]
@@ -516,8 +613,8 @@ async function processOrder(orderId: string): Promise<Order> {
 Before adding a custom counter or histogram for an outcome that happens
 inside a request `@opentelemetry/instrumentation-http` already covers,
 check whether it belongs as an attribute on `http.server.request.duration`
-instead — see `../../otel-instrument/SKILL.md` `#### Implementation Rules` and the
-`Node.js:` entry under `#### Language-Specific Musts`. The instrumentation
+instead. When implementing a change, also follow the loaded instrumentation
+skill's Implementation Rules and Node.js Language-Specific Musts. The instrumentation
 already sets `http.response.status_code` on that metric from the response
 for every request with no extra code, but it does not set `error.type` from
 a failing status: that attribute is reserved there for a lower-level
@@ -588,12 +685,13 @@ not fixed-port equality checks.
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | resolved local receiver; fallback `http://127.0.0.1:4318` | OTLP HTTP endpoint; preserve a configured non-default port |
-| `OTEL_EXPORTER_OTLP_HEADERS` | unset | Move cloud credentials to trace/metric signal headers and remove this generic value before enabling the Splunk Observability Studio-owned local log path, even when logs headers are set |
-| `OTEL_LOGS_EXPORTER` | `otlp` only when the logs endpoint is absent or preflight-classified local | `none` disables the added local log pipeline; another explicit value remains operator-owned |
+| `OTEL_EXPORTER_OTLP_HEADERS` | unset | Nonempty generic headers skip the added local OTLP member, even when logs headers are set; retain the original setting for traces and metrics |
+| `OTEL_LOGS_EXPORTER` | `otlp` only when the logs endpoint is absent or preflight-classified local | Any native `none` member disables logs; every OTLP member is guarded, and other members remain operator-owned |
 | `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | resolved local receiver; fallback `http://127.0.0.1:4318/v1/logs` | Signal-specific local application-log destination |
 | `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` | `http/protobuf` for the shown local baseline | Select a matching official exporter for another explicit protocol |
-| `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset or empty | Non-empty log headers disable this added local log pipeline so the exporter cannot inherit credentials |
-| `OTEL_SERVICE_NAME` | (must be set) | Service identity in telemetry |
+| `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset | Preserve supplied signal-specific local log headers for official SDK parsing; they do not waive the generic-header conflict |
+| `OTEL_SERVICE_NAME` | unset | Optional service-name override; preserve identity supplied through resource attributes or the active resource configuration |
+| `OTEL_METRICS_EXPORTER` | `otlp` only when absent in the native-reader launch profile | Explicit values remain operator-owned |
 | `OTEL_METRIC_EXPORT_INTERVAL` | `60000` | Metric export interval (ms) |
 | `OTEL_METRIC_EXPORT_TIMEOUT` | `30000` | Metric export timeout (ms) |
 | `OTEL_BSP_SCHEDULE_DELAY` | `5000` | Span batch export delay (ms) |
@@ -601,25 +699,27 @@ not fixed-port equality checks.
 For local development with Splunk Observability Studio, replace the conventional
 fallback port below with the resolved receiver port when it differs:
 
-    OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
-    OTEL_LOGS_EXPORTER=otlp
-    OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:4318/v1/logs
-    OTEL_METRIC_EXPORT_INTERVAL=1000
-    OTEL_METRIC_EXPORT_TIMEOUT=500
-    OTEL_BSP_SCHEDULE_DELAY=100
+    export OTEL_EXPORTER_OTLP_ENDPOINT="${OTEL_EXPORTER_OTLP_ENDPOINT-http://127.0.0.1:4318}"
+    export OTEL_METRICS_EXPORTER="${OTEL_METRICS_EXPORTER-otlp}"
+    export OTEL_LOGS_EXPORTER="${OTEL_LOGS_EXPORTER-otlp}"
+    export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT="${OTEL_EXPORTER_OTLP_LOGS_ENDPOINT-http://127.0.0.1:4318/v1/logs}"
+    export OTEL_METRIC_EXPORT_INTERVAL="${OTEL_METRIC_EXPORT_INTERVAL-1000}"
+    export OTEL_METRIC_EXPORT_TIMEOUT="${OTEL_METRIC_EXPORT_TIMEOUT-500}"
+    export OTEL_BSP_SCHEDULE_DELAY="${OTEL_BSP_SCHEDULE_DELAY-100}"
 
-When creating `PeriodicExportingMetricReader`, pass
-`exportIntervalMillis: Number(process.env.OTEL_METRIC_EXPORT_INTERVAL || 1000)`
-and `exportTimeoutMillis: Number(process.env.OTEL_METRIC_EXPORT_TIMEOUT || 500)`.
-This makes HTTP metrics from `@opentelemetry/instrumentation-http`, including
-`http.server.request.duration` when stable HTTP semantic conventions are
-enabled, export promptly to Splunk Observability Studio.
+Export these absent-only defaults before the normal application entrypoint;
+preserve present values, including empty, fractional and invalid text, for the
+SDK's actual reader. The absent-only short-run defaults let native metric
+configuration export HTTP metrics promptly, including
+`http.server.request.duration` from `@opentelemetry/instrumentation-http` when
+stable HTTP semantic conventions are enabled. Explicit settings retain their
+SDK-defined behavior.
 
 ### Local Splunk Observability Studio application logs and cloud boundary
 
 Local OTLP application logs are the default for a detected supported Node.js
-logging stack only when the exporter is absent/`otlp` and the logs endpoint is
-absent or preflight-classified as the local Splunk Observability Studio receiver. `none` omits the added
+logging stack only when the SDK's exporter list selects OTLP and the logs endpoint is
+absent or preflight-classified as the local Splunk Observability Studio receiver. A native `none` member omits the added
 processor and bridge while the original console/file destination continues;
 another non-OTLP exporter remains operator-owned and its endpoint is not
 interpreted. When traces or metrics use direct-cloud signal endpoints, keep
@@ -628,18 +728,21 @@ access token, generic cloud header, cloud exporter, or forwarding flag into log
 configuration. Classify an explicit signal-specific endpoint during
 instrumentation preflight; if approved, preserve it as operator configuration
 and let it win at runtime. Report a source-proven non-local value as the
-cloud-boundary conflict before applying this pattern. Reject non-empty generic
-and signal-specific log headers on the added local branch; the exporter may read
-either source from the environment. Move cloud credentials to trace/metric
-signal variables and remove the log header setting. Splunk Observability Studio cloud
+cloud-boundary conflict before applying this pattern. Reject nonempty generic
+OTLP headers on the added local branch. Move cloud credentials to trace/metric
+signal variables and remove the generic setting only through explicitly
+authorized operator preflight, never application-startup migration; preserve operator-owned
+signal-specific local log headers for official SDK parsing. Splunk Observability Studio cloud
 forwarding remains traces and metrics only.
 
 Verify one sanitized record at each required severity both outside and inside
 an active span. Assert body/category, severity, shared `service.name`,
 trace/span IDs when active, presence in the original console/file sink, one
-record in Splunk Observability Studio, and zero OTLP records under `OTEL_LOGS_EXPORTER=none`.
+received record on a healthy path in Splunk Observability Studio, and zero OTLP records under `OTEL_LOGS_EXPORTER=none`.
 That record-count assertion is required for Console, Pino, and Winston because
 their transport/instrumentation combinations can otherwise duplicate logs.
+In fault/retry scenarios distinguish transport copies from SDK emission and
+bridge ownership; an unavailable receiver can receive zero records.
 
 ---
 
@@ -653,6 +756,72 @@ Auto-instrumented via `@opentelemetry/instrumentation-fastify`. Hooks and handle
 
 ### Database Clients
 Auto-instrumented: `pg`, `mysql2`, `mongodb`, `redis`, `ioredis` -- all included in the auto-instrumentations package.
+
+---
+
+## Logging Readiness Checks
+
+Apply the [common logging rules](../logging-readiness.md) to the detected Node.js
+logger, bridge, SDK and startup path. Preserve the existing provider, resource,
+transports and collection owner. Setup recipes elsewhere in this guide are
+conditional examples, not requirements to use their framework or constructor.
+
+### Context and asynchronous work
+
+Inspect propagation through the application's actual promises, callbacks,
+event listeners and logging queues. Registration during a request does not by
+itself prove later callback context. Reuse verified propagation; use a supported
+binding mechanism only where the detected path needs it. Derive expected log
+context from the active SDK/bridge context and verify its ancestry to the right
+request instead of requiring a particular framework span kind.
+
+Exercise the owned handoff with real SDK spans and exact worker/callback log
+joins. For selected restoration checks, let an error escape the context boundary
+and inspect state after the caller handles it. Check each reused callback's
+actual log context rather than only call count. Where cancellation exists or is
+selected as a focused capability test, cancel real scheduled work and inspect
+both suppressed output and the next callback's own context. Do not add business
+cancellation merely to test logging.
+
+### Record mapping and privacy
+
+Verify the installed bridge's actual severity text/casing, structured-value
+conversion and timestamp representation. JavaScript number precision must not
+silently corrupt high-resolution time or identifiers; preserve the supported
+source representation and test the actual export path.
+
+Trace framework/native diagnostics through their producer and final renderer.
+Choose a supported hook at the policy-required boundary, preserving permitted
+category, effective level, native output and application responses. Account for
+subsequent renderers and already-committed responses. Replay exposed inputs under
+the normal enabled bootstrap; a different launch profile or an OTLP-only sanitizer
+does not prove an earlier native capture boundary.
+
+### Configuration, faults and lifecycle
+
+Resolve the installed SDK's public constructors, option shapes, units, effective
+defaults and forwarding into the active provider. Verify concrete repair proposals
+against that path rather than assuming a signature from another release. Preserve
+operator settings and verify resource/configuration through actual startup,
+including values reintroduced by loaded profiles.
+
+Follow final options composition into the active provider. A branch selecting
+explicit processors does not prove that later object spreads or shared builders
+skip environment-derived limits. Separate focused configuration/structured-value
+checks from normal-launch application proof when they exercise different paths.
+
+For an exporter fault, keep the application's real SDK/bootstrap and native call
+sites while proving progress and continued operation of other configured signals.
+Use an owned destination or supported isolated application-test seam; never stop
+a shared receiver or weaken production destination checks to enable a test.
+Retain the actual boundary and unresolved capability when no safe seam exists.
+
+Verify the existing repeated-stop policy while drain is active, with observable
+event ordering where required. Keep final-record receipt, stop handling and
+shutdown evidence on the same configured path. Route SDK diagnostics independently
+so they cannot recursively enter the application's log bridge. Apply the common
+per-batch acknowledgement, deadline and evidence rules without inferring them
+from a passing suite or configuration alone.
 
 ---
 
@@ -673,14 +842,12 @@ Auto-instrumented: `pg`, `mysql2`, `mongodb`, `redis`, `ioredis` -- all included
 - **One logging bridge**: choose Console, Pino, or Winston based on the actual
   logging calls. Do not add multiple bridges to the same record path, and do
   not pair instrumentation-managed sending with a second OTel transport.
-- **Metric reader option**: Use the `NodeSDK` option `metricReader` exactly as
-  shown above. Do not write `metricReaders` unless the installed SDK version
-  documents that option; older versions ignore it and fall back to env-based
-  reader setup.
-- **Metric export interval and timeout**: Always set `exportIntervalMillis` and
-  `exportTimeoutMillis` on `PeriodicExportingMetricReader`. Environment
-  variables alone are not enough when constructing the reader manually, and the
-  timeout must be less than or equal to the interval.
+- **Metric reader ownership**: Prefer the native `NodeSDK` environment path.
+  If an existing integration needs an explicit reader, use the public option
+  documented by that installed release (`metricReaders` or legacy `metricReader`)
+  and verify its constructor separately. A direct
+  `PeriodicExportingMetricReader` constructor may not read environment variables;
+  its defaults and timeout checks differ from the SDK environment wrapper.
 - **Avoid `@opentelemetry/auto-instrumentations-node`**: This meta-package
   installs every instrumentation. Only install what the project uses to
   minimize dependency surface.

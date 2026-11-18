@@ -387,19 +387,8 @@ def test_all_language_guides_define_local_logs_and_cloud_boundary() -> None:
             assert term in guide, f"{filename} is missing {term!r}"
 
 
-def test_language_guides_reject_generic_cloud_header_inheritance() -> None:
-    for filename in ('node.md',):
-        guide = _normalized(LANGUAGES / filename)
-        for term in ('OTEL_EXPORTER_OTLP_HEADERS', 'OTEL_EXPORTER_OTLP_LOGS_HEADERS', 'OTEL_EXPORTER_OTLP_LOGS_PROTOCOL', 'select the official exporter matching'):
-            assert term in guide, f'{filename} is missing {term!r}'
-        remediation = 'move generic OTLP headers to trace/metric signal variables'
-        assert remediation in guide, f'{filename} is missing {remediation!r}'
 
 
-def test_language_guides_inherit_compatible_generic_nondefault_receiver() -> None:
-    node = _read(LANGUAGES / 'node.md')
-    assert 'If a generic receiver supplied the local URL during\npreflight' in node
-    assert 'localLogsEndpointFromGeneric' not in node
 
 
 def test_complete_go_setup_has_no_unreferenced_imports() -> None:
@@ -1219,91 +1208,67 @@ def test_node_shutdown_drains_before_flushing_telemetry(tmp_path: Path) -> None:
     assert stalled.stdout == ""
 
 
-def test_node_non_otlp_exporters_never_add_obstudio_console_bridge() -> None:
-    node = _read(LANGUAGES / "node.md")
-    operator_owned_branch = node.split(
-        "if (configured && configured !== 'otlp') {",
-        1,
-    )[1].split("const protocol", 1)[0]
-
-    assert "logRecordProcessors: undefined" in operator_owned_branch
-    assert "logInstrumentations: []" in operator_owned_branch
-    assert "suppressAutoLogs: false" in operator_owned_branch
-    assert "configured !== 'none'" not in operator_owned_branch
-    assert "...logInstrumentations" in node
-    assert "logInstrumentations: [new ConsoleInstrumentation()]" in node
 
 
-def test_node_local_logs_require_preflight_match_and_fail_closed() -> None:
-    node = _read(LANGUAGES / "node.md")
-    normalized = _normalized(LANGUAGES / "node.md")
-    assert "A logs-only endpoint, header, or protocol" in normalized
-    assert "including in JavaScript translations" in normalized
-    assert "Never turn a log-only protocol conflict into a process-wide exception" in normalized
-    assert "Do not change `OTEL_LOGS_EXPORTER`, the logs endpoint, or the logs protocol" in normalized
-    helper = node.split("function defaultLocalLogConfiguration() {", 1)[1].split(
-        "const originalLogsExporter = process.env.OTEL_LOGS_EXPORTER;", 1
-    )[0]
-
-    assert "explicitLogsEndpoint !== PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT" in helper
-    assert "url: PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT" in helper
-    assert "OTEL_EXPORTER_OTLP_ENDPOINT?.trim()" not in helper
-    assert "process.env.OTEL_EXPORTER_OTLP_HEADERS?.trim()" in helper
-    assert "process.env.OTEL_EXPORTER_OTLP_LOGS_HEADERS?.trim()" in helper
-    assert "new BatchLogRecordProcessor({ exporter })" in helper
-    assert "logInstrumentations: [new ConsoleInstrumentation()]" in helper
-    assert "} catch {" in helper
-    assert "logRecordProcessors: undefined" in helper.split("} catch {", 1)[1]
-    assert "logInstrumentations: []" in helper.split("} catch {", 1)[1]
-    assert "suppressAutoLogs: true" in helper.split("} catch {", 1)[1]
-    assert "reportLocalLogSkip();" in helper.split("} catch {", 1)[1]
-    assert "process.stderr.write(" in node.split("function reportLocalLogSkip()", 1)[1]
-    assert "error.message" not in helper
-    assert "process.env.OTEL_LOGS_EXPORTER =" not in helper
-    assert "process.env.OTEL_LOGS_EXPORTER ||=" not in helper
-    assert "process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT =" not in helper
-    assert "process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT ||=" not in helper
-    assert "process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL =" not in helper
-    assert "process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL ||=" not in helper
-    assert "const originalLogsExporter = process.env.OTEL_LOGS_EXPORTER;" in node
-
-    sdk_integration = node.split("let sdk: NodeSDK;", 1)[1].split("sdk.start();", 1)[0]
-    assert "if (logRecordProcessors?.length) {\n  try {" in sdk_integration
-    assert "sdk = new NodeSDK({" in sdk_integration
-    assert "...base.instrumentations, ...logInstrumentations" in sdk_integration
-    assert "} catch {" in sdk_integration
-    assert "reportLocalLogSkip();" in sdk_integration.split("} catch {", 1)[1]
-    assert "const base = baseSdkOptions();" in node
-    assert sdk_integration.count("sdk = new NodeSDK(base);") == 2
-    assert "suppressAutoLogs = true;" in sdk_integration
-    assert "if (suppressAutoLogs) process.env.OTEL_LOGS_EXPORTER = 'none';" in node
-    assert "delete process.env.OTEL_LOGS_EXPORTER" in node
 
 
-def test_node_log_only_failures_keep_trace_metric_startup() -> None:
+@pytest.mark.parametrize("log_setup_phase", ["constructor", "start"])
+def test_node_log_only_failures_keep_trace_metric_startup(log_setup_phase) -> None:
     setup = _fenced_code_after(
         LANGUAGES / "node.md", "**File**: `instrumentation.ts`", "typescript"
     )
     source = "const PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT" + setup.split(
         "const PREFLIGHT_APPROVED_LOCAL_LOGS_ENDPOINT", 1
     )[1].split("let shutdownPromise", 1)[0]
-    source = source.replace("let sdk: NodeSDK;", "let sdk;")
+    source = source.replace("let sdk: NodeSDK;", "let sdk;").replace(
+        "function positiveSdkNumberFromEnv(name: string): number | undefined",
+        "function positiveSdkNumberFromEnv(name)",
+    ).replace(
+        "const logRecordProcessors: LogRecordProcessor[]", "const logRecordProcessors",
+    )
     stubs = """
 const counts = { trace: 0, metric: 0 };
+const activeBridges = new Set();
+const originalOtelEnvironment = Object.fromEntries(
+  Object.entries(process.env).filter(([name]) => name.startsWith('OTEL_')),
+);
+const diag = { warn: () => {} };
+function getStringFromEnv(name) {
+  const raw = process.env[name];
+  return raw == null || raw.trim() === '' ? undefined : raw;
+}
+function getNumberFromEnv(name) {
+  const raw = process.env[name];
+  if (raw == null || raw.trim() === '') return undefined;
+  const value = Number(raw);
+  return isNaN(value) ? undefined : value;
+}
 function resourceFromAttributes(attributes) { return attributes; }
-class OTLPTraceExporter { constructor() { counts.trace++; } }
-class OTLPMetricExporter { constructor() { counts.metric++; } }
-class PeriodicExportingMetricReader { constructor() {} }
+function getStringListFromEnv(name) {
+  return getStringFromEnv(name)?.split(',').map(value => value.trim()).filter(Boolean);
+}
 class HttpInstrumentation {}
 class ExpressInstrumentation {}
 class OTLPLogExporter {
-  constructor() { if (process.env.FAIL_LOG_CONSTRUCTOR === 'exporter') throw Error('secret'); }
+  constructor() {
+    if (process.env.FAIL_LOG_CONSTRUCTOR === 'exporter') throw Error('secret');
+    this.kind = 'otlp';
+  }
 }
 class BatchLogRecordProcessor {
-  constructor() { if (process.env.FAIL_LOG_CONSTRUCTOR === 'processor') throw Error('secret'); }
+  constructor(options) {
+    if (process.env.FAIL_LOG_CONSTRUCTOR === 'processor') throw Error('secret');
+    this.kind = options.exporter.kind;
+  }
 }
+class ConsoleLogRecordExporter { constructor() { this.kind = 'console'; } }
+class SimpleLogRecordProcessor { constructor(options) { this.kind = options.exporter.kind; } }
 class ConsoleInstrumentation {
-  constructor() { if (process.env.FAIL_LOG_CONSTRUCTOR === 'bridge') throw Error('secret'); }
+  constructor() {
+    if (process.env.FAIL_LOG_CONSTRUCTOR === 'bridge') throw Error('secret');
+    activeBridges.add(this);
+  }
+  disable() { activeBridges.delete(this); }
 }
 class NodeSDK {
   constructor(options) {
@@ -1311,38 +1276,74 @@ class NodeSDK {
       throw Error('secret');
     }
     this.options = options;
+    if (LOG_SETUP_PHASE === 'constructor') this.readLogConfiguration();
+    if (process.env.FAIL_SDK === 'constructor') {
+      throw Error('base SDK failed');
+    }
+    counts.trace++;
+    counts.metric++;
+  }
+  readLogConfiguration() {
+    this.autoExporter = this.options.logRecordProcessors
+      ? null : (process.env.OTEL_LOGS_EXPORTER || 'otlp');
   }
   start() {
+    globalThis.sdkStartCalls = (globalThis.sdkStartCalls || 0) + 1;
+    if (LOG_SETUP_PHASE === 'start') this.readLogConfiguration();
+    if (process.env.FAIL_SDK === 'start') throw Error('SDK startup failed');
     globalThis.startResult = {
       localLogs: !!this.options.logRecordProcessors,
       logOption: Object.hasOwn(this.options, 'logRecordProcessors'),
-      autoExporter: this.options.logRecordProcessors
-        ? null : (process.env.OTEL_LOGS_EXPORTER || 'otlp'),
+      autoExporter: this.autoExporter,
       trace: counts.trace,
       metric: counts.metric,
+      processorKinds: (this.options.logRecordProcessors || []).map(processor => processor.kind),
+      addedBridges: activeBridges.size,
     };
   }
 }
 """
     env = os.environ.copy()
-    for name in (
-        "OTEL_LOGS_EXPORTER",
-        "OTEL_EXPORTER_OTLP_ENDPOINT",
-        "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
-        "OTEL_EXPORTER_OTLP_HEADERS",
-        "OTEL_EXPORTER_OTLP_LOGS_HEADERS",
-        "FAIL_LOG_CONSTRUCTOR",
-    ):
-        env.pop(name, None)
+    for name in tuple(env):
+        if name.startswith("OTEL_") or name in {"FAIL_LOG_CONSTRUCTOR", "FAIL_SDK"}:
+            env.pop(name, None)
 
     cases = [
         ({"OTEL_EXPORTER_OTLP_HEADERS": "", "OTEL_EXPORTER_OTLP_LOGS_HEADERS": "  "}, True, None, False),
         ({"OTEL_LOGS_EXPORTER": "none"}, False, "none", False),
         ({"OTEL_LOGS_EXPORTER": "console"}, False, "console", False),
         ({"OTEL_EXPORTER_OTLP_HEADERS": "token=secret"}, False, "none", True),
-        ({"OTEL_EXPORTER_OTLP_LOGS_HEADERS": "token=secret"}, False, "none", True),
+        ({"OTEL_EXPORTER_OTLP_LOGS_HEADERS": "token=secret"}, True, None, False),
         ({"OTEL_EXPORTER_OTLP_PROTOCOL": "grpc"}, False, "none", True),
         ({"OTEL_LOGS_EXPORTER": "otlp", "OTEL_EXPORTER_OTLP_HEADERS": "token=secret"}, False, "none", True),
+        ({"OTEL_LOGS_EXPORTER": "otlp,otlp"}, True, None, False),
+        ({"OTEL_LOGS_EXPORTER": " otlp , otlp "}, True, None, False),
+        ({"OTEL_LOGS_EXPORTER": " , , "}, True, None, False),
+        ({"OTEL_LOGS_EXPORTER": "none,otlp"}, False, "none,otlp", False),
+        ({"OTEL_LOGS_EXPORTER": "otlp,none,console"}, False, "otlp,none,console", False),
+        ({"OTEL_LOGS_EXPORTER": "OTLP"}, False, "OTLP", False),
+        ({"OTEL_LOGS_EXPORTER": "bogus"}, False, "bogus", False),
+        ({"OTEL_TRACES_EXPORTER": "console"}, True, None, False, ["otlp"], 0),
+        ({"OTEL_METRICS_EXPORTER": "console"}, True, None, False, ["otlp"], 0),
+        ({"OTEL_TRACES_EXPORTER": " otlp , console , console "}, True, None, False, ["otlp"], 0),
+        ({"OTEL_METRICS_EXPORTER": "otlp,,console"}, True, None, False, ["otlp"], 0),
+        ({"OTEL_TRACES_EXPORTER": "none,console"}, True, None, False),
+        ({"OTEL_TRACES_EXPORTER": "console,none"}, True, None, False),
+        ({"OTEL_METRICS_EXPORTER": "none,console"}, True, None, False),
+        ({"OTEL_TRACES_EXPORTER": "CONSOLE"}, True, None, False),
+        ({"OTEL_METRICS_EXPORTER": ""}, True, None, False),
+        ({"OTEL_LOGS_EXPORTER": "otlp,console"}, True, None, False, ["otlp", "console"], 0),
+        ({"OTEL_LOGS_EXPORTER": "console,otlp"}, True, None, False, ["console", "otlp"], 0),
+        ({"OTEL_LOGS_EXPORTER": "otlp,,console,otlp"}, True, None, False, ["otlp", "console"], 0),
+        ({"OTEL_LOGS_EXPORTER": "otlp,bogus"}, True, None, False),
+        ({"OTEL_LOGS_EXPORTER": "otlp,otlp", "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://127.0.0.1:9999/v1/logs"}, False, "none", True),
+        ({"OTEL_LOGS_EXPORTER": "otlp,console", "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://127.0.0.1:9999/v1/logs"}, False, "console", True),
+        ({"OTEL_LOGS_EXPORTER": "otlp,console", "OTEL_EXPORTER_OTLP_HEADERS": "token=secret"}, False, "console", True),
+        ({"OTEL_LOGS_EXPORTER": "otlp,console", "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL": "grpc"}, False, "console", True),
+        ({"OTEL_LOGS_EXPORTER": " bogus , otlp , console ", "OTEL_EXPORTER_OTLP_HEADERS": "token=secret"}, False, "bogus,console", True),
+        ({"OTEL_LOGS_EXPORTER": "otlp,console", "FAIL_LOG_CONSTRUCTOR": "exporter"}, False, "console", True),
+        ({"OTEL_LOGS_EXPORTER": "otlp,console", "FAIL_LOG_CONSTRUCTOR": "processor"}, False, "console", True),
+        ({"OTEL_LOGS_EXPORTER": "otlp,console", "FAIL_LOG_CONSTRUCTOR": "sdk"}, False, "console", True),
     ]
     cases.extend(
         ({"FAIL_LOG_CONSTRUCTOR": name}, False, "none", True)
@@ -1351,9 +1352,20 @@ class NodeSDK {
     cases.append(
         ({"FAIL_LOG_CONSTRUCTOR": "exporter", "OTEL_LOGS_EXPORTER": "otlp"}, False, "none", True)
     )
-    for overrides, logs_enabled, auto_exporter, diagnostic in cases:
+    report = """
+const currentOtelEnvironment = Object.fromEntries(
+  Object.entries(process.env).filter(([name]) => name.startsWith('OTEL_')),
+);
+console.log(JSON.stringify({
+  ...globalThis.startResult,
+  restored: process.env.OTEL_LOGS_EXPORTER ?? null,
+  environmentPreserved: JSON.stringify(originalOtelEnvironment) === JSON.stringify(currentOtelEnvironment),
+}));
+"""
+    for overrides, logs_enabled, auto_exporter, diagnostic, *ownership in cases:
+        processors, bridges = ownership or (["otlp"] if logs_enabled else [], int(logs_enabled))
         result = subprocess.run(
-            ["node", "-e", stubs + source + "console.log(JSON.stringify({ ...globalThis.startResult, restored: process.env.OTEL_LOGS_EXPORTER ?? null }));"],
+            ["node", "-e", "const LOG_SETUP_PHASE = " + json.dumps(log_setup_phase) + ";\n" + stubs + source + report],
             env={**env, **overrides},
             text=True,
             capture_output=True,
@@ -1366,11 +1378,33 @@ class NodeSDK {
             "trace": 1,
             "metric": 1,
             "restored": overrides.get("OTEL_LOGS_EXPORTER"),
+            "processorKinds": processors,
+            "addedBridges": bridges,
+            "environmentPreserved": True,
         }
         assert result.stderr == (
             "OTel local log pipeline skipped; trace and metric startup continues.\n"
             if diagnostic else ""
         )
+
+    for failure in ("constructor", "start"):
+        for original in (None, "", "otlp", "otlp,console", "none,otlp", " , , "):
+            for conflict in (False, True):
+                overrides = {"FAIL_SDK": failure}
+                if conflict:
+                    overrides["OTEL_EXPORTER_OTLP_HEADERS"] = "token=secret"
+                if original is not None:
+                    overrides["OTEL_LOGS_EXPORTER"] = original
+                result = subprocess.run(
+                    ["node", "-e", "const LOG_SETUP_PHASE = " + json.dumps(log_setup_phase) + ";\n"
+                     + stubs + "try {\n" + source + "\n} catch (error) {"
+                     + "console.log(JSON.stringify({failed: true, restored: process.env.OTEL_LOGS_EXPORTER ?? null, starts: globalThis.sdkStartCalls || 0, bridges: activeBridges.size}));}"],
+                    env={**env, **overrides}, capture_output=True, text=True, check=True,
+                )
+                assert json.loads(result.stdout) == {
+                    "failed": True, "restored": original,
+                    "starts": int(failure == "start"), "bridges": 0,
+                }
 
 
 def test_audit_nonlocal_log_conflict_is_a_locked_external_dependency() -> None:
@@ -1829,3 +1863,22 @@ def test_java_approved_log_route_preserves_original_vm_options(tmp_path):
                             capture_output=True, text=True, timeout=5, check=True)
     assert "_JAVA_OPTIONS=-Doperator.keep=true\n" in result.stdout
     assert "Local OTLP logs inactive" not in result.stderr
+
+
+@pytest.mark.parametrize("exporter", [None, "none", "", "console"])
+def test_node_local_profile_enables_metrics_without_overriding_operator(exporter) -> None:
+    guide = _read(LANGUAGES / "node.md")
+    profile = guide.split("For local development with Splunk Observability Studio,", 1)[1]
+    exports = "\n".join(
+        line.strip() for line in profile.split("Export these absent-only defaults", 1)[0].splitlines()
+        if line.strip().startswith("export ")
+    )
+    env = {key: value for key, value in os.environ.items() if not key.startswith("OTEL_")}
+    if exporter is not None:
+        env["OTEL_METRICS_EXPORTER"] = exporter
+    result = subprocess.run(
+        ["/bin/sh", "-c", exports + '\nprintenv OTEL_METRICS_EXPORTER'],
+        env=env, capture_output=True, text=True,
+    )
+    assert result.returncode == 0
+    assert result.stdout == ("otlp" if exporter is None else exporter) + "\n"

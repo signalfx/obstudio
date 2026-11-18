@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-instrument |
-| Run ID | 20261118T122005179897Z |
+| Run ID | 20261118T163338351859Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -39,6 +39,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | java/springboot-basic/qual/logging-instrument-contract | java/springboot-basic | 3 | evals/java/springboot-basic/eval/qual/logging-instrument-contract.json | 0 | 63 | 0 |
 | node/express-basic/qual/dependency-log-compatibility | node/express-basic | 1 | evals/node/express-basic/eval/qual/dependency-log-compatibility.json | 0 | 6 | 0 |
 | node/express-basic/qual/instrument | node/express-basic | 2 | evals/node/express-basic/eval/qual/instrument.json | 0 | 10 | 0 |
+| node/express-basic/qual/logging-instrument-contract | node/express-basic | 3 | evals/node/express-basic/eval/qual/logging-instrument-contract.json | 0 | 63 | 0 |
 | node/express-basic/runtime/instrument | node/express-basic | 1 | evals/node/express-basic/eval/runtime/instrument.json | 0 | 0 | 2 |
 | python/agent-connection-demo/qual/instrument | python/agent-connection-demo | 1 | evals/python/agent-connection-demo/eval/qual/instrument.json | 0 | 5 | 0 |
 | python/ai-assistant-demo/qual/ao-root-compatibility-instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/ao-root-compatibility-instrument.json | 0 | 8 | 0 |

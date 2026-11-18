@@ -4,6 +4,9 @@
   "description": "Greenfield Express task API -- demo app for obstudio skills",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "node app.js"
   },
