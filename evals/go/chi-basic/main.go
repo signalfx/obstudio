@@ -2,7 +2,10 @@ package main
 
 import (
 	"encoding/json"
+	"log/slog"
+	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"sync"
 
@@ -30,6 +33,7 @@ func main() {
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
+	registerLoggingWorkflow(r)
 
 	r.Get("/tasks", func(w http.ResponseWriter, _ *http.Request) {
 		mu.Lock()
@@ -107,7 +111,26 @@ func main() {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 	})
 
-	http.ListenAndServe(":8000", r)
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8000"
+	}
+	slog.Warn("workflow outside completed")
+	http.ListenAndServe(net.JoinHostPort(os.Getenv("HOST"), port), r)
+}
+
+func registerLoggingWorkflow(r chi.Router) {
+	r.Get("/logging-workflow/{slot:(left|right)}", func(w http.ResponseWriter, req *http.Request) {
+		slot := chi.URLParam(req, "slot")
+		slog.Warn("workflow sync completed " + slot)
+		done := make(chan struct{})
+		go func() {
+			slog.Warn("workflow async completed " + slot)
+			close(done)
+		}()
+		<-done
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	})
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

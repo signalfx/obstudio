@@ -20,7 +20,7 @@
   ],
   "rubric": [
     "Identifies main.go as the entry point.",
-    "Enumerates the HTTP routes: GET /health, GET /tasks, GET /tasks/{id}, POST /tasks, PATCH /tasks/{id}, DELETE /tasks/{id}.",
+    "Rule: List every HTTP route defined by the service.\nExample: Include GET /logging-workflow/{slot:(left|right)} alongside the health and task routes.\nEvidence: Read main.go and report each route's method and path, including its parameter pattern.\nInsufficient evidence: Reusing an older route inventory that omits the worker logging route.",
     "Reports no OTel SDK initialization and no go.opentelemetry.io dependencies.",
     "Calls out missing HTTP server spans, request duration, request rate, error visibility, and OTLP exporter wiring.",
     "Mentions otelhttp or otelchi as the appropriate Go HTTP instrumentation path.",

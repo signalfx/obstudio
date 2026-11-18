@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import warnings
@@ -19,6 +21,39 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 SKILLS = ROOT / "skills"
 LANGUAGES = SKILLS / "otel-instrument" / "references" / "languages"
+
+
+@pytest.mark.parametrize(("service", "filename", "section"), [
+    ("node/express-basic", "node-dependency-log-compatibility.json", "actual_fixture_source"),
+    ("python/flask-basic", "python-cli-launcher-policy-cases.json", "fixture_receipts"),
+], ids=["node", "python"])
+def test_fixture_input_receipts_match_native_sources(service, filename, section) -> None:
+    fixture = ROOT / "evals" / service
+    data = json.loads((fixture / "eval" / "inputs" / filename).read_text())
+    receipts = data[section]["files"] if section == "actual_fixture_source" else data[section]
+    for name, receipt in receipts.items():
+        assert receipt["sha256"] == hashlib.sha256((fixture / name).read_bytes()).hexdigest(), name
+
+
+def test_go_chi_fixture_logging_routes(tmp_path: Path) -> None:
+    go = shutil.which("go")
+    if go is None:
+        pytest.skip("Go is not installed")
+    fixture = ROOT / "evals" / "go" / "chi-basic"
+    before = {name: (fixture / name).read_bytes() if (fixture / name).exists() else None
+              for name in ("go.mod", "go.sum")}
+    modfile = tmp_path / "fixture.mod"
+    modfile.write_bytes(before["go.mod"])
+    if before["go.sum"] is not None:
+        modfile.with_suffix(".sum").write_bytes(before["go.sum"])
+    result = subprocess.run(
+        [go, "test", "-count=1", "-mod=mod", f"-modfile={modfile}", "."],
+        cwd=fixture, env={**os.environ, "GOWORK": "off"},
+        capture_output=True, text=True, timeout=120,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert {name: (fixture / name).read_bytes() if (fixture / name).exists() else None
+            for name in before} == before
 
 
 def _read(path: Path) -> str:

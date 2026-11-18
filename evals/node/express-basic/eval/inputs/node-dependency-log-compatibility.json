@@ -10,7 +10,7 @@
   "actual_fixture_source": {
     "files": {
       "app.js": {
-        "sha256": "e21a658ea62dd0aba6890cb8514a37eb08d10282ae078165473371db042934b5"
+        "sha256": "7dc0b120a9cb78d104c8c5de73f45cc07e44cf1648421d7849daa159326ceaef"
       },
       "package.json": {
         "sha256": "9a6b2e4619c27d59d7911017d38caf37cecc4c5dc0a443b7eabd54ce0c554ae9"
@@ -22,7 +22,7 @@
     "manifest_dependencies": {
       "express": "^5.1.0"
     },
-    "logging_boundary": "app.js POST /tasks calls console.warn(\"runtime request completed\") before HTTP201 response; shutdown logs console.warn(\"runtime shutdown completed\").",
+    "logging_boundary": "app.js POST /tasks calls console.warn(\"runtime request completed\") before HTTP201 response; GET /logging-workflow/:slot accepts left/right and emits console.warn(`workflow sync completed ${slot}`), then setImmediate emits console.warn(`workflow async completed ${slot}`) before the HTTP200 response; startup logs console.warn(\"workflow outside completed\") outside request context; shutdown logs console.warn(\"runtime shutdown completed\").",
     "startup": "Express imported before app creation; new preload is a proposal, not already loaded instrumentation.",
     "missing_source_evidence": [
       "No OpenTelemetry dependency/provider/exporter/bridge in actual source.",
