@@ -426,16 +426,22 @@ it('integration: VSIX contains extension host and top-level webview assets', { t
 				fs.readFileSync(canonicalPath, 'utf8'),
 				`${archivePath} must match its canonical skill`,
 			);
-			for (const script of ['observe_report.py', 'observe_report_core.py', 'observe_report_html.py']) {
+			for (const resource of [
+				'references/scripts/observe_report.py',
+				'references/scripts/observe_report_core.py',
+				'references/scripts/observe_report_html.py',
+				'references/languages/go.md',
+			]) {
 				assert.equal(
-					execFileSync('unzip', ['-p', vsixFile, `${path.posix.dirname(archivePath)}/bundle/references/scripts/${script}`], { encoding: 'utf8' }),
-					fs.readFileSync(path.join(repoRoot, 'skills/references/scripts', script), 'utf8'),
+					execFileSync('unzip', ['-p', vsixFile, `${path.posix.dirname(archivePath)}/bundle/${resource}`], { encoding: 'utf8' }),
+					fs.readFileSync(path.join(repoRoot, 'skills', resource), 'utf8'),
 				);
 			}
 		}
 		for (const resource of [
 			'references/report-flow-contract.md',
 			'otel-instrument/references/languages/go.md',
+			'references/languages/go.md',
 			'otel-audit/scripts/scan_python_otel_topology.py',
 			'splunk-dashboard/references/dashboard-templates.md',
 		]) {

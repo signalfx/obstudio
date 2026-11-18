@@ -86,13 +86,13 @@ def test_incident_reference_prefers_current_resource_semconv_names():
 
 
 def test_java_agent_example_uses_current_environment_attribute():
-    java = _read(SKILLS_DIR / "otel-instrument" / "references" / "languages" / "java.md")
+    java = _read(SKILLS_DIR / "references" / "languages" / "java.md")
     assert "deployment.environment.name=production" in java
     assert "deployment.environment=production" not in java
 
 
 def test_python_auto_instrumentation_example_uses_current_environment_attribute():
-    python = _read(SKILLS_DIR / "otel-instrument" / "references" / "languages" / "python.md")
+    python = _read(SKILLS_DIR / "references" / "languages" / "python.md")
     assert "deployment.environment.name=production" in python
     assert "deployment.environment=production" not in python
 
