@@ -1,3 +1,4 @@
+import * as http from 'node:http';
 import * as net from 'node:net';
 import { performance } from 'node:perf_hooks';
 
@@ -84,4 +85,103 @@ export async function loopbackPortsAreSimultaneouslyAvailable(
 	} finally {
 		await reservations.close();
 	}
+}
+
+export const observerWorkspacePath = '/api/workspace';
+
+export type ObserverWorkspaceRegistration =
+	| { status: 'registered'; name: string }
+	| { status: 'skipped'; reason: string }
+	| { status: 'failed'; reason: string };
+
+// Tells a shared loopback Splunk Observability Studio to read .observe
+// artifacts from this window's workspace. The singleton keeps whichever root it
+// started with, so without this a second window attaches but its Dashboards and
+// Overview tabs keep showing the first repo. Failure only affects that view.
+// `at` lets the observer ignore a registration that arrives after a newer one
+// from another window; the observer keeps one active workspace for every
+// client, so the most recently focused window wins.
+export function registerObserverWorkspace(
+	restBaseUrl: string | undefined,
+	workspaceRoot: string | undefined,
+	timeoutMs = 2_000,
+	at = Date.now(),
+): Promise<ObserverWorkspaceRegistration> {
+	if (!restBaseUrl || !workspaceRoot) {
+		return Promise.resolve({ status: 'skipped', reason: 'no running observer or open workspace folder' });
+	}
+	let target: URL;
+	try {
+		target = new URL(observerWorkspacePath, restBaseUrl);
+	} catch {
+		return Promise.resolve({ status: 'skipped', reason: `invalid observer URL ${restBaseUrl}` });
+	}
+	const hostname = target.hostname.replace(/^\[|\]$/g, '');
+	if (target.protocol !== 'http:' || !(hostname === 'localhost' || isLoopbackAddress(hostname))) {
+		return Promise.resolve({ status: 'skipped', reason: `${target.origin} is not a local observer` });
+	}
+	const body = JSON.stringify({ root: workspaceRoot, at });
+	return new Promise((resolve) => {
+		const request = http.request(target, {
+			method: 'POST',
+			timeout: timeoutMs,
+			headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+		}, (response) => {
+			let text = '';
+			response.setEncoding('utf8');
+			response.on('data', (chunk: string) => {
+				if (text.length < 4096) {
+					text += chunk;
+				}
+			});
+			response.on('end', () => {
+				if (response.statusCode !== 200) {
+					resolve({ status: 'failed', reason: `${target.toString()} returned status ${response.statusCode ?? 'unknown'}` });
+					return;
+				}
+				try {
+					const parsed = JSON.parse(text) as { name?: unknown };
+					resolve({ status: 'registered', name: typeof parsed.name === 'string' ? parsed.name : '' });
+				} catch {
+					resolve({ status: 'failed', reason: `${target.toString()} returned invalid JSON` });
+				}
+			});
+			response.on('error', (error) => resolve({ status: 'failed', reason: error.message }));
+		});
+		request.on('timeout', () => request.destroy(new Error(`timed out after ${timeoutMs}ms`)));
+		request.on('error', (error) => resolve({ status: 'failed', reason: error.message }));
+		request.end(body);
+	});
+}
+
+function isLoopbackAddress(address: string): boolean {
+	return net.isIPv4(address) ? address.startsWith('127.') : address === '::1';
+}
+
+export interface TrailingDebounce {
+	schedule(): void;
+	cancel(): void;
+}
+
+// Runs `run` once `delayMs` after the last schedule(), and not at all if
+// cancel() comes first. Used so rapid window switching registers only the
+// window the user settled on.
+export function createTrailingDebounce(run: () => void, delayMs: number): TrailingDebounce {
+	let timer: NodeJS.Timeout | undefined;
+	const cancel = () => {
+		if (timer !== undefined) {
+			clearTimeout(timer);
+			timer = undefined;
+		}
+	};
+	return {
+		cancel,
+		schedule() {
+			cancel();
+			timer = setTimeout(() => {
+				timer = undefined;
+				run();
+			}, delayMs);
+		},
+	};
 }

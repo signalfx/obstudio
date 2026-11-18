@@ -106,6 +106,7 @@ const allowedGetPaths = new Set([
 	'/api/query/validation/summary',
 	'/api/splunk/export',
 	'/api/splunk/logs',
+	'/api/workspace',
 ]);
 const allowedPostPaths = new Set(['/api/config', '/api/validation/run', '/api/splunk/logs', '/api/splunk/logs/enabled', '/api/splunk/logs/disconnect', '/api/splunk/logs/refresh']);
 

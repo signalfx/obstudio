@@ -24,7 +24,40 @@ function stubFetchOnce(payload: unknown): ReturnType<typeof vi.fn> {
   return fn;
 }
 
+function stubFetchWithWorkspace(preview: unknown, workspace: Promise<unknown>): void {
+  vi.stubGlobal("fetch", vi.fn((url: string) =>
+    String(url).includes("/api/workspace")
+      ? workspace.then((payload) => ({ ok: true, status: 200, statusText: "OK", json: async () => payload }))
+      : Promise.resolve({ ok: true, status: 200, statusText: "OK", json: async () => preview }),
+  ));
+}
+
 describe("DashboardsTab", () => {
+  it("names the workspace it read in the empty state, so an empty tab explains itself", async () => {
+    stubFetchWithWorkspace(
+      makePreviewResponse({ available: false, groups: [], message: "No dashboard preview found at dashboards.preview.json." }),
+      Promise.resolve({ name: "repoB" }),
+    );
+    render(<DashboardsTab />);
+    await waitFor(() => expect(screen.getByText(/Reading from the repoB workspace\./)).toBeTruthy());
+    expect(screen.getByText(/No dashboard preview found at dashboards\.preview\.json\./)).toBeTruthy();
+  });
+
+  it("labels a rendered preview with the workspace it came from", async () => {
+    stubFetchWithWorkspace(makePreviewResponse(), Promise.resolve({ name: "repoB" }));
+    render(<DashboardsTab />);
+    await waitFor(() => expect(screen.getByText("from repoB")).toBeTruthy());
+    expect(screen.getByText("Checkout RED")).toBeTruthy();
+  });
+
+  it("still renders the preview when the workspace name is unavailable", async () => {
+    stubFetchWithWorkspace(makePreviewResponse(), Promise.reject(new Error("404")));
+    render(<DashboardsTab />);
+    await waitFor(() => expect(screen.getByText("Checkout RED")).toBeTruthy());
+    expect(screen.queryByText(/^from /)).toBeNull();
+    expect(screen.queryByText(/Failed to load preview/i)).toBeNull();
+  });
+
   it("uses the app's sans-serif font for the toolbar hints and time window picker", () => {
     const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
     for (const selector of ["dashboards-tab__hint", "dashboards-tab__hint--live", "dashboards-tab__window-select"]) {
@@ -108,11 +141,13 @@ describe("DashboardsTab", () => {
   it("F7: a failing refresh keeps the grid and surfaces the error inline (does not blank the dashboard)", async () => {
     // First fetch succeeds (renders the grid); the next fetch (the Refresh
     // click) rejects. The grid must stay rendered with a small inline error.
-    const fetchFn = vi
+    const previewFetch = vi
       .fn()
       .mockResolvedValueOnce({ ok: true, status: 200, statusText: "OK", json: async () => makePreviewResponse() })
       .mockRejectedValue(new Error("network down"));
-    vi.stubGlobal("fetch", fetchFn);
+    vi.stubGlobal("fetch", (url: string) =>
+      String(url).includes("/api/workspace") ? Promise.reject(new Error("unused")) : previewFetch(url),
+    );
 
     const { container } = render(<DashboardsTab paused />);
 
