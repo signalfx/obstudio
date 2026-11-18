@@ -156,6 +156,39 @@ Direct callers use `run_rubric_dimensions` with separate task/output directories
 and a monotonic deadline; the caller must own and protect the output directory.
 The existing `run_rubric_grade` API and output schema serve non-strict callers.
 
+Direct strict-grading callers can opt into two concurrent groups with
+`run_rubric_dimensions(..., max_workers=2)`. The default remains one group at a
+time; pytest and existing configurations keep that default. Both modes use the
+same prompts, criterion IDs, written evidence requirements, validation, score
+calculation and result order. Each group has its own working and output
+directories. Only the controller publishes `rubric_result.json`, using atomic
+replacement so readers see a complete JSON snapshot.
+
+Concurrent backends must explicitly provide `run_judge_cancellable`, accept a
+shared `cancel_event`, and safely support simultaneous calls and trace parsing.
+They must stop their owned execution before returning after cancellation.
+On POSIX, the Codex backend interrupts its owned process group first so the CLI
+can cancel its tool commands. It allows two seconds for that cleanup before
+escalating to TERM/KILL, including after normal judge exit. Process cleanup can
+add up to 3.2 seconds beyond the shared deadline. Detached processes and an
+uncatchable termination of the controller are outside that boundary.
+Concurrent Codex grading requires a POSIX host; use serial grading on other systems.
+Other backends retain serial support. Both workers share the caller's deadline.
+In concurrent mode, an evidence change invalidates every started group and stops
+further launches. The optional `evidence_changes.json` metadata diagnostic
+is written only in serial mode. Call this mode from the main thread: default
+SIGINT/SIGTERM/SIGHUP handlers record the first stop request. The controller
+checks it before launches and after each wait of at most 50 milliseconds,
+then cancels and waits for owned judges before raising the interruption.
+Repeated default stop signals cannot interrupt that cleanup. Previous handlers
+are restored afterward; custom and ignored handlers remain caller-owned.
+Separate directories and prompts do not provide filesystem read confinement;
+backend read-only enforcement and the caller's output protection still apply.
+Two workers is a per-call limit, so callers must also account for other active
+trials and provider capacity. Compare serial and parallel grading on separately
+labeled frozen evidence before enabling this option for a workload; deterministic
+controller tests do not establish model grading accuracy or a measured speedup.
+
 All groups share the existing `judge_timeout` budget; calls receive the remaining
 whole seconds, with no retries. Backend startup, cleanup and filesystem work can
 exceed that deadline. Fresh judge working directories and prompts separate judge

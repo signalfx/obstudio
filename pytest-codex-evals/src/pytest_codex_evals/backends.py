@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import signal
 import subprocess
 import threading
 import time
@@ -62,6 +63,62 @@ class StreamedCommandResult:
     returncode: int
     stdout: str
     stderr: str
+
+
+def _run_cancellable_judge(
+    cmd: list[str], *, cwd: Path, env: dict[str, str], timeout: int,
+    cancel_event: threading.Event, trace_path: Path, stderr_path: Path,
+) -> subprocess.CompletedProcess:
+    """Own a judge process group and retain diagnostics even during cancellation."""
+    if os.name != "posix":
+        raise ValueError("Concurrent Codex judges currently require POSIX process groups")
+    deadline = time.monotonic() + timeout
+    if cancel_event.is_set():
+        raise RuntimeError("Rubric judge cancelled before launch")
+    with trace_path.open("w", encoding="utf-8") as trace, stderr_path.open("w", encoding="utf-8") as diagnostics:
+        process = subprocess.Popen(
+            cmd, cwd=cwd, env=env, stdout=trace, stderr=diagnostics,
+            stdin=subprocess.DEVNULL, start_new_session=True,
+        )
+        try:
+            while process.poll() is None:
+                if cancel_event.is_set():
+                    raise RuntimeError("Rubric judge cancelled")
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise subprocess.TimeoutExpired(cmd, timeout)
+                cancel_event.wait(min(.05, remaining))
+        finally:
+            # A CLI may leave descendants after its own exit. They belong to this
+            # invocation too, and must not keep writing after results are read.
+            permission_error = None
+            try:
+                # Codex's interrupt handler cancels tool commands in their own
+                # process groups before the CLI exits. TERM alone skips it.
+                for stop_signal, grace_seconds in ((signal.SIGINT, 2.0), (signal.SIGTERM, .2)):
+                    os.killpg(process.pid, stop_signal)
+                    cleanup_deadline = time.monotonic() + grace_seconds
+                    while time.monotonic() < cleanup_deadline:
+                        process.poll()
+                        os.killpg(process.pid, 0)
+                        time.sleep(.01)
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            except PermissionError as exc:
+                # Reap before distinguishing a retired group from a live judge.
+                permission_error = exc
+            finally:
+                try:
+                    process.wait(timeout=1)
+                except subprocess.TimeoutExpired:
+                    if permission_error is not None:
+                        raise permission_error
+                    raise
+    return subprocess.CompletedProcess(
+        cmd, process.returncode, trace_path.read_text(encoding="utf-8"),
+        stderr_path.read_text(encoding="utf-8"),
+    )
 
 
 def run_streamed_command(
@@ -383,6 +440,7 @@ class CodexBackend:
         timeout: int = 900,
         output_dir: Path | None = None,
         read_dirs: tuple[Path, ...] = (),
+        _cancel_event: threading.Event | None = None,
     ) -> AgentResult:
         output_path = (output_dir or exec_dir) / "rubric_grade.json"
         trace_path = (output_dir or exec_dir) / "rubric_trace.jsonl"
@@ -413,14 +471,17 @@ class CodexBackend:
         )
         cmd.append(prompt)
 
-        completed = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            env=_judge_subprocess_env(_codex_subprocess_env(exec_dir)),
-            cwd=exec_dir if output_dir is not None else None,
-        )
+        environment = _judge_subprocess_env(_codex_subprocess_env(exec_dir))
+        if _cancel_event is None:
+            completed = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=timeout,
+                env=environment, cwd=exec_dir if output_dir is not None else None,
+            )
+        else:
+            completed = _run_cancellable_judge(
+                cmd, cwd=exec_dir, env=environment, timeout=timeout,
+                cancel_event=_cancel_event, trace_path=trace_path, stderr_path=stderr_path,
+            )
         trace_path.write_text(completed.stdout, encoding="utf-8")
         stderr_path.write_text(completed.stderr, encoding="utf-8")
 
@@ -450,6 +511,10 @@ class CodexBackend:
             final_message_path=output_path,
             stderr_path=stderr_path,
         )
+
+    def run_judge_cancellable(self, *, cancel_event: threading.Event, **kwargs) -> AgentResult:
+        """Opt in to independent judge calls with bounded process-group cleanup."""
+        return self.run_judge(_cancel_event=cancel_event, **kwargs)
 
     def parse_trace(self, trace_path: Path) -> TraceSummary:
         return parse_trace(trace_path, provider="codex")
