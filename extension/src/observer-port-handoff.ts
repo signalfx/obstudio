@@ -98,10 +98,14 @@ export type ObserverWorkspaceRegistration =
 // artifacts from this window's workspace. The singleton keeps whichever root it
 // started with, so without this a second window attaches but its Dashboards and
 // Overview tabs keep showing the first repo. Failure only affects that view.
+// `at` lets the observer ignore a registration that arrives after a newer one
+// from another window; the observer keeps one active workspace for every
+// client, so the most recently focused window wins.
 export function registerObserverWorkspace(
 	restBaseUrl: string | undefined,
 	workspaceRoot: string | undefined,
 	timeoutMs = 2_000,
+	at = Date.now(),
 ): Promise<ObserverWorkspaceRegistration> {
 	if (!restBaseUrl || !workspaceRoot) {
 		return Promise.resolve({ status: 'skipped', reason: 'no running observer or open workspace folder' });
@@ -116,7 +120,7 @@ export function registerObserverWorkspace(
 	if (target.protocol !== 'http:' || !(hostname === 'localhost' || isLoopbackAddress(hostname))) {
 		return Promise.resolve({ status: 'skipped', reason: `${target.origin} is not a local observer` });
 	}
-	const body = JSON.stringify({ root: workspaceRoot });
+	const body = JSON.stringify({ root: workspaceRoot, at });
 	return new Promise((resolve) => {
 		const request = http.request(target, {
 			method: 'POST',
@@ -152,4 +156,32 @@ export function registerObserverWorkspace(
 
 function isLoopbackAddress(address: string): boolean {
 	return net.isIPv4(address) ? address.startsWith('127.') : address === '::1';
+}
+
+export interface TrailingDebounce {
+	schedule(): void;
+	cancel(): void;
+}
+
+// Runs `run` once `delayMs` after the last schedule(), and not at all if
+// cancel() comes first. Used so rapid window switching registers only the
+// window the user settled on.
+export function createTrailingDebounce(run: () => void, delayMs: number): TrailingDebounce {
+	let timer: NodeJS.Timeout | undefined;
+	const cancel = () => {
+		if (timer !== undefined) {
+			clearTimeout(timer);
+			timer = undefined;
+		}
+	};
+	return {
+		cancel,
+		schedule() {
+			cancel();
+			timer = setTimeout(() => {
+				timer = undefined;
+				run();
+			}, delayMs);
+		},
+	};
 }

@@ -50,6 +50,7 @@ import {
 	stopObserverRun,
 } from './observer-lifecycle';
 import {
+	createTrailingDebounce,
 	loopbackPortsAreSimultaneouslyAvailable,
 	registerObserverWorkspace,
 	uniqueLoopbackPorts,
@@ -196,6 +197,7 @@ const observerAPIVersion = 'v1';
 const extensionManagedObserverOwner = 'vscode-extension';
 const extensionManagedObserverMode = 'managed';
 const sharedObserverStartupWindowMs = 15_000;
+const workspaceFocusDebounceMs = 250;
 const observerCloudRequestTimeoutMs = 15_000;
 const observerShutdownTerminationTimeoutMs = 2_000;
 const observerShutdownPostExitDelayMs = 300;
@@ -461,13 +463,21 @@ export async function activate(context: vscode.ExtensionContext) {
 			logObserverLifecycle(`Splunk Observability Studio configuration restart failed: ${getErrorMessage(error)}`);
 		});
 	}));
-	// The observer is one shared instance, so the focused window decides which
-	// repo's .observe artifacts the Explorer reads.
-	context.subscriptions.push(vscode.window.onDidChangeWindowState((state) => {
-		if (state.focused) {
-			registerWindowWorkspaceWithObserver();
-		}
-	}));
+	// The observer is one shared instance with a single active workspace, so the
+	// window the user settles on decides which repo's .observe artifacts every
+	// Explorer reads. Losing focus cancels a pending registration, so quick
+	// window switching registers only the window that kept focus.
+	const focusRegistration = createTrailingDebounce(registerWindowWorkspaceWithObserver, workspaceFocusDebounceMs);
+	context.subscriptions.push(
+		vscode.window.onDidChangeWindowState((state) => {
+			if (state.focused) {
+				focusRegistration.schedule();
+			} else {
+				focusRegistration.cancel();
+			}
+		}),
+		{ dispose: () => focusRegistration.cancel() },
+	);
 
 	// Status bar item reflects observer state and opens the observer menu.
 	observerStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);

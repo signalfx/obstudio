@@ -110,8 +110,14 @@ func TestRegisterWorkspaceWithRunningObserver(t *testing.T) {
 		if r.Method != http.MethodPost || r.URL.Path != api.WorkspacePath || r.Header.Get("Origin") != "" {
 			t.Errorf("unexpected request %s %s origin=%q", r.Method, r.URL.Path, r.Header.Get("Origin"))
 		}
-		var body struct{ Root string }
+		var body struct {
+			Root string
+			At   int64
+		}
 		_ = json.NewDecoder(r.Body).Decode(&body)
+		if body.At <= 0 {
+			t.Errorf("registration carried at=%d, want a client timestamp so older ones can be ignored", body.At)
+		}
 		got = append(got, body.Root)
 		w.WriteHeader(status)
 	}))

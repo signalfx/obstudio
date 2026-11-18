@@ -748,7 +748,7 @@ func registerWorkspaceWithRunningObserver(baseURL string) error {
 	if err != nil {
 		return err
 	}
-	body, err := json.Marshal(map[string]string{"root": root})
+	body, err := json.Marshal(map[string]any{"root": root, "at": time.Now().UnixMilli()})
 	if err != nil {
 		return err
 	}

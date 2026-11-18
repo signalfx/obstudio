@@ -179,3 +179,72 @@ func TestWorkspaceRegistrationKeepsAbsoluteOverridesPinned(t *testing.T) {
 		t.Fatal("absolute OBSTUDIO_DASHBOARDS_PREVIEW override should stay pinned after registration")
 	}
 }
+
+func postWorkspaceAt(mux *http.ServeMux, root string, at int64) (*httptest.ResponseRecorder, workspaceRegistrationResponse) {
+	body, _ := json.Marshal(map[string]any{"root": root, "at": at})
+	req := httptest.NewRequest(http.MethodPost, WorkspacePath, strings.NewReader(string(body)))
+	req.RemoteAddr = "127.0.0.1:54321"
+	req.Host = "127.0.0.1:17900"
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	var resp workspaceRegistrationResponse
+	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
+	return rec, resp
+}
+
+func TestWorkspaceRegistrationIgnoresOlderTimestamps(t *testing.T) {
+	startup := t.TempDir()
+	repoA := filepath.Join(t.TempDir(), "repoA")
+	repoB := filepath.Join(t.TempDir(), "repoB")
+	for _, dir := range []string{repoA, repoB} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mux := newWorkspaceTestMux(t, dashboards.Config{WorkspaceRoot: startup}, audit.Config{WorkspaceRoot: startup})
+
+	// B was focused later than A, but A's request arrives last.
+	if _, resp := postWorkspaceAt(mux, repoB, 2000); !resp.Applied || resp.Name != "repoB" {
+		t.Fatalf("newer registration = %+v, want applied repoB", resp)
+	}
+	rec, resp := postWorkspaceAt(mux, repoA, 1000)
+	if rec.Code != http.StatusOK || resp.Applied || resp.Name != "repoB" {
+		t.Fatalf("older registration = %d %+v, want 200 ignored and still repoB", rec.Code, resp)
+	}
+	if got := getJSON[workspaceResponse](t, mux, WorkspacePath).Name; got != "repoB" {
+		t.Fatalf("workspace name = %q, want repoB after a stale registration", got)
+	}
+
+	// A registration without a timestamp keeps the arrival-order behavior.
+	if _, resp := postWorkspaceAt(mux, repoA, 0); !resp.Applied || resp.Name != "repoA" {
+		t.Fatalf("untimestamped registration = %+v, want applied repoA", resp)
+	}
+	// The timestamp of the last applied registration still gates later ones.
+	if _, resp := postWorkspaceAt(mux, repoB, 1500); resp.Applied {
+		t.Fatalf("registration older than the recorded timestamp was applied: %+v", resp)
+	}
+}
+
+func TestWorkspaceRegistrationForUnchangedRootKeepsResolvers(t *testing.T) {
+	root := t.TempDir()
+	w := newWorkspaceResolvers(store.New(), dashboards.Config{WorkspaceRoot: root}, audit.Config{WorkspaceRoot: root})
+
+	if _, applied, err := w.setRoot(root, 100); err != nil || !applied {
+		t.Fatalf("setRoot(startup root) = applied %v, err %v", applied, err)
+	}
+	dash, aud := w.dashboards(), w.audit()
+	if _, applied, err := w.setRoot(root+string(filepath.Separator), 200); err != nil || !applied {
+		t.Fatalf("setRoot(same root again) = applied %v, err %v", applied, err)
+	}
+	if w.dashboards() != dash || w.audit() != aud {
+		t.Fatal("unchanged root rebuilt the resolvers, want a no-op")
+	}
+	// The refreshed timestamp still gates an older registration for another root.
+	other := t.TempDir()
+	if _, applied, _ := w.setRoot(other, 150); applied {
+		t.Fatal("registration older than the refreshed timestamp was applied")
+	}
+	if _, applied, _ := w.setRoot(other, 300); !applied || w.dashboards() == dash {
+		t.Fatal("newer registration for a different root should rebuild the resolvers")
+	}
+}

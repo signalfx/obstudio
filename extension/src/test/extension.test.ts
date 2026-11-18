@@ -64,6 +64,7 @@ import { ObserverWebviewTelemetry, webSocketURL } from '../observer-webview-tele
 import {
 	LoopbackPortReservations,
 	loopbackPortsAreSimultaneouslyAvailable,
+	createTrailingDebounce,
 	observerWorkspacePath,
 	registerObserverWorkspace,
 } from '../observer-port-handoff';
@@ -2783,14 +2784,14 @@ test('registerObserverWorkspace posts the window workspace root as a native requ
 		response.writeHead(200, { 'Content-Type': 'application/json' });
 		response.end(JSON.stringify({ name: 'repoB' }));
 	}, async (baseUrl) => {
-		const result = await registerObserverWorkspace(baseUrl, '/work/repoB');
+		const result = await registerObserverWorkspace(baseUrl, '/work/repoB', 2_000, 1234);
 		assert.deepEqual(result, { status: 'registered', name: 'repoB' });
 	});
 	assert.equal(seen.length, 1);
 	assert.equal(seen[0].method, 'POST');
 	assert.equal(seen[0].url, observerWorkspacePath);
 	assert.equal(seen[0].origin, undefined);
-	assert.deepEqual(JSON.parse(seen[0].body), { root: '/work/repoB' });
+	assert.deepEqual(JSON.parse(seen[0].body), { root: '/work/repoB', at: 1234 });
 });
 
 test('registerObserverWorkspace reports a rejected or unreachable observer without throwing', async () => {
@@ -2816,4 +2817,38 @@ test('registerObserverWorkspace skips remote observers and windows without a fol
 	assert.equal((await registerObserverWorkspace('https://127.0.0.1:17900', '/work/repoB')).status, 'skipped');
 	assert.equal((await registerObserverWorkspace('http://127.0.0.1:17900', undefined)).status, 'skipped');
 	assert.equal((await registerObserverWorkspace(undefined, '/work/repoB')).status, 'skipped');
+});
+
+test('registerObserverWorkspace stamps each registration with the current time by default', async () => {
+	let sent = 0;
+	await withWorkspaceServer((body, _request, response) => {
+		sent = (JSON.parse(body) as { at: number }).at;
+		response.writeHead(200, { 'Content-Type': 'application/json' });
+		response.end('{"name":"repoB","applied":true}');
+	}, async (baseUrl) => {
+		const before = Date.now();
+		await registerObserverWorkspace(baseUrl, '/work/repoB');
+		assert.ok(sent >= before && sent <= Date.now(), `at=${sent} should be a current epoch ms timestamp`);
+	});
+});
+
+test('createTrailingDebounce runs once after the last schedule and not after cancel', async () => {
+	const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+	let runs = 0;
+	const debounce = createTrailingDebounce(() => { runs += 1; }, 30);
+
+	debounce.schedule();
+	debounce.schedule();
+	debounce.schedule();
+	await sleep(80);
+	assert.equal(runs, 1, 'rapid schedules collapse into one run');
+
+	debounce.schedule();
+	debounce.cancel();
+	await sleep(80);
+	assert.equal(runs, 1, 'a cancelled schedule never runs');
+
+	debounce.schedule();
+	await sleep(80);
+	assert.equal(runs, 2, 'it can be used again after a cancel');
 });
