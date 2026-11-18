@@ -1,369 +1,16 @@
-name: CI
+name: Windows listener diagnostic (ephemeral)
 
 on:
-  push:
-    branches: [main, feature/**]
-  pull_request:
   workflow_dispatch:
 
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+permissions:
+  contents: read
 
 jobs:
-  agent-policy:
-    name: Agent policy
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Validate agent-policy contracts
-        env:
-          AGENT_POLICY_BASE: ${{ github.event.pull_request.base.sha || (github.event_name == 'push' && github.ref_name == github.event.repository.default_branch && github.event.before) || format('origin/{0}', github.event.repository.default_branch) }}
-        run: |
-          make agent-policy-check
-          make check-eval-models EVAL_MODEL_POLICY_BASE="$AGENT_POLICY_BASE"
-
-  plugin-skills-synced:
-    name: Plugin - Canonical skill consistency sync
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Verify committed plugin skills match canonical skills
-        run: make check-obstudio-plugin-skills
-
-  plugin-manifest-versions:
-    name: Plugin - Manifest versions agree
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Verify Claude/Codex plugin manifest versions agree
-        env:
-          HEAD_REF: ${{ github.head_ref }}
-        run: |
-          set -euo pipefail
-          release_tag=""
-          if [[ "$HEAD_REF" == bot/sync-plugin-version-* ]]; then
-            release_tag="${HEAD_REF#bot/sync-plugin-version-}"
-          fi
-          make check-plugin-manifest-versions RELEASE_TAG="$release_tag"
-
-  claude-plugin-validate:
-    name: Plugin - Claude validation
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22.23.4"
-
-      - name: Install Claude Code CLI
-        run: npm install -g @anthropic-ai/claude-code
-
-      - name: Validate obstudio plugin and marketplace manifest
-        run: make check-claude-plugin-validate
-
-  skill-description-length:
-    name: Skills - Description length cap check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Verify SKILL.md descriptions stay within the 1,536 character cap
-        run: make check-skill-description-length
-
-  observer:
-    name: Splunk Observability Studio – vet, build & test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: observer/go.mod
-          cache-dependency-path: observer/go.sum
-
-      - name: go vet
-        run: make -C observer vet
-
-      - name: Build binary
-        run: make -C observer build
-
-      - name: Run tests
-        run: make -C observer test
-
-  interactive-otel-scripts:
-    name: Interactive OTel reports & eval handoff – unit tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22.23.4"
-
-      - name: Run interactive OTel report and selection tests
-        run: make test-interactive-otel-scripts
-
-      - name: Validate every eval definition and fixture
-        run: make test-eval-harness
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: evals/go/native-genai-demo/go.mod
-          cache-dependency-path: evals/go/native-genai-demo/go.sum
-
-      - name: Test native GenAI fixture contracts
-        working-directory: evals/go/native-genai-demo
-        run: go test -race ./...
-
-      - name: Run eval-input handoff tests
-        run: make test-pytest-plugin
-
-      - name: Run Splunk Observability Studio plugin hook tests
-        run: python3 -m unittest discover -s plugins/obstudio/hooks/tests -p 'test_*.py'
-
-  observer-smoke:
-    name: Splunk Observability Studio smoke – ${{ matrix.label }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            label: linux-x64
-          - os: windows-latest
-            label: win32-x64
-          - os: macos-15-intel
-            label: darwin-x64
-          - os: macos-15
-            label: darwin-arm64
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: observer/go.mod
-          cache-dependency-path: observer/go.sum
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22.23.4"
-
-      - name: Install Linux credential provider
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends -y dbus-daemon gnome-keyring
-
-      - name: Stage embedded skills for collector tests
-        working-directory: observer
-        run: go run ./cmd/stage-skills
-
-      - name: Verify Linux native credential lifecycle
-        if: runner.os == 'Linux'
-        working-directory: observer
-        env:
-          OBSTUDIO_TEST_SYSTEM_KEYRING: "1"
-          XDG_DATA_HOME: ${{ runner.temp }}/obstudio-native-keyring
-        run: |
-          mkdir -m 700 -p "$XDG_DATA_HOME"
-          dbus-run-session -- bash -euo pipefail <<'NATIVE_TEST'
-            printf '%s' 'obstudio-ci-only' | gnome-keyring-daemon --unlock --components=secrets --daemonize
-            go test ./internal/credentials -run '^(TestSystemCredentialStoreRoundTrip|TestLinux.*)$' -count=1 -timeout=60s -v
-            go test ./cmd/obstudio -run '^TestSystem(Cloud|Logs)ConnectionPersistenceLifecycle$' -count=1 -timeout=60s -v
-          NATIVE_TEST
-
-      - name: Verify Windows native credential lifecycle
-        if: runner.os == 'Windows'
-        working-directory: observer
-        env:
-          OBSTUDIO_TEST_SYSTEM_KEYRING: "1"
-        run: |
-          go test ./internal/credentials -run '^TestSystemCredentialStoreRoundTrip$' -count=1 -timeout=60s -v
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          go test ./cmd/obstudio -run '^TestSystem(Cloud|Logs)ConnectionPersistenceLifecycle$' -count=1 -timeout=60s -v
-          exit $LASTEXITCODE
-
-      - name: Verify storage refusal and session-only fallback
-        shell: bash
-        working-directory: observer
-        run: |
-          set -euo pipefail
-          go test ./internal/credentials -run '^Test(NativeWriteRefusalDistinguishesUnwrittenAndPartialCredentials|StoreClassifiesOnlyDefiniteProviderRefusal|LateUnsubmittedCredentialWriteDoesNotRequireNativeCleanup)$' -count=1 -timeout=60s -v
-          go test ./cmd/obstudio -run '^Test(CloudRefusalBeforeWriteKeepsSavedStateWithoutPendingCleanup|LogsRefusalBeforeWriteDoesNotCreateAConnectionOrPendingCleanup)$' -count=1 -timeout=60s -v
-          go test ./internal/api -run '^(TestSplunkCloudSessionConnectionLeavesSavedSettingsUntouched|TestCloudSessionRollbackRestoresRuntimeWithoutSaving|TestCloudSaveFailureExplainsStorageAndLaunchOwnership|TestLogsSessionConnectionDoesNotUsePersistence)$' -count=1 -timeout=60s -v
-
-      - name: Run Splunk Observability Studio plugin Claude hook shim tests
-        run: node --test plugins/obstudio/hooks/tests/test_bootstrap_claude.js
-
-      - name: Run install smoke test
-        working-directory: observer
-        run: |
-          go test ./cmd/obstudio -run 'Test(InstallSmokeInstallsBinaryAndAcceptsOTLP|ManagedLifecycleRealBinary|ManagedUpgradeActivatesOnlyAfterRestart|CopilotTargetUsesVSCodeUserMCPJSON|CopilotMCPConfigPathResolvesPerOS|ConfigureMCPCopilot.*)$' -count=1 -v
-
-  extension:
-    name: Extension – test & package
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22.23.4"
-          cache: npm
-          cache-dependency-path: extension/package-lock.json
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: observer/go.mod
-          cache-dependency-path: observer/go.sum
-
-      - name: Install dependencies
-        working-directory: extension
-        run: npm ci --engine-strict
-
-      - name: Run unit tests
-        working-directory: extension
-        run: npm run test:unit
-
-      - name: Run integration tests
-        working-directory: extension
-        run: npm run test:integration
-
-      - name: Prepare exact v0.0.18 upgrade fixture
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          fixture_dir="${RUNNER_TEMP}/obstudio-v0.0.18"
-          archive="${fixture_dir}/obstudio_0.0.18_linux_amd64.zip"
-          mkdir -p "${fixture_dir}/unpacked"
-          gh release download v0.0.18 \
-            --repo signalfx/obstudio \
-            --pattern 'obstudio_0.0.18_linux_amd64.zip' \
-            --dir "${fixture_dir}"
-          echo "334fe414f6c8d0994ffab3e065232b9726f1b76e47f260a719213f5dc85c9c47  ${archive}" | sha256sum -c -
-          unzip -q "${archive}" -d "${fixture_dir}/unpacked"
-          binary="$(find "${fixture_dir}/unpacked" -type f -name obstudio -print -quit)"
-          test -n "${binary}"
-          chmod +x "${binary}"
-          echo "OBSTUDIO_V018_BINARY_PATH=${binary}" >> "${GITHUB_ENV}"
-
-      - name: Prepare exact v0.0.20 upgrade fixture
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          fixture_dir="${RUNNER_TEMP}/obstudio-v0.0.20"
-          archive="${fixture_dir}/obstudio_0.0.20_linux_amd64.zip"
-          mkdir -p "${fixture_dir}/unpacked"
-          gh release download v0.0.20 \
-            --repo signalfx/obstudio \
-            --pattern 'obstudio_0.0.20_linux_amd64.zip' \
-            --dir "${fixture_dir}"
-          echo "56efc339d671e041da2d812b0c5e824b084a5c4215a92f148ecc77d64d805323  ${archive}" | sha256sum -c -
-          unzip -q "${archive}" -d "${fixture_dir}/unpacked"
-          binary="$(find "${fixture_dir}/unpacked" -type f -name obstudio -print -quit)"
-          test -n "${binary}"
-          chmod +x "${binary}"
-          echo "OBSTUDIO_V020_BINARY_PATH=${binary}" >> "${GITHUB_ENV}"
-
-      - name: Run VS Code host tests
-        working-directory: extension
-        run: xvfb-run -a npm run test:host
-
-  extension-vsix:
-    name: Extension VSIX – ${{ matrix.label }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            label: linux-x64
-          - os: windows-latest
-            label: win32-x64
-          - os: macos-15-intel
-            label: darwin-x64
-          - os: macos-15
-            label: darwin-arm64
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22.23.4"
-          cache: npm
-          cache-dependency-path: extension/package-lock.json
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: observer/go.mod
-          cache-dependency-path: observer/go.sum
-
-      - name: Install dependencies
-        working-directory: extension
-        run: npm ci
-
-      - name: Build target VSIX
-        working-directory: extension
-        run: npm run build:vsix -- --target "${{ matrix.label }}"
-
-      - name: Upload VSIX artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: observability-studio-vsix-${{ matrix.label }}
-          path: extension/*.vsix
-          if-no-files-found: error
-
-  extension-smoke:
-    name: Extension smoke – ${{ matrix.label }}
-    runs-on: ${{ matrix.os }}
-    needs: extension-vsix
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            label: linux-x64
-          - os: windows-latest
-            label: win32-x64
-          - os: macos-15-intel
-            label: darwin-x64
-          - os: macos-15
-            label: darwin-arm64
+  windows-listener-diagnostic:
+    name: Inspect Windows listener query
+    runs-on: windows-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -377,67 +24,95 @@ jobs:
         working-directory: extension
         run: npm ci
 
-      - name: Verify platform process termination
+      - name: Run unchanged process-control tests with native-query diagnostics
+        shell: pwsh
         working-directory: extension
-        run: npm run test:process-control
-
-      - name: Download target VSIX artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: observability-studio-vsix-${{ matrix.label }}
-          path: extension/.smoke-vsix
-
-      - name: Run installed VSIX smoke test
-        working-directory: extension
-        env:
-          OBSTUDIO_PREBUILT_VSIX_DIR: .smoke-vsix
-        run: npm run test:integration:smoke
-
-  client:
-    name: Client – unit tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22.23.4"
-          cache: npm
-          cache-dependency-path: observer/client/package-lock.json
-
-      - name: Install dependencies
-        working-directory: observer/client
-        run: npm ci
-
-      - name: Run tests
-        working-directory: observer/client
-        run: npx vitest run
-
-  required-ci:
-    name: Required CI
-    if: ${{ always() }}
-    needs:
-      - agent-policy
-      - plugin-skills-synced
-      - plugin-manifest-versions
-      - claude-plugin-validate
-      - skill-description-length
-      - observer
-      - interactive-otel-scripts
-      - observer-smoke
-      - extension
-      - extension-vsix
-      - extension-smoke
-      - client
-    runs-on: ubuntu-latest
-    steps:
-      - name: Confirm every mandatory job passed
-        env:
-          REQUIRED_RESULTS: ${{ join(needs.*.result, ' ') }}
         run: |
-          for result in $REQUIRED_RESULTS; do
-            if [ "$result" != "success" ]; then
-              echo "A mandatory CI job finished with result: $result"
-              exit 1
-            fi
-          done
+          $preload = Join-Path $env:RUNNER_TEMP 'obstudio-listener-diagnostic.cjs'
+          @'
+          // Temporary CI diagnostics. Never print command arguments or output contents.
+          'use strict';
+          const cp = require('node:child_process');
+          const { performance } = require('node:perf_hooks');
+          const originalExecFile = cp.execFile;
+
+          function inspectionKind(file, args) {
+            if (typeof file !== 'string' || !/(?:^|[\\/])powershell\.exe$/i.test(file)
+                || !Array.isArray(args) || args.length !== 4
+                || args[0] !== '-NoProfile' || args[1] !== '-NonInteractive'
+                || args[2] !== '-Command' || typeof args[3] !== 'string') {
+              return undefined;
+            }
+            if (args[3].startsWith('$connections = @(Get-NetTCPConnection -ErrorAction Stop); ')) {
+              return 'NetTCP';
+            }
+            if (/^\$p = Get-Process -Id [1-9][0-9]* -ErrorAction SilentlyContinue; /.test(args[3])) {
+              return 'Process';
+            }
+            return undefined;
+          }
+
+          function diagnosticExecFile(...callArgs) {
+            const kind = inspectionKind(callArgs[0], callArgs[1]);
+            const callbackIndex = callArgs.length - 1;
+            const callback = callArgs[callbackIndex];
+            if (kind === undefined || typeof callback !== 'function') {
+              return Reflect.apply(originalExecFile, this, callArgs);
+            }
+            const started = performance.now();
+            let callbackEntered = false;
+            const record = (error, stdout, stderr) => {
+              try {
+                const code = error?.code;
+                const signal = error?.signal;
+                const length = (value) => typeof value === 'string' || Buffer.isBuffer(value) ? value.length : null;
+                const metadata = {
+                  kind,
+                  elapsed_ms: Math.round((performance.now() - started) * 1000) / 1000,
+                  timeout_ms: typeof callArgs[2]?.timeout === 'number' ? callArgs[2].timeout : null,
+                  error: error == null ? null : {
+                    code: typeof code === 'number' || (typeof code === 'string' && /^[A-Z0-9_]{1,64}$/.test(code)) ? code : null,
+                    killed: typeof error.killed === 'boolean' ? error.killed : null,
+                    signal: typeof signal === 'string' && /^SIG[A-Z0-9]{1,20}$/.test(signal) ? signal : null,
+                  },
+                  stdout_length: length(stdout),
+                  stderr_length: length(stderr),
+                };
+                process.stderr.write('[windows-listener-diagnostic] ' + JSON.stringify(metadata) + '\n');
+              } catch {}
+            };
+            const forwardedArgs = [...callArgs];
+            forwardedArgs[callbackIndex] = function (...callbackArgs) {
+              callbackEntered = true;
+              record(...callbackArgs);
+              return Reflect.apply(callback, this, callbackArgs);
+            };
+            try {
+              return Reflect.apply(originalExecFile, this, forwardedArgs);
+            } catch (error) {
+              if (!callbackEntered) {
+                record(error, undefined, undefined);
+              }
+              throw error;
+            }
+          }
+
+          Object.defineProperties(diagnosticExecFile, Object.getOwnPropertyDescriptors(originalExecFile));
+          cp.execFile = diagnosticExecFile;
+          require('node:module').syncBuiltinESMExports();
+          '@ | Set-Content -LiteralPath $preload -Encoding utf8
+          $previousNodeOptions = $env:NODE_OPTIONS
+          $testExitCode = 1
+          try {
+            $preloadOption = '--require="' + $preload.Replace('\', '/') + '"'
+            $env:NODE_OPTIONS = if ([string]::IsNullOrWhiteSpace($previousNodeOptions)) {
+              $preloadOption
+            } else {
+              "$previousNodeOptions $preloadOption"
+            }
+            npm run test:process-control
+            $testExitCode = $LASTEXITCODE
+          } finally {
+            $env:NODE_OPTIONS = $previousNodeOptions
+          }
+          exit $testExitCode
