@@ -1,4 +1,6 @@
 # Python OpenTelemetry Guide
 
-Read [the shared python guide](../../../references/languages/python.md).
-Preserve the calling skill's scope and read-only boundaries.
+The canonical guide is now shared by audit, instrumentation and verification.
+Read [the python guide](../../../references/languages/python.md); for a logging-only
+task, start at its **Logging Readiness Checks** section and follow its ownership
+references. Preserve the calling skill's scope and read-only boundaries.

@@ -17,6 +17,11 @@ description: >-
 
 # Instrument
 
+For Python application logging, apply the shared `logging-readiness.md`
+workflow below, including its worklists, report readback and evidence receipts.
+For Go, Java and Node.js, continue the existing language and local-log workflow;
+the expanded shared logging-readiness workflow applies only to Python.
+
 Add OpenTelemetry observability to applications using auto-instrumentation,
 default local application-log export, and optional custom spans or metrics.
 
@@ -237,6 +242,19 @@ Markdown reports.
   span work only; it is not a log-export opt-out. Only the explicit exporter,
   endpoint, and supported-stack conditions above may suppress the default local
   log pipeline.
+- Repair a policy violation exposed by that added/selected log pipeline within
+  the current logging baseline. Captured framework/container records belong to
+  that assessment even when their producer is a dependency. A supported
+  logging-only sanitizer is not a new custom business signal and does not need
+  another audit merely because the violation was discovered during verification.
+  Keep an existing bound audit and its IDs immutable; do not widen an explicit
+  user exclusion. Inspect the actual producer/bridge hook, preserve response
+  behavior, permitted diagnostics and original sinks, then replay the failing
+  probe. Retain a genuine unsupported boundary with the inspected evidence;
+  do not defer an uninvestigated captured path as future custom instrumentation.
+  For a direct baseline without an audit, also carry the common logging
+  reference's concrete future acceptance assertions for unexecuted controls in
+  the canonical report; there is no earlier audit from which to inherit them.
 - In the normal generated launch profile, explicitly set
   `OTEL_LOGS_EXPORTER=otlp` with the resolved local Studio logs endpoint and
   matching protocol, alongside trace and metric export. Do not generate `none`
@@ -587,7 +605,8 @@ inventing arguments, metadata, native node IDs/counts or execution:
   matching protocol. Name the planned or captured bounded/redacted body,
   severity, shared service resource and trace/span IDs matching the owning
   span, alongside separate span and metric-datapoint receipts. Assert one
-  native LogRecord per application log call, retention of the actual original
+  SDK LogRecord emitted per application log call and one received copy on a
+  healthy path, retention of the actual original
   stdout/file sinks, owned log-provider/bridge drain and close, and local-only
   routing with no cloud log forwarding. SDK `@log` spans, stdout correlation
   and exporter settings alone do not supply this application LogRecord proof.
@@ -1121,7 +1140,13 @@ active file path and added or changed variable names without exposing secrets.
   the launch environment before importing or constructing the instrumentor.
   Accept `http.server.duration` only when the installed SDK truly emits the
   alternate name and record that exact runtime evidence; never claim both names.
-- For local, Docker, and eval-style runtime checks, configure metric export to flush quickly. When constructing a metric reader manually, use the language equivalent of `OTEL_METRIC_EXPORT_INTERVAL` with a safe local default of `1000` ms and `OTEL_METRIC_EXPORT_TIMEOUT` with a safe local default of `500` ms instead of relying on SDK defaults.
+- For short local, Docker, and eval runtime checks, prove metric receipt before
+  exit using supported launch configuration or an explicit collection/flush step.
+  A local verification preset may use `OTEL_METRIC_EXPORT_INTERVAL=1000` and
+  `OTEL_METRIC_EXPORT_TIMEOUT=500` (milliseconds); these are local timing choices,
+  not OTel requirements or production defaults. Preserve effective operator
+  values and delegate parsing to the selected SDK when supported. A manual
+  reader does not by itself require custom parsers or explicit options.
 - Strictly adhere to OTel [semantic conventions](https://opentelemetry.io/docs/specs/semconv/) for span and metric naming and attributes for domains where such semantic conventions are defined.
 - For domains where OTel semantic conventions exist, use semantic-convention
   names and attributes. Start with required spans, metrics, and attributes; add
@@ -1551,10 +1576,26 @@ active file path and added or changed variable names without exposing secrets.
 
 #### Default Local Application Log Export
 
+Read `../references/logging-readiness.md` before changing a logging path.
+Start with its source-and-applicability worklists: source clauses, concrete
+capabilities and acceptance controls must be reconciled separately.
+Apply its LOG-* rules within selected scope using the existing provider and
+detected bridge, and include their applicable positive and fault scenarios in
+the verification handoff. Preserve supported SDK defaults and operator policy;
+do not add application code merely to duplicate SDK-owned behavior.
+Apply the shared
+[LOG-SPEC-CLOSURE matrix](../references/logging-readiness.md#log-spec-closure----reconcile-sources-implementation-and-proof)
+during planning and final readback, recording actual implementation and proof
+within the approved scope.
+
+- Resolve effective configuration and any existing Collector forwarding route
+  using the shared logging reference before applying the environment-based
+  local-SDK recipe below. Preserve an established collection owner; do not add
+  a second route or treat an ignored environment value as effective policy.
 - Classify application logs during preflight as `local-otlp-default`,
   `explicitly-disabled`, `operator-owned`, `correlation-only`, or
-  `unsupported-stack`. Trace/MDC fields in stdout are correlation-only, not an
-  OTLP log pipeline.
+  `unsupported-stack`. Trace/MDC fields alone are correlation-only evidence;
+  prove a selected forwarding route separately.
 - For a supported Python, Node.js, Java, or Go application logging stack,
   configure local Splunk Observability Studio OTLP export by default. Use the official log SDK,
   batch processor/exporter, and the official bridge for the detected stack.
@@ -1616,7 +1657,10 @@ active file path and added or changed variable names without exposing secrets.
 - Add focused and full-runtime proof for log body/category, severity, shared
   resource identity, trace/span correlation in an active span, redaction,
   preservation of the existing sink, explicit `none` opt-out, and exactly one
-  OTLP record per application log call. When cloud trace/metric forwarding is
+  received OTLP record per application log call on a healthy delivery path.
+  For fault/retry tests, distinguish SDK emissions and bridge ownership from
+  transport attempts and receiver copies; zero receipt is possible during an
+  outage. Preserve the original sink's per-call count. When cloud trace/metric forwarding is
   configured, also prove the log is visible in local Splunk Observability Studio and no cloud log
   exporter or forwarding path was configured.
 - When `OTEL_LOGS_EXPORTER=none`, disable or bypass any previously discovered
@@ -1630,19 +1674,20 @@ active file path and added or changed variable names without exposing secrets.
 
 Python:
 - Add explicit dependency entries for `opentelemetry-api`, `opentelemetry-sdk`, `opentelemetry-exporter-otlp`, and each detected framework/client instrumentation package.
-- Create a separate setup file such as `otel_setup.py`, `telemetry.py`, or `instrumentation.py`.
-- Configure a shared `Resource.create({"service.name": ...})`, trace provider,
-  meter provider, and default local log provider/exporter in that setup file only
-  for signals the process does not already own. If a source-owned provider
-  exists, move or adapt its construction into the shared setup while preserving
-  existing wrappers, views, file-export modes, and tests; do not create a
-  second provider.
-- Import and call the setup function from the app entry point before creating or instrumenting the app.
-- For Flask, call `FlaskInstrumentor().instrument_app(app)`.
-- For FastAPI, call `FastAPIInstrumentor.instrument_app(app)` immediately
-  after app construction and before lifespan/startup begins. Do not first call
-  it inside lifespan: Starlette/FastAPI middleware installation is too late
-  after the application has started serving.
+- Reuse one initialization path and the existing configuration/provider owners.
+  Add a separate setup module only when the project needs it; preserve existing
+  wrappers, views, file-export modes and tests.
+- Resolve the shared Resource through the selected SDK/configuration owner,
+  preserving supplied attributes and precedence. Add providers only for signals
+  the process does not already own; follow the Python reference for supported
+  defaults rather than constructing a higher-priority identity fallback.
+- Where explicit application setup is needed, call the selected initializer at
+  its supported startup boundary before instrumenting the app. Preserve an
+  existing CLI/zero-code initialization owner instead of adding a duplicate.
+- Use the detected framework or worker integration at its supported lifecycle
+  boundary. Resolve ordering from the Python reference and installed APIs;
+  middleware that must be installed before serving cannot first be installed
+  during an already-running framework lifecycle.
 - For Celery, call `CeleryInstrumentor().instrument()` in the worker path.
 - Keep existing Docker/Compose/Makefile commands, but update them only as the startup surface for the explicit setup, not as a replacement for app wiring.
 - For stdlib `logging` (including Flask/Django logging), use the current
@@ -1654,14 +1699,11 @@ Python:
   and retain its documented SDK `LoggingHandler` compatibility path instead
   of forcing an upgrade. Shut the
   log provider down with the other providers.
-- The ASGI/WSGI instrumentation underlying Flask/FastAPI already sets
-  `http.response.status_code` on `http.server.request.duration` for every
-  request, and `error.type` for a 5xx (or otherwise invalid) status, with no
-  extra code -- a plain 4xx client-error response does not set `error.type`
-  on a server span. `server_request_hook`/`response_hook` only set span
-  attributes, not metric attributes; they are not a route to a new dimension
-  on the duration metric itself. Do not add a standalone counter for a
-  request outcome the duration metric already attributes correctly.
+- Resolve HTTP duration metric names, units and status/error dimensions from
+  the selected instrumentation and semantic-convention mode. Reuse an existing
+  metric when it already expresses the requested outcome. Verify whether a
+  supported hook changes metric attributes or only spans before choosing a
+  custom signal; a handled successful operation is not automatically an error.
 
 Node.js:
 - Add `@opentelemetry/instrumentation-http` explicitly for HTTP server spans.
@@ -1808,6 +1850,12 @@ permission to run a project-configured syntax, compile, typecheck, import, or
 focused test command. Do not require full app startup, Docker, credentials,
 live providers, or an OTLP collector for this gate.
 
+For logging, read the planning and readback checks in
+`../references/logging-readiness.md`. Reconcile the full required-control set with
+named assertions, actual outcomes and missing proof. Prefer doing this before
+authoring probes.
+Use the actual path's proof mode, and do not infer omitted controls from suite totals.
+
 At minimum:
 
 1. Probe the selected project runtime and record the version actually used.
@@ -1902,6 +1950,16 @@ reader-first `.observe/otel-verify.md` using the selected audit scenario IDs.
 Use `./references/json-approval-handoff.md` and the bundled
 `./scripts/observe_report.py` to validate the audit, selection,
 instrumentation, and verify overlays and refresh the instrumentation HTML.
+For executed logging controls, use the shared
+[Deterministic evidence reports](../references/logging-readiness.md#deterministic-evidence-reports)
+recipe. Derive the final canonical verification fields from the complete selected
+control manifest, then run `evidence-bake --check-report` with
+`--receipt-output <service-root>/.observe/otel-evidence-receipt.json`.
+Run `validate-evidence-receipt` through the same bundled report helper with
+`--receipt <service-root>/.observe/otel-evidence-receipt.json` and
+`--service-root <service-root>` before handoff. A valid receipt may retain partial
+results. On the direct path without
+a canonical overlay, retain baked control results without fabricating one.
 Only an individual scenario needing an unavailable listener, credential,
 package, or fixture is blocked; a missing skill invocation or adjacent file
 is not itself a verification blocker. Do not report verification as `Not run`
@@ -1993,6 +2051,17 @@ This step is REQUIRED whenever `.vscode/launch.json` exists.
 - Include selected `Audit Gap Closure` counts by `Working`, `Not working`, `Not
   proven`, and `Not configured`. Do not report unselected findings as
   implemented work.
+- Before serializing logging verdicts, read the common reference's
+  [Report readback](../references/logging-readiness.md#report-readback) section.
+  Match each bound control and case/input to its expected value/oracle and required
+  boundary, then to the actual assertion, raw outcome and operation receipt in
+  existing evidence fields. Derive scenario/item status, direct-assertion flags,
+  mode, visibility and remaining work from those matches, not from scenario-ID
+  coverage or all recorded suites passing. A valid related launch may witness an
+  input such as an absent setting without a specially named case; retain its
+  actual settings and assertions. Separate source capability and direct item
+  proof from unmatched ancillary controls; do not borrow another path's stronger
+  result or trace IDs. Schema validity cannot establish the missing matches.
 - For incident-readiness work, summarize each in-scope workflow, dependency,
   input-complexity, freshness, backpressure, synthetic/canary, auth/edge,
   capacity, health/readiness, and release/config surface as MTTD-improving,

@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-audit |
-| Run ID | 20261118T073143103043Z |
+| Run ID | 20261118T111844760447Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -46,6 +46,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | python/existing-otel-agent-demo/qual/route-recovery-audit | python/existing-otel-agent-demo | 1 | evals/python/existing-otel-agent-demo/eval/qual/route-recovery-audit.json | 0 | 5 | 0 |
 | python/fastapi-celery/qual/audit | python/fastapi-celery | 2 | evals/python/fastapi-celery/eval/qual/audit.json | 0 | 5 | 0 |
 | python/flask-basic/qual/audit | python/flask-basic | 2 | evals/python/flask-basic/eval/qual/audit.json | 0 | 6 | 0 |
+| python/flask-basic/qual/logging-audit-contract | python/flask-basic | 3 | evals/python/flask-basic/eval/qual/logging-audit-contract.json | 0 | 63 | 0 |
 | python/galileo-agent-demo/qual/audit | python/galileo-agent-demo | 2 | evals/python/galileo-agent-demo/eval/qual/audit.json | 0 | 7 | 0 |
 | python/mcp-ai-tool-demo/qual/audit | python/mcp-ai-tool-demo | 2 | evals/python/mcp-ai-tool-demo/eval/qual/audit.json | 0 | 6 | 0 |
 | python/model-directed-agent/qual/audit | python/model-directed-agent | 1 | evals/python/model-directed-agent/eval/qual/audit.json | 0 | 5 | 0 |
