@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-verify",
-    "run_id": "20261110T214828070848Z",
+    "run_id": "20261118T054751823728Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-6-luna",
     "judge_model": "",
@@ -51,22 +51,6 @@
       "skill_path": "skills/otel-verify",
       "sanity_check_count": 0,
       "rubric_check_count": 7,
-      "runtime_check_count": 0
-    },
-    {
-      "id": "python/ai-assistant-demo/qual/ao-name-inputs-verify",
-      "case": "python/ai-assistant-demo",
-      "language": "python",
-      "service": "ai-assistant-demo",
-      "prompt_count": 1,
-      "prompts": [
-        "ao-name-inputs-verify"
-      ],
-      "definition_path": "evals/python/ai-assistant-demo/eval/qual/ao-name-inputs-verify.json",
-      "eval_dir": "evals/python/ai-assistant-demo",
-      "skill_path": "skills/otel-verify",
-      "sanity_check_count": 0,
-      "rubric_check_count": 6,
       "runtime_check_count": 0
     },
     {
@@ -327,16 +311,16 @@
     }
   ],
   "summary": {
-    "eval_count": 19,
-    "case_count": 19,
-    "prompt_count": 19,
+    "eval_count": 18,
+    "case_count": 18,
+    "prompt_count": 18,
     "sanity_check_count": 0,
-    "rubric_check_count": 112,
+    "rubric_check_count": 106,
     "runtime_check_count": 0
   },
   "source": {
     "digest_version": 4,
-    "digest": "b88c3b6b7c16e17490d9516e34dbebd029c978dfc1635426b355d93cab0fc98f",
+    "digest": "7a2077d04ce6ab18e44fa8d9114384fe1787080f2e0ce486c891692d3ef96c4c",
     "eval_kinds": [
       "rubric"
     ],
@@ -380,7 +364,7 @@
       "skills/references/tests/test_observe_report.py": "cf79f1a74e4b2260d8010145ce2ff0c6122554e6c7eb19984941b6a89418c2c0",
       "skills/references/tests/test_observe_report_flow.py": "a895ca4165a196ff8ab0ffb73a1c6dcf859d27cf59cd5f335ce4fe1c9ca7392e",
       "skills/references/tests/test_observe_report_html.py": "32183996d90eb073b9ece7bcd05613ea3552512af7f6f8acfc7171d45eaf2382",
-      "skills/references/tests/test_observe_report_selection.py": "c2a441002d8392b9ea5cfdb52cee7e0b75000542334c2a3eb3bc8cff48a0d7c7",
+      "skills/references/tests/test_observe_report_selection.py": "744beaa95d5f6bb5a6045fd7f6f5de96b08085af0f74f8c9de6c3d3b5eada59c",
       "evals/go/native-genai-demo/README.md": "0c368f3c02fe251d816cbe166981b59b29769064ad67b12a09d89cee48af1048",
       "evals/go/native-genai-demo/eval/inputs/candidate-provenance.json": "50cd7a5cd8b96642fb8925d176a1539d7531710cd8021692d75bdf5e57648865",
       "evals/go/native-genai-demo/eval/inputs/genai-profile-evidence.json": "aa816ae1e830e83a99289d326264d53e050cccd0c50648d49c3f2f8627ce7343",
@@ -402,12 +386,11 @@
       "evals/python/ai-assistant-demo/Makefile": "3603e3404f82d150e09de40be763c2213a05185cd302c7d2426eee61f44260b1",
       "evals/python/ai-assistant-demo/README.md": "eebd4711ef5b6d9325e15d0488b43da6b3fde8bc48ffff91fa44841fd1dfaf0e",
       "evals/python/ai-assistant-demo/app.py": "fa5e1ef6707b71d0faec679ba88c81052382b85b42e895ee484454fbfd056f1e",
-      "evals/python/ai-assistant-demo/eval/qual/ao-name-inputs-verify.json": "73cc62fd8e22cd9d9975d23f1685ca1715cbb3c929446d072b03e6a28fb78492",
+      "evals/python/ai-assistant-demo/eval/inputs/ao-root-compatibility-evidence.json": "335ce70f9753091154b9fcc22c8fc3134ef266faa797b86e31141ef2665c44a6",
+      "evals/python/ai-assistant-demo/eval/qual/ao-root-compatibility-verify.json": "1472eeaafeed62e1847629f2d0ff53591e554e10fea9119cfe62b7ac59a1a2b4",
       "evals/python/ai-assistant-demo/eval_runner.py": "6b685cf5472871a9b227e652e47fd23a68b5ffe38021d4b6f3802236be65e2c8",
       "evals/python/ai-assistant-demo/load_demo.py": "a33aef8a368b24c3351f46722f2caab5ecf4b2791a998b058d7c4a458ff8f2e0",
       "evals/python/ai-assistant-demo/pyproject.toml": "90be0bda1c6147fc324325b0f8a65a82499d65840df190a76b633c992e511f00",
-      "evals/python/ai-assistant-demo/eval/inputs/ao-root-compatibility-evidence.json": "335ce70f9753091154b9fcc22c8fc3134ef266faa797b86e31141ef2665c44a6",
-      "evals/python/ai-assistant-demo/eval/qual/ao-root-compatibility-verify.json": "1472eeaafeed62e1847629f2d0ff53591e554e10fea9119cfe62b7ac59a1a2b4",
       "evals/python/ai-assistant-demo/eval/inputs/ao-target-handoff-validator-snapshot.json": "6e605a622e4b4f16658e3b62918a77a32f1481feec8eeb95f1055ac1bfe8e60d",
       "evals/python/ai-assistant-demo/eval/inputs/finding-group-snapshot.json": "4d8ecff766c242dac8b4e48409681b6aa0b87487b62740128afe39ed2f41e5d6",
       "evals/python/ai-assistant-demo/eval/qual/ao-target-handoff-verify.json": "0715cbac999eba2145db514b657a1d75f39bd9aea4e3ac292bf6d0b336e55b30",
@@ -439,7 +422,7 @@
       "evals/python/ai-assistant-demo/eval/inputs/otel-audit.json": "0aa217a1410c384a8afda2ab7608e19c93bb9e5ae5483a87e5bec66e8bf5ea1d",
       "evals/python/ai-assistant-demo/eval/qual/resource-selector-length-verify.json": "952fb1f6a120610e80de94a21d211892f3836a946cc800f794d755fef41a877c",
       "evals/python/ai-assistant-demo/eval/inputs/ao-resource-resolver.py": "f89793e32d84071b0e986ac5e98eace4c7385c0eb00b89b088e49e107568b6f7",
-      "evals/python/ai-assistant-demo/eval/qual/reuse-env-policy-verification.json": "549779746b1ff60c7949d40b6fb7ea08be4677205d190715cfa783174bffadc6",
+      "evals/python/ai-assistant-demo/eval/qual/reuse-env-policy-verification.json": "5843bf530d866add6b0ff2433300bfd149a102bb8819e8a7ae29e45a379d21af",
       "evals/python/ai-assistant-demo/eval/inputs/genai-tool-enrichment-evidence.json": "5b991c48950fece0a6935a5ae652f90f8bf3479916c197c3885f6a3361de000e",
       "evals/python/ai-assistant-demo/eval/inputs/genai-tool-message-mapping.json": "4cbd7c4f59c8dd85096cfa1209528b65d29d5772095cc1fef0627e01dfc0c77c",
       "evals/python/ai-assistant-demo/eval/qual/tool-message-mapping-verify.json": "4f6a07de5a159470a221b02905cbb2a9b95c1b53fcc707052868f52cee27480e",
@@ -523,13 +506,6 @@
           "eval/inputs/native-lookup-failure-capture.json",
           "eval/inputs/native-rejected-traces-capture.json"
         ]
-      },
-      {
-        "definition_path": "evals/python/ai-assistant-demo/eval/qual/ao-name-inputs-verify.json",
-        "fixture_dir": "evals/python/ai-assistant-demo",
-        "prompt_id": "ao-name-inputs-verify",
-        "eval_kind": "rubric",
-        "eval_inputs": []
       },
       {
         "definition_path": "evals/python/ai-assistant-demo/eval/qual/ao-root-compatibility-verify.json",
