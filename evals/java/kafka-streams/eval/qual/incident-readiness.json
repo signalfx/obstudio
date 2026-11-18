@@ -3,7 +3,10 @@
   "prompts": [
     {
       "id": "mttd",
-      "task": "Instrument the Java Kafka Streams service in ./service to reduce mean time to detect silent malformed/null record drops, stream-processing failures, and output-flow degradation. Add the safe app-owned custom OpenTelemetry metrics needed for detector-ready coverage as well as the standard Java-agent path. Preserve the Kafka topology and Guice structure, do not create a second SDK or Guice Tracer binding, and do not invent broker/platform signals the application cannot observe."
+      "task": "$otel-instrument --ids OTEL-001,OTEL-002,OTEL-003,OTEL-004\n\nWork in ./service. Copy eval/inputs/otel-audit.json to .observe/otel-audit.json first. Make silent null/malformed record drops, processing failures and degraded output easier to detect in this Kafka Streams service. Preserve its existing topology and Guice ownership.",
+      "eval_inputs": [
+        "eval/inputs/otel-audit.json"
+      ]
     }
   ],
   "judge_inputs": [
@@ -12,11 +15,11 @@
     "Read ./grade.json for run guard checks."
   ],
   "rubric": [
-    "Preserves KafkaStreamsApplication.java, StreamProcessingModule.java, OrderStreamTopology.java, and the orders to orders.enriched plus orders.fraud-alerts topology while using the OpenTelemetry Java agent as the primary Kafka client/Streams instrumentation path.",
-    "Adds detector-ready app-owned metrics that distinguish successful records from null or malformed parse drops and expose stream-processing failure or lifecycle outcomes; metric attributes are bounded reason, outcome, or workflow values rather than payloads, record keys, order IDs, or exception messages.",
-    "Adds a meaningful latency, lag, age, or freshness signal only where the application can measure it accurately, and explicitly owner-maps broker lag, topic availability, or other unavailable platform signals instead of creating placeholders.",
-    "Avoids OpenTelemetrySdk construction, duplicate providers, broad per-record manual spans, and a Guice Tracer binding; custom instrumentation uses the agent-provided/global API boundary without changing application ownership.",
-    "Adds focused tests that exercise valid, null, and malformed records plus the custom telemetry path, and runs the existing Maven tests or records a concrete blocker with commands and evidence.",
-    "Writes proof-aware instrumentation and verification handoff material that names the exact signals added, identifies which are MTTD-improving versus localization-only, and leaves every unimplemented dependency or broker signal as an explicit prerequisite."
+    "Rule: Preserve the application entrypoint, Guice module and stream topology. Use the standard Java agent as the primary Kafka/Kafka Streams instrumentation.\nExample: Orders still flow from orders to orders.enriched and, when appropriate, orders.fraud-alerts.\nEvidence: Inspect KafkaStreamsApplication.java, StreamProcessingModule.java, OrderStreamTopology.java and the actual agent launch configuration.\nInsufficient evidence: Rewritten processing behavior or manual spans replacing the agent path.",
+    "Rule: Add detector-ready application metrics that distinguish successful records, handled null/malformed drops, processing failures and stream lifecycle/state. Use bounded reason, outcome or workflow labels.\nExample: A malformed record increments a handled-drop outcome while a stream failure has its own failure/lifecycle signal.\nEvidence: Exercise the selected parser, processing and lifecycle paths and inspect recorded values and dimensions.\nInsufficient evidence: Payloads, keys, order IDs or exception messages in dimensions, or one success count hiding dropped records.",
+    "Rule: Use latency, lag, age or freshness signals only when the app can measure them meaningfully. Identify the owner of unavailable broker/platform signals.\nExample: Native client lag samples can measure app-visible lag; they do not prove total broker backlog, topic availability or event freshness.\nEvidence: Trace each measurement to its source and explain unavailable platform-owned signals in the report.\nInsufficient evidence: Placeholder gauges or unsupported freshness/availability claims.",
+    "Rule: Use the agent-owned global API boundary for custom application signals. Preserve the existing provider and Guice ownership.\nExample: An app metric uses the agent global Meter without installing another SDK.\nEvidence: Inspect initialization, providers, per-record instrumentation and Guice bindings.\nInsufficient evidence: OpenTelemetrySdk construction, duplicate providers, broad manual spans for each record, or a Guice Tracer binding.",
+    "Rule: Add focused tests for valid records, null/malformed records and the custom telemetry paths. Run the existing Maven tests or document the concrete blocker.\nExample: The same parser test proves its business result and the expected handled-drop metric.\nEvidence: Show exact commands, test results and exercised paths; identify missing dependencies or runtime prerequisites precisely.\nInsufficient evidence: Compilation alone for changed parser behavior, unrun tests described as passing, or a vague environment excuse.",
+    "Rule: Explain which exact signals shorten detection time and which only help locate an incident. Keep unimplemented work and dependencies explicit.\nExample: A handled-drop rate can detect silent loss; a trace may only identify the failing stage.\nEvidence: Match .observe reports to implemented signals, test/runtime evidence and outstanding broker/dependency prerequisites.\nInsufficient evidence: A generic MTTD claim, or local tests presented as proof of unrun broker or agent delivery."
   ]
 }
