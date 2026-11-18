@@ -16,6 +16,18 @@
     "otel-audit",
     "otel-instrument"
   ],
+  "languages/go.md": [
+    "otel-instrument"
+  ],
+  "languages/java.md": [
+    "otel-instrument"
+  ],
+  "languages/node.md": [
+    "otel-instrument"
+  ],
+  "languages/python.md": [
+    "otel-instrument"
+  ],
   "ledger-template.md": [
     "splunk-dashboard-publish",
     "splunk-detector-publish"
