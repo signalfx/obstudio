@@ -109,11 +109,7 @@ func newRootCmd(config *runConfig) *cobra.Command {
 	root.AddCommand(newInstallCmd())
 	root.AddCommand(newLifecycleCommands()...)
 	root.AddCommand(newTokenTelemetryCommand())
-	// --env-file is not parsed yet, so the gate uses OBSTUDIO_ENV_FILE or
-	// ~/.obstudio/env.
-	if configManagerEnabled("") {
-		root.AddCommand(newTelemetryCommand())
-	}
+	root.AddCommand(newTelemetryCommand())
 	return root
 }
 
@@ -238,8 +234,7 @@ func run(config runConfig) error {
 	if observerMode == managedObserverMode && !managedLaunchAuthorized {
 		observerMode = "standalone"
 	}
-	configManager := configManagerEnabled(config.envFile)
-	userConfig := buildUserConfig(configManager)
+	userConfig := openUserConfig()
 	if userConfig.manager != nil {
 		// Deferred so it runs after srv.Shutdown has drained the handlers.
 		defer userConfig.manager.Close()
@@ -255,7 +250,7 @@ func run(config runConfig) error {
 		Mode:          observerMode,
 		StartedAt:     startedAt,
 		Exporters:     exporterInfo(splunkExportController, splunkTracesController),
-		ConfigManager: configManager,
+		ConfigManager: userConfig.manager != nil,
 	}, dashboards.Config{
 		WorkspaceRoot: envOr("OBSTUDIO_WORKSPACE_ROOT", ""),
 		SpecPath:      envOr("OBSTUDIO_DASHBOARDS_PREVIEW", ""),
@@ -277,7 +272,7 @@ func run(config runConfig) error {
 		return providerRepositoryCorrelationMode(tokenTelemetryStatePath(), provider)
 	})
 	// One parameter list for both MCP transports, so HTTP and stdio expose the
-	// same tools and status. With the gate off userConfig.status is a nil
+	// same tools and status. When the Config Manager could not be built userConfig.status is a nil
 	// *configstatus.Builder, which NewDispatcher ignores.
 	mcpParams := []any{
 		v,
@@ -352,7 +347,7 @@ func run(config runConfig) error {
 		}
 	}()
 
-	fmt.Fprint(os.Stderr, renderStartupBanner(mainAddr, otlpHTTPAddr, otlpGRPCAddr, configManager))
+	fmt.Fprint(os.Stderr, renderStartupBanner(mainAddr, otlpHTTPAddr, otlpGRPCAddr))
 	warnStaleMCPPortConfigs(os.Stderr, port)
 
 	go mcp.RunStdio(s, os.Stdin, os.Stdout, mcpParams...)
@@ -481,45 +476,6 @@ func existingEnvKeys() map[string]struct{} {
 		}
 	}
 	return keys
-}
-
-func readEnvFile(path string) (map[string]string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, fmt.Errorf("open env file %q: %w", path, err)
-	}
-	defer file.Close()
-
-	values := map[string]string{}
-	scanner := bufio.NewScanner(file)
-	lineNo := 0
-	for scanner.Scan() {
-		lineNo++
-		key, value, ok, err := parseEnvLine(scanner.Text())
-		if err != nil {
-			return nil, fmt.Errorf("parse env file %q line %d: %w", path, lineNo, err)
-		}
-		if ok {
-			if _, exists := values[key]; exists {
-				continue
-			}
-			values[key] = value
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("read env file %q: %w", path, err)
-	}
-	return values, nil
-}
-
-func envMapBool(values map[string]string, keys ...string) bool {
-	for _, key := range keys {
-		switch strings.ToLower(strings.TrimSpace(values[key])) {
-		case "1", "true", "yes", "y", "on":
-			return true
-		}
-	}
-	return false
 }
 
 func parseEnvLine(line string) (string, string, bool, error) {
@@ -785,13 +741,6 @@ func buildSharedObserverState(host, port string, publicMCPURLs ...string) shared
 	}
 }
 
-func boolToOneOrZero(v bool) string {
-	if v {
-		return "1"
-	}
-	return "0"
-}
-
 func enabledStringOrDisabled(oneOrZero string) string {
 	if strings.TrimSpace(oneOrZero) == "1" {
 		return "Enabled"
@@ -799,7 +748,7 @@ func enabledStringOrDisabled(oneOrZero string) string {
 	return "Disabled"
 }
 
-func renderStartupBanner(mainAddr, otlpHTTPAddr, otlpGRPCAddr string, configManager bool) string {
+func renderStartupBanner(mainAddr, otlpHTTPAddr, otlpGRPCAddr string) string {
 	return fmt.Sprintf(
 		"\nSplunk Observability Studio (collector)\n"+
 			"  Telemetry Explorer:  %s\n"+
@@ -810,7 +759,6 @@ func renderStartupBanner(mainAddr, otlpHTTPAddr, otlpGRPCAddr string, configMana
 			"\nEnvironment Variables\n"+
 			"  OBSTUDIO_REGISTRATION_AND_AUTH_PROTOCOL: %s\n"+
 			"  OBSTUDIO_O11Y_OAUTH_REGISTRATION_URL: %s\n"+
-			"  %s: %s\n"+
 			"  OBSTUDIO_O11Y_OAUTH_RANDOM_CLIENT_NAME: %s\n\n",
 		observerBrowserURL(mainAddr),
 		otlpHTTPAddr,
@@ -818,8 +766,6 @@ func renderStartupBanner(mainAddr, otlpHTTPAddr, otlpGRPCAddr string, configMana
 		mainAddr,
 		strings.TrimSpace(os.Getenv("OBSTUDIO_REGISTRATION_AND_AUTH_PROTOCOL")),
 		strings.TrimSpace(os.Getenv("OBSTUDIO_O11Y_OAUTH_REGISTRATION_URL")),
-		configManagerGateEnv,
-		enabledStringOrDisabled(boolToOneOrZero(configManager)),
 		enabledStringOrDisabled(strings.TrimSpace(os.Getenv("OBSTUDIO_O11Y_OAUTH_RANDOM_CLIENT_NAME"))),
 	)
 }

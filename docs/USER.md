@@ -219,11 +219,10 @@ this from the collapsed **client registration** section).
 - If `OBSTUDIO_REGISTRATION_AND_AUTH_PROTOCOL` is not `O11Y_OAUTH`, sign-in is
   not available and Studio keeps using the copy-and-paste token described
   above.
-- Saving the sign-in details (realm, organization ID, client ID and client
-  secret) between sessions needs the Config Manager, which is off by default.
-  With it off, Studio does not remember them and you enter them for each
-  sign-in. With it on, they are stored in `~/.obstudio/config.yaml`, with the
-  client secret in plain text in that file.
+- Studio saves the sign-in details (realm, organization ID, client ID and
+  client secret) between sessions in `~/.obstudio/config.yaml`, with the client
+  secret in plain text in that file. If Studio cannot read or create that file,
+  it does not remember them and you enter them for each sign-in.
 
 ### Secure token storage
 
