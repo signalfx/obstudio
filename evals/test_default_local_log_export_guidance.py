@@ -20,7 +20,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILLS = ROOT / "skills"
-LANGUAGES = SKILLS / "otel-instrument" / "references" / "languages"
+LANGUAGES = SKILLS / "references" / "languages"
 
 
 @pytest.mark.parametrize(("service", "filename", "section"), [

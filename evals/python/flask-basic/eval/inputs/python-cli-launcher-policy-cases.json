@@ -16,7 +16,7 @@
     }
   },
   "source_selection": {
-    "loaded_guide_suffix": "otel-instrument/references/languages/python.md",
+    "loaded_guide_suffix": "references/languages/python.md",
     "heading": "## Auto-Instrumentation (CLI Wrapper)",
     "fence_language": "bash",
     "selection": "First bash fence after the heading, including the shebang through the final exec command. Copy it byte-for-byte; no corrected/reimplemented guard logic in the extracted shell or fake instrumentor."
