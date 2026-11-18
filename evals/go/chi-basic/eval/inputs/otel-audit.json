@@ -28,7 +28,7 @@
     },
     {
       "check": "Route source",
-      "finding": "Six chi routes",
+      "finding": "Seven chi routes",
       "source": "main.go"
     },
     {
@@ -46,6 +46,10 @@
     {
       "method": "GET",
       "path": "/health"
+    },
+    {
+      "method": "GET",
+      "path": "/logging-workflow/{slot:(left|right)}"
     },
     {
       "method": "GET",
@@ -97,7 +101,7 @@
       ],
       "dependencies": [],
       "evidence": [
-        "main.go:28"
+        "main.go:31"
       ],
       "acceptance_criteria": [
         "GET /health emits exactly one HTTP server span with http.route=/health."
@@ -139,7 +143,7 @@
       ],
       "dependencies": ["OTEL-003"],
       "evidence": [
-        "main.go:60"
+        "main.go:68"
       ],
       "acceptance_criteria": [
         "A successful task creation increments task.created exactly once."
@@ -180,7 +184,7 @@
       ],
       "dependencies": [],
       "evidence": [
-        "main.go:53"
+        "main.go:57"
       ],
       "acceptance_criteria": [
         "Exactly one of task.created or task.create is implemented and proven."
@@ -242,7 +246,7 @@
       ],
       "dependencies": ["OTEL-003"],
       "evidence": [
-        "main.go:53"
+        "main.go:57"
       ],
       "acceptance_criteria": [
         "A successful task creation emits task.create exactly once."
@@ -280,7 +284,7 @@
       {
         "id": "http.health.success",
         "trigger": "GET /health",
-        "entrypoint": "main.go:28",
+        "entrypoint": "main.go:31",
         "expected_signals": "one route-aware HTTP server span",
         "proof_level": "full runtime",
         "acceptance_criteria": "The request emits exactly one server span with http.route=/health.",
@@ -291,7 +295,7 @@
       {
         "id": "business.task-created",
         "trigger": "POST /tasks with a valid bounded title",
-        "entrypoint": "main.go:53",
+        "entrypoint": "main.go:57",
         "expected_signals": "one task.created metric increment",
         "proof_level": "focused call-site",
         "acceptance_criteria": "The successful persistence path records task.created exactly once with no metric attributes.",
@@ -302,7 +306,7 @@
       {
         "id": "business.task-create-span",
         "trigger": "POST /tasks with a valid bounded title",
-        "entrypoint": "main.go:53",
+        "entrypoint": "main.go:57",
         "expected_signals": "one task.create span",
         "proof_level": "focused call-site",
         "acceptance_criteria": "The successful persistence path emits task.create exactly once.",

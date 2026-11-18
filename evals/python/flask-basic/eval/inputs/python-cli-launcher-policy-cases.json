@@ -4,7 +4,7 @@
   "fixture_receipts": {
     "app.py": {
       "path": "app.py",
-      "sha256": "5fcca84aacb85fb64cceec468d669718b163566742c5a7343bd65316923e840c"
+      "sha256": "1209172394d85fc8244799b9ea13d0633ef39b9cedb4b1f1e95190fedb2903de"
     },
     "pyproject.toml": {
       "path": "pyproject.toml",
@@ -12,7 +12,7 @@
     },
     "Makefile": {
       "path": "Makefile",
-      "sha256": "9638ea37751505b6f4a4018a30477ad3c69633c7669796322e1738d7b75a0bbe"
+      "sha256": "9a65cc876fd81f9d1d30cf23790d2d921e59aa5542ad8c7a524fe550971bb03c"
     }
   },
   "source_selection": {
