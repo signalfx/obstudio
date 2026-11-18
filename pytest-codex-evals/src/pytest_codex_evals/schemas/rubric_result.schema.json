@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schema_version", "status", "acceptance", "overall_pass", "score", "counts", "checks", "dimensions"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": 1},
+    "status": {"enum": ["complete", "incomplete"]},
+    "acceptance": {"enum": ["pass", "fail", "incomplete", "vacuous"]},
+    "overall_pass": {"type": ["boolean", "null"]},
+    "score": {"type": ["integer", "null"], "minimum": 0, "maximum": 100},
+    "counts": {"$ref": "#/$defs/counts"},
+    "checks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "result", "notes", "evidence", "dimension"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^rubric-[1-9][0-9]*$"},
+          "result": {"enum": ["pass", "fail", "not_proven", "not_applicable", "ungraded"]},
+          "notes": {"type": "string"},
+          "evidence": {"type": "string"},
+          "dimension": {"type": "string"}
+        }
+      }
+    },
+    "dimensions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "error",
+          "criteria",
+          "score",
+          "counts",
+          "timeout_seconds",
+          "duration_seconds",
+          "returncode",
+          "usage",
+          "usage_error",
+          "artifacts"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string"},
+          "status": {"enum": ["graded", "grader_error", "not_run"]},
+          "error": {"type": ["string", "null"]},
+          "criteria": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^rubric-[1-9][0-9]*$"}},
+          "score": {"type": ["integer", "null"], "minimum": 0, "maximum": 100},
+          "counts": {"$ref": "#/$defs/counts"},
+          "timeout_seconds": {"type": "integer", "minimum": 0},
+          "duration_seconds": {"type": "number", "minimum": 0},
+          "returncode": {"type": ["integer", "null"]},
+          "usage": {"anyOf": [{"$ref": "#/$defs/usage"}, {"type": "null"}]},
+          "usage_error": {"type": ["string", "null"]},
+          "artifacts": {
+            "type": "object",
+            "required": ["prompt", "output", "trace", "stderr"],
+            "additionalProperties": false,
+            "properties": {
+              "prompt": {"type": ["string", "null"]},
+              "output": {"type": ["string", "null"]},
+              "trace": {"type": ["string", "null"]},
+              "stderr": {"type": ["string", "null"]}
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "counts": {
+      "type": "object",
+      "required": ["pass", "fail", "not_proven", "not_applicable", "ungraded", "total"],
+      "additionalProperties": false,
+      "properties": {
+        "pass": {"type": "integer", "minimum": 0},
+        "fail": {"type": "integer", "minimum": 0},
+        "not_proven": {"type": "integer", "minimum": 0},
+        "not_applicable": {"type": "integer", "minimum": 0},
+        "ungraded": {"type": "integer", "minimum": 0},
+        "total": {"type": "integer", "minimum": 0}
+      }
+    },
+    "usage": {
+      "additionalProperties": false,
+      "properties": {
+        "provider": {"enum": ["codex", "claude", "unknown"], "type": "string"},
+        "source": {"enum": ["cumulative", "incremental", "unknown"], "type": "string"},
+        "observed": {"type": "boolean"},
+        "usage_record_count": {"minimum": 0, "type": "integer"},
+        "selected_record_count": {"minimum": 0, "type": "integer"},
+        "input_tokens": {"anyOf": [{"minimum": 0, "type": "integer"}, {"type": "null"}]},
+        "cached_input_tokens": {"anyOf": [{"minimum": 0, "type": "integer"}, {"type": "null"}]},
+        "cache_creation_input_tokens": {"anyOf": [{"minimum": 0, "type": "integer"}, {"type": "null"}]},
+        "output_tokens": {"anyOf": [{"minimum": 0, "type": "integer"}, {"type": "null"}]},
+        "reasoning_output_tokens": {"anyOf": [{"minimum": 0, "type": "integer"}, {"type": "null"}]},
+        "provider_total_tokens": {"anyOf": [{"minimum": 0, "type": "integer"}, {"type": "null"}]},
+        "derived_total_tokens": {"anyOf": [{"minimum": 0, "type": "integer"}, {"type": "null"}]},
+        "effective_total_tokens": {"anyOf": [{"minimum": 0, "type": "integer"}, {"type": "null"}]}
+      },
+      "type": "object"
+    }
+  }
+}
