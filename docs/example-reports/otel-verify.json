@@ -2,8 +2,8 @@
   "schema_version": 1,
   "kind": "otel-verify",
   "audit_id": "go-chi-basic-fixture",
-  "audit_sha256": "sha256:653451e6cf339e9abd3e3227afbc16fb0eb8195cd4d944e35874942e87e56c66",
-  "instrumentation_sha256": "sha256:fc379cfddd35f4eed67c50f2fa3a73848f167d01c462c87a6f3fe538637fade1",
+  "audit_sha256": "sha256:5e406521fc2aa60967a500a61c8382667f795843ff8a64e0b16a339ba3203962",
+  "instrumentation_sha256": "sha256:0e35c68856e11c6ffc0c58fd2a7a79c6ee1218d38a722771a01e9fb7f98a5cde",
   "meta": {
     "service_name": "go-chi-basic",
     "date": "2026-07-21",
