@@ -37,7 +37,7 @@ from pytest_codex_evals.definitions import GradeCheckResult, GradeResult
 from pytest_codex_evals.graders.rubric import run_rubric_dimensions
 
 
-FIXTURE_CHECKS = {'go/chi-basic': ['go', 'test', './...'], 'python/flask-basic': ['uv', 'run', 'python', '-m', 'py_compile', 'app.py']}
+FIXTURE_CHECKS = {'go/chi-basic': ['go', 'test', './...'], 'java/springboot-basic': ['mvn', '-q', 'test'], 'python/flask-basic': ['uv', 'run', 'python', '-m', 'py_compile', 'app.py']}
 
 
 @pytest.mark.skipif(os.name != "posix", reason="This receipt boundary test creates filesystem symlinks")
@@ -191,7 +191,7 @@ def test_public_make_targets_forward_identity_profiles(tmp_path, case, target, c
     )
     tools = tmp_path / "fake tools"
     tools.mkdir()
-    for name in ('go', 'uv'):
+    for name in ('go', 'mvn', 'uv'):
         executable = tools / name
         executable.write_text(
             "#!" + sys.executable + "\nimport json,os,sys\nfrom pathlib import Path\n"
