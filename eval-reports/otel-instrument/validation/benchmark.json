@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-instrument",
-    "run_id": "20261118T081128018964Z",
+    "run_id": "20261118T095939735229Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-6-luna",
     "judge_model": "",
@@ -970,7 +970,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "fdcdae5fee53947ee849b3b740dbdc5f295b304709e22613e139670070c8ba0d",
+    "digest": "0f921d538094f37e3a8ccda51597c0c3da30d319201e21ab241418f9c00bc021",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -1367,8 +1367,9 @@
       "evals/go/native-genai-demo/eval/inputs/genai-profile-evidence.json": "aa816ae1e830e83a99289d326264d53e050cccd0c50648d49c3f2f8627ce7343",
       "evals/go/native-genai-demo/eval/inputs/native-module-evidence.json": "450d81069099780c28e3a105394662a5713d004cf23a7f1f92289a8b252b996c",
       "evals/go/native-genai-demo/eval/inputs/nativeprobe/main.go": "2a2dcfeffb8bb6a370f8dc342e18d3432514cf849b423107b728940173be64ca",
+      "evals/go/native-genai-demo/eval/inputs/otel-audit.json": "20b465570af3ce27a0d801b90e7561dde94101c6144b843aad1298c7f5ebefb4",
       "evals/go/native-genai-demo/eval/inputs/schemacheck/main.go": "c0049f5ecbd169dfc0ac6a576b126054a49feabdd46c7f96c3eb1717beefc3c8",
-      "evals/go/native-genai-demo/eval/qual/instrument.json": "18bbc0abdfccdbe765fdcc0106b9cc12a267482827a2bc2188b83f7a6b15e73f",
+      "evals/go/native-genai-demo/eval/qual/instrument.json": "64722bb7e117ade8af5e4084ee06f2b3aa74712847968510869c019099f97192",
       "evals/go/native-genai-demo/go.mod": "5799f426a1dad23378ee071445e85d7ec9422a96bb38ed38b490f6d94ac3a059",
       "evals/go/native-genai-demo/go.sum": "f6fbf8e7bb1b83a747a7590926aa9ee22c16be6dad16f5e8d66adcb37f5046cc",
       "evals/go/native-genai-demo/main.go": "7ff08c72f55f98255c93762056f8816f2a4351975365e2c03dfc3b1f39bee09f",
@@ -1406,7 +1407,8 @@
       "evals/java/kafka-producer-consumer/src/main/java/com/example/kafka/ShipmentProducer.java": "a413bb5a6f4eca018f151f677e008e8a9d4dce800acbf852ddf1e5749e63e69f",
       "evals/java/kafka-producer-consumer/src/test/java/com/example/kafka/OrderMessageHandlerTest.java": "152745d96f5d6bc8f1419dc78c1c625c2cd7fd2990b3d0104280d4e9207ad833",
       "evals/java/kafka-streams/README.md": "34c5c5004cefaa371f41affc2cfca31d4279a3312e81cbb43224111bb1d4be7d",
-      "evals/java/kafka-streams/eval/qual/incident-readiness.json": "387cf30d9845061c88f1a713c30d11e50667580b531a3d366dff689a4d91e7f5",
+      "evals/java/kafka-streams/eval/inputs/otel-audit.json": "b93ee2dbec84f6ac52338b3b8b51becf315c9a9c3197e328f0d5f15b9cb6597c",
+      "evals/java/kafka-streams/eval/qual/incident-readiness.json": "db3d4b381948203247f4761dbbdbe85e332b184f6136143673fb308a89686e7f",
       "evals/java/kafka-streams/pom.xml": "cd0a688ee3238759b4fe58cee98d4c011e8bd30666b6e450a1e9c5165c04502f",
       "evals/java/kafka-streams/src/main/java/com/example/streaming/EnrichedOrder.java": "33a71ed88c738a9e1583484636bc77b36895d98cfb8ec391d124cdc7712f63c9",
       "evals/java/kafka-streams/src/main/java/com/example/streaming/KafkaStreamsApplication.java": "046a463cc5e5d7af8ba2612425b8d127e788e3c0fc97ac19c3447776b19723f0",
@@ -1441,7 +1443,7 @@
       "evals/python/agent-connection-demo/app.py": "187d093ab61e902969b0f6fabc59a352d45a117f9a3baf93f737087c35926559",
       "evals/python/agent-connection-demo/checks/probe_regressions.py": "89e4537c9c180ac37113fe95f2bb972c2344b96f66eea31dc776dc6cb1909c36",
       "evals/python/agent-connection-demo/eval/inputs/otel-audit.json": "2145ea19c020d2932a52ea6d60f27434939ae8c788f6f10c8756a40d2f1f5b13",
-      "evals/python/agent-connection-demo/eval/qual/instrument.json": "1254b2d1e379825a30d4725f0c7f97562b76da6c4e6ff8c3346e67d9e24ac8e4",
+      "evals/python/agent-connection-demo/eval/qual/instrument.json": "7f93854b8a74ab2a021ca6cf53f6d20935dbad63dc83ca8c9b40cb3f46ad40f9",
       "evals/python/agent-connection-demo/gateway_contract_check.py": "5fdc06f29366d61539c45cd256c3fe80c4b415002cca536f7d1523a3b81e3d39",
       "evals/python/agent-connection-demo/launch.py": "ecb23235956a9cc83a0d073dc3a77aa28244abca0fa4029d25693891af454c08",
       "evals/python/agent-connection-demo/probe.py": "a524290e5b0f4bcede6af0c3b43b53eb4bfafe0304b22a4fc4c7b578978d8313",
@@ -1480,7 +1482,7 @@
       "evals/python/ai-assistant-demo/eval/inputs/genai-semconv-source-snapshot.json": "37dcf51de2138b706b7272c32e4215d280a94790b3d4bb454000ef66ef24e3ae",
       "evals/python/ai-assistant-demo/eval/qual/genai-sdk-default-instrument.json": "8ffa9b4ade3c15f7ca1bf95f42a4e1040f9ae94075fcc7f100cdfdc0447307f1",
       "evals/python/ai-assistant-demo/eval/inputs/python-preflight-requirements.txt": "b0b8f31b82900833d80bc473c89cbe7c19d8a702f7d0ba17e7299ba3cf818c68",
-      "evals/python/ai-assistant-demo/eval/qual/instrument.json": "797351844eeff675a5c64f7c739e1394fe251343c523d78d44fc669e6f9a1216",
+      "evals/python/ai-assistant-demo/eval/qual/instrument.json": "9c2924c7d23e7b5fcc9b7c4abe372336345177303a625e0840de1541f234b4f8",
       "evals/python/ai-assistant-demo/eval/inputs/per-function-decorator-gate-evidence.json": "ade2556c260fef65e1952236e26e474c9f24333f78ce18f87667b189505752b9",
       "evals/python/ai-assistant-demo/eval/inputs/per-function-full-conformance-evidence.json": "cfeb7eb26410f9aa70fb7e2c77355ea4a67b5d92b0f9e7f02cd15a8ff528c805",
       "evals/python/ai-assistant-demo/eval/qual/per-function-decorator-instrument.json": "f2a0b21a747260a7146f13afd8864e86c9d22a9eb79fdbda90164721a9b84394",
@@ -1729,7 +1731,8 @@
           "eval/inputs/genai-profile-evidence.json",
           "eval/inputs/native-module-evidence.json",
           "eval/inputs/nativeprobe/main.go",
-          "eval/inputs/schemacheck/main.go"
+          "eval/inputs/schemacheck/main.go",
+          "eval/inputs/otel-audit.json"
         ]
       },
       {
@@ -1779,7 +1782,9 @@
         "fixture_dir": "evals/java/kafka-streams",
         "prompt_id": "mttd",
         "eval_kind": "rubric",
-        "eval_inputs": []
+        "eval_inputs": [
+          "eval/inputs/otel-audit.json"
+        ]
       },
       {
         "definition_path": "evals/java/kafka-streams/eval/qual/instrument.json",
