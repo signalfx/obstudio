@@ -2169,6 +2169,7 @@ th {{ color: var(--muted); font-size: 12px; }}
       <span>language <b>{esc(report['meta']['language'])}</b></span>
       <span>framework <b>{esc(report['meta']['framework'])}</b></span>
       <span>date <b>{esc(report['meta']['date'])}</b></span>
+      <span>GenAI ownership detected <b>{'Yes' if report['meta']['genai_ownership_detected'] else 'No'}</b></span>
       <span><b>{len(findings)}</b> findings</span>
     </div>
     <nav class="report-nav" aria-label="Report formats">

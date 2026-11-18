@@ -26,13 +26,20 @@
     "otel-instrument"
   ],
   "languages/python.md": [
-    "otel-instrument"
+    "otel-audit",
+    "otel-instrument",
+    "otel-verify"
   ],
   "ledger-template.md": [
     "splunk-dashboard-publish",
     "splunk-detector-publish"
   ],
   "local-otlp-receiver.md": [
+    "otel-audit",
+    "otel-instrument",
+    "otel-verify"
+  ],
+  "logging-readiness.md": [
     "otel-audit",
     "otel-instrument",
     "otel-verify"

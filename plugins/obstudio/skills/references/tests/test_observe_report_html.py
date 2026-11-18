@@ -21,6 +21,35 @@ from observe_report_fixtures import (
 
 
 class ObserveReportTest(unittest.TestCase):
+    def test_audit_header_shows_genai_ownership_without_opening_appendix(self) -> None:
+        for detected, expected in ((False, "No"), (True, "Yes")):
+            with self.subTest(detected=detected):
+                data = sample_report()
+                data["meta"]["genai_ownership_detected"] = detected
+                data["evidence"][-1]["finding"] = expected
+                if detected:
+                    data["genai_readiness"] = [{
+                        "surface": "Checkout assistant",
+                        "status": "covered",
+                        "evidence": "assistant.go:20",
+                        "required_signals": "assistant.request span",
+                        "owner": "assistant.go:20",
+                        "acceptance_criteria": "A bounded assistant.request span is emitted.",
+                        "impact": "Operators can locate assistant latency.",
+                    }]
+                report = MODULE.normalize_audit_report(data)
+
+                html = MODULE.render_html(report, MODULE.empty_selection(report))
+
+                header = html.split("</header>", 1)[0]
+                self.assertIn(f"GenAI ownership detected <b>{expected}</b>", header)
+                self.assertEqual(report["evidence"][-1]["finding"], expected)
+                self.assertLess(html.index("</header>"), html.index("Technical appendix"))
+                self.assertNotRegex(
+                    html,
+                    r"(?i)<h2\b[^>]*>\s*(?:GenAI|Incident)(?:\s+telemetry)?\s+readiness\b",
+                )
+
     def test_renders_splunk_agent_observability_as_nested_findings_subsection(self) -> None:
         report = MODULE.normalize_audit_report(
             sample_splunk_agent_observability_report()
