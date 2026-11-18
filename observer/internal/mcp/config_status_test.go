@@ -182,8 +182,8 @@ func TestStdioObserverStatusConfig(t *testing.T) {
 		t.Error("mcp-stdio-config (b): config key present without a Builder")
 	}
 
-	// (c) A nil *configstatus.Builder, as run passes with the gate off, is no
-	// Builder.
+	// (c) A nil *configstatus.Builder, as run passes when the Config Manager
+	// could not be built, is no Builder.
 	var none *configstatus.Builder
 	if _, ok := stdioStatus(t, none)["config"]; ok {
 		t.Error("mcp-stdio-config (c): config key present with a nil Builder")

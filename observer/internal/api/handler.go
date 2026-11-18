@@ -28,9 +28,9 @@ type ServerInfo struct {
 	StartedAt  time.Time               `json:"startedAt"`
 	Version    string                  `json:"version"`
 	Exporters  map[string]ExporterInfo `json:"exporters,omitempty"`
-	// ConfigManager is the Config Manager gate as resolved at startup, not
-	// whether a config Manager was built. The client shows the Config tab
-	// only when it is true.
+	// ConfigManager reports whether the config Manager was built at startup,
+	// so the config routes exist. The client shows the Config tab only when it
+	// is true.
 	ConfigManager bool `json:"configManager"`
 }
 

@@ -19,7 +19,6 @@ func TestRunServesConfigManagerAndSecureCloudConnection(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
-	t.Setenv(configManagerGateEnv, "true")
 	t.Setenv("OBSTUDIO_OWNER", "cli")
 	t.Setenv("OBSTUDIO_MODE", "standalone")
 	t.Setenv("OBSTUDIO_SHARED_OBSERVER_STATE_PATH", filepath.Join(home, "shared.json"))
@@ -245,7 +244,7 @@ func TestObserverBrowserURLContainsNoControlCredential(t *testing.T) {
 }
 
 func TestRenderStartupBannerUsesFullProductName(t *testing.T) {
-	got := renderStartupBanner("127.0.0.1:3000", "127.0.0.1:4318", "127.0.0.1:4317", false)
+	got := renderStartupBanner("127.0.0.1:3000", "127.0.0.1:4318", "127.0.0.1:4317")
 	if !strings.HasPrefix(got, "\nSplunk Observability Studio (collector)\n") {
 		t.Fatalf("renderStartupBanner() = %q, want full product name", got)
 	}
