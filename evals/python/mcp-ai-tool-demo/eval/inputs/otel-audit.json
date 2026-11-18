@@ -1,0 +1,283 @@
+{
+  "schema_version": 2,
+  "kind": "otel-audit",
+  "meta": {
+    "audit_id": "python-mcp-ai-tool-demo-selected-work",
+    "service_name": "mcp-ai-tool-demo",
+    "commit": "fixture",
+    "language": "python",
+    "framework": "FastAPI",
+    "date": "2026-11-17",
+    "status": "Partial",
+    "genai_ownership_detected": true
+  },
+  "summary": [
+    "POST /mcp [GAP: HTTP and JSON-RPC outcomes] -> _execute_tool -> _call_provider [GAP: Tool and provider operations]; sessions and SSE [GAP: Session and stream lifecycle]"
+  ],
+  "evidence": [
+    {
+      "check": "Manifest",
+      "finding": "FastAPI and httpx fixture without OpenTelemetry dependencies.",
+      "source": "pyproject.toml"
+    },
+    {
+      "check": "Entry point",
+      "finding": "app.py owns JSON-RPC dispatch, sessions, streams, tools and a simulated provider.",
+      "source": "app.py:17-198"
+    },
+    {
+      "check": "Route source",
+      "finding": "Routes are listed from application source; this packet covers only the selected work.",
+      "source": "app.py:17-198"
+    },
+    {
+      "check": "Runtime/startup",
+      "finding": "Make dev runs uvicorn app:app; make test compiles the Python sources.",
+      "source": "app.py:17-198"
+    },
+    {
+      "check": "GenAI ownership",
+      "finding": "Yes",
+      "source": "app.py:17-198"
+    }
+  ],
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/health"
+    },
+    {
+      "method": "POST",
+      "path": "/mcp"
+    },
+    {
+      "method": "GET",
+      "path": "/mcp/sessions"
+    },
+    {
+      "method": "DELETE",
+      "path": "/mcp/sessions/{session_id}"
+    },
+    {
+      "method": "GET",
+      "path": "/mcp/sessions/{session_id}/stream"
+    }
+  ],
+  "signal_flow": {
+    "component_flow_map": "POST /mcp [GAP: HTTP and JSON-RPC outcomes] -> _execute_tool -> _call_provider [GAP: Tool and provider operations]; sessions and SSE [GAP: Session and stream lifecycle]"
+  },
+  "current_instrumentation": {
+    "spans": [],
+    "metrics": [],
+    "logs": [
+      {
+        "integration": "Python logging",
+        "source": "app.py:14-15; app.py:130-131; app.py:189-194",
+        "detail": "Console tool-error and stream lifecycle logs exist; no OpenTelemetry logging setup."
+      }
+    ],
+    "incident_readiness": []
+  },
+  "genai_readiness": [
+    {
+      "surface": "HTTP and JSON-RPC outcomes",
+      "status": "missing",
+      "evidence": "app.py:38-52; app.py:118-151",
+      "required_signals": "One SDK lifecycle covers FastAPI and bounded JSON-RPC method outcomes without exposing payloads or session identifiers.",
+      "owner": "Application-owned paths in app.py:38-52",
+      "acceptance_criteria": "One SDK lifecycle covers FastAPI and bounded JSON-RPC method outcomes without exposing payloads or session identifiers.",
+      "impact": "HTTP status alone does not identify JSON-RPC method and tool-call errors; no OpenTelemetry setup exists."
+    },
+    {
+      "surface": "Session and stream lifecycle",
+      "status": "missing",
+      "evidence": "app.py:88-103; app.py:154-198",
+      "required_signals": "Actual session and stream lifecycle paths produce bounded activity, duration and outcome signals with safe cleanup.",
+      "owner": "Application-owned paths in app.py:88-103",
+      "acceptance_criteria": "Actual session and stream lifecycle paths produce bounded activity, duration and outcome signals with safe cleanup.",
+      "impact": "Session and stream state exists but has no telemetry for activity, close, cancellation or failure."
+    },
+    {
+      "surface": "Tool and provider operations",
+      "status": "missing",
+      "evidence": "app.py:55-85; app.py:118-133",
+      "required_signals": "Representative tool and provider operations have safe semantic spans and bounded error/latency metrics; synthetic provider proof stays distinct from live provider proof.",
+      "owner": "Application-owned paths in app.py:55-85",
+      "acceptance_criteria": "Representative tool and provider operations have safe semantic spans and bounded error/latency metrics; synthetic provider proof stays distinct from live provider proof.",
+      "impact": "Application-owned tool and simulated-provider operations have no OpenTelemetry spans or detector inputs."
+    }
+  ],
+  "findings": [
+    {
+      "id": "OTEL-001",
+      "title": "HTTP and JSON-RPC outcomes",
+      "severity": "high",
+      "priority": "required",
+      "effort": "medium",
+      "status": "proposed",
+      "area": "HTTP and JSON-RPC outcomes",
+      "gap": "HTTP status alone does not identify JSON-RPC method and tool-call errors; no OpenTelemetry setup exists.",
+      "impact": "One SDK lifecycle covers FastAPI and bounded JSON-RPC method outcomes without exposing payloads or session identifiers.",
+      "required_fix": "One SDK lifecycle covers FastAPI and bounded JSON-RPC method outcomes without exposing payloads or session identifiers.",
+      "instrument_mode": "default",
+      "verification_scenarios": [
+        "otel-001.behavior"
+      ],
+      "dependencies": [],
+      "evidence": [
+        "app.py:38-52",
+        "app.py:118-151"
+      ],
+      "acceptance_criteria": [
+        "One SDK lifecycle covers FastAPI and bounded JSON-RPC method outcomes without exposing payloads or session identifiers."
+      ],
+      "constraints": [
+        "Preserve existing application behavior, telemetry owners and supported startup paths; keep private data out of telemetry dimensions."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "span",
+          "name": "HTTP and JSON-RPC outcomes",
+          "attributes": [],
+          "product_view": "One SDK lifecycle covers FastAPI and bounded JSON-RPC method outcomes without exposing payloads or session identifiers."
+        }
+      ],
+      "follow_up_actions": [
+        "Verify the selected paths locally and report unexecuted or external proof separately."
+      ]
+    },
+    {
+      "id": "OTEL-002",
+      "title": "Session and stream lifecycle",
+      "severity": "high",
+      "priority": "required",
+      "effort": "medium",
+      "status": "proposed",
+      "area": "Session and stream lifecycle",
+      "gap": "Session and stream state exists but has no telemetry for activity, close, cancellation or failure.",
+      "impact": "Actual session and stream lifecycle paths produce bounded activity, duration and outcome signals with safe cleanup.",
+      "required_fix": "Actual session and stream lifecycle paths produce bounded activity, duration and outcome signals with safe cleanup.",
+      "instrument_mode": "fix all",
+      "verification_scenarios": [
+        "otel-002.behavior"
+      ],
+      "dependencies": [
+        "OTEL-001"
+      ],
+      "evidence": [
+        "app.py:88-103",
+        "app.py:154-198"
+      ],
+      "acceptance_criteria": [
+        "Actual session and stream lifecycle paths produce bounded activity, duration and outcome signals with safe cleanup."
+      ],
+      "constraints": [
+        "Preserve existing application behavior, telemetry owners and supported startup paths; keep private data out of telemetry dimensions."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "metric",
+          "name": "session and stream lifecycle",
+          "attributes": [],
+          "product_view": "Actual session and stream lifecycle paths produce bounded activity, duration and outcome signals with safe cleanup."
+        }
+      ],
+      "follow_up_actions": [
+        "Verify the selected paths locally and report unexecuted or external proof separately."
+      ]
+    },
+    {
+      "id": "OTEL-003",
+      "title": "Tool and provider operations",
+      "severity": "high",
+      "priority": "required",
+      "effort": "medium",
+      "status": "proposed",
+      "area": "Tool and provider operations",
+      "gap": "Application-owned tool and simulated-provider operations have no OpenTelemetry spans or detector inputs.",
+      "impact": "Representative tool and provider operations have safe semantic spans and bounded error/latency metrics; synthetic provider proof stays distinct from live provider proof.",
+      "required_fix": "Representative tool and provider operations have safe semantic spans and bounded error/latency metrics; synthetic provider proof stays distinct from live provider proof.",
+      "instrument_mode": "default",
+      "verification_scenarios": [
+        "otel-003.behavior"
+      ],
+      "dependencies": [
+        "OTEL-001"
+      ],
+      "evidence": [
+        "app.py:55-85",
+        "app.py:118-133"
+      ],
+      "acceptance_criteria": [
+        "Representative tool and provider operations have safe semantic spans and bounded error/latency metrics; synthetic provider proof stays distinct from live provider proof."
+      ],
+      "constraints": [
+        "Preserve existing application behavior, telemetry owners and supported startup paths; keep private data out of telemetry dimensions."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "span",
+          "name": "tool and provider operations",
+          "attributes": [],
+          "product_view": "Representative tool and provider operations have safe semantic spans and bounded error/latency metrics; synthetic provider proof stays distinct from live provider proof."
+        }
+      ],
+      "follow_up_actions": [
+        "Verify the selected paths locally and report unexecuted or external proof separately."
+      ]
+    }
+  ],
+  "verification": {
+    "environments": [
+      {
+        "id": "fixture.local",
+        "surface": "Selected application paths with controlled local dependencies",
+        "config_evidence": "pyproject.toml",
+        "runner": "Focused application tests",
+        "scope": "service",
+        "prerequisites": "Install compatible declared dependencies; use local fakes for external failures. Live delivery needs separate receiver evidence."
+      }
+    ],
+    "scenarios": [
+      {
+        "id": "otel-001.behavior",
+        "trigger": "Exercise successful and failing selected paths with controlled local dependencies.",
+        "entrypoint": "app.py:38-52; app.py:118-151",
+        "expected_signals": "One SDK lifecycle covers FastAPI and bounded JSON-RPC method outcomes without exposing payloads or session identifiers.",
+        "proof_level": "focused call-site",
+        "acceptance_criteria": "One SDK lifecycle covers FastAPI and bounded JSON-RPC method outcomes without exposing payloads or session identifiers.",
+        "environments": [
+          "fixture.local"
+        ]
+      },
+      {
+        "id": "otel-002.behavior",
+        "trigger": "Exercise successful and failing selected paths with controlled local dependencies.",
+        "entrypoint": "app.py:88-103; app.py:154-198",
+        "expected_signals": "Actual session and stream lifecycle paths produce bounded activity, duration and outcome signals with safe cleanup.",
+        "proof_level": "focused call-site",
+        "acceptance_criteria": "Actual session and stream lifecycle paths produce bounded activity, duration and outcome signals with safe cleanup.",
+        "environments": [
+          "fixture.local"
+        ]
+      },
+      {
+        "id": "otel-003.behavior",
+        "trigger": "Exercise successful and failing selected paths with controlled local dependencies.",
+        "entrypoint": "app.py:55-85; app.py:118-133",
+        "expected_signals": "Representative tool and provider operations have safe semantic spans and bounded error/latency metrics; synthetic provider proof stays distinct from live provider proof.",
+        "proof_level": "focused call-site",
+        "acceptance_criteria": "Representative tool and provider operations have safe semantic spans and bounded error/latency metrics; synthetic provider proof stays distinct from live provider proof.",
+        "environments": [
+          "fixture.local"
+        ]
+      }
+    ]
+  },
+  "anti_patterns": [
+    "Do not treat a source inventory or local fake result as live telemetry delivery."
+  ],
+  "recommendation": [
+    "Select the requested findings through the bundled selection flow before instrumentation."
+  ]
+}

@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-instrument",
-    "run_id": "20261118T163338351859Z",
+    "run_id": "20261119T012932346346Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-6-luna",
     "judge_model": "",
@@ -1026,7 +1026,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "bc7d9806eb49de2dc9096465e352432b22ee1ecf8681643655e79d7f52682313",
+    "digest": "fde6fac0e43250fa70683fddda920e1baa0e32dda346a9cf84ff19627b92d94f",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -1076,11 +1076,11 @@
       "skills/references/splunk-agent-observability.md": "819faa9e9f27d2b1b41c13980809801fa242c9b6309eb4eae854688a538f4bf4",
       "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
-      "skills/references/tests/observe_report_fixtures.py": "58440bbebb543612a46b7dd63b7a35db7c530e6ea5cb20eb8bda109a3dfe08ed",
+      "skills/references/tests/observe_report_fixtures.py": "979ad773cac94d5f824a9b5632770071ba72a74df2dc9ce87bdb9ac0ee1698fb",
       "skills/references/tests/test_observe_report.py": "cf79f1a74e4b2260d8010145ce2ff0c6122554e6c7eb19984941b6a89418c2c0",
       "skills/references/tests/test_observe_report_flow.py": "a895ca4165a196ff8ab0ffb73a1c6dcf859d27cf59cd5f335ce4fe1c9ca7392e",
-      "skills/references/tests/test_observe_report_html.py": "e9f9d025f0b8d86dbedb0325e9ec6c2b19e06957857cee43ea95324072a40d0b",
-      "skills/references/tests/test_observe_report_selection.py": "744beaa95d5f6bb5a6045fd7f6f5de96b08085af0f74f8c9de6c3d3b5eada59c",
+      "skills/references/tests/test_observe_report_html.py": "409cf8d297b93b07b820302b5f3daff7654266bafbb18763abc8400a3f43bdc5",
+      "skills/references/tests/test_observe_report_selection.py": "747c197c4ee94a49e736a7dc13585ba972097da07d58a9909cc60f95e4cb7289",
       "evals/go/chi-basic/eval/qual/instrument-decision-gated.json": "1604ebf6626a7ebc97406d3bc8299a7bf44003d6f2eb6f9bda6f89b408d934df",
       "evals/go/chi-basic/eval/qual/instrument.json": "ce3b05d3f76526c0e8126512dd2bbd45413e5759bef8661763e064a39383c2ed",
       "evals/go/chi-basic/eval/qual/logging-instrument-contract.json": "9bd706095115bf655a59b99a7d13d2febffd5f75559eb76a0ffd3d924fbad9b3",
@@ -1423,8 +1423,9 @@
       "evals/go/kvstore/kvstore/store.go": "eb8c09d0220e8816f3f6bb8a6fae9c86c44823048065ed12cf56cf9f6e6b98fd",
       "evals/go/kvstore/kvstore/store_test.go": "23532aff7f33ce9ce0937e10b915c0b3e136b6382c98c16aada5fcf711b0c96b",
       "evals/go/kvstore/spec.md": "4eb0f6f554cb707e1a3290b6b76a1f5e74af5100d2938fb2734e079798d29c7a",
-      "evals/go/kvstore/eval/qual/incident-readiness.json": "9951aa3266bb0d23a23cecae29511ea33703bea50d904564dbaad0e48996fa3a",
-      "evals/go/kvstore/eval/qual/instrument.json": "300aea80fbccc5a2efc3e5b94714603c00af0fe0f3ddf64594dc5ce35e1a5320",
+      "evals/go/kvstore/eval/inputs/otel-audit.json": "3c3c313086c69c281148b3c163f4ac459c4317a607f6c4f1e83a4b5d91976198",
+      "evals/go/kvstore/eval/qual/incident-readiness.json": "8f458f3086a7af567626737b5078b3de8f36746e43e02e814769e3e1fb707658",
+      "evals/go/kvstore/eval/qual/instrument.json": "424f3713773685fb1947c36602206747299c662631731a134ce03e324a7d2738",
       "evals/go/kvstore/eval/runtime/App.Dockerfile": "a5fd8ddcda7b4d4aa9345c8b1f906ed8455a7e6b542731dd41ffad176f573d43",
       "evals/go/kvstore/eval/runtime/docker-compose.yml": "59c1611b85c4eb8becc363a29be591f1946503a82ce33d98dc9a41a4cd9453d2",
       "evals/go/kvstore/eval/runtime/instrument.json": "4e8e051e61da3c95d54bc92e7c1cbb6c20872b2cad82873ce189eec08ad514fa",
@@ -1609,7 +1610,8 @@
       "evals/python/fastapi-celery/Makefile": "8403be2e415c0666604e4311051933595559f5272ffe891de4328cc8d7df25aa",
       "evals/python/fastapi-celery/app.py": "2dcc2c24037dba31b4dee309a005be4179ab3396e97d2a1e87a93c5aae6d760c",
       "evals/python/fastapi-celery/docker-compose.yml": "8170f2f746522ea541976a0900991c9b39914e5bdee9424e0831f6d8f3e2d751",
-      "evals/python/fastapi-celery/eval/qual/incident-readiness.json": "00ff6de8f476c9b1ad73820506afbbd3beb550e32944ef3e2bf88e62223ee07d",
+      "evals/python/fastapi-celery/eval/inputs/otel-audit.json": "5b766e21516edfcedb616bd019444fd9ef27cf32cce8b521a4a14f771f4a1334",
+      "evals/python/fastapi-celery/eval/qual/incident-readiness.json": "02e3fa1cf21b1b03b77efa0295968238e506bfb35ea340e7ae2b4f7587912b9f",
       "evals/python/fastapi-celery/pyproject.toml": "486ece182067449ec1cbd8f0cdb18184cfe0278fedb7fee81e9c6975da0e1e79",
       "evals/python/fastapi-celery/worker.py": "ac138d80a191757a1dba95cc57d6f69628486e9aee73efa8925d605e72ccd65d",
       "evals/python/fastapi-celery/eval/qual/instrument.json": "5591bdd562cbf0a85f139e38e3b5a29b537a6d837e1cfadef25302798debc026",
@@ -1638,16 +1640,18 @@
       "evals/python/galileo-agent-demo/agent.py": "4aaff22556af904048ceb3febb342184ea8c84ce6c88053f1352b93e7abf89ed",
       "evals/python/galileo-agent-demo/app.py": "fe53cb16cb6e4d48fcfc2e4ad312600e7d523de99f2a7eaee55fec5dd1108909",
       "evals/python/galileo-agent-demo/eval/inputs/otel-audit-integration-choice.json": "61017ffe8e2cb968c76ad2c0773abd5dfd71faa6757f70f25f77e76b5832f07a",
-      "evals/python/galileo-agent-demo/eval/qual/instrument.json": "51fa47ff2c7bd8592c725c4837970f136dc2e7a0c2def8d3c95da23fb83efae4",
+      "evals/python/galileo-agent-demo/eval/qual/instrument.json": "43aa7a6252b99bf4f0b98e123be6af208bfeb153e9c1713bf38eb57bd182c50e",
       "evals/python/galileo-agent-demo/galileo_compat.py": "a94d05b35aade11b9686881b92ce3a84de442882e7efcee39f3dffdb2da59879",
       "evals/python/galileo-agent-demo/pyproject.toml": "bfb227381b5219b92fc4238fdb4a47b0b781e4c2818628b6d977e408b9304901",
       "evals/python/galileo-agent-demo/tests/test_agent.py": "33d5fea1eebfbdc855fafd00e7a3600a06a1a90f1b97d1c8942e8e0460b4f124",
       "evals/python/galileo-agent-demo/tests/test_galileo_compat.py": "5cfbd1cb95bbec495be7643dbb6d1fc4243586c8d3897d6830f3e9ca21f63ceb",
       "evals/python/galileo-agent-demo/eval/inputs/galileo-native-profile.env": "723e03bf855ce965d485645a4bef3180609346b6335a0c0e44aff11264caeb28",
+      "evals/python/galileo-agent-demo/eval/inputs/native-resource-audit.json": "d83e54bc2f57daa534ae0c3528bb2616d101e43c9b8a793dfafa09d0a0f319ca",
       "evals/python/mcp-ai-tool-demo/Makefile": "87d12c2866f8dbd360a98ed53448c98ee805fa7f55a7b61e03862734fa4f63a2",
       "evals/python/mcp-ai-tool-demo/README.md": "56f9c6b444d4fc18a62c0f8bed5dbcd21c81ac5753911d25a8d61cb2816b6d73",
       "evals/python/mcp-ai-tool-demo/app.py": "3e224b78e316ad5ee07fa06f2773be2a5299e1b3a8d8e12febd0b33ef17718c4",
-      "evals/python/mcp-ai-tool-demo/eval/qual/instrument.json": "c3911248d1c775a028240e61fd66cb2491d65cd6b94346b52bf86be62d3cc224",
+      "evals/python/mcp-ai-tool-demo/eval/inputs/otel-audit.json": "58483da5c3d39f3f9cd8c028698e8fe8794578344ab7994092ca31e90a2c232a",
+      "evals/python/mcp-ai-tool-demo/eval/qual/instrument.json": "5a55a19f677a96c4860834e2888113f170905086d38022bb7c201794526597de",
       "evals/python/mcp-ai-tool-demo/load_demo.py": "5bec26d9d8fd272dbdd779ab2dfb7bbb7134648ee65960537516354fcb428660",
       "evals/python/mcp-ai-tool-demo/pyproject.toml": "d0aed70f07d1a77a413afe435daa70c5e403da903e07511ba23b0232fc0e4375",
       "evals/python/model-directed-agent/README.md": "4df0874e3a6d9596a7362376aa7d143ae4a8537ba5de86033a468702f1e87519",
@@ -1664,16 +1668,18 @@
       "evals/python/model-directed-agent/requirements.txt": "db09e53078192128053fbc35c0c970233d26af43535e63090738aa6d0f1d042b",
       "evals/python/model-directed-agent/roles.py": "8d254346b01cbcf7bda6d38778732d44656ff585b5f0fbb56bdf3f65d818bbdc",
       "evals/python/model-directed-agent/templates/index.html": "499ff2bfcefb3e0263b6c2af41f7d81a1dc20c1417854350bcf44b9465e6ce81",
-      "evals/python/model-directed-agent/eval/qual/resource-table-instrument.json": "d51be784667e5d99f876a4d127a474a499fb321356a20793f82659e10a520ede",
+      "evals/python/model-directed-agent/eval/inputs/native-resource-audit.json": "e58e84afa04b239e89a95133561aac5e423351b8110d995462fd4b0861eb2b01",
+      "evals/python/model-directed-agent/eval/qual/resource-table-instrument.json": "b49d13ea0e92c14b988691b58df465a805120ee2abc3ad2064cb73c44d5582a7",
       "evals/python/splunk-ao-integration-demo/decorator_app.py": "65cbdeb9ba515386d6f122ae085bd299f640952cf3e338c76bc285c8df01cd56",
-      "evals/python/splunk-ao-integration-demo/eval/qual/instrument.json": "73dab129274a7d9b54646433e17ebad5b0b66a43d0e08b3293ba251281f03038",
+      "evals/python/splunk-ao-integration-demo/eval/inputs/otel-audit.json": "e4e15fd563a1863f6cd134327d49c4dc82ed4fa7e6d4783f2d683aff23ebb3f0",
+      "evals/python/splunk-ao-integration-demo/eval/qual/instrument.json": "35573f53e0eff0f5aeb892e1039bc8a61071a169ecc56f556573eff4d48b792c",
       "evals/python/splunk-ao-integration-demo/existing_otel_app.py": "11103e93e200d4f35bb2e3c230ca06da3cbc9180af105baa2a4caa9bec9c81d4",
       "evals/python/splunk-ao-integration-demo/pyproject.toml": "af0ebcbf966f782df354973d50395d20359db6877cc8ba99984f97a9b98e6908",
       "evals/python/splunk-ao-langchain-demo/Makefile": "c9da5dd95276d141b0a32e21a2011ac263117a3e449121688573b882fe87fc0d",
       "evals/python/splunk-ao-langchain-demo/README.md": "30a1e175482d6071a5a8746b1c61b208b2756aa157205c268466cdd336578b9b",
       "evals/python/splunk-ao-langchain-demo/app.py": "05d2a0a640aedc252b3b38626fe12099ef8ad805a842607a6e59bf666644fda5",
       "evals/python/splunk-ao-langchain-demo/eval/inputs/otel-audit.json": "b7cb3fa40477fef1fd9f906ab25daefefe3591f572a974d8db82b850c3ebe177",
-      "evals/python/splunk-ao-langchain-demo/eval/qual/instrument.json": "d01f3061795956899f9a9cf961b73ef38fb0c57c12c931288635b10a9303faff",
+      "evals/python/splunk-ao-langchain-demo/eval/qual/instrument.json": "8c6395b09a7c6b1f89dfc8987ffc06250d1f27c73179da4e777ae826827a0554",
       "evals/python/splunk-ao-langchain-demo/pyproject.toml": "4400a876430531a23291aa826f8eb266b77f0d5b393d3b0aba5a720f02d7b3a3",
       "evals/python/splunk-ao-langchain-demo/tests/test_app.py": "843b89e1f95650214876c4ca61d4cce82b7038664e893a4f87cea90278b1c40e",
       "evals/sanity/skill-smoke/eval/sanity/instrument.json": "79b5c1da09ad32b8f941a0445a79a528ce2de76ff4c81738263b4fa04cd2d1c9",
@@ -1796,7 +1802,9 @@
         "fixture_dir": "evals/go/kvstore",
         "prompt_id": "mttd",
         "eval_kind": "rubric",
-        "eval_inputs": []
+        "eval_inputs": [
+          "eval/inputs/otel-audit.json"
+        ]
       },
       {
         "definition_path": "evals/go/kvstore/eval/qual/instrument.json",
@@ -2327,7 +2335,9 @@
         "fixture_dir": "evals/python/fastapi-celery",
         "prompt_id": "mttd",
         "eval_kind": "rubric",
-        "eval_inputs": []
+        "eval_inputs": [
+          "eval/inputs/otel-audit.json"
+        ]
       },
       {
         "definition_path": "evals/python/fastapi-celery/eval/qual/instrument.json",
@@ -2446,7 +2456,8 @@
         "prompt_id": "galileo-native-resources",
         "eval_kind": "rubric",
         "eval_inputs": [
-          "eval/inputs/galileo-native-profile.env"
+          "eval/inputs/galileo-native-profile.env",
+          "eval/inputs/native-resource-audit.json"
         ]
       },
       {
@@ -2472,7 +2483,9 @@
         "fixture_dir": "evals/python/mcp-ai-tool-demo",
         "prompt_id": "direct",
         "eval_kind": "rubric",
-        "eval_inputs": []
+        "eval_inputs": [
+          "eval/inputs/otel-audit.json"
+        ]
       },
       {
         "definition_path": "evals/python/model-directed-agent/eval/qual/instrument.json",
@@ -2488,14 +2501,18 @@
         "fixture_dir": "evals/python/model-directed-agent",
         "prompt_id": "native-agent-resource-defaults",
         "eval_kind": "rubric",
-        "eval_inputs": []
+        "eval_inputs": [
+          "eval/inputs/native-resource-audit.json"
+        ]
       },
       {
         "definition_path": "evals/python/splunk-ao-integration-demo/eval/qual/instrument.json",
         "fixture_dir": "evals/python/splunk-ao-integration-demo",
         "prompt_id": "integration-paths",
         "eval_kind": "rubric",
-        "eval_inputs": []
+        "eval_inputs": [
+          "eval/inputs/otel-audit.json"
+        ]
       },
       {
         "definition_path": "evals/python/splunk-ao-langchain-demo/eval/qual/instrument.json",

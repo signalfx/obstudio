@@ -718,3 +718,17 @@ def test_m2_put_dashboard_documented_for_chart_gap():
     assert "duplicate" in coverage_text.lower(), (
         "coverage model must warn that recreating the whole dashboard produces a duplicate"
     )
+
+
+def test_configure_tool_permissions_keep_writes_and_terraform_scoped():
+    skill = SKILLS_DIR / "splunk-configure" / "SKILL.md"
+    frontmatter = _read(skill).split("---", 2)[1]
+    tool_line = next(line for line in frontmatter.splitlines() if line.startswith("allowed-tools:"))
+    tools = {item.strip() for item in tool_line.removeprefix("allowed-tools:").split(",")}
+    writes = {item for item in tools if item in {"Write", "Edit"} or item.startswith(("Write(", "Edit("))}
+    assert writes == {"Edit(**/.observe/**)"}
+    bash = {item for item in tools if item == "Bash" or item.startswith("Bash(")}
+    assert bash == {
+        f"Bash(terraform {command} *)"
+        for command in ("version", "fmt", "init", "validate", "plan")
+    }

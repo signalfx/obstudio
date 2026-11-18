@@ -1613,7 +1613,10 @@ def test_language_rubrics_grade_each_log_acceptance_path_independently() -> None
             and "severity" in item
             and "trace" in item
             and "span" in item
-            and "resource identity" in item
+            and (
+                "resource identity" in item
+                or ("effective service.name" in item and "shared resource" in item)
+            )
             for item in rubric
         ), f"{path} lacks a focused record-integrity rubric"
         assert any(

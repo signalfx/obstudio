@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-audit",
-    "run_id": "20261118T163338351859Z",
+    "run_id": "20261119T012932346346Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-6-luna",
     "judge_model": "",
@@ -290,7 +290,7 @@
       "eval_dir": "evals/python/ai-assistant-demo",
       "skill_path": "skills/otel-audit",
       "sanity_check_count": 0,
-      "rubric_check_count": 15,
+      "rubric_check_count": 14,
       "runtime_check_count": 0
     },
     {
@@ -706,12 +706,12 @@
     "case_count": 64,
     "prompt_count": 64,
     "sanity_check_count": 0,
-    "rubric_check_count": 1074,
+    "rubric_check_count": 1072,
     "runtime_check_count": 0
   },
   "source": {
     "digest_version": 4,
-    "digest": "5ac67c6ce9bf2fc8f5d5ddda0aa775fb6524e4aa19d29e9170ba5cf5977f91f2",
+    "digest": "fa50097815b5d335dbdda7ac8b2d4a4e455c8700fa8d8b9de92e8a225b8e1bdc",
     "eval_kinds": [
       "rubric",
       "sanity"
@@ -753,11 +753,11 @@
       "skills/references/splunk-agent-observability.md": "819faa9e9f27d2b1b41c13980809801fa242c9b6309eb4eae854688a538f4bf4",
       "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
-      "skills/references/tests/observe_report_fixtures.py": "58440bbebb543612a46b7dd63b7a35db7c530e6ea5cb20eb8bda109a3dfe08ed",
+      "skills/references/tests/observe_report_fixtures.py": "979ad773cac94d5f824a9b5632770071ba72a74df2dc9ce87bdb9ac0ee1698fb",
       "skills/references/tests/test_observe_report.py": "cf79f1a74e4b2260d8010145ce2ff0c6122554e6c7eb19984941b6a89418c2c0",
       "skills/references/tests/test_observe_report_flow.py": "a895ca4165a196ff8ab0ffb73a1c6dcf859d27cf59cd5f335ce4fe1c9ca7392e",
-      "skills/references/tests/test_observe_report_html.py": "e9f9d025f0b8d86dbedb0325e9ec6c2b19e06957857cee43ea95324072a40d0b",
-      "skills/references/tests/test_observe_report_selection.py": "744beaa95d5f6bb5a6045fd7f6f5de96b08085af0f74f8c9de6c3d3b5eada59c",
+      "skills/references/tests/test_observe_report_html.py": "409cf8d297b93b07b820302b5f3daff7654266bafbb18763abc8400a3f43bdc5",
+      "skills/references/tests/test_observe_report_selection.py": "747c197c4ee94a49e736a7dc13585ba972097da07d58a9909cc60f95e4cb7289",
       "evals/go/chi-basic/eval/qual/logging-audit-contract.json": "0ffb9cabae96dffc227d537e78e1d57f94a119dd10b3704dbf9af835aac1d034",
       "evals/rubrics/logging-common.json": "1076c8a84a27f319bb0ee263fd71f2909301570e884d5f8d5bf0388e9774c4a0",
       "evals/rubrics/logging-go-additions.json": "1a3c025779dafe4f1c40639405d633d55669d77c65bc517f5ebf718526a614e2",
@@ -866,7 +866,7 @@
       "evals/python/ai-assistant-demo/eval/qual/audit-focused-decorator-logs.json": "8f1015406d832f2e1e1c3d120f32c31019a11e03020f0a45cb53d3f253f43228",
       "evals/python/ai-assistant-demo/eval/inputs/audit-metadata-capability-evidence.json": "d7f7221d0cb706edd87fc050b307f78a0d569308bb10fd8c93345d3fb919a113",
       "evals/python/ai-assistant-demo/eval/qual/audit-focused-metadata.json": "b304b84bfe791a2ea3afd1b84fcc550d2dd597ae658fba4a5c967de88d2ab523",
-      "evals/python/ai-assistant-demo/eval/qual/audit.json": "0e3776a61e36b8fe5508d7154a98d060d4b10265589e2d2e800feee0ad82cc4b",
+      "evals/python/ai-assistant-demo/eval/qual/audit.json": "1158f9d0ca82f221c1d094368977f3e86e21eb3ba3791eb981dbd9909fa65a45",
       "evals/python/ai-assistant-demo/eval/qual/content-coverage-audit.json": "74461bcbb6962e170a3007ed1e9fc5f0a87b6b937724bc458737cf5f6edbd5c5",
       "evals/python/ai-assistant-demo/eval/qual/env-resource-plan.json": "80b2e7a58290de98d4a7dbd7f2a51383e57c980394ef29c5c1bf912203402666",
       "evals/python/ai-assistant-demo/eval/qual/finding-group-audit.json": "ba3ab0d4ab99f4b165a9dd48c9a2cb71dd860dc85b45365de4551c26ea2bc3d7",

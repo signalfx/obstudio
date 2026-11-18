@@ -1,0 +1,148 @@
+{
+  "schema_version": 2,
+  "kind": "otel-audit",
+  "meta": {
+    "audit_id": "python-splunk-ao-integration-demo-selected-work",
+    "service_name": "splunk-ao-integration-demo",
+    "commit": "fixture",
+    "language": "python",
+    "framework": "Splunk AO and OpenTelemetry",
+    "date": "2026-11-17",
+    "status": "Partial",
+    "genai_ownership_detected": true
+  },
+  "summary": [
+    "decorator_app @log [SOURCE-COVERED] [GAP: Decorator content privacy and termination]; existing_otel_app provider -> AO export-only processor -> provider.shutdown [SOURCE-COVERED]"
+  ],
+  "evidence": [
+    {
+      "check": "Manifest",
+      "finding": "Declared splunk-ao and OpenTelemetry SDK dependencies.",
+      "source": "pyproject.toml"
+    },
+    {
+      "check": "Entry point",
+      "finding": "Two independent entrypoints demonstrate SDK-owned decorators and caller-owned OpenTelemetry.",
+      "source": "decorator_app.py; existing_otel_app.py"
+    },
+    {
+      "check": "Route source",
+      "finding": "Routes are listed from application source; this packet covers only the selected work.",
+      "source": "decorator_app.py; existing_otel_app.py"
+    },
+    {
+      "check": "Runtime/startup",
+      "finding": "Each Python module is an independent application entrypoint; no common launcher exists.",
+      "source": "decorator_app.py; existing_otel_app.py"
+    },
+    {
+      "check": "GenAI ownership",
+      "finding": "Yes",
+      "source": "decorator_app.py; existing_otel_app.py"
+    }
+  ],
+  "routes": [],
+  "signal_flow": {
+    "component_flow_map": "decorator_app @log [SOURCE-COVERED] [GAP: Decorator content privacy and termination]; existing_otel_app provider -> AO export-only processor -> provider.shutdown [SOURCE-COVERED]"
+  },
+  "current_instrumentation": {
+    "spans": [
+      {
+        "name": "answer_question, search_documents, get_weather",
+        "source": "decorator_app.py:6-20",
+        "type": "Splunk AO decorators"
+      },
+      {
+        "name": "invoke_workflow answer_question",
+        "source": "existing_otel_app.py:8-21",
+        "type": "Application-owned OpenTelemetry with AO export-only processor"
+      }
+    ],
+    "metrics": [],
+    "logs": [],
+    "incident_readiness": []
+  },
+  "genai_readiness": [
+    {
+      "surface": "Decorator content privacy and termination",
+      "status": "partial",
+      "evidence": "decorator_app.py:3-20",
+      "required_signals": "Existing SDK-owned logical operations remain single-produced, private content is excluded before raw capture, and the supported logger teardown is exercised.",
+      "owner": "Application-owned paths in decorator_app.py:3-20",
+      "acceptance_criteria": "Existing SDK-owned logical operations remain single-produced, private content is excluded before raw capture, and the supported logger teardown is exercised.",
+      "impact": "Decorated operations accept and return private caller content, with no application-owned safe capture boundary or logger teardown shown."
+    }
+  ],
+  "findings": [
+    {
+      "id": "AO-001",
+      "title": "Decorator content privacy and termination",
+      "severity": "high",
+      "priority": "required",
+      "effort": "medium",
+      "status": "proposed",
+      "area": "Decorator content privacy and termination",
+      "gap": "Decorated operations accept and return private caller content, with no application-owned safe capture boundary or logger teardown shown.",
+      "impact": "Existing SDK-owned logical operations remain single-produced, private content is excluded before raw capture, and the supported logger teardown is exercised.",
+      "required_fix": "Existing SDK-owned logical operations remain single-produced, private content is excluded before raw capture, and the supported logger teardown is exercised.",
+      "instrument_mode": "default",
+      "verification_scenarios": [
+        "ao-001.behavior"
+      ],
+      "dependencies": [],
+      "evidence": [
+        "decorator_app.py:3-20"
+      ],
+      "acceptance_criteria": [
+        "Existing SDK-owned logical operations remain single-produced, private content is excluded before raw capture, and the supported logger teardown is exercised."
+      ],
+      "constraints": [
+        "Preserve existing application behavior, telemetry owners and supported startup paths; keep private data out of telemetry dimensions.",
+        "Preserve existing_otel_app.py's exact provider, single AO export-only processor, workflow span and provider shutdown; prove these existing behaviors in focused credential-free tests."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "configuration",
+          "name": "splunk-ao.decorator.content-and-lifecycle",
+          "attributes": [],
+          "product_view": "Existing SDK-owned logical operations remain single-produced, private content is excluded before raw capture, and the supported logger teardown is exercised."
+        }
+      ],
+      "follow_up_actions": [
+        "Verify the selected paths locally and report unexecuted or external proof separately."
+      ],
+      "finding_group": "splunk-agent-observability"
+    }
+  ],
+  "verification": {
+    "environments": [
+      {
+        "id": "fixture.local",
+        "surface": "Selected application paths with controlled local dependencies",
+        "config_evidence": "pyproject.toml",
+        "runner": "Focused application tests",
+        "scope": "service",
+        "prerequisites": "Install compatible declared dependencies; use local fakes for external failures. Live delivery needs separate receiver evidence."
+      }
+    ],
+    "scenarios": [
+      {
+        "id": "ao-001.behavior",
+        "trigger": "Exercise successful and failing selected paths with controlled local dependencies.",
+        "entrypoint": "decorator_app.py:3-20",
+        "expected_signals": "Existing SDK-owned logical operations remain single-produced, private content is excluded before raw capture, and the supported logger teardown is exercised.",
+        "proof_level": "focused call-site",
+        "acceptance_criteria": "Existing SDK-owned logical operations remain single-produced, private content is excluded before raw capture, and the supported logger teardown is exercised.",
+        "environments": [
+          "fixture.local"
+        ]
+      }
+    ]
+  },
+  "anti_patterns": [
+    "Do not treat a source inventory or local fake result as live telemetry delivery."
+  ],
+  "recommendation": [
+    "Select the requested findings through the bundled selection flow before instrumentation."
+  ]
+}

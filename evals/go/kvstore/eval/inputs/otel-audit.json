@@ -1,0 +1,303 @@
+{
+  "schema_version": 2,
+  "kind": "otel-audit",
+  "meta": {
+    "audit_id": "go-kvstore-selected-work",
+    "service_name": "kvstore",
+    "commit": "fixture",
+    "language": "go",
+    "framework": "net/http",
+    "date": "2026-11-17",
+    "status": "Partial",
+    "genai_ownership_detected": false
+  },
+  "summary": [
+    "HTTP [GAP: HTTP and SDK lifecycle] -> Store.Set -> asynchronous write [GAP: Asynchronous persistence outcomes]; indexCh [GAP: Search indexing pressure]; LRU [GAP: Capacity eviction]"
+  ],
+  "evidence": [
+    {
+      "check": "Manifest",
+      "finding": "Go module without OpenTelemetry dependencies.",
+      "source": "go.mod"
+    },
+    {
+      "check": "Entry point",
+      "finding": "cmd/kvstore-server starts the store and HTTP server.",
+      "source": "cmd/kvstore-server/main.go; kvstore/http.go"
+    },
+    {
+      "check": "Route source",
+      "finding": "Routes are listed from application source; this packet covers only the selected work.",
+      "source": "cmd/kvstore-server/main.go; kvstore/http.go"
+    },
+    {
+      "check": "Runtime/startup",
+      "finding": "The existing server owns signal handling and store shutdown.",
+      "source": "cmd/kvstore-server/main.go:18-67; Makefile"
+    },
+    {
+      "check": "GenAI ownership",
+      "finding": "No",
+      "source": "cmd/kvstore-server/main.go; kvstore/http.go"
+    }
+  ],
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/kv/{key}"
+    },
+    {
+      "method": "PUT",
+      "path": "/kv/{key}"
+    },
+    {
+      "method": "DELETE",
+      "path": "/kv/{key}"
+    },
+    {
+      "method": "GET",
+      "path": "/search"
+    }
+  ],
+  "signal_flow": {
+    "component_flow_map": "HTTP [GAP: HTTP and SDK lifecycle] -> Store.Set -> asynchronous write [GAP: Asynchronous persistence outcomes]; indexCh [GAP: Search indexing pressure]; LRU [GAP: Capacity eviction]"
+  },
+  "current_instrumentation": {
+    "spans": [],
+    "metrics": [],
+    "logs": [
+      {
+        "integration": "Go log and slog",
+        "source": "kvstore/store.go:226-227; kvstore/http.go:59-63; cmd/kvstore-server/main.go:66",
+        "detail": "Existing persistence failure and request/shutdown console logging; no OTLP log exporter."
+      }
+    ],
+    "incident_readiness": []
+  },
+  "genai_readiness": [],
+  "findings": [
+    {
+      "id": "OTEL-001",
+      "title": "HTTP and SDK lifecycle",
+      "severity": "high",
+      "priority": "required",
+      "effort": "medium",
+      "status": "proposed",
+      "area": "HTTP and SDK lifecycle",
+      "gap": "The HTTP server has no OpenTelemetry setup or route-aware request telemetry.",
+      "impact": "Request telemetry, resource identity and export use one managed lifecycle while the existing server and store shutdown continue.",
+      "required_fix": "Request telemetry, resource identity and export use one managed lifecycle while the existing server and store shutdown continue.",
+      "instrument_mode": "default",
+      "verification_scenarios": [
+        "otel-001.behavior"
+      ],
+      "dependencies": [],
+      "evidence": [
+        "cmd/kvstore-server/main.go:18-67",
+        "kvstore/http.go:23-95"
+      ],
+      "acceptance_criteria": [
+        "Request telemetry, resource identity and export use one managed lifecycle while the existing server and store shutdown continue."
+      ],
+      "constraints": [
+        "Preserve existing application behavior, telemetry owners and supported startup paths; keep private data out of telemetry dimensions."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "span",
+          "name": "HTTP server telemetry",
+          "attributes": [],
+          "product_view": "Request telemetry, resource identity and export use one managed lifecycle while the existing server and store shutdown continue."
+        }
+      ],
+      "follow_up_actions": [
+        "Verify the selected paths locally and report unexecuted or external proof separately."
+      ]
+    },
+    {
+      "id": "OTEL-002",
+      "title": "Asynchronous persistence outcomes",
+      "severity": "high",
+      "priority": "required",
+      "effort": "medium",
+      "status": "proposed",
+      "area": "Asynchronous persistence outcomes",
+      "gap": "Set returns before its background write completes; persistence failures are only logged.",
+      "impact": "Operators can distinguish completed and failed background persistence without treating an accepted Set as durable success.",
+      "required_fix": "Operators can distinguish completed and failed background persistence without treating an accepted Set as durable success.",
+      "instrument_mode": "fix all",
+      "verification_scenarios": [
+        "otel-002.behavior"
+      ],
+      "dependencies": [
+        "OTEL-001"
+      ],
+      "evidence": [
+        "kvstore/store.go:130-160",
+        "kvstore/store.go:223-239"
+      ],
+      "acceptance_criteria": [
+        "Operators can distinguish completed and failed background persistence without treating an accepted Set as durable success."
+      ],
+      "constraints": [
+        "Preserve existing application behavior, telemetry owners and supported startup paths; keep private data out of telemetry dimensions."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "metric",
+          "name": "persistence outcomes",
+          "attributes": [],
+          "product_view": "Operators can distinguish completed and failed background persistence without treating an accepted Set as durable success."
+        }
+      ],
+      "follow_up_actions": [
+        "Verify the selected paths locally and report unexecuted or external proof separately."
+      ]
+    },
+    {
+      "id": "OTEL-003",
+      "title": "Search indexing pressure",
+      "severity": "high",
+      "priority": "required",
+      "effort": "medium",
+      "status": "proposed",
+      "area": "Search indexing pressure",
+      "gap": "The bounded index channel can overflow into waiting goroutines without an observable pressure signal.",
+      "impact": "A bounded signal exposes actual queued or active index work without claiming unmeasured index freshness.",
+      "required_fix": "A bounded signal exposes actual queued or active index work without claiming unmeasured index freshness.",
+      "instrument_mode": "fix all",
+      "verification_scenarios": [
+        "otel-003.behavior"
+      ],
+      "dependencies": [
+        "OTEL-001"
+      ],
+      "evidence": [
+        "kvstore/store.go:89-100",
+        "kvstore/store.go:208-219",
+        "kvstore/store.go:255-265"
+      ],
+      "acceptance_criteria": [
+        "A bounded signal exposes actual queued or active index work without claiming unmeasured index freshness."
+      ],
+      "constraints": [
+        "Preserve existing application behavior, telemetry owners and supported startup paths; keep private data out of telemetry dimensions."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "metric",
+          "name": "index queue pressure",
+          "attributes": [],
+          "product_view": "A bounded signal exposes actual queued or active index work without claiming unmeasured index freshness."
+        }
+      ],
+      "follow_up_actions": [
+        "Verify the selected paths locally and report unexecuted or external proof separately."
+      ]
+    },
+    {
+      "id": "OTEL-004",
+      "title": "Capacity eviction",
+      "severity": "high",
+      "priority": "required",
+      "effort": "medium",
+      "status": "proposed",
+      "area": "Capacity eviction",
+      "gap": "Capacity pressure silently removes the least-recently-used in-memory entry.",
+      "impact": "A capacity-eviction event is observable without using keys or values as metric attributes.",
+      "required_fix": "A capacity-eviction event is observable without using keys or values as metric attributes.",
+      "instrument_mode": "fix all",
+      "verification_scenarios": [
+        "otel-004.behavior"
+      ],
+      "dependencies": [
+        "OTEL-001"
+      ],
+      "evidence": [
+        "kvstore/store.go:142-153",
+        "kvstore/store.go:242-252"
+      ],
+      "acceptance_criteria": [
+        "A capacity-eviction event is observable without using keys or values as metric attributes."
+      ],
+      "constraints": [
+        "Preserve existing application behavior, telemetry owners and supported startup paths; keep private data out of telemetry dimensions."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "metric",
+          "name": "capacity evictions",
+          "attributes": [],
+          "product_view": "A capacity-eviction event is observable without using keys or values as metric attributes."
+        }
+      ],
+      "follow_up_actions": [
+        "Verify the selected paths locally and report unexecuted or external proof separately."
+      ]
+    }
+  ],
+  "verification": {
+    "environments": [
+      {
+        "id": "fixture.local",
+        "surface": "Selected application paths with controlled local dependencies",
+        "config_evidence": "go.mod; Makefile",
+        "runner": "go test -race ./...",
+        "scope": "service",
+        "prerequisites": "Install compatible declared dependencies; use local fakes for external failures. Live delivery needs separate receiver evidence."
+      }
+    ],
+    "scenarios": [
+      {
+        "id": "otel-001.behavior",
+        "trigger": "Exercise successful and failing selected paths with controlled local dependencies.",
+        "entrypoint": "cmd/kvstore-server/main.go:18-67; kvstore/http.go:23-95",
+        "expected_signals": "Request telemetry, resource identity and export use one managed lifecycle while the existing server and store shutdown continue.",
+        "proof_level": "focused call-site",
+        "acceptance_criteria": "Request telemetry, resource identity and export use one managed lifecycle while the existing server and store shutdown continue.",
+        "environments": [
+          "fixture.local"
+        ]
+      },
+      {
+        "id": "otel-002.behavior",
+        "trigger": "Exercise successful and failing selected paths with controlled local dependencies.",
+        "entrypoint": "kvstore/store.go:130-160; kvstore/store.go:223-239",
+        "expected_signals": "Operators can distinguish completed and failed background persistence without treating an accepted Set as durable success.",
+        "proof_level": "focused call-site",
+        "acceptance_criteria": "Operators can distinguish completed and failed background persistence without treating an accepted Set as durable success.",
+        "environments": [
+          "fixture.local"
+        ]
+      },
+      {
+        "id": "otel-003.behavior",
+        "trigger": "Exercise successful and failing selected paths with controlled local dependencies.",
+        "entrypoint": "kvstore/store.go:89-100; kvstore/store.go:208-219; kvstore/store.go:255-265",
+        "expected_signals": "A bounded signal exposes actual queued or active index work without claiming unmeasured index freshness.",
+        "proof_level": "focused call-site",
+        "acceptance_criteria": "A bounded signal exposes actual queued or active index work without claiming unmeasured index freshness.",
+        "environments": [
+          "fixture.local"
+        ]
+      },
+      {
+        "id": "otel-004.behavior",
+        "trigger": "Exercise successful and failing selected paths with controlled local dependencies.",
+        "entrypoint": "kvstore/store.go:142-153; kvstore/store.go:242-252",
+        "expected_signals": "A capacity-eviction event is observable without using keys or values as metric attributes.",
+        "proof_level": "focused call-site",
+        "acceptance_criteria": "A capacity-eviction event is observable without using keys or values as metric attributes.",
+        "environments": [
+          "fixture.local"
+        ]
+      }
+    ]
+  },
+  "anti_patterns": [
+    "Do not treat a source inventory or local fake result as live telemetry delivery."
+  ],
+  "recommendation": [
+    "Select the requested findings through the bundled selection flow before instrumentation."
+  ]
+}

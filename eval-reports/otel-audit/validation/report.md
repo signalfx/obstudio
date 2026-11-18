@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-audit |
-| Run ID | 20261118T163338351859Z |
+| Run ID | 20261119T012932346346Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -32,7 +32,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | node/express-basic/qual/logging-audit-contract | node/express-basic | 3 | evals/node/express-basic/eval/qual/logging-audit-contract.json | 0 | 63 | 0 |
 | python/ai-assistant-demo/qual/ao-root-compatibility-audit | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/ao-root-compatibility-audit.json | 0 | 8 | 0 |
 | python/ai-assistant-demo/qual/ao-target-handoff-audit | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/ao-target-handoff-audit.json | 0 | 4 | 0 |
-| python/ai-assistant-demo/qual/audit | python/ai-assistant-demo | 2 | evals/python/ai-assistant-demo/eval/qual/audit.json | 0 | 15 | 0 |
+| python/ai-assistant-demo/qual/audit | python/ai-assistant-demo | 2 | evals/python/ai-assistant-demo/eval/qual/audit.json | 0 | 14 | 0 |
 | python/ai-assistant-demo/qual/audit-focused-decorator-logs | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/audit-focused-decorator-logs.json | 0 | 3 | 0 |
 | python/ai-assistant-demo/qual/audit-focused-metadata | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/audit-focused-metadata.json | 0 | 4 | 0 |
 | python/ai-assistant-demo/qual/content-coverage-audit | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/content-coverage-audit.json | 0 | 4 | 0 |

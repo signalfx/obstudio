@@ -1,0 +1,249 @@
+{
+  "schema_version": 2,
+  "kind": "otel-audit",
+  "meta": {
+    "audit_id": "python-fastapi-celery-selected-work",
+    "service_name": "fastapi-celery",
+    "commit": "fixture",
+    "language": "python",
+    "framework": "FastAPI and Celery",
+    "date": "2026-11-17",
+    "status": "Partial",
+    "genai_ownership_detected": false
+  },
+  "summary": [
+    "FastAPI [GAP: API and worker telemetry] -> send_task [GAP: Order enqueue outcomes] -> Redis -> fulfill_order [GAP: Fulfillment outcomes and delay]"
+  ],
+  "evidence": [
+    {
+      "check": "Manifest",
+      "finding": "FastAPI, Celery and Redis dependencies without OpenTelemetry setup.",
+      "source": "pyproject.toml"
+    },
+    {
+      "check": "Entry point",
+      "finding": "FastAPI sends work to the independent Redis-backed Celery worker.",
+      "source": "app.py; worker.py"
+    },
+    {
+      "check": "Route source",
+      "finding": "Routes are listed from application source; this packet covers only the selected work.",
+      "source": "app.py; worker.py"
+    },
+    {
+      "check": "Runtime/startup",
+      "finding": "Compose starts Redis, API and worker as separate services.",
+      "source": "docker-compose.yml; Makefile"
+    },
+    {
+      "check": "GenAI ownership",
+      "finding": "No",
+      "source": "app.py; worker.py"
+    }
+  ],
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/health"
+    },
+    {
+      "method": "GET",
+      "path": "/orders"
+    },
+    {
+      "method": "GET",
+      "path": "/orders/{order_id}"
+    },
+    {
+      "method": "POST",
+      "path": "/orders"
+    },
+    {
+      "method": "DELETE",
+      "path": "/orders/{order_id}"
+    }
+  ],
+  "signal_flow": {
+    "component_flow_map": "FastAPI [GAP: API and worker telemetry] -> send_task [GAP: Order enqueue outcomes] -> Redis -> fulfill_order [GAP: Fulfillment outcomes and delay]"
+  },
+  "current_instrumentation": {
+    "spans": [],
+    "metrics": [],
+    "logs": [],
+    "incident_readiness": []
+  },
+  "genai_readiness": [],
+  "findings": [
+    {
+      "id": "OTEL-001",
+      "title": "API and worker telemetry",
+      "severity": "high",
+      "priority": "required",
+      "effort": "medium",
+      "status": "proposed",
+      "area": "API and worker telemetry",
+      "gap": "The API and independent Celery worker have no OpenTelemetry initialization.",
+      "impact": "Both processes retain their Compose startup and emit baseline FastAPI, Celery and Redis telemetry with distinct configurable identities.",
+      "required_fix": "Both processes retain their Compose startup and emit baseline FastAPI, Celery and Redis telemetry with distinct configurable identities.",
+      "instrument_mode": "default",
+      "verification_scenarios": [
+        "otel-001.behavior"
+      ],
+      "dependencies": [],
+      "evidence": [
+        "app.py:7-9",
+        "app.py:19-57",
+        "worker.py:6-19"
+      ],
+      "acceptance_criteria": [
+        "Both processes retain their Compose startup and emit baseline FastAPI, Celery and Redis telemetry with distinct configurable identities."
+      ],
+      "constraints": [
+        "Preserve existing application behavior, telemetry owners and supported startup paths; keep private data out of telemetry dimensions."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "span",
+          "name": "API and worker telemetry",
+          "attributes": [],
+          "product_view": "Both processes retain their Compose startup and emit baseline FastAPI, Celery and Redis telemetry with distinct configurable identities."
+        }
+      ],
+      "follow_up_actions": [
+        "Verify the selected paths locally and report unexecuted or external proof separately."
+      ]
+    },
+    {
+      "id": "OTEL-002",
+      "title": "Order enqueue outcomes",
+      "severity": "high",
+      "priority": "required",
+      "effort": "medium",
+      "status": "proposed",
+      "area": "Order enqueue outcomes",
+      "gap": "The API stores pending state before send_task, whose failure is not measured.",
+      "impact": "Successful and failed enqueue attempts have bounded, accurate outcome telemetry.",
+      "required_fix": "Successful and failed enqueue attempts have bounded, accurate outcome telemetry.",
+      "instrument_mode": "fix all",
+      "verification_scenarios": [
+        "otel-002.behavior"
+      ],
+      "dependencies": [
+        "OTEL-001"
+      ],
+      "evidence": [
+        "app.py:37-49"
+      ],
+      "acceptance_criteria": [
+        "Successful and failed enqueue attempts have bounded, accurate outcome telemetry."
+      ],
+      "constraints": [
+        "Preserve existing application behavior, telemetry owners and supported startup paths; keep private data out of telemetry dimensions."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "metric",
+          "name": "order enqueue outcomes",
+          "attributes": [],
+          "product_view": "Successful and failed enqueue attempts have bounded, accurate outcome telemetry."
+        }
+      ],
+      "follow_up_actions": [
+        "Verify the selected paths locally and report unexecuted or external proof separately."
+      ]
+    },
+    {
+      "id": "OTEL-003",
+      "title": "Fulfillment outcomes and delay",
+      "severity": "high",
+      "priority": "required",
+      "effort": "medium",
+      "status": "proposed",
+      "area": "Fulfillment outcomes and delay",
+      "gap": "Fulfillment completes asynchronously without app-owned outcome or timing signals.",
+      "impact": "Task success/failure and an accurately measured delay, age or duration reveal failed or slow work; broker fleet state is not inferred from local state.",
+      "required_fix": "Task success/failure and an accurately measured delay, age or duration reveal failed or slow work; broker fleet state is not inferred from local state.",
+      "instrument_mode": "fix all",
+      "verification_scenarios": [
+        "otel-003.behavior"
+      ],
+      "dependencies": [
+        "OTEL-001"
+      ],
+      "evidence": [
+        "worker.py:12-15",
+        "app.py:48"
+      ],
+      "acceptance_criteria": [
+        "Task success/failure and an accurately measured delay, age or duration reveal failed or slow work; broker fleet state is not inferred from local state."
+      ],
+      "constraints": [
+        "Preserve existing application behavior, telemetry owners and supported startup paths; keep private data out of telemetry dimensions."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "metric",
+          "name": "fulfillment outcomes and timing",
+          "attributes": [],
+          "product_view": "Task success/failure and an accurately measured delay, age or duration reveal failed or slow work; broker fleet state is not inferred from local state."
+        }
+      ],
+      "follow_up_actions": [
+        "Verify the selected paths locally and report unexecuted or external proof separately."
+      ]
+    }
+  ],
+  "verification": {
+    "environments": [
+      {
+        "id": "fixture.local",
+        "surface": "Selected application paths with controlled local dependencies",
+        "config_evidence": "pyproject.toml",
+        "runner": "Focused application tests",
+        "scope": "service",
+        "prerequisites": "Install compatible declared dependencies; use local fakes for external failures. Live delivery needs separate receiver evidence."
+      }
+    ],
+    "scenarios": [
+      {
+        "id": "otel-001.behavior",
+        "trigger": "Exercise successful and failing selected paths with controlled local dependencies.",
+        "entrypoint": "app.py:7-9; app.py:19-57; worker.py:6-19",
+        "expected_signals": "Both processes retain their Compose startup and emit baseline FastAPI, Celery and Redis telemetry with distinct configurable identities.",
+        "proof_level": "focused call-site",
+        "acceptance_criteria": "Both processes retain their Compose startup and emit baseline FastAPI, Celery and Redis telemetry with distinct configurable identities.",
+        "environments": [
+          "fixture.local"
+        ]
+      },
+      {
+        "id": "otel-002.behavior",
+        "trigger": "Exercise successful and failing selected paths with controlled local dependencies.",
+        "entrypoint": "app.py:37-49",
+        "expected_signals": "Successful and failed enqueue attempts have bounded, accurate outcome telemetry.",
+        "proof_level": "focused call-site",
+        "acceptance_criteria": "Successful and failed enqueue attempts have bounded, accurate outcome telemetry.",
+        "environments": [
+          "fixture.local"
+        ]
+      },
+      {
+        "id": "otel-003.behavior",
+        "trigger": "Exercise successful and failing selected paths with controlled local dependencies.",
+        "entrypoint": "worker.py:12-15; app.py:48",
+        "expected_signals": "Task success/failure and an accurately measured delay, age or duration reveal failed or slow work; broker fleet state is not inferred from local state.",
+        "proof_level": "focused call-site",
+        "acceptance_criteria": "Task success/failure and an accurately measured delay, age or duration reveal failed or slow work; broker fleet state is not inferred from local state.",
+        "environments": [
+          "fixture.local"
+        ]
+      }
+    ]
+  },
+  "anti_patterns": [
+    "Do not treat a source inventory or local fake result as live telemetry delivery."
+  ],
+  "recommendation": [
+    "Select the requested findings through the bundled selection flow before instrumentation."
+  ]
+}
