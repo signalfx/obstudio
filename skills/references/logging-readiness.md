@@ -4,20 +4,23 @@ Read this reference when auditing or changing an application logging path.
 These rules extend the local-log contract; they do not authorize new sinks,
 sensitive-data capture, a custom SDK, or changes outside the selected scope.
 
-For Python audit, instrumentation and verification, read the Python guide's
-**Logging Readiness Checks** section and follow its bridge/provider ownership
-references as needed. Resolve concrete SDK APIs and settings from the detected
-implementation. These rules preserve each role's application-code permissions.
-For Go, Java and Node.js, continue the existing language workflow and local
-receiver rules; this expanded source, control and evidence workflow applies
-only to Python application logging.
+For Python and Go audit, instrumentation and verification, read only the detected stack's
+**Logging Readiness Checks** section in the existing language guide, following
+its bridge/provider ownership references as needed. Those guides describe runtime-specific context, record and lifecycle pitfalls;
+resolve concrete SDK APIs and settings from the detected implementation. The
+common rules and acceptance obligations below still apply. A guide's setup
+examples do not authorize application changes in an audit or verification task.
+The logging checks are self-contained for each declared consumer; audit and
+verification do not require a sibling instrumentation skill to be installed.
+Read the needed sections in bounded pieces. A truncation banner means the
+returned content is incomplete: retrieve the missing selected section before
+using its rule or making an exact source claim. A successful command or a file
+present in the bundle does not establish what its tool response actually showed.
 
-Read needed sections in bounded pieces. Retrieve missing selected content
-after a truncation banner before relying on its rules or source claims.
-
-| Detected stack | Language reference |
+| Detected stack | Existing language reference |
 |---|---|
 | Python | [Python logging checks](languages/python.md#logging-readiness-checks) |
+| Go | [Go logging checks](languages/go.md#logging-readiness-checks) |
 
 ## Source and applicability
 

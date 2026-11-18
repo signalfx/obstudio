@@ -17,7 +17,9 @@
     "otel-instrument"
   ],
   "languages/go.md": [
-    "otel-instrument"
+    "otel-audit",
+    "otel-instrument",
+    "otel-verify"
   ],
   "languages/java.md": [
     "otel-instrument"

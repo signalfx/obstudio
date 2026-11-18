@@ -2,6 +2,12 @@
 
 Language-specific instrumentation guidance for Go services.
 
+For a logging path, first resolve the effective configuration and collection
+owner using [the shared logging reference](../logging-readiness.md#source-and-applicability).
+The environment-based setup recipes below apply only after that check; they
+do not supersede an active supported declarative loader, an intentional SDK
+opt-out, or an established operator-owned forwarding route.
+
 ---
 
 ## Auto-Instrumentation Library Map
@@ -171,13 +177,19 @@ logs-only compatibility or configuration failure is a reported incomplete log
 path; it must not silently become the normal disabled-log configuration.
 
 Create a dedicated file for OTel setup that returns a shutdown function.
-Call it early in `main()`.
+Call it early in `main()`. Establish the selected propagator before provider
+construction and any SDK-disabled return. Resolve the active configuration
+owner's SDK-disabled support before selecting an activation repair. Where
+existing operator policy or the selected repair requires that path, apply the
+common disabled-SDK policy without bypassing propagation setup; this conditional
+example does not supply every application-owned activation reader.
 Resolve the approved local logs URL during preflight, then embed that exact
 host, port, base path, and `/v1/logs` leaf in the generated setup. Do not use
 `localhost`, loopback IP, or `/v1/logs` shape as a runtime proxy for approval:
-the same host with a different port or path is a boundary conflict. Generic or
-logs-specific OTLP headers also prevent the added local log pipeline from
-starting; keep the trace/metric providers and original logger sink active.
+the same host with a different port or path is a boundary conflict. Nonempty
+generic OTLP headers also prevent the added local log pipeline from starting;
+preserve signal-specific local log headers through official SDK parsing. Keep
+the trace/metric providers and original logger sink active.
 Inspect signal-specific and compatible generic OTel endpoints, receiver status,
 and checked-in launch or Compose configuration for the selected runtime before
 choosing the conventional fallback. For a Compose app with an approved
@@ -198,9 +210,7 @@ import (
 	"log"
 	"log/slog"
 	"os"
-	"strconv"
 	"strings"
-	"time"
 
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
@@ -225,13 +235,17 @@ func initOTel(
 	ctx context.Context,
 	existingLogHandler slog.Handler,
 ) (func(context.Context) error, error) {
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	))
 	res, err := resource.New(ctx,
-		resource.WithFromEnv(),
 		resource.WithTelemetrySDK(),
 		resource.WithProcess(),
 		resource.WithOS(),
 		resource.WithContainer(),
 		resource.WithHost(),
+		resource.WithFromEnv(),
 	)
 	if err != nil {
 		return nil, err
@@ -269,11 +283,7 @@ func initOTel(
 	}
 
 	mp := sdkmetric.NewMeterProvider(
-		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(
-			metricExporter,
-			sdkmetric.WithInterval(metricExportInterval()),
-			sdkmetric.WithTimeout(metricExportTimeout()),
-		)),
+		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(metricExporter)),
 		sdkmetric.WithResource(res),
 	)
 
@@ -300,10 +310,6 @@ func initOTel(
 
 	otel.SetTracerProvider(tp)
 	otel.SetMeterProvider(mp)
-	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
-		propagation.TraceContext{},
-		propagation.Baggage{},
-	))
 	if lp != nil {
 		otellogglobal.SetLoggerProvider(lp)
 		slog.SetDefault(slog.New(fanoutHandler{
@@ -366,9 +372,7 @@ func newApplicationLogExporter(ctx context.Context) (*otlploghttp.Exporter, erro
 			"move generic OTLP headers to trace/metric signal variables and remove OTEL_EXPORTER_OTLP_HEADERS",
 		)
 	}
-	if strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_LOGS_HEADERS")) != "" {
-		return nil, errors.New("remove logs-specific OTLP headers from the local log path")
-	}
+	// Preserve signal-specific headers for the official exporter to parse.
 
 	endpoint := strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"))
 	if endpoint == "" {
@@ -379,7 +383,6 @@ func newApplicationLogExporter(ctx context.Context) (*otlploghttp.Exporter, erro
 	}
 	return otlploghttp.New(ctx,
 		otlploghttp.WithEndpointURL(endpoint),
-		otlploghttp.WithHeaders(map[string]string{}),
 	)
 }
 
@@ -468,31 +471,22 @@ func (h standardLogHandler) WithGroup(name string) slog.Handler {
 	return h
 }
 
-func metricExportInterval() time.Duration {
-	if v := os.Getenv("OTEL_METRIC_EXPORT_INTERVAL"); v != "" {
-		millis, err := strconv.Atoi(v)
-		if err == nil && millis > 0 {
-			return time.Duration(millis) * time.Millisecond
-		}
-	}
-	return time.Second
-}
-
-func metricExportTimeout() time.Duration {
-	if v := os.Getenv("OTEL_METRIC_EXPORT_TIMEOUT"); v != "" {
-		millis, err := strconv.Atoi(v)
-		if err == nil && millis > 0 {
-			return time.Duration(millis) * time.Millisecond
-		}
-	}
-	return 500 * time.Millisecond
+func nativeSDKErrorHandler(current *log.Logger) otel.ErrorHandler {
+	native := log.New(current.Writer(), current.Prefix(), current.Flags())
+	return otel.ErrorHandlerFunc(func(error) {
+		native.Print("OpenTelemetry SDK operation failed")
+	})
 }
 ```
 
-The explicit `sdkmetric.WithInterval` and `sdkmetric.WithTimeout` are required
-for local and eval runs. Do not rely on metric reader defaults; they can be too
-slow for short-lived runtime checks, causing valid HTTP metrics to never reach
-the collector before the process stops.
+The [PeriodicReader API](https://pkg.go.dev/go.opentelemetry.io/otel/sdk/metric#NewPeriodicReader)
+supports `OTEL_METRIC_EXPORT_INTERVAL` and `OTEL_METRIC_EXPORT_TIMEOUT` in the
+SDK; confirm their actual readers in the selected version. The example delegates
+their parsing and defaults to that owner. For a short runtime check, use supported
+launch settings or an explicit collection/flush step and prove metric receipt
+before exit. Add `WithInterval`/`WithTimeout` only for a justified application
+policy: those options override SDK environment values, so reconcile operator
+precedence and test the actual applied values rather than adding duplicate parsers.
 
 ### Using in main()
 
@@ -502,6 +496,10 @@ func main() {
 		context.Background(), os.Interrupt, syscall.SIGTERM,
 	)
 	defer stop()
+
+	// This example assumes preflight found no existing SDK error-handler owner.
+	// Reuse an existing safe custom/strict handler instead of replacing it.
+	otel.SetErrorHandler(nativeSDKErrorHandler(log.Default()))
 
 	// This service uses log.Default(). Snapshot its writer, prefix, and flags
 	// before slog.SetDefault rewires it. Native slog apps pass their existing
@@ -545,6 +543,19 @@ standard logger, so calling that captured default handler can recurse. For a
 project-owned `*slog.Logger`, apply the same fan-out at its construction site
 instead of changing the process default.
 
+Resolve SDK diagnostic routes before installing a global bridge. Internal SDK
+logging and errors reported through `otel.Handle` have different owners; the
+default public error handler uses the standard logger and can therefore reenter
+this fan-out. The example's `nativeSDKErrorHandler` freezes the original writer,
+prefix and flags before provider startup and emits a fixed, value-free message
+outside that bridge. It is for new application-owned SDK setup: inspect and
+retain an existing custom or strict error handler rather than replacing it.
+[`GetErrorHandler`](https://pkg.go.dev/go.opentelemetry.io/otel#GetErrorHandler)
+exists, but a previously returned default delegator can be redirected by the
+first registration; it is not a historical native-handler snapshot to restore.
+Resolve actual registration/delegation in the selected version and isolate tests
+that change process-wide handlers.
+
 Use context-aware logging inside traced work so `otelslog` can correlate the
 record:
 
@@ -558,7 +569,7 @@ preflight resolves the local receiver for the selected runtime. Replace
 including any non-default port or Docker service address; use the literal
 fallback only when no receiver was discovered. At runtime an explicit logs
 endpoint must equal that approved URL. A different endpoint, unsupported log
-protocol, generic or logs-specific OTLP headers, or log exporter setup failure skips only the
+protocol, nonempty generic OTLP headers, or log exporter setup failure skips only the
 added log provider and bridge, with a fixed diagnostic that contains no
 configuration values. Trace and metric providers still start, and the original
 logger sink remains active. Report a source-proven non-local endpoint as an
@@ -666,9 +677,10 @@ go func(ctx context.Context) {
 
 Before adding a custom counter or histogram for an outcome that happens
 inside a request `otelhttp.NewHandler` already wraps, check whether it
-belongs as an attribute on `http.server.request.duration` instead — see
-`../../otel-instrument/SKILL.md` `#### Implementation Rules` and the `Go:` entry under
-`#### Language-Specific Musts` for the `otelhttp.LabelerFromContext` pattern.
+belongs as an attribute on `http.server.request.duration` instead, using
+the detected HTTP integration's supported request-metric attribute mechanism.
+When implementing a change, also follow the loaded instrumentation skill's
+Implementation Rules and Language-Specific Musts.
 Only define a new instrument when the signal does not correlate 1:1 with a
 single request (a queue-depth gauge, a background job outcome).
 
@@ -760,8 +772,8 @@ configuration automatically.
 | `OTEL_LOGS_EXPORTER` | `otlp` only when the logs endpoint is absent or preflight-classified local | `none` disables the added local log pipeline; another explicit value remains operator-owned |
 | `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | resolved local receiver; fallback `http://127.0.0.1:4318/v1/logs` | Signal-specific local application-log destination |
 | `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` | `http/protobuf` for the shown local baseline | Select a matching official exporter for another explicit protocol |
-| `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset | Signal-specific headers prevent the added local log path; preserve operator configuration without copying credentials into logs |
-| `OTEL_SERVICE_NAME` | (must be set) | Service identity in telemetry |
+| `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset | Preserve supplied signal-specific local log headers for official SDK parsing after generic headers are removed |
+| `OTEL_SERVICE_NAME` | unset | Optional service-name override; preserve identity supplied through resource attributes or the active resource configuration |
 | `OTEL_METRIC_EXPORT_INTERVAL` | `60000` | Metric export interval (ms) |
 | `OTEL_METRIC_EXPORT_TIMEOUT` | `30000` | Metric export timeout (ms) |
 | `OTEL_BSP_SCHEDULE_DELAY` | `5000` | Span batch export delay (ms) |
@@ -780,12 +792,11 @@ OTEL_BSP_SCHEDULE_DELAY=100 \
 go run .
 ```
 
-When creating `sdkmetric.NewPeriodicReader`, pass
-`sdkmetric.WithInterval(metricExportInterval())` and
-`sdkmetric.WithTimeout(metricExportTimeout())`, where the helper functions read
-`OTEL_METRIC_EXPORT_INTERVAL` and `OTEL_METRIC_EXPORT_TIMEOUT`. This makes HTTP
-metrics from `otelhttp`, including `http.server.request.duration` or the older
-`http.server.duration` name, export promptly to Splunk Observability Studio.
+The launch settings above are consumed by a supporting SDK's PeriodicReader;
+do not copy them into application-owned parsing helpers. Verify the effective
+schedule/timeout and actual receipt of HTTP metrics from `otelhttp`. A successful
+process exit alone does not prove export, and a collection interval does not
+establish the full provider shutdown deadline.
 
 For Docker or Compose, use the checked-in local Splunk Observability Studio service address (for
 example `http://observer:4318/v1/logs`) instead of loopback in both the
@@ -809,20 +820,111 @@ flag into log configuration. Classify an explicit signal-specific endpoint
 during instrumentation preflight; if approved, preserve it as operator
 configuration and require exact equality with the approved local URL at
 runtime. Report a source-proven non-local value as the boundary conflict
-before applying this pattern. Reject generic and signal-specific OTLP headers
+before applying this pattern. Reject nonempty generic OTLP headers
 on the local log branch; move generic credentials to trace/metric variables and
-leave signal-specific log credentials operator-owned. Splunk Observability Studio cloud
+remove the generic setting. Preserve operator-owned signal-specific local log
+headers for official SDK parsing without an empty headers override. Splunk Observability Studio cloud
 forwarding remains traces and metrics only.
 
 Add an in-memory SDK log test and a full local Splunk Observability Studio runtime check. Emit one
 sanitized application record at each required severity both outside and inside
 an active span, then assert its exact body/category, severity, shared resource
 including `service.name`, and trace/span IDs for the active-span record. Prove
-the original stdout/file sink still receives it, exactly one OTel record exists
-per application log call, `OTEL_LOGS_EXPORTER=none` produces no OTel record
+the original stdout/file sink still receives it, one SDK record is emitted per
+application log call and a healthy receiver gets exactly one copy.
+Fault/retry scenarios count transport copies separately from bridge ownership;
+an unavailable receiver can receive zero records. `OTEL_LOGS_EXPORTER=none` produces no OTel record
 while preserving the original sink, and the record is visible in the Splunk Observability Studio
 Explorer. When trace/metric cloud export is enabled, also prove no cloud log
 endpoint, header, exporter, or forwarding path was configured.
+
+---
+
+## Logging Readiness Checks
+
+Apply the [common logging rules](../logging-readiness.md) to the detected Go
+logger, bridge, provider and launcher. Preserve the existing collection owner,
+resource, native sink and operator configuration. Setup recipes elsewhere in
+this guide are conditional examples; do not introduce their packages or APIs
+solely because they appear here.
+
+### Context and asynchronous work
+
+Carry the actual operation's `context.Context` across owned goroutines and into
+the detected logger's supported context-aware path. Capture the argument before
+dispatch, use any active child context at the log call, and preserve intentional
+operation lifetime and cancellation policy. A fresh background context or
+manually copied ID does not prove caller handoff.
+
+Exercise the actual goroutine path with real SDK spans, exact log/span joins and
+concurrent request isolation. Follow the common sampled, unsampled, outside-span
+and reuse controls. For selected propagation, resolve the installed/project-compatible implementation
+and bind each configured component's actual carrier fields to its supported
+extracted-state assertions; a TraceContext-only pass
+does not prove a composite propagator. Do not automatically copy baggage
+or other propagated application fields into telemetry; preserve standard SDK
+trace-context correlation. Inspect the actual valid peer carrier before assigning a
+logger repair, retaining dependency limitations without masking fields or
+changing the project's runtime requirements.
+
+### Native logging and configuration
+
+Verify native severity and value conversion rather than copying source numeric
+levels into OTel fields. Preserve occurrence time, structured values and approved
+source metadata. When extending native handler fanout, retain each handler's
+enablement, derived attributes/groups and record ownership; one disabled OTel
+branch must not suppress an enabled original destination.
+
+Resolve the native handler's actual output path before rebinding a process-wide
+default. An untouched built-in `slog` default handler can write through the
+standard logger that `slog.SetDefault` rewires; nesting it beneath the new default
+can recurse or deadlock. An application-owned logger can retain that handler
+without rebinding the process default. A captured standard-log writer adapter
+is appropriate only when it preserves the detected source's semantics; it does
+not automatically preserve native `slog` formatting or level markers. Verify the
+original formatting, enablement, sinks and ownership as well as multiplicity.
+This native-handler cycle is separate from SDK diagnostic reexport below.
+
+Resolve the existing provider and processor's public configuration, defaults,
+option units and precedence. Inspect the actual construction path before
+proposing record limits, batching or timeout changes. Reuse adequate defaults
+and the selected log configuration; do not copy options from a different signal
+or SDK. Body/privacy policy remains independent of attribute limits.
+
+Resolve the converter actually used by the selected reader rather than assuming
+the accepted values of a familiar standard-library parser. Keep integer parsing,
+duration conversion and downstream consumption separate. For an exact limit-
+diagnostic claim, inspect the record's emission/once guards as well as its
+normalizer; successful truncation alone does not establish diagnostic cadence.
+
+For a newly owned standard environment Boolean reader, compare the raw value
+to `true` ignoring case; do not reuse a selector's `TrimSpace` normalization.
+`strconv.ParseBool` accepts `1`/`t`/`T` and rejects `TrUe`, so it does not supply
+the [standard Boolean rule](https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/#boolean).
+Keep the detected configuration owner and its actual loader; this does not
+require replacing an unchanged SDK reader. See [Go's parser contract](https://pkg.go.dev/strconv#ParseBool).
+
+### Deadlines and lifecycle
+
+Determine whether each timeout covers an attempt, whole export, processor wait
+or application lifecycle. When selected, verify caller cancellation and deadline
+expiry separately, and distinguish retry recovery from persistent-failure
+exhaustion. Measure each claimed boundary; process shutdown duration cannot
+establish an individual export deadline. Retain the bound request/attempt and
+wait evidence required by the common delivery contract, not just aggregate counts.
+An elapsed-time eligibility check after an attempt does not necessarily bound a
+subsequent throttling/backoff wait; identify the enclosing context deadline and
+which waits and requests actually observe it before calling a value a ceiling.
+
+Prove final-log receipt through the existing launcher and lifecycle owner by
+decoding the actual record at the claimed boundary. A request count or successful
+shutdown return cannot identify its content. Preserve final-record, protocol
+acknowledgement and backend-persistence distinctions. Resolve internal diagnostic
+logging separately from the public SDK error-handler route through its actual
+consumer. A default standard-logger route can feed errors back into a global log
+bridge. Preserve an existing safe owner; for new application-owned setup, use an
+independent native route before provider/bridge activation. Verify bounded fault
+output and no diagnostic reexport; isolate tests that change global handlers.
 
 ---
 
@@ -846,9 +948,11 @@ endpoint, header, exporter, or forwarding path was configured.
 - **One log bridge**: use only the official bridge matching the detected logger
   and prove one OTel record per call. Keep context-aware calls such as
   `slog.InfoContext` so active trace/span IDs reach the log record.
-- **Metric export interval and timeout**: Always set `sdkmetric.WithInterval`
-  and `sdkmetric.WithTimeout` on `sdkmetric.NewPeriodicReader`. Environment
-  variables alone are not enough when constructing the reader manually.
+- **Metric reader configuration**: Resolve the selected SDK's environment/default
+  readers before adding explicit options. Preserve effective operator settings;
+  an application option takes precedence and needs its own justification and
+  acceptance checks. Bound verification with supported configuration or flush,
+  rather than introducing custom parsers solely for a short test.
 - **Shutdown order**: shut down the LoggerProvider, TracerProvider, and
   MeterProvider so their batch processors flush before process exit. Attempt
   every shutdown even when an earlier one returns an error.
