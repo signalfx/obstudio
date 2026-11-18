@@ -3,7 +3,7 @@
   "provenance": {
     "generated_at_utc": "2026-10-14",
     "evidence_kind": "fictional complete dependency/runtime/API/configuration policy matrix; not a registry response, installed package, executed probe or received telemetry",
-    "scope": "Only actual_fixture_source facts below describe app.js/package.json. All selected runtime, operator lock, package releases/engines/peers/API receipts and log/config cases are independently fictional.",
+    "scope": "Only actual_fixture_source facts below describe app.js/package.json. All selected runtime, operator lock, package releases/engines/peers/API receipts and log/config cases are independently fictional. The fictional runtime and allowed_node replace the actual engines.node range only for this counterfactual plan. They do not apply to the real application.",
     "registry_model": "The packages map exhaustively lists candidates for this offline fictional registry. Empty dependency/peer maps mean no other dependencies/peers in this toy model. Named NodeSDK integration peers are fictional compatibility contracts for the checked graph, not claims about real published package metadata.",
     "future_real_task": "Real installation requires current official npm metadata/resolution and installed source/API/import/behavior verification; these fictional APIs/versions cannot be installed or asserted real/latest from this case."
   },
@@ -13,11 +13,14 @@
         "sha256": "7dc0b120a9cb78d104c8c5de73f45cc07e44cf1648421d7849daa159326ceaef"
       },
       "package.json": {
-        "sha256": "9a6b2e4619c27d59d7911017d38caf37cecc4c5dc0a443b7eabd54ce0c554ae9"
+        "sha256": "86da429b63d49286cb8f5663ed940138bcc08b979d585b170b6064383a70eb28"
       }
     },
     "package_name": "node-express-basic",
     "type": "module",
+    "engines": {
+      "node": ">=22"
+    },
     "dev_script": "node app.js",
     "manifest_dependencies": {
       "express": "^5.1.0"
@@ -26,7 +29,7 @@
     "startup": "Express imported before app creation; new preload is a proposal, not already loaded instrumentation.",
     "missing_source_evidence": [
       "No OpenTelemetry dependency/provider/exporter/bridge in actual source.",
-      "No engines/runtime selection or package-lock.json committed in this actual fixture.",
+      "Actual engines.node is >=22; no package-lock.json is committed in this fixture.",
       "No actual discovered Studio receiver, installed API/source, native signal or runtime proof."
     ]
   },
@@ -51,14 +54,15 @@
         "integrity": "fictional-existing-api-integrity-must-be-preserved"
       }
     },
-    "lock_policy": "Operator freezes Express5.1.0 and OTel API1.9.0. Existing runtime/manifest/scripts/locked entries stay untouched; only chosen coherent OTel additions may be proposed. The overlay is supplied policy evidence only; do not create this lock/profile in actual service.",
+    "lock_policy": "Rule: Preserve the supplied runtime, manifest, scripts and frozen lock entries; only coherent OTel additions may be proposed. Do not materialize this fictional overlay in the actual service.\nExample: The existing Express lock entry remains 5.1.0 with its supplied identity.\nEvidence: The operator freezes Express 5.1.0 and OTel API 1.9.0; runtime limits, manifest ranges and both integrity values are supplied above.\nInsufficient evidence: Permission to add OTel dependencies does not authorize replacing frozen entries or changing the runtime.",
     "preflight_approved_local_receiver": {
       "http_base": "http://127.0.0.1:55618/collector",
       "logs_endpoint": "http://127.0.0.1:55618/collector/v1/logs",
       "protocol": "http/protobuf",
       "evidence": "fictional classified-local preflight receipt; no running Studio/discovery or network receipt"
     },
-    "application_log_owner": "Existing console sink only; no Pino/Winston/manual log transport in this source or overlay."
+    "application_log_owner": "Existing console sink only; no Pino/Winston/manual log transport in this source or overlay.",
+    "resource_identity_requirement": "Rule: Use service.name=node-express-basic for this fictional operator-selected telemetry profile.\nExample: The proposed Resource carries that service.name value.\nEvidence: This operator requirement supplies the telemetry identity; the package name alone does not select it.\nInsufficient evidence: Inferring the Resource identity solely from package.json."
   },
   "packages": {
     "@opentelemetry/api": [
@@ -112,9 +116,7 @@
           "@opentelemetry/instrumentation-console": ">=0.4.0 <0.5.0"
         },
         "dependencies": {},
-        "inspected_public_api": {
-          "NodeSDK": "older compatible coherent graph; APIs not needed for selected plan"
-        }
+        "inspected_public_api": {}
       },
       {
         "version": "0.90.0",
@@ -352,7 +354,7 @@
         },
         "dependencies": {},
         "inspected_public_api": {
-          "BatchLogRecordProcessor": "constructor(exporter); selected candidate does NOT accept an options object {exporter}; shutdown flushes owned log batches"
+          "BatchLogRecordProcessor": "constructor(exporter); no options-object {exporter} form; shutdown flushes owned log batches"
         }
       },
       {
@@ -365,7 +367,7 @@
         },
         "dependencies": {},
         "inspected_public_api": {
-          "BatchLogRecordProcessor": "constructor({exporter}); this candidate belongs to newer incompatible NodeSDK graph"
+          "BatchLogRecordProcessor": "constructor({exporter})"
         }
       }
     ],
@@ -465,7 +467,7 @@
         },
         "dependencies": {},
         "inspected_public_api": {
-          "role": "required peer in this fictional checked graph; no requirement to copy versioned schema constants into application attrs"
+          "role": "peer dependency; no requirement to copy versioned schema constants into application attrs"
         }
       },
       {
@@ -567,57 +569,41 @@
     ]
   },
   "preflight_to_apply_race": {
-    "after_checked_selection": "Fictional registry latest tag changes to sdk-node0.99.0, whose engines require Node>=24.0.0 and API>=2.0.0.",
-    "required_response": "Retain exactly the previously checked candidate specs/lock graph; do not rerun mutable latest at application, overwrite locked entries, upgrade Node/API or claim installation. A real metadata/source change would need a new explicit compatible preflight, never silent tag substitution."
+    "after_checked_selection": "Fictional registry latest tag changes to sdk-node0.99.0, whose engines require Node>=24.0.0 and API>=2.0.0."
   },
   "log_policy_cases": [
     {
       "id": "normal-default",
       "provided_env": {},
-      "user_optout": false,
-      "required_plan": "Persist OTEL_LOGS_EXPORTER=otlp in proposed normal profile; all three native signals to approved local receiver. Exactly one supported ConsoleInstrumentation and one selected-API BatchLogRecordProcessor(exporter), with resource/correlation and original sink preserved. No runtime export claimed."
+      "user_optout": false
     },
     {
       "id": "explicit-optout",
       "provided_env": {
         "OTEL_LOGS_EXPORTER": "none"
       },
-      "user_optout": true,
-      "required_plan": "Intentional log-export N/A for this separate case; omit local bridge and logRecordProcessors option entirely, not []; preserve console and trace/metric setup. This is not actual app/operator state or the default profile."
+      "user_optout": true
     },
     {
       "id": "generic-header-conflict",
       "provided_env": {
         "OTEL_LOGS_EXPORTER": "otlp",
         "OTEL_EXPORTER_OTLP_HEADERS": "fictional-nonempty-credential-marker"
-      },
-      "required_plan": "Skip only added local logs before exporter construction; value-free diagnostic, preserve source console/traces/metrics/environment, normal log profile still intended. Require future separate negative proof; no cloud headers copied to local logs."
+      }
     },
     {
-      "id": "signal-header-conflict",
+      "id": "signal-specific-local-headers",
       "provided_env": {
         "OTEL_LOGS_EXPORTER": "otlp",
         "OTEL_EXPORTER_OTLP_LOGS_HEADERS": "fictional-nonempty-credential-marker"
-      },
-      "required_plan": "Independent logs-header fault with same isolation/ownership/privacy obligations as generic-header case."
+      }
     },
     {
       "id": "late-constructor-failure",
       "provided_env": {
         "OTEL_LOGS_EXPORTER": "otlp"
       },
-      "injected_failure": "Selected optional log-enabled NodeSDK constructor throws before start; base constructor succeeds. This is a hypothetical future test, not an executed observation.",
-      "required_plan": "Guard the pre-start log-enabled SDK constructor, then build base trace/metric SDK. Because selected omitted-log-options API auto-exports logs, temporarily suppress only this skipped path at synchronous start and restore exact original env in finally. No production/profile none default or retry after partial global start; logs remain incomplete."
+      "injected_failure": "Selected optional log-enabled NodeSDK constructor throws before start; base constructor succeeds. This is a hypothetical future test, not an executed observation."
     }
-  ],
-  "future_real_acceptance": {
-    "source_request": "Actual app POST /tasks warning must produce exactly one stored native OTLP LogRecord with body runtime request completed, WARN severity, service.name node-express-basic, nonzero trace/span IDs matching that actual request span, while original console still outputs once.",
-    "signal_receipts": "Require independent actual Studio trace, metric and LogRecord receipt, full approved route/protocol and partial-success acceptance; a plan, stdout or SDK configuration is not packet/receiver proof.",
-    "lifecycle": "Proposed pre-import ESM setup must keep Express routes/entrypoint intact. Integrate with actual existing server.close shutdown ownership: stop intake, bounded drain, final logs then once-only SDK flush; do not add competing signal handlers, lose final warning or claim the current unmodified app already flushes SDK.",
-    "not_executed": [
-      "No npm metadata fetch/install/resolver or actual API probe",
-      "No actual profile or package/lock/app changes",
-      "No app/model/receiver/UI/cloud run"
-    ]
-  }
+  ]
 }

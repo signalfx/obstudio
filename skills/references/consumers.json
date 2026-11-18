@@ -27,7 +27,9 @@
     "otel-verify"
   ],
   "languages/node.md": [
-    "otel-instrument"
+    "otel-audit",
+    "otel-instrument",
+    "otel-verify"
   ],
   "languages/python.md": [
     "otel-audit",

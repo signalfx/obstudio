@@ -17,11 +17,6 @@ description: >-
 
 # Instrument
 
-For Python, Go and Java application logging, apply the shared `logging-readiness.md`
-workflow below, including its worklists, report readback and evidence receipts.
-For Node.js, continue the existing language and local-log workflow;
-the expanded shared logging-readiness workflow applies only to Python, Go and Java.
-
 Add OpenTelemetry observability to applications using auto-instrumentation,
 default local application-log export, and optional custom spans or metrics.
 
@@ -1708,11 +1703,14 @@ Python:
 Node.js:
 - Add `@opentelemetry/instrumentation-http` explicitly for HTTP server spans.
 - Add the detected framework instrumentation explicitly, for example `@opentelemetry/instrumentation-express` for Express.
-- Add `@opentelemetry/exporter-metrics-otlp-http` and `@opentelemetry/sdk-metrics` when wiring SDK-based metrics.
-- Add `@opentelemetry/exporter-logs-otlp-proto` for the default
-  `http/protobuf` path and
-  `@opentelemetry/sdk-logs`, pass one `BatchLogRecordProcessor` through
-  `NodeSDK.logRecordProcessors`, and add only the detected official bridge.
+- Reuse the selected SDK's trace/metric configuration owner. Add direct exporter
+  or reader dependencies only when the chosen integration actually needs them;
+  preserve operator selectors and signal-specific protocol precedence.
+- Reuse any existing log provider/processor owner. For a new isolated local
+  branch, choose the compatible exporter, processor and one detected official
+  bridge through the installed public APIs. Follow the Node reference for the
+  approved URL, supported BLRP configuration and failure-isolation boundary;
+  do not replace an existing pipeline or assume a constructor reads environment.
   For detected `console.*` calls, use
   `@opentelemetry/instrumentation-console` only after checking its current
   package engines, peers and API against the selected runtime and project.
@@ -1723,21 +1721,18 @@ Node.js:
   instrumentation/transport bridge. Keep existing console/file transports.
   Do not enable an instrumentation sender and an OTel transport for the same
   logger; `sdk.shutdown()` must flush logs as well as traces and metrics.
-- Configure `PeriodicExportingMetricReader` with `exportIntervalMillis: Number(process.env.OTEL_METRIC_EXPORT_INTERVAL || 1000)` and `exportTimeoutMillis: Number(process.env.OTEL_METRIC_EXPORT_TIMEOUT || 500)` so HTTP duration metrics export during short runtime checks.
-- Use the current `NodeSDK` metric reader option exactly as shown in the Node reference. Do not substitute `metricReaders` for `metricReader` unless the installed SDK version documents that option.
+- Prefer the native SDK environment owner for metric configuration. Put
+  short-run timing defaults in the normal launch profile only when absent,
+  preserving SDK parsing, fallback and timeout semantics. If an existing
+  integration requires an explicit reader, verify its installed public option
+  and constructor behavior separately; receipt/flush proves short-run coverage.
 - Do not rely on `@opentelemetry/auto-instrumentations-node` alone when specific framework packages are expected.
 - In the final response, name the updated preload command (`--require` or `--import`), the packages added, and that HTTP server spans plus request-duration metrics are expected.
-- `@opentelemetry/instrumentation-http` already sets `http.response.status_code`
-  on `http.server.request.duration` from the response for every request with no
-  extra code. It does not set `error.type` from a failing status code:
-  `error.type` there is reserved for a lower-level request/response transport
-  error (for example a socket error before a status was ever sent), not an
-  ordinary 4xx/5xx completion. Its hooks (`requestHook`, `responseHook`,
-  `startIncomingSpanHook`) only add span attributes, not metric attributes.
-  Do not add a standalone counter for a request outcome that `http.response.status_code`
-  already distinguishes; `@opentelemetry/instrumentation-http` has no per-call
-  metric-attribute hook, so a finer-grained reason dimension that the status
-  code alone cannot express does need its own custom metric here.
+- Resolve the effective HTTP metric mode, status/error dimensions and hook
+  capabilities from the selected package. Reuse an observed duration metric for
+  outcomes its dimensions already distinguish; choose a custom metric only when
+  the selected requirement cannot be represented through supported existing
+  instruments/hooks. Span hooks alone do not establish metric enrichment.
 
 Go:
 - For HTTP services, use `otelhttp.NewHandler` as the outermost server handler so request-duration metrics are emitted, even when router-specific middleware is also used for route-aware spans.

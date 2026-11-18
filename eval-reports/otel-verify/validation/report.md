@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-verify |
-| Run ID | 20261118T122005179897Z |
+| Run ID | 20261118T163338351859Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -21,6 +21,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | go/chi-basic/qual/verify | go/chi-basic | 1 | evals/go/chi-basic/eval/qual/verify.json | 0 | 6 | 0 |
 | go/native-genai-demo/qual/verify | go/native-genai-demo | 1 | evals/go/native-genai-demo/eval/qual/verify.json | 0 | 7 | 0 |
 | java/springboot-basic/qual/logging-verify-contract | java/springboot-basic | 3 | evals/java/springboot-basic/eval/qual/logging-verify-contract.json | 0 | 63 | 0 |
+| node/express-basic/qual/logging-verify-contract | node/express-basic | 3 | evals/node/express-basic/eval/qual/logging-verify-contract.json | 0 | 63 | 0 |
 | python/ai-assistant-demo/qual/ao-root-compatibility-verify | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/ao-root-compatibility-verify.json | 0 | 8 | 0 |
 | python/ai-assistant-demo/qual/ao-target-handoff-verify | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/ao-target-handoff-verify.json | 0 | 4 | 0 |
 | python/ai-assistant-demo/qual/finding-group-verify | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/finding-group-verify.json | 0 | 7 | 0 |

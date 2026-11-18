@@ -37,7 +37,12 @@ from pytest_codex_evals.definitions import GradeCheckResult, GradeResult
 from pytest_codex_evals.graders.rubric import run_rubric_dimensions
 
 
-FIXTURE_CHECKS = {'go/chi-basic': ['go', 'test', './...'], 'java/springboot-basic': ['mvn', '-q', 'test'], 'python/flask-basic': ['uv', 'run', 'python', '-m', 'py_compile', 'app.py']}
+FIXTURE_CHECKS = {
+    "go/chi-basic": ["go", "test", "./..."],
+    "java/springboot-basic": ["mvn", "-q", "test"],
+    "python/flask-basic": ["uv", "run", "python", "-m", "py_compile", "app.py"],
+    "node/express-basic": ["node", "--check", "app.js"],
+}
 
 
 @pytest.mark.skipif(os.name != "posix", reason="This receipt boundary test creates filesystem symlinks")
@@ -86,7 +91,7 @@ def test_dependency_setup_stops_owned_children_and_retains_output(tmp_path, outc
         "temporary.write_text(json.dumps({'pid':os.getpid(),'group':os.getpgrp()}));temporary.replace(ready)\n"
         "while True: time.sleep(1)\n"
     )
-    tool = tools / "uv"
+    tool = tools / "npm"
     tool.write_text(
         "#!" + sys.executable + "\nimport os,subprocess,sys,time\nfrom pathlib import Path\n"
         + "os.write(1,b'installer output\\xff\\x00\\n')\n"
@@ -118,7 +123,7 @@ def test_dependency_setup_stops_owned_children_and_retains_output(tmp_path, outc
         + "subprocess.Popen=launch\n"
         + ("driver.DEPENDENCY_TIMEOUT_SECONDS=.2\n" if outcome == "timeout" else "")
         + "try:\n"
-        + " driver.prepare_dependencies('python',Path(" + repr(str(workspace)) + "),Path(" + repr(str(output)) + "))\n"
+        + " driver.prepare_dependencies('node',Path(" + repr(str(workspace)) + "),Path(" + repr(str(output)) + "))\n"
         + " result='success'\n"
         + "except subprocess.TimeoutExpired: result='timeout'\n"
         + "except KeyboardInterrupt: result='interrupt'\n"
@@ -191,7 +196,7 @@ def test_public_make_targets_forward_identity_profiles(tmp_path, case, target, c
     )
     tools = tmp_path / "fake tools"
     tools.mkdir()
-    for name in ('go', 'mvn', 'uv'):
+    for name in ("go", "mvn", "uv", "node"):
         executable = tools / name
         executable.write_text(
             "#!" + sys.executable + "\nimport json,os,sys\nfrom pathlib import Path\n"

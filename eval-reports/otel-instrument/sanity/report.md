@@ -7,24 +7,24 @@
 | Mode | with_skill |
 | Eval kind | sanity |
 | Skill | otel-instrument |
-| Run ID | collection-java-30091609b6ab6e1e9d4e6552ce9a6a4be21deb51-native |
+| Run ID | collection-node-console-de3-native-403 |
 | Agent model | gpt-6.1-sol |
 | Workers | 1 |
-| Config | evals/codex-evals.toml |
+| Config | evals/codex-evals.logging.toml |
 
 ## Sanity Summary
 
 | Mode | Eval | Service | Prompts | With Skill | With Skill Tokens | With Skill Time | Baseline | Baseline Tokens | Baseline Time |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | sanity/skill-smoke/sanity/instrument | sanity/skill-smoke | 1 | 100% (3/3) | 95.1K | 17.9s | - | - | - |
-| with_skill | sanity/skill-smoke/sanity/instrument | sanity/skill-smoke | 1 | 100% (3/3) | 95.2K | 9.1s | - | - | - |
+| with_skill | sanity/skill-smoke/sanity/instrument | sanity/skill-smoke | 1 | 100% (3/3) | 94.7K | 8.9s | - | - | - |
+| with_skill | sanity/skill-smoke/sanity/instrument | sanity/skill-smoke | 1 | 100% (3/3) | 94.7K | 16.4s | - | - | - |
 
 ## Agent Token Usage
 
 | Mode | Eval | Service | Side | Provider | Source | Status | Coverage | Input | Cached Input | Cache Creation Input | Output | Reasoning Output | Provider Total | Derived Total |
 |---|---|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| with_skill | sanity/skill-smoke/sanity/instrument | sanity/skill-smoke | with_skill | codex | cumulative | measured | 1/1 recognized | 95002 | 43264 | 0 | 55 | 0 | unknown | 95057 |
-| with_skill | sanity/skill-smoke/sanity/instrument | sanity/skill-smoke | with_skill | codex | cumulative | measured | 1/1 recognized | 95076 | 53120 | 0 | 110 | 54 | unknown | 95186 |
+| with_skill | sanity/skill-smoke/sanity/instrument | sanity/skill-smoke | with_skill | codex | cumulative | measured | 1/1 recognized | 94609 | 52864 | 0 | 103 | 46 | unknown | 94712 |
+| with_skill | sanity/skill-smoke/sanity/instrument | sanity/skill-smoke | with_skill | codex | cumulative | measured | 1/1 recognized | 94579 | 43008 | 0 | 77 | 21 | unknown | 94656 |
 
 ## Sanity Failures
 

@@ -1,0 +1,25 @@
+{
+  "skill": "otel-verify",
+  "prompts": [
+    {
+      "id": "logging-trial-1",
+      "eval_inputs": [],
+      "task": "$otel-verify ./service"
+    },
+    {
+      "id": "logging-trial-2",
+      "eval_inputs": [],
+      "task": "$otel-verify ./service"
+    },
+    {
+      "id": "logging-trial-3",
+      "eval_inputs": [],
+      "task": "$otel-verify ./service"
+    }
+  ],
+  "rubric_base": "../../../../rubrics/logging-common.json",
+  "rubric_additions_source": "../../../../rubrics/logging-node-additions.json",
+  "rubric_additions": {
+    "rubric-22": "Rule: Verification: inspect and run the selected checks without editing code.\nExample: With logs set to otlp and traces set to console, an SDK span dump must not become an application LogRecord.\nEvidence: Check the compatibility decision for each selected SDK console writer on logs, traces and metrics, even when no global console bridge is present. Require a proven compatible application producer or a truthful Not configured/unsupported result for the added console-to-OTLP route. Preserve operator SDK exporters and native output. Run selected checks without code edits and prove SDK console output is not captured as application LogRecords, including selected deferred-Resource resolution or direct-SDK emission paths. Check the normal-profile application-record control. Do not add a second bridge or remove an operator exporter to hide extra records.\nInsufficient evidence: Guarding only the logs selector; treating an omitted bridge as working application logging; processor construction alone; dropping an operator console exporter; or testing only an immediate console write when deferred Resource output is selected."
+  }
+}
