@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-audit |
-| Run ID | 20261118T111844760447Z |
+| Run ID | 20261118T115646033891Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -18,6 +18,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Eval | Service | Prompts | Eval File | Sanity Checks | Rubric Checks | Runtime Checks |
 |---|---|---:|---|---:|---:|---:|
 | go/chi-basic/qual/audit | go/chi-basic | 2 | evals/go/chi-basic/eval/qual/audit.json | 0 | 11 | 0 |
+| go/chi-basic/qual/logging-audit-contract | go/chi-basic | 3 | evals/go/chi-basic/eval/qual/logging-audit-contract.json | 0 | 63 | 0 |
 | go/chi-partial/qual/audit | go/chi-partial | 2 | evals/go/chi-partial/eval/qual/audit.json | 0 | 6 | 0 |
 | go/kvstore/qual/audit | go/kvstore | 2 | evals/go/kvstore/eval/qual/audit.json | 0 | 7 | 0 |
 | go/native-genai-demo/qual/audit | go/native-genai-demo | 1 | evals/go/native-genai-demo/eval/qual/audit.json | 0 | 6 | 0 |

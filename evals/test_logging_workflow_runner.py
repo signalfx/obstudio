@@ -37,7 +37,7 @@ from pytest_codex_evals.definitions import GradeCheckResult, GradeResult
 from pytest_codex_evals.graders.rubric import run_rubric_dimensions
 
 
-FIXTURE_CHECKS = {"python/flask-basic": ["uv", "run", "python", "-m", "py_compile", "app.py"]}
+FIXTURE_CHECKS = {'go/chi-basic': ['go', 'test', './...'], 'python/flask-basic': ['uv', 'run', 'python', '-m', 'py_compile', 'app.py']}
 
 
 @pytest.mark.skipif(os.name != "posix", reason="This receipt boundary test creates filesystem symlinks")
@@ -191,7 +191,7 @@ def test_public_make_targets_forward_identity_profiles(tmp_path, case, target, c
     )
     tools = tmp_path / "fake tools"
     tools.mkdir()
-    for name in ("uv",):
+    for name in ('go', 'uv'):
         executable = tools / name
         executable.write_text(
             "#!" + sys.executable + "\nimport json,os,sys\nfrom pathlib import Path\n"
@@ -553,7 +553,7 @@ def workflow(tmp_path, monkeypatch):
             (workspace / "service/main.go").write_text("grader changed source")
         return path
 
-    args = argparse.Namespace(repo=ROOT, output=output, language="python", trial=1, studio_binary=tmp_path / "unused",
+    args = argparse.Namespace(repo=ROOT, output=output, language="go", trial=1, studio_binary=tmp_path / "unused",
                               codex_home=tmp_path / "home", agent_timeout=1, judge_timeout=30)
     def run(collect=False):
         if collect:
@@ -1228,7 +1228,7 @@ def test_all_roles_are_bare_feedback_free_and_archives_byte_exact(workflow):
     assert workflow.calls == ["audit", "instrument", "verify"]
     assert summary["collect_semantic_failures"] is False and summary["diagnostic_only"] is False
     for stage in summary["stages"]:
-        case = DRIVER.case_for(ROOT, "python", stage["role"], 1)
+        case = DRIVER.case_for(ROOT, "go", stage["role"], 1)
         contract = json.dumps({"rubric": case.rubric, "judge_inputs": case.judge_inputs},
                               sort_keys=True, separators=(",", ":")).encode()
         assert stage["rubric_contract"] == {
@@ -1250,7 +1250,7 @@ def test_judge_budget_reaches_the_controller_from_config_or_cli(workflow, monkey
     configured = tomllib.loads(config_path.read_text())["agent"]["judge_timeout"]
     expected = configured if override is None else override
     arguments = ["run_logging_workflow.py", "--repo", str(ROOT), "--output", str(workflow.output),
-                 "--language", "python", "--trial", "1", "--studio-binary", str(tmp_path / "unused"),
+                 "--language", "go", "--trial", "1", "--studio-binary", str(tmp_path / "unused"),
                  "--codex-home", str(tmp_path / "home"), "--agent-timeout", "1"]
     if override is not None:
         arguments.extend(["--judge-timeout", str(override)])
@@ -1600,7 +1600,7 @@ def test_archive_cannot_be_actor_visible_subdirectory(tmp_path):
 def test_cli_flag_defaults_off_and_is_explicit(monkeypatch):
     seen = []
     monkeypatch.setattr(DRIVER, "run", lambda args: seen.append(args) or 0)
-    required = ["driver", "--language", "python", "--trial", "1", "--studio-binary", "unused", "--codex-home", "home", "--output", "output"]
+    required = ["driver", "--language", "go", "--trial", "1", "--studio-binary", "unused", "--codex-home", "home", "--output", "output"]
     monkeypatch.setattr(sys, "argv", required)
     assert DRIVER.main() == 0 and seen[-1].collect_semantic_failures is False
     monkeypatch.setattr(sys, "argv", required + ["--collect-semantic-failures"])

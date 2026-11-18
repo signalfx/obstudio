@@ -79,7 +79,7 @@ command checks live in `skills/references/tests/test_observe_report_selection.py
 
 ### Logging workflows
 
-The Python basic service fixture defines bare `$otel-audit ./service`,
+The Go and Python basic service fixtures define bare `$otel-audit ./service`,
 `$otel-instrument ./service` and `$otel-verify ./service` tasks. Run the stages
 on the same workspace with the eval environment active:
 
@@ -90,10 +90,11 @@ uv run python run_logging_workflow.py --language python --trial 1 \
   --output ../.workspace/logging-workflow/python-trial-1
 ```
 
-For basic regression, select `python` and run trial 1 once. Trials 2 and 3 repeat the same task to measure reliability;
+For basic regression, select `go` or `python` and run trial 1
+once per enabled language. Trials 2 and 3 repeat the same task to measure reliability;
 run them explicitly when measuring variation, rather than counting them as new
 scenarios. Each invocation runs only its selected trial. The runner needs
-a POSIX host and the Python toolchain on `PATH`. It creates an isolated local receiver without cloud credentials,
+a POSIX host and the language toolchain on `PATH`, including Go 1.24 for the enabled fixtures. It creates an isolated local receiver without cloud credentials,
 retains source and execution evidence, and preserves application reports for
 stage handoff. Judge feedback stays outside later actor inputs. Actor and judge
 execution must use the `codex-evals.logging.toml` configuration's
@@ -111,8 +112,8 @@ this check does not establish final-record drain or post-exit persistence.
 A standalone verify task lacking audit/selection prerequisites is a negative
 control and supplies no instrumented runtime coverage.
 
-The three Python role definitions extend one [logging rubric](rubrics/logging-common.json)
-and share the Python additions file. Role-specific checks stay in their
+The 6 enabled role definitions extend one [logging rubric](rubrics/logging-common.json)
+and share one additions file per language. Role-specific checks stay in their
 own definitions. Eight focused judges inspect the same completed
 task, covering 63 checklist items in total. Each item receives its own result,
 explanation and evidence. Judges run in separate temporary folders and share
@@ -163,8 +164,9 @@ retain the result before deciding whether another run is justified.
 The 2400-second judge budget covers all eight judges together. If it expires, remaining items stay
 ungraded and the required result is incomplete.
 
-Use the paired runner for positive bare Python logging instrumentation and
-verification tasks that need live evidence. Standalone verification remains a
+Use the paired runner for bare logging instrumentation and verification tasks
+that need live evidence. Native Make instrumentation runs should select the
+compatibility cases with `CASE` and `PROMPT`; standalone verification remains a
 prerequisite-negative control. Only the paired runner configures the host checker
 and isolated receiver. An ordinary `make eval-rubric` run does not provision them
 automatically;
@@ -177,7 +179,7 @@ make eval-rubric SKILL=skills/otel-verify CASE=python/flask-basic \
 ```
 
 That command checks whether verification reports the missing audit/selection
-honestly. Repeating it across trials does not add positive runtime
+honestly. Repeating it across languages or trials does not add positive runtime
 coverage. Avoid unfiltered logging selections: they also collect the repeated
 trials and standalone cases without the paired prerequisites.
 

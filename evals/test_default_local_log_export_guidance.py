@@ -380,7 +380,7 @@ def test_all_language_guides_define_local_logs_and_cloud_boundary() -> None:
 
 
 def test_language_guides_reject_generic_cloud_header_inheritance() -> None:
-    for filename in ('node.md', 'go.md'):
+    for filename in ('node.md',):
         guide = _normalized(LANGUAGES / filename)
         for term in ('OTEL_EXPORTER_OTLP_HEADERS', 'OTEL_EXPORTER_OTLP_LOGS_HEADERS', 'OTEL_EXPORTER_OTLP_LOGS_PROTOCOL', 'select the official exporter matching'):
             assert term in guide, f'{filename} is missing {term!r}'
@@ -425,11 +425,13 @@ def test_go_logs_match_preflight_receiver_without_stopping_traces_or_metrics() -
     assert "checked-in launch or Compose configuration for the selected runtime" in " ".join(go.split())
     assert "only when none of those sources supplies a receiver" in " ".join(go.split())
     rubric = " ".join(json.loads(_read(ROOT / "evals/go/kvstore/eval/qual/instrument.json"))["rubric"])
-    assert "fallback only when no such receiver evidence exists" in rubric
+    assert "Use the 127.0.0.1:4318/v1/logs fallback only when none exists." in rubric
     assert "url.Parse(genericEndpoint)" not in exporter
     assert 'os.Getenv("OTEL_EXPORTER_OTLP_HEADERS")' in exporter
-    assert 'os.Getenv("OTEL_EXPORTER_OTLP_LOGS_HEADERS")' in exporter
-    assert "otlploghttp.WithHeaders(map[string]string{})" in exporter
+    assert 'os.Getenv("OTEL_EXPORTER_OTLP_LOGS_HEADERS")' not in exporter
+    assert "return otlploghttp.New(ctx," in exporter
+    assert "otlploghttp.WithEndpointURL(endpoint)" in exporter
+    assert "otlploghttp.WithHeaders" not in exporter
     assert "return nil, err" not in log_setup
     assert "tp.Shutdown" not in log_setup
     assert "mp.Shutdown" not in log_setup
@@ -1476,7 +1478,7 @@ def test_runtime_evals_prove_structured_logs_preserved_sink_and_opt_out() -> Non
         expected_logs_endpoint = (
             f"http://observer:{http_port.group(1)}/v1/logs"
         )
-        assert "runs the app in Docker Compose" in definition["prompts"][0]["task"]
+        assert "Docker Compose" in definition["prompts"][0]["task"]
         assert expected_logs_endpoint in definition["prompts"][0]["task"]
         default_check, opt_out_check = definition["checks"]
 
@@ -1494,10 +1496,13 @@ def test_runtime_evals_prove_structured_logs_preserved_sink_and_opt_out() -> Non
             or check["id"] == "request-context-logs"
         )
         assert record_check["match"] == {"body": "runtime request completed"}
-        assert record_check["field_contains"] == {"severityText": "WARN"}
-        assert record_check["field_equals"] == {
-            "resource.serviceName": service_name
-        }
+        expected_fields = {"resource.serviceName": service_name}
+        expected_text = {"severityText": "WARN"}
+        if service_name == "go-kvstore":
+            expected_fields["severityNumber"] = 13
+            expected_text = {}
+        assert record_check.get("field_contains", {}) == expected_text
+        assert record_check["field_equals"] == expected_fields
         assert record_check["non_empty"] == ["traceId", "spanId"]
         assert record_check["exact_count"] == record_count
         assert record_check["unique_by"] == ["traceId", "spanId"]
@@ -1508,13 +1513,15 @@ def test_runtime_evals_prove_structured_logs_preserved_sink_and_opt_out() -> Non
             for check in default_logs["record_checks"]
             if check["id"] == "shutdown-log"
         )
-        assert shutdown_check == {
+        expected_shutdown = {
             "id": "shutdown-log",
             "match": {"body": "runtime shutdown completed"},
-            "field_contains": {"severityText": "WARN"},
-            "field_equals": {"resource.serviceName": service_name},
+            "field_equals": expected_fields,
             "exact_count": 1,
         }
+        if expected_text:
+            expected_shutdown["field_contains"] = expected_text
+        assert shutdown_check == expected_shutdown
 
         default_sink = default_check["expect"]["service_logs"][0]
         assert default_sink["occurrences"]["runtime request completed"] == record_count

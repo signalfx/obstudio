@@ -34,7 +34,7 @@
     },
     "operator_constraints": {
       "api_and_trace_metric_sdk_maximum": "v1.101.0",
-      "all_modules": "stable supplied releases only; preserve go/toolchain directives; no runtime upgrade; all ten listed modules needed for proposed HTTP/runtime trace/metric/log baseline"
+      "all_modules": "Rule: Use stable releases from the supplied table. Include all ten modules and keep the Go and toolchain directives.\nExample: The local toolchain stays go1.22.8.\nEvidence: The operator supplies the runtime, version ceiling and complete module table.\nInsufficient evidence: Changing the runtime to accommodate a dependency is not authorized."
     },
     "module_requirements_interpretation": "Each requires entry is the minimum module version in that candidate go.mod; apply Go minimal version selection to the complete hypothetical closure. All requirements under review are listed; no other module/toolchain constraints exist in this fictional case. API compatibility facts below apply only to the supplied candidates.",
     "modules": {
@@ -284,12 +284,12 @@
       ]
     },
     "public_api_facts": {
-      "all_runtime_compatible_candidates": "The indicated old and selected-runtime candidate APIs satisfy the required public signatures; the newer candidates do not remove APIs but their direct/transitive runtime constraints still govern selection.",
+      "all_runtime_compatible_candidates": "The public signatures below are available in every listed candidate. Each candidate still has its listed direct and transitive Go version requirements.",
       "log_api_and_sdk": "sdklog.NewLoggerProvider with WithResource and WithProcessor; sdklog.NewBatchProcessor(exporter); LoggerProvider.Shutdown(ctx) drains batch once. log API global.SetLoggerProvider exists in supplied candidates.",
-      "slog_bridge": "otelslog.NewHandler(scope, otelslog.WithLoggerProvider(lp)) implements slog.Handler and carries the supplied context trace/span IDs into native LogRecords. A fanout retains a snapshot of the existing standard log writer/prefix/flags; slog.SetDefault can route standard log into this single handler, so snapshot first to avoid recursion/duplicate export.",
-      "http_log_exporter": "otlploghttp.New(ctx, WithEndpointURL(exactURL), WithHeaders(emptyMap)) supports http/protobuf and the complete /v1/logs URL. This selected exporter has no grpc transport; switching only an env protocol to grpc cannot make it a grpc exporter.",
+      "slog_bridge": "otelslog.NewHandler(scope, otelslog.WithLoggerProvider(lp)) implements slog.Handler and carries context trace/span IDs into native LogRecords. slog.SetDefault also redirects the standard log default to that handler.",
+      "http_log_exporter": "otlploghttp.New(ctx, WithEndpointURL(exactURL)) accepts a complete /v1/logs URL and supports HTTP/protobuf only. It reads supported environment headers. An explicit headers option overrides those environment headers.",
       "trace_metric_exporters": "otlptracehttp.New and otlpmetrichttp.New accept the independent configured trace/metric HTTP routes. sdktrace.WithBatcher and sdkmetric.WithReader(NewPeriodicReader) share the same service resource.",
-      "http_runtime": "otelhttp.NewHandler(api.Handler(), server) supplies request context plus bounded HTTP trace/metric signals; runtime.Start uses the selected meter provider. No grpc middleware is required by actual source."
+      "http_runtime": "otelhttp.NewHandler accepts an http.Handler and operation name, supplies request context, and records HTTP server spans and metrics. runtime.Start uses the configured meter provider."
     },
     "later_mutable_latest_counterexample": {
       "id": "post-preflight-latest-changes",
@@ -302,7 +302,7 @@
           "go.opentelemetry.io/otel/sdk/log": "v0.52.0"
         }
       },
-      "constraint": "Operator has not authorized runtime or lock changes after preflight; the plan must apply the exact previously checked graph rather than another latest lookup."
+      "constraint": "Rule: The operator has not authorized runtime or lock changes after preflight.\nExample: A new bridge release appears after dependency review.\nEvidence: Approval covers the reviewed dependency set and runtime.\nInsufficient evidence: A changed latest tag does not grant approval for another dependency set."
     }
   },
   "fictional_locked_case": {
@@ -323,7 +323,7 @@
       "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp": "v0.60.0",
       "go.opentelemetry.io/contrib/instrumentation/runtime": "v0.30.0"
     },
-    "operator_instruction": "Retain this compatible locked module graph and its existing one-producer trace/metric/log pipelines; no telemetry dependency upgrade requested.",
+    "operator_instruction": "Rule: Keep this existing dependency set and its trace, metric and log pipelines. No upgrade is requested.\nExample: The existing set may be older than another compatible set.\nEvidence: The operator supplies locked_modules for this separate deployment.\nInsufficient evidence: A newer release alone is not permission to change the lock or add another pipeline.",
     "compatibility_facts": "The supplied locked graph satisfies every minimum requirement, selected runtime and public API facts in its matching old-candidate rows. Existing log export uses one otelslog bridge/provider and the same local profile; this is fictional source/compatibility evidence, not executed capture."
   },
   "fictional_log_cases": [
@@ -337,44 +337,28 @@
         "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf"
       },
       "operator_log_optout": false,
-      "future_source_backed_acceptance": {
-        "request_trigger": "successful PUT /kv/synthetic-key with synthetic safe bytes",
-        "log_body": "runtime request completed",
-        "severity_text": "WARN",
-        "attribute": {
-          "operation": "put"
-        },
-        "service_name": "go-kvstore",
-        "correlation": "nonzero trace/span IDs matching its own active HTTP request span; do not fabricate values before execution",
-        "original_sink": "retain actual original standard log writer/prefix/flags and existing slog output; no new file sink assumed",
-        "shutdown_body": "runtime shutdown completed",
-        "shutdown_severity": "WARN",
-        "shutdown_correlation": "Outside an active span, absent/zero trace/span IDs are valid; do not borrow the earlier request IDs.",
-        "privacy": "Do not export key, raw value, dynamic data-dir/path, raw error/config text or credentials; bounded fixed body and operation only.",
-        "drain": "Stop/drain server and owned store work, emit final shutdown warning while log provider is alive, then shut down owned trace/metric/log providers exactly once."
-      },
       "initially_absent_settings": [
         "OTEL_LOGS_EXPORTER",
         "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
         "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL",
         "OTEL_EXPORTER_OTLP_HEADERS",
         "OTEL_EXPORTER_OTLP_LOGS_HEADERS"
-      ]
+      ],
+      "operator_privacy_requirement": "Rule: Keep exported records bounded. Do not export keys, raw values, dynamic data-directory paths, raw errors, configuration text or credentials.\nExample: A request may log a fixed message and the operation name, without its key or value.\nEvidence: This is the operator's privacy policy for this scenario.\nInsufficient evidence: The fixture gives no approval to export any of those data classes."
     },
     {
       "id": "explicit-operator-optout",
-      "operator_instruction": "Disable OTLP application log export; preserve traces, metrics and the original local logger sink.",
+      "operator_instruction": "Rule: Disable OTLP application-log export in this case. Keep traces, metrics and the original local logger output.\nExample: The operator sets OTEL_LOGS_EXPORTER=none.\nEvidence: profile_override records the operator's explicit opt-out.\nInsufficient evidence: Disabling other signals or losing the original logger output does not meet the request.",
       "profile_override": {
         "OTEL_LOGS_EXPORTER": "none"
-      },
-      "log_scope": "No added local LoggerProvider/bridge; zero OTLP LogRecords, retain original request/shutdown warnings."
+      }
     },
     {
       "id": "wrong-local-port",
       "normal_profile_override": {
         "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://127.0.0.1:55319/v1/logs"
       },
-      "fact": "Different port from approved55318 even though loopback; trace/metric routes remain approved55318."
+      "fact": "Trace and metric routes still use the approved receiver on port 55318."
     },
     {
       "id": "mismatched-log-protocol",
@@ -387,7 +371,28 @@
       "id": "log-constructor-failure",
       "normal_profile_override": {},
       "injected_failure": "otlploghttp.New returns a hypothetical constructor error with configuration text",
-      "fact": "The log exporter failed before its provider/bridge installation; trace/metric providers and original logger are already usable. Diagnostic must not expose raw error/config text."
+      "fact": "The failure occurs before the log provider or bridge is installed. The original logger and trace/metric providers are already usable."
+    },
+    {
+      "id": "generic-header-conflict",
+      "normal_profile_override": {
+        "OTEL_EXPORTER_OTLP_HEADERS": "Authorization=synthetic-generic-marker"
+      },
+      "fact": "The generic headers may belong to other signals. Their values are fictional."
+    },
+    {
+      "id": "generic-plus-logs-headers",
+      "normal_profile_override": {
+        "OTEL_EXPORTER_OTLP_HEADERS": "Authorization=synthetic-generic-marker",
+        "OTEL_EXPORTER_OTLP_LOGS_HEADERS": "X-Local=synthetic-local-marker"
+      }
+    },
+    {
+      "id": "signal-specific-local-headers",
+      "normal_profile_override": {
+        "OTEL_EXPORTER_OTLP_LOGS_HEADERS": "X-Local=synthetic-local-marker"
+      },
+      "fact": "Generic headers are absent in this case."
     }
   ]
 }

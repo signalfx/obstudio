@@ -17,10 +17,10 @@ description: >-
 
 # Instrument
 
-For Python application logging, apply the shared `logging-readiness.md`
+For Python and Go application logging, apply the shared `logging-readiness.md`
 workflow below, including its worklists, report readback and evidence receipts.
-For Go, Java and Node.js, continue the existing language and local-log workflow;
-the expanded shared logging-readiness workflow applies only to Python.
+For Java and Node.js, continue the existing language and local-log workflow;
+the expanded shared logging-readiness workflow applies only to Python and Go.
 
 Add OpenTelemetry observability to applications using auto-instrumentation,
 default local application-log export, and optional custom spans or metrics.
@@ -1746,7 +1746,10 @@ Go:
   outer `otelhttp.NewHandler`, then prove at least one parameterized route uses
   its low-cardinality route pattern rather than a constant `server` span name.
   Also prove the combined wrappers do not emit duplicate server spans.
-- Configure `sdkmetric.NewPeriodicReader` with an interval derived from `OTEL_METRIC_EXPORT_INTERVAL`, defaulting to `1000` ms, and a timeout derived from `OTEL_METRIC_EXPORT_TIMEOUT`, defaulting to `500` ms, for local runtime checks.
+- Follow the Go guide's metric-reader ownership rules. Use the selected SDK's
+  supported environment settings for local timing; explicit reader options
+  override those values and need an actual application policy and acceptance
+  check. Prove receipt/flush rather than introducing duplicate timing parsers.
 - Add `go.opentelemetry.io/otel/sdk/log`,
   `go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp`, and exactly
   one official `go.opentelemetry.io/contrib/bridges` package matching the

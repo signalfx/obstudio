@@ -3,7 +3,7 @@
   "prompts": [
     {
       "id": "runtime-preserving",
-      "task": "Instrument the Go key-value store service in ./service with OpenTelemetry while preserving the existing runtime and startup command. Add auto-instrumentation only; ensure traces, metrics, and existing application logs export to the local Splunk Observability Studio during the runtime check; do not add custom business spans. This runtime fixture runs the app in Docker Compose: the checked-in OTLP logs endpoint http://observer:4318/v1/logs is the trusted local Splunk Observability Studio receiver for this test. Preserve it rather than replacing it with localhost or treating it as a remote endpoint."
+      "task": "$otel-instrument ./service\n\nUse auto-instrumentation only, without custom business spans. Runtime validation uses Docker Compose; http://observer:4318/v1/logs is the approved local Studio logs endpoint."
     }
   ],
   "checks": [
@@ -43,11 +43,9 @@
                 "match": {
                   "body": "runtime request completed"
                 },
-                "field_contains": {
-                  "severityText": "WARN"
-                },
                 "field_equals": {
-                  "resource.serviceName": "go-kvstore"
+                  "resource.serviceName": "go-kvstore",
+                  "severityNumber": 13
                 },
                 "non_empty": ["traceId", "spanId"],
                 "exact_count": 3,
@@ -59,11 +57,9 @@
                 "match": {
                   "body": "runtime shutdown completed"
                 },
-                "field_contains": {
-                  "severityText": "WARN"
-                },
                 "field_equals": {
-                  "resource.serviceName": "go-kvstore"
+                  "resource.serviceName": "go-kvstore",
+                  "severityNumber": 13
                 },
                 "exact_count": 1
               }

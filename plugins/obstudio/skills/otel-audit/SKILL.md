@@ -17,10 +17,10 @@ allowed-tools: Read Grep Glob Edit(**/.observe/**)
 
 # Audit -- Observability Coverage Scan
 
-For Python application logging, apply the shared `logging-readiness.md`
+For Python and Go application logging, apply the shared `logging-readiness.md`
 workflow below, including its worklists, report readback and evidence receipts.
-For Go, Java and Node.js, continue the existing language and local-log workflow;
-the expanded shared logging-readiness workflow applies only to Python.
+For Java and Node.js, continue the existing language and local-log workflow;
+the expanded shared logging-readiness workflow applies only to Python and Go.
 
 ## Overview
 
