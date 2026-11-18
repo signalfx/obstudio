@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-audit |
-| Run ID | 20261118T115646033891Z |
+| Run ID | 20261118T122005179897Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -27,6 +27,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | java/kafka-producer-consumer/qual/audit | java/kafka-producer-consumer | 2 | evals/java/kafka-producer-consumer/eval/qual/audit.json | 0 | 6 | 0 |
 | java/kafka-streams/qual/audit | java/kafka-streams | 2 | evals/java/kafka-streams/eval/qual/audit.json | 0 | 7 | 0 |
 | java/springboot-basic/qual/audit | java/springboot-basic | 2 | evals/java/springboot-basic/eval/qual/audit.json | 0 | 6 | 0 |
+| java/springboot-basic/qual/logging-audit-contract | java/springboot-basic | 3 | evals/java/springboot-basic/eval/qual/logging-audit-contract.json | 0 | 63 | 0 |
 | node/express-basic/qual/audit | node/express-basic | 2 | evals/node/express-basic/eval/qual/audit.json | 0 | 6 | 0 |
 | python/ai-assistant-demo/qual/ao-root-compatibility-audit | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/ao-root-compatibility-audit.json | 0 | 8 | 0 |
 | python/ai-assistant-demo/qual/ao-target-handoff-audit | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/ao-target-handoff-audit.json | 0 | 4 | 0 |

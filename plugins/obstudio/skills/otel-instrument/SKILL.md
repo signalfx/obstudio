@@ -17,10 +17,10 @@ description: >-
 
 # Instrument
 
-For Python and Go application logging, apply the shared `logging-readiness.md`
+For Python, Go and Java application logging, apply the shared `logging-readiness.md`
 workflow below, including its worklists, report readback and evidence receipts.
-For Java and Node.js, continue the existing language and local-log workflow;
-the expanded shared logging-readiness workflow applies only to Python and Go.
+For Node.js, continue the existing language and local-log workflow;
+the expanded shared logging-readiness workflow applies only to Python, Go and Java.
 
 Add OpenTelemetry observability to applications using auto-instrumentation,
 default local application-log export, and optional custom spans or metrics.
@@ -1786,15 +1786,13 @@ Java:
 - Avoid adding SDK dependencies to `pom.xml` for basic Spring Boot coverage.
 - Follow `../references/languages/java.md` Implementation Rules for DI binding, provider reuse, and dependency checks.
 - Wire the agent through the existing startup surface, `JAVA_TOOL_OPTIONS`, or a documented run command.
-- Default the Java agent's application log exporter to `otlp` only when
-  `OTEL_LOGS_EXPORTER` is absent and the logs endpoint is absent or matches the
-  detected local Splunk Observability Studio receiver. Set that local
-  `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`, and rely on the agent's detected
-  Logback/Log4j bridge plus JVM shutdown hook. A non-local explicit endpoint on
-  the absent/`otlp` branch is a fail-closed boundary conflict and must not start
-  the agent-owned log path. Preserve explicit `none`, other exporter choices,
-  existing appenders, and any single existing OTel appender; never install a
-  second bridge.
+- Follow the Java reference's actual SDK exporter-list reader and configuration
+  precedence. Guard every selected OTLP member against the independently approved
+  local receiver, including normalized/mixed selections. Preserve other exporter
+  members and SDK-invalid input behavior. Reuse the agent's detected bridge and
+  shutdown owner, honor opt-outs, retain native appenders and never add a second
+  capture path. Defaults apply only where the selected SDK/operator policy leaves
+  the local branch unconfigured.
 - In the final response, explicitly mention the agent setup or path,
   `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, HTTP server spans, and
   `http.server.request.duration`.

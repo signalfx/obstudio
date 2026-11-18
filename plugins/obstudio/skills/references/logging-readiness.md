@@ -4,7 +4,7 @@ Read this reference when auditing or changing an application logging path.
 These rules extend the local-log contract; they do not authorize new sinks,
 sensitive-data capture, a custom SDK, or changes outside the selected scope.
 
-For Python and Go audit, instrumentation and verification, read only the detected stack's
+For Python, Go and Java audit, instrumentation and verification, read only the detected stack's
 **Logging Readiness Checks** section in the existing language guide, following
 its bridge/provider ownership references as needed. Those guides describe runtime-specific context, record and lifecycle pitfalls;
 resolve concrete SDK APIs and settings from the detected implementation. The
@@ -19,6 +19,7 @@ present in the bundle does not establish what its tool response actually showed.
 
 | Detected stack | Existing language reference |
 |---|---|
+| Java | [Java logging checks](languages/java.md#logging-readiness-checks) |
 | Python | [Python logging checks](languages/python.md#logging-readiness-checks) |
 | Go | [Go logging checks](languages/go.md#logging-readiness-checks) |
 

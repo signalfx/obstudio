@@ -31,7 +31,7 @@ from pytest_codex_evals.runner import prepare_side_workspace
 from logging_workflow_check import interrupt_owned_run, source_hashes, stop_owned
 
 
-SERVICES = {"go": "chi-basic", "python": "flask-basic"}
+SERVICES = {"go": "chi-basic", "java": "springboot-basic", "python": "flask-basic"}
 DEPENDENCY_TIMEOUT_SECONDS = 600
 
 _CLONEFILE = None
@@ -625,7 +625,7 @@ def grading_case(case, stage: dict, captures: list[dict]):
 def prepare_dependencies(language: str, workspace: Path, output: Path) -> None:
     if os.name != "posix":
         raise RuntimeError("Logging workflow dependency cleanup requires POSIX process groups")
-    commands = {'python': ['uv', 'sync'], 'go': ['go', 'mod', 'download', 'all']}
+    commands = {'python': ['uv', 'sync'], 'go': ['go', 'mod', 'download', 'all'], 'java': ['mvn', '-q', 'dependency:go-offline']}
     command = commands[language]
     with (output / "baseline-dependencies.log").open("w") as log:
         process = subprocess.Popen(command, cwd=workspace / "service", stdout=log,

@@ -16,7 +16,7 @@
     "build": "existing Maven/Spring Boot command",
     "do_not_upgrade_jdk_framework_or_logging_stack": true,
     "approved_agent_releases": ">=1.4.0,<2.0.0",
-    "original_managed_dependency_values": "Preserve values read from actual pom.xml; the fictional logging resolution below does not authorize rewriting the real BOM."
+    "original_managed_dependency_values": "Rule: Keep the Maven-managed dependency values in pom.xml.\nExample: Fictional logging metadata does not authorize a real BOM change.\nEvidence: The operator permits no framework or logging-stack upgrade. The actual pom.xml supplies the managed values.\nInsufficient evidence: Replacing those values with versions from this fictional matrix."
   },
   "synthetic_resolved_logging_inventory": {
     "source": "fictional complete Maven dependency and logging configuration receipt for this scenario, not a dependency:tree run",
@@ -249,7 +249,7 @@
     },
     "record_sha256": "bdf7a4a8920a0e7869ce9ed34a839d26a01e75ee07347bc3082dc5c9db9af380",
     "app_manifest_changes": [],
-    "apply_policy": "For this hypothetical application stage, fetch the exact checked agent artifact coordinate and verify its captured digest/API graph; do not fetch a floating latest tag. Record any real runtime/application-stage check as unexecuted here."
+    "apply_policy": "Rule: The operator approves only the checked agent coordinate and artifact digest.\nExample: Approval of one artifact does not approve every release.\nEvidence: This synthetic_checked_agent_lock supplies the approved coordinate and digest.\nInsufficient evidence: Approval of another coordinate or digest."
   },
   "synthetic_resolution_drift": {
     "latest_tag_at_preflight": "2.0.0",
@@ -257,8 +257,7 @@
     "new_release_facts": {
       "minimum_jdk": 25,
       "approved_project_release_constraint": false
-    },
-    "expected": "The checked compatible 1.5.0 lock remains the sole proposed application artifact; mutable latest must not substitute an unreviewed incompatible candidate."
+    }
   },
   "normal_baseline_source_plan": {
     "user_requested_logs_optout": false,
@@ -270,23 +269,8 @@
       "service.name": "java-springboot-basic",
       "deployment.environment.name": "local"
     },
-    "expected_native_paths": {
-      "traces": "/v1/traces",
-      "metrics": "/v1/metrics",
-      "logs": "/v1/logs"
-    },
     "logs_endpoint": "http://127.0.0.1:55318/v1/logs",
-    "expected_application_log": {
-      "source_call": "TaskController.create",
-      "body": "runtime request completed",
-      "severity_text": "WARN",
-      "severity_number": 13,
-      "logger_or_scope": "com.example.tasks.TaskController",
-      "expected_count_for_one_application_call": 1,
-      "correlation": "In-span trace_id/span_id must equal an actual received POST /tasks server span at execution time. No IDs or packets are supplied here. Out-of-span planned probe must not fabricate IDs."
-    },
-    "existing_console_sink": "Preserve the declared CONSOLE formatter/level/additivity and one original warning record; no replacement with OTel-only output.",
-    "forwarding": "Native logs remain local; traces/metrics may have independently configured destinations. No generic cloud headers or cloud log forwarding."
+    "resource_requirement": "Rule: Use the operator-approved Resource identity.\nExample: The Maven artifact name does not choose the service identity.\nEvidence: The operator supplies service.name=java-springboot-basic and deployment.environment.name=local in resource.\nInsufficient evidence: A different service or environment value."
   },
   "independent_operator_and_failure_cases": [
     {
@@ -296,39 +280,28 @@
       },
       "launcher_jvm_args": [
         "-Dotel.logs.exporter=none"
-      ],
-      "expected": "Effective JVM property wins. Leave logs disabled without another SDK/appender/bridge; original console and independently configured trace/metric paths are retained. Zero matching OTLP logs is a future assertion, not proof now."
+      ]
     },
     {
       "id": "explicit-other-log-exporter",
       "environment": {
         "OTEL_LOGS_EXPORTER": "console"
-      },
-      "expected": "Preserve explicit operator-owned exporter without supplementing it with local OTLP log defaults or interpreting an irrelevant logs endpoint."
+      }
     },
     {
       "id": "generic-cloud-header-conflict",
       "environment": {
         "OTEL_LOGS_EXPORTER": "otlp",
         "OTEL_EXPORTER_OTLP_HEADERS": "Authorization=SYNTHETIC_CLOUD_HEADER"
-      },
-      "expected": "The Java guide guard rejects this effective generic header before JVM startup. Mark that launch blocked; do not claim its traces/metrics continued in an unstarted process. Propose reviewed move to trace/metric-specific headers and removal from generic local log path without mutating user/global configuration here."
+      }
     },
     {
       "id": "unsupported-log-protocol",
       "environment": {
         "OTEL_LOGS_EXPORTER": "otlp",
         "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL": "http/json"
-      },
-      "expected": "The supplied selected agent supports grpc/http-protobuf, not http/json; the Java launcher guard blocks before Java. Keep exact cause and intended normal OTLP profile in the plan, retain unrelated target configuration, and do not silently disable logs or claim successful app/trace/metric execution."
+      }
     }
-  ],
-  "required_unexecuted_proof_plan": [
-    "Verify real selected agent/JDK and exact applied artifact/configuration against the checked graph at a future authorized implementation.",
-    "Exercise existing POST /tasks warning through the normal Java-agent startup, then compare one native application LogRecord with actual server span/metric resource IDs and the original console sink.",
-    "Inspect body, severity text/number, logger scope, resource, nonzero correctly sized trace/span IDs matching a real received span; add an out-of-span log probe with no fabricated correlation.",
-    "Assert one warning per app call in both console and local receiver, and agent-owned JVM shutdown delivery of a final bounded record without new application providers/hooks.",
-    "Keep explicit opt-out and blocked/misconfigured launches separate from the normal three-signal path; verify no logs reach a cloud path."
   ],
   "synthetic_registry_receipt_sha256": "521b07779efd693d656b8b53bcd51a551a6b493a621db4efa1fed267fd88b11d"
 }
