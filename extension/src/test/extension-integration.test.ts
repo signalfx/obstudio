@@ -431,6 +431,7 @@ it('integration: VSIX contains extension host and top-level webview assets', { t
 				'references/scripts/observe_report_core.py',
 				'references/scripts/observe_report_html.py',
 				'references/languages/go.md',
+				'references/logging-readiness.md',
 			]) {
 				assert.equal(
 					execFileSync('unzip', ['-p', vsixFile, `${path.posix.dirname(archivePath)}/bundle/${resource}`], { encoding: 'utf8' }),
@@ -442,6 +443,7 @@ it('integration: VSIX contains extension host and top-level webview assets', { t
 			'references/report-flow-contract.md',
 			'otel-instrument/references/languages/go.md',
 			'references/languages/go.md',
+			'references/logging-readiness.md',
 			'otel-audit/scripts/scan_python_otel_topology.py',
 			'splunk-dashboard/references/dashboard-templates.md',
 		]) {

@@ -2,6 +2,12 @@
 
 Language-specific instrumentation guidance for Python services.
 
+For a logging path, first resolve the effective configuration and collection
+owner using [the shared logging reference](../logging-readiness.md#source-and-applicability).
+The environment-based setup recipes below apply only after that check; they
+do not supersede an active supported declarative loader, an intentional SDK
+opt-out, or an established operator-owned forwarding route.
+
 ---
 
 ## Auto-Instrumentation Library Map
@@ -94,16 +100,17 @@ handler across later `basicConfig`, `dictConfig`, and `fileConfig` calls while
 preserving the application's console/file handlers. Pass
 `inject_trace_context=True` only when that API supports it, to add
 `otelTraceID`, `otelSpanID`, `otelTraceSampled`, and `otelServiceName` to the
-original stdlib `LogRecord` without changing its format. Keep
-`set_logging_format=False` to preserve the existing stdout/file format. When
-the resolved API lacks that capability, omit the unsupported
-`inject_trace_context` argument; prove that the OTLP handler derives
-correlation from current OTel context independently. If the retained
-stdout/file formatter itself must consume those fields, use
-`OTEL_PYTHON_LOG_CORRELATION=true` or `set_logging_format=True` and update an
-already-created formatter explicitly. That older option also asks
-`logging.basicConfig` to install the OTel format, which may be a no-op when
-handlers already exist and does not enable OTLP export. If the constrained SDK
+original stdlib `LogRecord` without changing its format. The example selects
+native-format preservation with `set_logging_format=False`; that explicit
+option overrides `OTEL_PYTHON_LOG_CORRELATION`; the formatting activation
+gates `OTEL_PYTHON_LOG_FORMAT` and `OTEL_PYTHON_LOG_LEVEL`. Independent bridge
+controls, such as handler level, retain their own readers and policy. Apply the common policy/precedence decision before
+claiming those operator controls remain effective. If the resolved API lacks injection,
+omit the unsupported `inject_trace_context` argument and prove canonical OTLP
+correlation independently. When
+the selected native formatter needs injected fields or operator formatting,
+resolve the supported activation and existing formatter path; `basicConfig`
+may leave existing handlers unchanged and does not enable OTLP export. If the constrained SDK
 instead owns the supported `LoggingHandler` path, retain and test that path;
 do not install a second handler or upgrade dependencies solely to copy the
 instrumentor example.
@@ -120,31 +127,68 @@ only for an explicit user opt-out, preserving its provenance; an unavailable
 bridge, conflict, or failed verification is a reported incomplete log path,
 not permission to persist `none` as the normal configuration.
 
+For standard environment configuration, an empty `OTEL_LOGS_EXPORTER` has the
+same meaning as an unset value: use the approved local OTLP default. Python's
+`os.environ.get(name, default)` and `setdefault` do not replace a present empty
+string. Use the explicit empty-value handling shown in the wrapper and setup examples
+below. Check both unset and empty values through the actual
+startup path, and keep explicit `none` and other operator-owned exporters intact.
+
 ```bash
 #!/bin/sh
 set -eu
 
 logs_exporter="${OTEL_LOGS_EXPORTER:-}"
-logs_exporter="${logs_exporter#"${logs_exporter%%[![:space:]]*}"}"
-logs_exporter="${logs_exporter%"${logs_exporter##*[![:space:]]}"}"
-case "$logs_exporter" in
-  '') logs_exporter=otlp; export OTEL_LOGS_EXPORTER=otlp ;;
-  [oO][tT][lL][pP]) logs_exporter=otlp ;;
-  [nN][oO][nN][eE]) logs_exporter=none ;;
-  *) logs_exporter="${OTEL_LOGS_EXPORTER}" ;;
-esac
+if [ -z "$logs_exporter" ]; then
+  logs_exporter=otlp
+  export OTEL_LOGS_EXPORTER=otlp
+fi
+otel_python="$(command -v python3 2>/dev/null || command -v python 2>/dev/null || true)"
+# These helpers use only Python 3's standard library. Keep SDK list semantics
+# when available; a helper failure must not stop the application.
+logs_class=
+if [ -n "$otel_python" ] && logs_class="$("$otel_python" -I - 2>/dev/null <<'PY_EXPORTERS'
+import os
+
+value = os.environ["OTEL_LOGS_EXPORTER"]
+if value.lower().strip() == "none":
+    print("none")
+elif any(name.strip() in ("otlp", "otlp_proto_http", "otlp_proto_grpc")
+         for name in value.split(",")):
+    print("otlp")
+else:
+    print("operator")
+PY_EXPORTERS
+)"; then
+  case "$logs_class" in none|otlp|operator) ;; *) logs_class= ;; esac
+else
+  logs_class=
+fi
+if [ -z "$logs_class" ]; then
+  # Conservatively guard anything that might contain an OTLP member.
+  # Without Python this is classification only, not a replacement list parser.
+  case "$logs_exporter" in
+    *otlp*) logs_class=otlp ;;
+    *)
+      trimmed="${logs_exporter#"${logs_exporter%%[![:space:]]*}"}"
+      trimmed="${trimmed%"${trimmed##*[![:space:]]}"}"
+      case "$trimmed" in [nN][oO][nN][eE]) logs_class=none ;; *) logs_class=operator ;; esac
+      ;;
+  esac
+fi
 effective_logs_exporter="$logs_exporter"
-if [ "$logs_exporter" = otlp ]; then
-  # Use the selected project Python. Validate before the CLI constructs any
+if [ "$logs_class" = otlp ]; then
+  # Validate before the CLI constructs any
   # local log exporter; never print endpoint/header values on failure.
-  if logs_configuration="$(python - <<'PY_LOGS'
+  if [ -n "$otel_python" ] && logs_configuration="$("$otel_python" -I - 2>/dev/null <<'PY_LOGS'
 import os
 import sys
 from urllib.parse import urlsplit, urlunsplit
 
-# Retain only receiver names confirmed in preflight; otel-collector matches
-# the Compose example below. Replace it for a different service topology.
-local_hosts = {"127.0.0.1", "localhost", "::1", "otel-collector"}
+# Replace these literals with the protocol and complete logs URL resolved in
+# preflight. The conventional values apply only when no receiver was found.
+approved_logs_protocol = "http/protobuf"
+approved_logs_endpoint = "http://127.0.0.1:4318/v1/logs"
 
 
 def local_endpoint(raw, protocol, *, signal=False):
@@ -155,26 +199,36 @@ def local_endpoint(raw, protocol, *, signal=False):
         raise ValueError("whitespace")
     parsed = urlsplit(value)
     port = parsed.port  # Validate numeric port syntax and range.
-    if (parsed.scheme != "http" or parsed.hostname not in local_hosts
+    if (parsed.scheme != "http" or not parsed.hostname
             or parsed.username is not None or parsed.password is not None
             or "?" in value or "#" in value
             or (port is not None and not 1 <= port <= 65535)):
         raise ValueError("non-local or ambiguous endpoint")
     if protocol == "grpc" and parsed.path not in ("", "/"):
         raise ValueError("gRPC endpoint path")
-    if signal and protocol == "http/protobuf" and not parsed.path.endswith("/v1/logs"):
-        raise ValueError("HTTP logs signal path")
     return parsed
 
 
 try:
-    if any(os.environ.get(name, "").strip() for name in (
-            "OTEL_EXPORTER_OTLP_HEADERS", "OTEL_EXPORTER_OTLP_LOGS_HEADERS")):
-        raise ValueError("local log headers")
-    generic_protocol = os.environ.get("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf").strip().lower()
-    logs_protocol = os.environ.get("OTEL_EXPORTER_OTLP_LOGS_PROTOCOL", generic_protocol).strip().lower()
-    if logs_protocol not in ("http/protobuf", "grpc"):
-        raise ValueError("unsupported logs protocol")
+    if os.environ.get("OTEL_EXPORTER_OTLP_HEADERS", "").strip():
+        raise ValueError("generic local log headers")
+    generic_protocol = (os.environ.get("OTEL_EXPORTER_OTLP_PROTOCOL") or "http/protobuf").strip()
+    configured_protocol = (os.environ.get("OTEL_EXPORTER_OTLP_LOGS_PROTOCOL")
+                           or os.environ.get("OTEL_EXPORTER_OTLP_PROTOCOL")
+                           or (generic_protocol if "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL" in os.environ
+                               else approved_logs_protocol)).strip()
+    transports = set()
+    for name in os.environ["OTEL_LOGS_EXPORTER"].split(","):
+        name = name.strip()
+        if name == "otlp":
+            transports.add(configured_protocol)
+        elif name == "otlp_proto_http":
+            transports.add("http/protobuf")
+        elif name == "otlp_proto_grpc":
+            transports.add("grpc")
+    if transports != {approved_logs_protocol}:
+        raise ValueError("selected OTLP transports differ from approval")
+    logs_protocol = approved_logs_protocol
     logs_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", "")
     generic_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "")
     if any(ord(char) < 32 or ord(char) == 127 for char in logs_endpoint):
@@ -189,17 +243,20 @@ try:
             generic = local_endpoint(generic_endpoint, generic_protocol)
         if generic is not None and logs_protocol == generic_protocol:
             if logs_protocol == "http/protobuf":
-                path = generic.path.rstrip("/")
-                for suffix in ("/v1/traces", "/v1/metrics", "/v1/logs"):
-                    if path.endswith(suffix):
-                        path = path[:-len(suffix)]
-                        break
-                generic = generic._replace(path=path.rstrip("/") + "/v1/logs")
+                path = generic.path
+                if not path.endswith("/"):
+                    path += "/"
+                generic = generic._replace(path=path + "v1/logs")
             resolved = generic
         else:
-            fallback = ("http://127.0.0.1:4318/v1/logs"
-                        if logs_protocol == "http/protobuf" else "http://127.0.0.1:4317")
-            resolved = local_endpoint(fallback, logs_protocol, signal=True)
+            resolved = local_endpoint(approved_logs_endpoint, logs_protocol, signal=True)
+    approved = local_endpoint(approved_logs_endpoint, approved_logs_protocol, signal=True)
+    resolved_path = (resolved.path or "/") if logs_protocol == "http/protobuf" else resolved.path
+    approved_path = (approved.path or "/") if approved_logs_protocol == "http/protobuf" else approved.path
+    if (logs_protocol != approved_logs_protocol
+            or (resolved.scheme, resolved.hostname, resolved.port or 80, resolved_path)
+            != (approved.scheme, approved.hostname, approved.port or 80, approved_path)):
+        raise ValueError("logs tuple differs from preflight approval")
     print(logs_protocol + " " + urlunsplit(resolved))
 except Exception:
     sys.exit(1)
@@ -207,35 +264,81 @@ PY_LOGS
 )"; then
     logs_protocol="${logs_configuration%% *}"
     logs_endpoint="${logs_configuration#* }"
-    export OTEL_EXPORTER_OTLP_LOGS_PROTOCOL="$logs_protocol"
+    if [ "${OTEL_EXPORTER_OTLP_LOGS_PROTOCOL+x}" != x ]; then
+      export OTEL_EXPORTER_OTLP_LOGS_PROTOCOL="$logs_protocol"
+    fi
     export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT="$logs_endpoint"
   else
     # This invocation skips only the added CLI log path. Preserve the intended
     # profile and all trace/metric/header settings; do not persist an opt-out.
     printf '%s\n' 'local OTLP log export skipped; check receiver, protocol and header configuration' >&2
-    effective_logs_exporter=none
-    export OTEL_PYTHON_LOG_AUTO_INSTRUMENTATION=false
+    # Remove only OTLP members; retain the other exporters and their bridge.
+    # The suffix preserves trailing whitespace through shell substitution.
+    if [ -n "$otel_python" ] && removed="$("$otel_python" -I - 2>/dev/null <<'PY_WITHOUT_OTLP'
+import os
+import sys
+
+members = [name for name in os.environ["OTEL_LOGS_EXPORTER"].split(",")
+           if name.strip() not in ("otlp", "otlp_proto_http", "otlp_proto_grpc")]
+value = ",".join(members) if members else "none"
+# A mixed list's empty/none member must still reach SDK component lookup,
+# rather than accidentally becoming the SDK's special whole-value opt-out.
+if members and (not value or value.lower().strip() == "none"):
+    value += "," + members[0]
+sys.stdout.write(value + "X")
+PY_WITHOUT_OTLP
+)"; then
+      effective_logs_exporter="${removed%X}"
+    else
+      effective_logs_exporter=none
+    fi
   fi
 fi
-if [ "$logs_exporter" = none ]; then
+if [ "$logs_class" = none ] || [ "$effective_logs_exporter" = none ]; then
   # Ensure the explicit opt-out cannot inherit the zero-code default bridge.
   export OTEL_PYTHON_LOG_AUTO_INSTRUMENTATION=false
 fi
 
 exec opentelemetry-instrument \
   --logs_exporter "$effective_logs_exporter" \
-  --service_name "${OTEL_SERVICE_NAME:-my-service}" \
   --exporter_otlp_endpoint "${OTEL_EXPORTER_OTLP_ENDPOINT:-http://127.0.0.1:4318}" \
   --exporter_otlp_protocol "${OTEL_EXPORTER_OTLP_PROTOCOL:-http/protobuf}" \
-  --resource_attributes deployment.environment.name=production \
+  -- \
   "$@"
 ```
+
+Before saving the wrapper, replace its `approved_logs_protocol` and
+`approved_logs_endpoint` literals with the receiver resolved during preflight,
+including its authority, port and signal path. Keep the conventional literals
+only when existing signal/generic settings, receiver status and project topology
+supply no receiver. An explicit approved signal endpoint wins even when the
+generic endpoint differs; a compatible generic base is considered only without
+a signal endpoint. Loopback membership alone does not approve a tuple. These
+literals record the preflight decision, not new runtime environment controls.
+
+OTLP-containing selections require a working Python 3 interpreter (`python3`,
+otherwise `python`) for these standard-library checks. Without it, the wrapper
+starts the application and preserves native output and trace/metric settings,
+but skips log exporters for that invocation. This includes non-OTLP members of a
+mixed list when their safe removal cannot be computed; report that log path as
+incomplete. Explicit `none` and non-OTLP-only selections still reach the
+instrumentor unchanged. Nothing writes an opt-out into the saved normal profile.
 
 Save the checked-in wrapper as `otel-entrypoint.sh`, make it executable, and
 pass the same command the project already uses, for example
 `./otel-entrypoint.sh python app.py`, `uv run`, `poetry run`, `gunicorn`, or
 `uvicorn`. Do not inline only the final `opentelemetry-instrument` command and
-drop the policy checks.
+drop the policy checks. Arguments after the wrapper are the application command
+and its arguments; the `--` boundary prevents additional OTel CLI options from
+overriding configuration after it has been checked.
+
+The wrapper leaves service and resource selection to the existing SDK/configuration
+owner. Do not add higher-precedence wrapper or CLI defaults over operator
+values. Source deployment identity from the effective project configuration;
+use `deployment.environment.name` for a supplied environment identity, with its
+actual configured value. An absent identity retains the SDK fallback
+and needs a source-backed service-name decision; it is not evidence that an
+arbitrary application default was configured.
 
 If the project already runs in Docker:
 ```dockerfile
@@ -271,9 +374,14 @@ particular, a root OTel handler installed before Flask creates `app.logger` can
 make Flask skip its default console handler. If the original sink is missing,
 do not ship the zero-code log path; route the service to the split
 provider/late-bridge programmatic setup below.
-Only the effective `otlp` branch adds or validates the local receiver logs
-protocol, endpoint, and header isolation. `none` and every other explicit
-operator-owned exporter bypass that added log configuration, so generic
+Every selected SDK-supported OTLP member (`otlp`, `otlp_proto_http`, or
+`otlp_proto_grpc`) requires the approved local tuple and header isolation,
+including in mixed lists. Explicit transport aliases win over protocol selectors;
+incompatible selected transports skip OTLP. On a conflict, remove only OTLP
+members for that invocation, preserving other exporters and their bridge. Keep
+the SDK's case-sensitive member lookup, duplicate handling, whole-value `none`
+and invalid-list behavior; do not turn mixed `none` or empty members into a valid
+opt-out. With no OTLP member, operator-owned exporters bypass the added checks, so generic
 trace/metric cloud settings cannot make an opted-out application fail startup.
 At instrumentation time, persist the detected Splunk Observability Studio
 service address through the standard OTel endpoint variables for
@@ -341,18 +449,29 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
-from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.resources import OTELResourceDetector, Resource
 
 
-FALLBACK_LOCAL_OTLP_LOGS_ENDPOINT = "http://127.0.0.1:4318/v1/logs"
-# Adapt this host set to the receiver resolved during instrumentation for
-# Docker/Compose or other deployment-local names; never infer a cloud host.
-LOCAL_OTLP_HOSTS = {"127.0.0.1", "localhost", "::1"}
+# Replace with the complete logs URL resolved in preflight; use this
+# conventional fallback only when no existing receiver evidence is available.
+PREFLIGHT_APPROVED_LOCAL_OTLP_LOGS_ENDPOINT = "http://127.0.0.1:4318/v1/logs"
 
 
 def _local_http_endpoint(endpoint):
-    parsed = urlsplit(endpoint)
-    return parsed.scheme == "http" and parsed.hostname in LOCAL_OTLP_HOSTS
+    try:
+        parsed = urlsplit(endpoint)
+        approved = urlsplit(PREFLIGHT_APPROVED_LOCAL_OTLP_LOGS_ENDPOINT)
+        return (parsed.scheme == approved.scheme == "http"
+                and bool(parsed.hostname) and parsed.username is None
+                and parsed.password is None and "?" not in endpoint
+                and "#" not in endpoint
+                and not any(char.isspace() or ord(char) < 32 or ord(char) == 127
+                            for char in endpoint)
+                and (parsed.port is None or 1 <= parsed.port <= 65535)
+                and (parsed.hostname, parsed.port or 80, parsed.path or "/")
+                == (approved.hostname, approved.port or 80, approved.path or "/"))
+    except ValueError:
+        return False
 
 
 def _skip_local_logs(reason):
@@ -362,13 +481,10 @@ def _skip_local_logs(reason):
 
 def _http_logs_endpoint_from_base(endpoint):
     parsed = urlsplit(endpoint)
-    path = parsed.path.rstrip("/")
-    for signal_path in ("/v1/traces", "/v1/metrics", "/v1/logs"):
-        if path.endswith(signal_path):
-            path = path[: -len(signal_path)]
-            break
-    path = f"{path.rstrip('/')}/v1/logs"
-    return urlunsplit(parsed._replace(path=path))
+    path = parsed.path
+    if not path.endswith("/"):
+        path += "/"
+    return urlunsplit(parsed._replace(path=path + "v1/logs"))
 
 
 def _use_default_local_log_export():
@@ -383,28 +499,24 @@ def _use_default_local_log_export():
 
 
 def _local_log_exporter():
-    generic_protocol = os.environ.get(
-        "OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf"
+    generic_protocol = (
+        os.environ.get("OTEL_EXPORTER_OTLP_PROTOCOL") or "http/protobuf"
     ).strip().lower()
-    protocol = os.environ.get(
-        "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL", generic_protocol
+    protocol = (
+        os.environ.get("OTEL_EXPORTER_OTLP_LOGS_PROTOCOL") or generic_protocol
     ).strip().lower()
     if protocol != "http/protobuf":
         return _skip_local_logs(
             "select the official exporter matching the configured logs protocol"
         )
 
-    # Exporters may read both header variables when constructor headers are
-    # omitted. Reject either source before constructing this local exporter.
-    if any(os.environ.get(name, "").strip() for name in (
-        "OTEL_EXPORTER_OTLP_HEADERS", "OTEL_EXPORTER_OTLP_LOGS_HEADERS"
-    )):
+    # Reject generic credentials; preserve signal-specific local log headers
+    # for the official exporter to parse without an empty headers override.
+    if os.environ.get("OTEL_EXPORTER_OTLP_HEADERS", "").strip():
         return _skip_local_logs(
-            "keep local logs headers empty; scope cloud credentials to traces/metrics"
+            "move generic OTLP headers to trace/metric signal variables"
         )
     endpoint = os.environ.get("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", "").strip()
-    if endpoint and not _local_http_endpoint(endpoint):
-        return _skip_local_logs("explicit logs endpoint is not the local receiver")
     if not endpoint:
         generic_endpoint = os.environ.get(
             "OTEL_EXPORTER_OTLP_ENDPOINT", ""
@@ -412,13 +524,23 @@ def _local_log_exporter():
         # Preserve a compatible local OTLP/HTTP receiver, including its
         # non-default port. A cloud generic endpoint may still serve traces
         # and metrics, but must never become the application-log endpoint.
-        if generic_endpoint and not _local_http_endpoint(generic_endpoint):
-            return _skip_local_logs("generic endpoint is not the local receiver")
         if generic_protocol == protocol and generic_endpoint:
-            endpoint = _http_logs_endpoint_from_base(generic_endpoint)
+            try:
+                endpoint = _http_logs_endpoint_from_base(generic_endpoint)
+            except ValueError:
+                return _skip_local_logs("invalid generic logs endpoint")
         else:
-            endpoint = FALLBACK_LOCAL_OTLP_LOGS_ENDPOINT
+            endpoint = PREFLIGHT_APPROVED_LOCAL_OTLP_LOGS_ENDPOINT
+    if not _local_http_endpoint(endpoint):
+        return _skip_local_logs("logs endpoint differs from the preflight-approved receiver")
     return OTLPLogExporter(endpoint=endpoint)
+
+
+def _application_resource():
+    return Resource.create({
+        "service.name": "my-service",
+        **OTELResourceDetector().detect().attributes,
+    })
 
 
 def configure_opentelemetry():
@@ -428,18 +550,12 @@ def configure_opentelemetry():
     use_local_log_export = _use_default_local_log_export()
     log_exporter = _local_log_exporter() if use_local_log_export else None
 
-    resource = Resource.create({
-        "service.name": os.environ.get("OTEL_SERVICE_NAME", "my-service"),
-    })
+    resource = _application_resource()
 
     tracer_provider = TracerProvider(resource=resource)
     tracer_provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
 
-    metric_reader = PeriodicExportingMetricReader(
-        OTLPMetricExporter(),
-        export_interval_millis=int(os.environ.get("OTEL_METRIC_EXPORT_INTERVAL", "1000")),
-        export_timeout_millis=int(os.environ.get("OTEL_METRIC_EXPORT_TIMEOUT", "500")),
-    )
+    metric_reader = PeriodicExportingMetricReader(OTLPMetricExporter())
     meter_provider = MeterProvider(resource=resource, metric_readers=[metric_reader])
 
     logger_provider = None
@@ -506,13 +622,21 @@ def configure_opentelemetry():
     return install_logging_bridge, shutdown
 ```
 
-This new-process example defaults only an absent or explicit `otlp` log
+### Local log preflight approval
+
+This new-process example defaults only an absent, empty or explicit `otlp` log
 exporter with an absent or detected-local endpoint to Splunk Observability Studio. Adapt
 the standard `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` launch setting to the receiver
 address resolved during instrumentation, including any non-default port and
-Docker/Compose service name; add that service host to `LOCAL_OTLP_HOSTS` in
-the checked-in setup. The in-code literal remains only the host fallback;
-do not add a runtime Obstudio lookup. Report a source-proven non-local endpoint
+Docker/Compose service name. Set `PREFLIGHT_APPROVED_LOCAL_OTLP_LOGS_ENDPOINT`
+to that complete approved URL in the checked-in setup. Keep its conventional
+value only when no existing configuration, receiver status or project topology
+supplies a receiver; do not add a runtime Obstudio lookup. The shown exporter
+supports HTTP/protobuf only. Compare the resolved protocol, authority, port and
+path with preflight approval rather than treating any loopback URL as approved.
+An explicit approved signal endpoint is independent of a differing or invalid
+generic endpoint; consult a compatible generic base only when the signal endpoint
+is absent. Report a source-proven non-local endpoint
 as an operator-owned boundary conflict before copying this pattern. A
 conflict disables only local log export and emits a value-free warning; it
 must not abort application startup or operator-owned trace/metric export. If
@@ -527,6 +651,8 @@ it is not invoked by the default SIGTERM action. When no lifecycle owner
 exists, install one signal owner that requests the service to stop, wait for
 the serving loop to return, and then call `shutdown`. Do not create a second
 provider or signal handler during reloads or per worker request.
+Follow the shared-role [lifecycle checks](#launcher-and-lifecycle)
+for repeated stop requests and final-record proof.
 
 `LoggingInstrumentor` is the current stdlib-to-OTel bridge. Its handler is an
 additional path, and its guarded configuration wrappers let later application
@@ -534,44 +660,60 @@ logging setup proceed before reattaching the OTel handler. Do not use
 `logging.basicConfig(force=True)`. Check the resolved instrumentor's API and
 handler ownership before copying the setup. When supported,
 `inject_trace_context=True` injects the OTel fields without changing the
-existing text format; `set_logging_format=False` preserves that format. If the
-constrained API lacks it, omit the unsupported injection argument and prove
-that the OTLP handler still derives correlation from current context; use
-`OTEL_PYTHON_LOG_CORRELATION=true`/`set_logging_format=True` only when the older
-stdout/file formatter must receive those fields, and update an already-created
-formatter explicitly because `basicConfig` may not replace it.
+existing text format. Treat this example's `set_logging_format=False` as an
+explicit native-format policy, not a guarantee that correlation/format/level
+environment controls remain effective. Resolve authority and precedence as
+above. If the injection API is unsupported, omit it and prove the OTLP
+handler's context mapping independently; inspect existing formatter setup
+when selected text-field or operator-formatting behavior requires it.
 Inspect filters, formatters, adapters,
 Flask/Django access logs, exception rendering, and structured logger wrappers.
 Apply the same project redaction policy to the final OTel record and prove
 sensitive values cannot be reintroduced later in the pipeline.
 
-The explicit `export_interval_millis` and `export_timeout_millis` are required
-for local and eval runs. Do not rely on metric reader defaults; they can be too
-slow for short-lived runtime checks, causing valid HTTP metrics to never reach
-the collector before the process stops.
+The selected SDK reads metric interval and timeout settings when the optional
+reader arguments are omitted. Keep its parsing and precedence for supplied
+operator values. The local launch profile below supplies a 1000 ms interval
+and 500 ms collection timeout only when absent; verify effective collection and
+received datapoints for short runs. Reader collection timeout, exporter HTTP
+timeout and the service's stop budget are separate bounds.
 
 ### Loading the SDK
 
-**Option 1** -- import at top of entry point (preferred):
+**Option 1** -- integrate with the existing bootstrap (preferred):
+
+Use the detected application's actual startup owners in this order:
+
+1. Initialize the selected providers before their framework instrumentation
+   binds them, preserving any existing provider ownership.
+2. Establish the original native sinks for each selected application, framework
+   and server producer through its supported logging configuration or startup
+   hook. Name that producer's concrete public setup mechanism and expected handler,
+   stream, format and level; a generic instruction to initialize handlers is not
+   a repair mechanism. Preserve multiplicity. Creating an application logger or
+   attaching a filter does not initialize a sibling producer's lazy native sink.
+   Public standard-library logging configuration is valid when it preserves that
+   detected producer's destination, format, level and multiplicity. Inspecting
+   dependency internals can explain lazy behavior; calling an underscored
+   initializer solely for its lazy setup side effects does not establish a
+   supported bootstrap mechanism.
+3. Call the returned `install_logging_bridge()` only after those sinks are
+   established and before the selected records are emitted. Some producers test
+   ancestor handlers by level alone: a root OTel handler can suppress their
+   native-handler installation even if its filter rejects their records.
+   Reconcile that producer's actual initialization rather than adding a handler
+   indiscriminately or treating an application handler as its native sink.
+4. Register the returned shutdown function with the existing graceful lifecycle
+   owner. `atexit.register(shutdown_opentelemetry)` is only a normal-exit fallback.
+
+At provider initialization in step 1, bind the returned callbacks in the
+existing startup owner. Step 3 invokes the bridge after native sinks exist;
+step 4 registers shutdown with the existing post-stop owner:
 
 ```python
-# app.py
-import atexit
-
 from otel_setup import configure_opentelemetry
+
 install_logging_bridge, shutdown_opentelemetry = configure_opentelemetry()
-# This is a normal-exit fallback, not the SIGTERM integration.
-atexit.register(shutdown_opentelemetry)
-
-from opentelemetry.instrumentation.flask import FlaskInstrumentor
-from flask import Flask
-
-app = Flask(__name__)
-# Accessing app.logger establishes Flask's default console handler. If the
-# project configures logging explicitly, run that configuration here instead.
-_ = app.logger
-install_logging_bridge()
-FlaskInstrumentor().instrument_app(app)
 ```
 
 Register `shutdown_opentelemetry` with the process's existing graceful hook,
@@ -654,15 +796,10 @@ tracer = trace.get_tracer("my-service.orders")
 def process_order(order_id: str) -> Order:
     span = trace.get_current_span()
     span.set_attribute("order.id", order_id)
-    try:
-        order = db.get_order(order_id)
-        span.set_attribute("order.total", order.total)
-        charge_payment(order)
-        return order
-    except Exception as exc:
-        span.record_exception(exc)
-        span.set_status(trace.StatusCode.ERROR, str(exc))
-        raise
+    order = db.get_order(order_id)
+    span.set_attribute("order.total", order.total)
+    charge_payment(order)
+    return order
 ```
 
 **Context manager form** (when you need the span reference immediately):
@@ -688,13 +825,14 @@ async def process_order(order_id: str) -> Order:
 
 Before adding a custom counter or histogram for an outcome that happens
 inside a request the ASGI/WSGI instrumentation already covers, check
-whether it belongs as an attribute on `http.server.request.duration`
-instead — see `../../otel-instrument/SKILL.md` `#### Implementation Rules` and the
-`Python:` entry under `#### Language-Specific Musts`. The instrumentation
-already sets `http.response.status_code` on that metric for every request,
-and `error.type` for a 5xx (or otherwise invalid) status, with no extra code
--- a plain 4xx client-error response does not set `error.type` on a server
-span. Define a new instrument when the signal does not correlate 1:1 with a
+whether it belongs as an attribute on the effective HTTP duration histogram
+instead (`http.server.request.duration` in stable mode, or the selected legacy
+counterpart). Resolve its actual name, units and dimensions before reuse. When implementing a change, also follow the loaded instrumentation
+skill's Implementation Rules and Python Language-Specific Musts. The instrumentation
+sets status and error dimensions through the selected semantic-convention
+mode: stable attributes include `http.response.status_code` and `error.type`
+for server failures; a legacy mode may use different names. A plain 4xx
+client-error response does not set `error.type` on a server span. Define a new instrument when the signal does not correlate 1:1 with a
 single request (a queue-depth gauge or background job outcome), or cannot
 be represented by those automatically emitted attributes -- for example a
 same-status-different-cause outcome (a 200 that is a logical failure, several
@@ -743,7 +881,14 @@ order_duration.record(elapsed_seconds, {"order.type": "standard"})
 
 ## Error Handling
 
-APM backends identify errors by `otel.status_code = ERROR`. Always set error status on exceptions:
+The supported `start_as_current_span` decorator/context manager records an
+escaping exception and sets ERROR by default. Do not add a duplicate event for
+that exception inside the same span. For a failed manually managed operation,
+follow the selected exception convention and data policy when recording its
+error. A handled or retried exception that allows the operation to complete
+successfully should not automatically mark that operation as an error. See the
+[recording-errors guidance](https://opentelemetry.io/docs/specs/semconv/general/recording-errors/)
+(Development status); preserve existing SDK/instrumentation signal behavior.
 
 ```python
 from opentelemetry.trace import StatusCode
@@ -774,29 +919,30 @@ not fixed-port equality checks.
 | `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | resolved local receiver; fallback `http://127.0.0.1:4318/v1/logs` | Signal-specific local application-log destination |
 | `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` | `http/protobuf` for the shown local baseline | Select a matching official exporter for another explicit protocol |
 | `OTEL_EXPORTER_OTLP_LOGS_HEADERS` | unset | Signal-specific operator log headers; generic cloud headers are rejected from the log path |
-| `OTEL_SERVICE_NAME` | (must be set) | Service identity in telemetry |
+| `OTEL_SERVICE_NAME` | unset | Optional service-name override; preserve identity supplied through resource attributes or the active resource configuration |
 | `OTEL_METRIC_EXPORT_INTERVAL` | `60000` | Metric export interval (ms) |
 | `OTEL_METRIC_EXPORT_TIMEOUT` | `30000` | Metric export timeout (ms) |
 | `OTEL_BSP_SCHEDULE_DELAY` | `5000` | Span batch export delay (ms) |
 
 For local development with Splunk Observability Studio, substitute the resolved
-receiver port when it differs from the conventional fallback:
+receiver authority and port in both the approval and profile when they differ
+from the conventional fallback:
 
-    OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+    OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
     OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf \
     OTEL_LOGS_EXPORTER=otlp \
-    OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:4318/v1/logs \
-    OTEL_METRIC_EXPORT_INTERVAL=1000 \
-    OTEL_METRIC_EXPORT_TIMEOUT=500 \
+    OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://127.0.0.1:4318/v1/logs \
+    OTEL_METRIC_EXPORT_INTERVAL="${OTEL_METRIC_EXPORT_INTERVAL-1000}" \
+    OTEL_METRIC_EXPORT_TIMEOUT="${OTEL_METRIC_EXPORT_TIMEOUT-500}" \
     OTEL_BSP_SCHEDULE_DELAY=100 \
     python app.py
 
-When creating `PeriodicExportingMetricReader`, pass
-`export_interval_millis=int(os.environ.get("OTEL_METRIC_EXPORT_INTERVAL", "1000"))`
-and `export_timeout_millis=int(os.environ.get("OTEL_METRIC_EXPORT_TIMEOUT", "500"))`.
-This makes HTTP metrics from Flask/FastAPI instrumentation, including
-`http.server.request.duration` or the older `http.server.duration` name,
-export promptly to Splunk Observability Studio.
+Let `PeriodicExportingMetricReader` resolve its supported environment settings
+when optional constructor overrides are absent. The local profile chooses
+short-run defaults without replacing supplied values or narrowing the SDK's
+number parser. Resolve actual HTTP metric names and units from the selected
+instrumentation mode, then observe datapoint arrival; interval settings alone
+do not prove delivery or enforce the exporter's transport timeout.
 
 Resolve the effective endpoint/protocol per signal. The conventional gRPC
 fallback is `127.0.0.1:4317`; the conventional HTTP/protobuf fallback is
@@ -817,17 +963,21 @@ endpoint on local Splunk Observability Studio. Never copy a Splunk ingest URL, r
 generic cloud header, cloud exporter, or forwarding flag into the log pipeline.
 For the absent/`otlp` branch, classify a non-local explicit logs endpoint during
 instrumentation preflight, preserve it as operator configuration, report the
-boundary conflict, and require the operator to resolve it. Also
-reject any generic OTLP header on the local branch even when signal-specific
-logs headers exist; move the generic credentials to trace/metric variables and
-remove the generic setting. Splunk Observability Studio cloud forwarding remains traces and
-metrics only.
+boundary conflict, and require the operator to resolve it. Reject any generic
+OTLP header on the local branch even when signal-specific logs headers exist.
+Resolve moving generic credentials to trace/metric variables and removing the
+generic setting through operator-approved configuration during preflight.
+Application startup must not pop or rewrite those settings to activate local
+logs. Splunk Observability Studio cloud forwarding remains traces and metrics
+only.
 
 Verify one sanitized record at each required severity both outside and inside
 an active span. Assert its body/category, severity, shared `service.name`,
 trace/span IDs when a span is active, presence in the original stdout/file
-sink, one record in Splunk Observability Studio, and zero OTLP records with
+sink, one received record on a healthy path in Splunk Observability Studio, and zero OTLP records with
 `OTEL_LOGS_EXPORTER=none`. This runtime check also detects duplicate handlers.
+In fault/retry scenarios distinguish transport copies from SDK emission and
+handler ownership; an unavailable receiver can receive zero records.
 
 ---
 
@@ -841,6 +991,110 @@ Add `opentelemetry-instrumentation-flask`. For Gunicorn, use the `post_fork` hoo
 
 ### Django
 Add `opentelemetry-instrumentation-django`. Add `opentelemetry.instrumentation.django` to `INSTALLED_APPS` if using explicit programmatic setup instead of automatic module loading.
+
+---
+
+## Logging Readiness Checks
+
+Apply the [common logging rules](../logging-readiness.md) to the detected Python
+logger, bridge and runtime. Resolve the existing provider and configuration
+owner; preserve native handlers, operator settings and verified propagation.
+Setup recipes elsewhere in this guide are conditional examples, not requirements
+to adopt their framework, packages or API shape.
+For selected bootstrap or local-log work, retrieve the complete
+[bootstrap ordering](#loading-the-sdk),
+[preflight approval](#local-log-preflight-approval) and
+[local log credential boundary](#local-splunk-observability-studio-application-logs-and-cloud-boundary)
+sections separately. A truncated whole-guide read does not supply a missing
+linked section. Apply these ownership and policy decisions to the selected
+path while keeping setup recipes conditional.
+
+### Context and asynchronous work
+
+Inspect the actual task, thread, executor and logging-queue boundaries. Context
+inheritance differs by scheduler; verify it rather than assuming all asynchronous
+APIs propagate contextvars. Where an explicit transfer is needed, capture an
+independent context per work item before dispatch and restore/detach state on
+success, failure and cancellation. Do not enter one context copy concurrently.
+Keep context capture before a logging queue unless its supported integration
+already preserves the caller's context.
+
+Use the common real-span join contract on the worker's actual native logging
+path. A direct SDK emit or context-copy test does not establish bridge or
+application-runtime coverage. Distinguish native severity from OTel severity and
+preserve the source timestamp's actual precision, formatters and supported
+structured values.
+
+For selected content-preserving privacy work, inspect native `LogRecord.msg`,
+`LogRecord.args` and existing structured extras before `getMessage()` or a
+formatter. A producer can keep a status argument separate while decorating its
+request text; use only source-verified argument positions and retain a selected
+numeric status as an integer. Normalize a verified rendered-only field when its
+raw value is unavailable, and exercise non-success records as well as success.
+
+### Configuration and limits
+
+Resolve public options, signatures, units and configuration precedence from the
+installed provider/exporter path. Bind a selected local-receiver policy to the
+complete URL approved during preflight; neither loopback locality nor the current
+generic endpoint grants approval. A signal-specific endpoint wins independently
+of a differing unused generic endpoint. Test the selected policy with relevant
+operator overrides present while preserving independent settings.
+
+Distinguish an eagerly evaluated default argument from the value ultimately
+selected by a configuration lookup. Trace sentinels and helper results through
+outer constructor defaults; an intermediate `None` need not mean unlimited.
+Keep source-known behavior separate from unexecuted runtime checks.
+For representability claims, follow Python's integer parsing into the actual
+container, scheduler or native extension constructor. Accepting an integer does
+not establish that the terminal consumer can use it; retain that boundary and
+avoid allocating an unsafe size merely to probe the limit.
+
+For limits, replay the original payload and test its boundaries. Derive expected
+retained values and drops from actual input, accounting for bridge-added fields
+and reviewed processors.
+
+Where the selected Python SDK keeps limits and accumulated drops on a mutable
+attribute container, replacing it with a plain mapping can erase earlier drop
+accounting. Use that owner's supported mutation or snapshot mechanism while
+preserving its limits and existing drop state. Check the downstream count as
+well as sanitized values; do not synthesize counters or assume another
+SDK/version has the same container semantics.
+When a selected privacy repair also rebuilds spans or span events, check each
+affected owner's count separately: preserving a parent span's drop counts does
+not preserve an event's exported `dropped_attributes_count`.
+
+Direct SDK and native-bridge controls prove different paths; keep either missing
+control unproven. Attribute limits do not define Body or exception-capture
+policy. Use native enablement only to avoid expensive work; lazy formatting does
+not defer argument-producing expressions already evaluated.
+
+### Launcher and lifecycle
+
+Resolve the actual launcher, CLI/environment precedence, worker model and reload
+behavior before claiming a process or shutdown profile. Validate the effective
+command and process identities; an environment assignment alone cannot override
+an explicit higher-priority runner setting. Preserve existing development and
+operator policy, and scope proof to the processes actually exercised.
+Inspect effective handler ownership after the runner initializes: supervisors,
+reloaders or workers can replace an earlier handler or stop a different process.
+A flag in an application handler proves nothing if that handler is no longer
+installed. Retain the selected graceful-stop contract on the actual process.
+
+Use the runtime's supported stop mechanism. Repeated stop requests must respect
+the selected shutdown policy and not accidentally interrupt active final logging
+or drain. Prove required event ordering and final-record receipt on that same
+configured lifecycle path. Keep exporter completion, flush waiting, cancellation
+and receiver acknowledgement distinct. Route SDK/exporter diagnostics through a
+supported independent handler or suppression path. When adding a root OTel
+bridge, follow the actual
+`logging.Logger.callHandlers` route: a found handler can disable `lastResort`
+even when its filter rejects the record. Excluding SDK records from the bridge
+does not supply native output; handlers on application/framework sibling
+loggers do not serve that SDK namespace. Retain an eligible existing native
+route or supported suppression policy rather than forcing a new handler or
+diagnostic emission. Assess actual diagnostic cadence separately from
+successful limit enforcement.
 
 ---
 
@@ -879,10 +1133,11 @@ Add `opentelemetry-instrumentation-django`. Add `opentelemetry.instrumentation.d
   enough. Do not add it when an existing OTel handler/provider already owns the
   same records, and do not combine it with a second framework bridge that
   exports those records.
-- **Metric export interval and timeout**: Always set
-  `export_interval_millis` and `export_timeout_millis` on
-  `PeriodicExportingMetricReader`. Environment variables alone are not enough
-  when constructing the reader manually.
+- **Metric export interval and timeout**: Resolve the selected reader's
+  optional constructor arguments and environment readers. Preserve supported
+  operator values; the local profile may supply short-run defaults when absent.
+  Verify the actual collection and export path, keeping reader, transport and
+  shutdown bounds separate.
 - **Observable gauge callback signature**: The callback receives a
   `CallbackOptions` argument and must **yield `Observation` objects**
   (from `opentelemetry.metrics`). A common mistake is writing
