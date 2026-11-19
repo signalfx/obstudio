@@ -1083,6 +1083,33 @@ describe("OverviewTab outstanding work and formatting", () => {
     expect(link.getAttribute("href")).toBe("/api/audit/report");
     expect(link.getAttribute("target")).toBe("_blank");
   });
+
+  it("scores and links the repo picked in the repo switcher", async () => {
+    stubScoreFetch(makeScore({ hasHtmlReport: true }));
+    const { container } = render(<OverviewTab workspace="api (2)" />);
+
+    await waitFor(() => {
+      expect(container.querySelector(".overview-report__view")).toBeTruthy();
+    });
+    expect(vi.mocked(fetch).mock.calls.map(([path]) => String(path))).toContain("/api/audit/score?workspace=api%20(2)");
+    // Its own path, so the report's relative links stay in the same repo.
+    expect(container.querySelector(".overview-report__view")?.getAttribute("href"))
+      .toBe("/api/workspaces/api%20(2)/audit/report");
+  });
+
+  it("names the picked repo, not a URL, when the IDE opens its report", async () => {
+    const harness = installBridge(makeScore({ hasHtmlReport: true }));
+    const { container } = render(<OverviewTab workspace="payments-api" />);
+
+    await waitFor(() => {
+      expect(container.querySelector(".overview-report__view")).toBeTruthy();
+    });
+    container.querySelector<HTMLAnchorElement>(".overview-report__view")!
+      .dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+
+    const request = harness.requests.find((r) => r.action === "open-audit-report");
+    expect(request?.payload).toEqual({ workspace: "payments-api" });
+  });
 });
 
 describe("Overview telemetry summary", () => {

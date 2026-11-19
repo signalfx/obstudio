@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 )
 
 // Artifacts the $otel-audit skill writes, relative to the workspace root.
@@ -43,6 +45,17 @@ type Resolver struct {
 	workspaceRoot string
 	reportPath    string
 	htmlPath      string
+
+	serviceMu sync.Mutex
+	service   serviceCache
+}
+
+// serviceCache remembers meta.service_name for one version of the audit file,
+// so listing many workspaces only re-reads an audit after it changes.
+type serviceCache struct {
+	modTime time.Time
+	size    int64
+	name    string
 }
 
 // NewResolver returns a Resolver bound to the configured workspace.
@@ -291,6 +304,39 @@ func (r *Resolver) HTMLSource() string {
 // Source returns the JSON audit's basename.
 func (r *Resolver) Source() string {
 	return filepath.Base(r.reportPath)
+}
+
+// ServiceName returns the audit's meta.service_name, or "" when there is no
+// usable audit. Unlike Build it does no scoring or staleness checks, and it
+// re-reads the file only when its size or modification time changes.
+func (r *Resolver) ServiceName() string {
+	info, err := r.statContained(r.reportPath)
+	if err != nil {
+		return ""
+	}
+
+	r.serviceMu.Lock()
+	defer r.serviceMu.Unlock()
+	if r.service.size == info.Size() && r.service.modTime.Equal(info.ModTime()) {
+		return r.service.name
+	}
+
+	raw, readInfo, err := r.readContainedInfo(r.reportPath)
+	if err != nil {
+		return ""
+	}
+	var file struct {
+		Meta struct {
+			ServiceName string `json:"service_name"`
+		} `json:"meta"`
+	}
+	name := ""
+	if json.Unmarshal(raw, &file) == nil {
+		name = strings.TrimSpace(file.Meta.ServiceName)
+	}
+	r.service = serviceCache{modTime: readInfo.ModTime(), size: readInfo.Size(), name: name}
+
+	return name
 }
 
 // Build reads and scores the audit. It is called per request (one file read),

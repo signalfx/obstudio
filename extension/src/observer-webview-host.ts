@@ -33,6 +33,7 @@ export type ObserverHostCloudPayload = {
 	region?: string;
 	skill?: SkillDocsId;
 	termsAccepted?: boolean;
+	workspace?: string;
 };
 
 export type ObserverHostRequest =
@@ -107,6 +108,7 @@ const allowedGetPaths = new Set([
 	'/api/splunk/export',
 	'/api/splunk/logs',
 	'/api/workspace',
+	'/api/workspaces',
 ]);
 const allowedPostPaths = new Set(['/api/config', '/api/validation/run', '/api/splunk/logs', '/api/splunk/logs/enabled', '/api/splunk/logs/disconnect', '/api/splunk/logs/refresh']);
 
@@ -347,9 +349,14 @@ function isObserverHostCloudRequestPayload(action: CloudBridgeAction, value: unk
 		case 'open-credential-storage-help':
 			return value === undefined || (isObserverHostCloudPayload(value) && hasOnlyCloudPayloadKeys(value, ['platform'])
 				&& (value.platform === undefined || ['darwin', 'linux', 'windows'].includes(value.platform)));
+		case 'open-audit-report':
+			// The repo switcher may name which registered repo's report to open.
+			return value === undefined
+				|| (isObserverHostCloudPayload(value)
+					&& hasOnlyCloudPayloadKeys(value, ['workspace'])
+					&& isWorkspaceName(value.workspace));
 		case 'detect-free-account-region':
 		case 'initialize':
-		case 'open-audit-report':
 		case 'open-free-edition':
 		case 'open-free-edition-terms':
 		case 'open-ingest-token-help':
@@ -393,6 +400,7 @@ function isObserverHostCloudPayload(value: unknown): value is ObserverHostCloudP
 		'region',
 		'skill',
 		'termsAccepted',
+		'workspace',
 	].includes(key))
 		&& (payload.accessToken === undefined
 			|| (typeof payload.accessToken === 'string'
@@ -426,7 +434,23 @@ function isObserverHostCloudPayload(value: unknown): value is ObserverHostCloudP
 			|| (typeof payload.realm === 'string' && payload.realm.length <= 32))
 		&& (payload.region === undefined || typeof payload.region === 'string')
 		&& (payload.skill === undefined || isSkillDocsId(payload.skill))
-		&& (payload.termsAccepted === undefined || typeof payload.termsAccepted === 'boolean');
+		&& (payload.termsAccepted === undefined || typeof payload.termsAccepted === 'boolean')
+		&& (payload.workspace === undefined || isWorkspaceName(payload.workspace));
+}
+
+const maxWorkspaceNameBytes = 256;
+
+/**
+ * A registered repo name as GET /api/workspaces reports it: a single folder
+ * name, so it can only ever address one segment of the scoped report route.
+ */
+export function isWorkspaceName(value: unknown): value is string {
+	return typeof value === 'string'
+		&& value.trim() !== ''
+		&& Buffer.byteLength(value, 'utf8') <= maxWorkspaceNameBytes
+		&& value !== '.'
+		&& value !== '..'
+		&& !/[/\\\u0000-\u001f\u007f]/.test(value);
 }
 
 function hasOnlyCloudPayloadKeys(

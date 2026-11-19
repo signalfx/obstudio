@@ -74,6 +74,8 @@ export interface ObserverHostCloudPayload {
   region?: string;
   skill?: ObserverHostSkillId;
   termsAccepted?: boolean;
+  /** Registered repo name for open-audit-report; never a path or URL. */
+  workspace?: string;
 }
 
 export interface ObserverHostCloudResponse {

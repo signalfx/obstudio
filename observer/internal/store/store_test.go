@@ -3,6 +3,7 @@ package store
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -5048,4 +5049,43 @@ func contains(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+func TestQueryTraceSummariesFiltered_SpanServiceMatchesAnySpan(t *testing.T) {
+	s := New()
+	now := time.Now()
+
+	gatewayRoot := newTestSpan("trace-pay", "root", "POST /checkout", now, 30)
+	gatewayRoot.Resource.ServiceName = "api-gateway"
+	payment := newTestSpan("trace-pay", "child", "charge", now.Add(time.Millisecond), 10)
+	payment.ParentSpanID = "root"
+	payment.Resource.ServiceName = "payment-service"
+	other := newTestSpan("trace-other", "root", "GET /health", now.Add(time.Second), 5)
+	other.Resource.ServiceName = "api-gateway"
+	s.AddSpansForConnection("conn-1", []Span{gatewayRoot, payment, other})
+
+	traceIDs := func(filter TraceSummaryFilter) []string {
+		filter.Limit = 10
+		ids := []string{}
+		for _, summary := range s.QueryTraceSummariesFiltered(filter) {
+			ids = append(ids, summary.TraceID)
+		}
+		slices.Sort(ids)
+		return ids
+	}
+
+	// The root-service filter keeps its meaning: payment-service never starts a trace.
+	if got := traceIDs(TraceSummaryFilter{ServiceName: "payment-service"}); len(got) != 0 {
+		t.Fatalf("root service filter = %v, want none", got)
+	}
+	if got := traceIDs(TraceSummaryFilter{SpanServiceName: "Payment-Service"}); !slices.Equal(got, []string{"trace-pay"}) {
+		t.Fatalf("any-span service filter = %v, want [trace-pay]", got)
+	}
+	if got := traceIDs(TraceSummaryFilter{ExcludeSpanServiceName: "payment-service"}); !slices.Equal(got, []string{"trace-other"}) {
+		t.Fatalf("excluding an any-span service = %v, want [trace-other]", got)
+	}
+	// Suggestions for another field honor the any-span filter too.
+	if got := s.QueryTraceSummaryFieldValues("rootSpanName", "", TraceSummaryFilter{SpanServiceName: "payment-service"}, 10); !slices.Equal(got, []string{"POST /checkout"}) {
+		t.Fatalf("root span suggestions under the any-span filter = %v", got)
+	}
 }

@@ -32,10 +32,12 @@ const DEFAULT_WINDOW_MS = 60_000;
 interface DashboardsTabProps {
   telemetryError?: string | null;
   paused?: boolean;
+  /** Registered repo chosen in the repo switcher; null reads the active one. */
+  workspace?: string | null;
 }
 
-export function DashboardsTab({ telemetryError, paused = false }: DashboardsTabProps): React.ReactElement {
-  const { data, workspace, loading, error, refresh } = useDashboardPreview(paused);
+export function DashboardsTab({ telemetryError, paused = false, workspace: selectedWorkspace = null }: DashboardsTabProps): React.ReactElement {
+  const { data, workspace, loading, error, refresh } = useDashboardPreview(paused, selectedWorkspace);
   const otlpEndpoint = useOtlpEndpoint();
   const [expandedId, setExpandedId] = useState<PanelId | null>(null);
   const expandedPanel = expandedId ? resolvePanel(data, expandedId) : null;

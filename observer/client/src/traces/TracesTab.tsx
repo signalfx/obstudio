@@ -4,6 +4,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import type { TraceSummary, TraceDetail, ValidationFinding } from "../api/types";
 import { fetchTraceDetail, fetchTraceFilterValues, fetchTraces, type TracesQuery } from "../api/client";
 import { FilterBar, type FilterClause, type FilterDefinition } from "../FilterBar";
+import { useScopedClauses } from "../workspace";
 import { CopyTextButton, DetailPanel, ResizablePanel, useAnimatedPanel } from "../layout";
 import { KVTable } from "../components/KVTable";
 import { TraceWaterfall } from "./TraceWaterfall";
@@ -14,6 +15,8 @@ import { lookupSpanValidation } from "../validation/utils";
 import { formatDurationMs, formatUtcTimestamp } from "../format";
 
 interface TracesTabProps {
+  /** service.name of the selected repo; pre-fills a removable Service filter. */
+  scopeService?: string | null;
   traces: TraceSummary[];
   telemetryError: string | null;
   onInteract?: () => void;
@@ -23,6 +26,10 @@ interface TracesTabProps {
 
 const TRACE_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: "serviceName", label: "Service", kind: "text", placeholder: "payments" },
+  // Matches a service anywhere in the trace, not just the root span's. The
+  // repo switcher scopes Traces with it, since a repo's service often never
+  // starts a trace.
+  { key: "spanServiceName", label: "Any span service", kind: "text", placeholder: "payments" },
   { key: "rootSpanName", label: "Root Span", kind: "text", placeholder: "POST /charge" },
   {
     key: "status",
@@ -109,6 +116,7 @@ function buildTracesQuery(clauses: FilterClause[]): TracesQuery {
       case "traceId":
       case "rootSpanName":
       case "serviceName":
+      case "spanServiceName":
       case "status":
         assignQueryFilter(query, clause);
         break;
@@ -162,8 +170,8 @@ function buildTracesQuery(clauses: FilterClause[]): TracesQuery {
 }
 
 /** Traces tab with virtualized table and waterfall detail panel. */
-export function TracesTab({ traces, telemetryError, onInteract, validationFindings, validationIndex }: TracesTabProps): React.ReactElement {
-  const [clauses, setClauses] = useState<FilterClause[]>([]);
+export function TracesTab({ traces, telemetryError, onInteract, validationFindings, validationIndex, scopeService }: TracesTabProps): React.ReactElement {
+  const [clauses, setClauses] = useScopedClauses(scopeService, "spanServiceName");
   const [serverTraces, setServerTraces] = useState<TraceSummary[]>([]);
   const [isFiltering, setIsFiltering] = useState(false);
   const [filterError, setFilterError] = useState<string | null>(null);
