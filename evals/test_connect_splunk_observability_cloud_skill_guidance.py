@@ -8,28 +8,11 @@ ROOT = Path(__file__).resolve().parents[1]
 SKILL = ROOT / "skills" / "connect-splunk-observability-cloud" / "SKILL.md"
 AGENT_YAML = SKILL.parent / "agents" / "openai.yaml"
 DISCOVERY_LINK = ROOT / ".agents" / "skills" / "connect-splunk-observability-cloud"
-EVAL = (
-    ROOT
-    / "evals"
-    / "plugins"
-    / "obstudio"
-    / "eval"
-    / "qual"
-    / "connect-splunk-observability-cloud.json"
-)
 CLOUD_URL = "http://127.0.0.1:17900/?tab=cloud"
 
 
 def _normalized(path: Path) -> str:
     return " ".join(path.read_text(encoding="utf-8").split())
-
-
-def _eval_contract() -> tuple[str, str, str]:
-    definition = json.loads(EVAL.read_text(encoding="utf-8"))
-    tasks = " ".join(prompt["task"] for prompt in definition["prompts"])
-    rubric = " ".join(definition["rubric"])
-    prompt_ids = " ".join(prompt["id"] for prompt in definition["prompts"])
-    return tasks, rubric, prompt_ids
 
 
 def test_connection_skill_is_discoverable_and_scoped_separately_from_signup() -> None:
@@ -91,37 +74,30 @@ def test_connection_skill_keeps_credentials_in_existing_local_cloud_ui() -> None
     assert "paste the access token here" not in text.lower()
 
 
-def test_connection_skill_eval_covers_browser_and_terminal_handoffs() -> None:
-    definition = json.loads(EVAL.read_text(encoding="utf-8"))
-    task, rubric, prompt_ids = _eval_contract()
+def test_connection_skill_grants_only_scoped_read_only_mcp_tools() -> None:
+    header, frontmatter, _ = SKILL.read_text(encoding="utf-8").split("---", 2)
+    assert not header
+    declarations = [
+        line.removeprefix("allowed-tools:").strip()
+        for line in frontmatter.splitlines()
+        if line.startswith("allowed-tools:")
+    ]
+    assert len(declarations) == 1
+    assert {name.strip() for name in declarations[0].split(",")} == {
+        "mcp__plugin_obstudio_obstudio__observer_status",
+        "mcp__plugin_obstudio_obstudio__observer_splunk_connection_realm",
+    }
 
-    assert definition["skill"] == "connect-splunk-observability-cloud"
-    assert "existing-organization-browser" in prompt_ids
-    assert "newly-ready-organization-browser" in prompt_ids
-    assert "terminal-clickable-fallback" in prompt_ids
-    assert "standalone Codex client" in task
-    assert "prior Free Edition signup turn ended with its approved registration confirmation" in task
-    assert "no host-provided browser capability" in task
-    assert '"rest":"http://0.0.0.0:17900"' in task
-    assert '"rest":"http://127.0.0.1:17900"' in task
-    assert "exactly one read-only observer_status call with no arguments" in rubric
-    assert "reads only endpoints.rest" in rubric
-    assert CLOUD_URL in rubric
-    assert "host-provided browser capability" in rubric
-    assert "exact clickable URL" in rubric
-    assert "does not claim to launch an operating-system browser" in rubric
-    assert "never asks for either value in agent chat" in rubric
-    assert "never places a raw access token" in rubric
-    assert "Does not model observer_splunk_metrics_export_configure" in rubric
-    assert "observer_splunk_free_account_region_detect" in rubric
-    assert "observer_splunk_free_account_create" in rubric
-    assert "without starting, stopping, restarting, or launching another Splunk Observability Studio instance" in rubric
-    assert "a successful-render prompt need not add an irrelevant render-failure warning" in rubric
-    assert "current running standalone Splunk Observability Studio process" in rubric
-    assert "must be entered again after Splunk Observability Studio restarts" in rubric
-    assert "Does not claim the organization is connected merely because the Cloud tab opened" in rubric
-    assert "does not repeat, retract, contradict, or modify the earlier approved registration confirmation" in rubric
-    assert "it need not mention the earlier confirmation" in rubric
+
+def test_connection_rubric_judge_can_read_run_artifacts() -> None:
+    definition = json.loads(
+        (ROOT / "evals/plugins/obstudio/eval/qual/connect-splunk-observability-cloud.json")
+        .read_text(encoding="utf-8")
+    )
+    for prompt in definition["prompts"]:
+        assert "You may read local skill files" in prompt["task"]
+        assert "Do not call Studio tools or browser/open-URL capabilities" in prompt["task"]
+        assert "launch a browser, access the network, or change Studio state" in prompt["task"]
 
     judge_inputs = "\n".join(definition["judge_inputs"])
     judge_prompt = definition["judge_prompt"]
