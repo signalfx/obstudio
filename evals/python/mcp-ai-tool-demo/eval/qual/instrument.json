@@ -3,7 +3,10 @@
   "prompts": [
     {
       "id": "direct",
-      "task": "Instrument representative owned paths in the MCP-style AI tool gateway in ./service: JSON-RPC method outcomes, session/stream lifecycle, execute_tool, and the provider call. Add safe spans/metrics, focused tests, and the separate reader-first instrumentation report. Run one focused verification pass; after a dependency or environment blocker, record the exact blocker and finish instead of repeatedly retrying setup."
+      "task": "$otel-instrument\n\nWork in ./service. Copy eval/inputs/otel-audit.json to .observe/otel-audit.json and select OTEL-001,OTEL-002,OTEL-003 through the bundled selection flow. Cover the owned JSON-RPC, session/stream, tool and provider paths. Run one focused verification pass; after a dependency or environment blocker, report it and finish instead of repeatedly retrying setup.",
+      "eval_inputs": [
+        "eval/inputs/otel-audit.json"
+      ]
     }
   ],
   "judge_inputs": [
@@ -12,12 +15,12 @@
     "Read ./grade.json for run guard checks."
   ],
   "rubric": [
-    "Adds one reusable OpenTelemetry setup path and avoids duplicate SDK initialization.",
-    "Instruments FastAPI plus representative app-owned JSON-RPC method outcome, MCP session/stream lifecycle and outcome, tool execution, and provider/model call paths without claiming unexecuted branches are proven.",
-    "Uses OTel GenAI semantic-convention names where data is available, including execute_tool and model/provider attributes, without inventing unsafe high-cardinality dimensions.",
-    "Includes detector-ready metrics for tool and provider error/latency plus active session/stream and stream outcome behavior where the fixture exposes those values.",
-    "Adds or updates tests or compile checks and keeps raw JSON-RPC payloads, prompts, completions, sessions, users, tenants, requests, traces, and tool arguments out of metric dimensions.",
-    "Writes a separate .observe/otel-instrumentation.md with Signals Changed. When a source audit exists, it includes one-to-one Audit Gap Closure and GenAI Readiness Closure rows; otherwise it records that no source audit was available and does not fabricate closure rows.",
-    "Runs otel-verify for exact MCP route, tool, stream, error, and privacy paths, or records the exact blocker; any unexecuted path remains Not proven and prevents a Pass result."
+    "Rule: Adds one reusable OpenTelemetry setup path and avoids duplicate SDK initialization.\nExample: Reuse one setup path across the gateway entrypoints.\nEvidence: Inspect the selected application path, actual changes, commands and bound reports for this rule. Require execution only where the rule calls for it; keep unselected branches outside its scope.\nInsufficient evidence: A second SDK initialization for a request path.",
+    "Rule: Instruments FastAPI plus representative app-owned JSON-RPC method outcome, MCP session/stream lifecycle and outcome, tool execution, and provider/model call paths without claiming unexecuted branches are proven.\nExample: Cover representative method, stream, tool and provider boundaries.\nEvidence: Inspect the selected application path, actual changes, commands and bound reports for this rule. Require execution only where the rule calls for it; keep unselected branches outside its scope.\nInsufficient evidence: An unexecuted stream or failure branch labelled proven.",
+    "Rule: Uses OTel GenAI semantic-convention names where data is available, including execute_tool and model/provider attributes, without inventing unsafe high-cardinality dimensions.\nExample: Attach supported execute_tool and provider/model metadata when known.\nEvidence: Inspect the selected application path, actual changes, commands and bound reports for this rule. Require execution only where the rule calls for it; keep unselected branches outside its scope.\nInsufficient evidence: Invented convention values or unsafe high-cardinality dimensions.",
+    "Rule: Includes detector-ready metrics for tool and provider error/latency plus active session/stream and stream outcome behavior where the fixture exposes those values.\nExample: Measure observed tool/provider latency and errors plus exposed stream state.\nEvidence: Inspect the selected application path, actual changes, commands and bound reports for this rule. Require execution only where the rule calls for it; keep unselected branches outside its scope.\nInsufficient evidence: A placeholder active-session or stream-outcome metric.",
+    "Rule: Adds or updates tests or compile checks and keeps raw JSON-RPC payloads, prompts, completions, sessions, users, tenants, requests, traces, and tool arguments out of metric dimensions.\nExample: Run focused checks and inspect metric attributes for sensitive input.\nEvidence: Inspect the selected application path, actual changes, commands and bound reports for this rule. Require execution only where the rule calls for it; keep unselected branches outside its scope.\nInsufficient evidence: Payload, prompt, user, tenant, session, trace or argument values as dimensions.",
+    "Rule: Writes a separate .observe/otel-instrumentation.md with Signals Changed. When a source audit exists, it includes one-to-one Audit Gap Closure and GenAI Readiness Closure rows; otherwise it records that no source audit was available and does not fabricate closure rows.\nExample: Bind closure rows to the supplied source audit in the separate report.\nEvidence: Inspect the selected application path, actual changes, commands and bound reports for this rule. Require execution only where the rule calls for it; keep unselected branches outside its scope.\nInsufficient evidence: Fabricated closure rows or missing required one-to-one mappings.",
+    "Rule: Runs otel-verify for exact MCP route, tool, stream, error, and privacy paths, or records the exact blocker; any unexecuted path remains Not proven and prevents a Pass result.\nExample: Verify exact route/tool/stream/error/privacy paths or name the blocker.\nEvidence: Inspect the selected application path, actual changes, commands and bound reports for this rule. Require execution only where the rule calls for it; keep unselected branches outside its scope.\nInsufficient evidence: A Pass claim while a required path remains unexecuted."
   ]
 }

@@ -454,6 +454,57 @@ def test_representative_evals_require_canonical_artifacts_and_scope() -> None:
     assert ".observe/otel-verify.json" in verify
 
 
+@pytest.mark.parametrize(
+    ("case", "definition", "requested", "destination", "audit_input", "prompt_id"),
+    [
+        ("go/kvstore", "incident-readiness.json", "OTEL-001,OTEL-002,OTEL-003,OTEL-004", None, "eval/inputs/otel-audit.json", "mttd"),
+        ("python/fastapi-celery", "incident-readiness.json", "OTEL-001,OTEL-002,OTEL-003", None, "eval/inputs/otel-audit.json", "mttd"),
+        ("python/mcp-ai-tool-demo", "instrument.json", "OTEL-001,OTEL-002,OTEL-003", None, "eval/inputs/otel-audit.json", "direct"),
+        ("python/splunk-ao-integration-demo", "instrument.json", "AO-001", ("integration-demo", "integration-paths"), "eval/inputs/otel-audit.json", "integration-paths"),
+        ("python/model-directed-agent", "resource-table-instrument.json", "AO-001,AO-002,AO-003", ("model-directed-demo", "model-directed-agent"), "eval/inputs/native-resource-audit.json", "native-agent-resource-defaults"),
+        ("python/galileo-agent-demo", "instrument.json", "OTEL-001,OTEL-002,OTEL-003", None, "eval/inputs/native-resource-audit.json", "galileo-native-resources"),
+    ],
+)
+def test_custom_instrumentation_evals_supply_a_ready_audit(
+    case: str,
+    definition: str,
+    requested: str,
+    destination: tuple[str, str] | None,
+    audit_input: str,
+    prompt_id: str,
+    tmp_path: Path,
+) -> None:
+    fixture = ROOT / "evals" / case
+    prompts = json.loads(_read(fixture / "eval/qual" / definition))["prompts"]
+    prompt = next(row for row in prompts if row["id"] == prompt_id)
+    assert audit_input in prompt["eval_inputs"]
+    audit_path = fixture / audit_input
+    original = audit_path.read_bytes()
+    selected_path = tmp_path / "otel-selection.json"
+    target_flags = (
+        ("--ao-project", destination[0], "--ao-agent-stream", destination[1])
+        if destination else ()
+    )
+    selected = subprocess.run(
+        [sys.executable, str(REPORT_TOOL), "select", str(audit_path),
+         "--ids", requested, *target_flags, "-o", str(selected_path)],
+        capture_output=True, text=True, check=False,
+    )
+    assert selected.returncode == 0, selected.stderr
+    engine = runpy.run_path(str(REPORT_TOOL))
+    audit = engine["normalize_audit_report"](json.loads(original))
+    selection = engine["normalize_selection"](json.loads(_read(selected_path)), audit)
+    assert selection["requested_ids"] == requested.split(",")
+    assert set(selection["approved_ids"]) == {row["id"] for row in audit["findings"]}
+    assert engine["required_input_status"](
+        engine["required_input_groups"](audit), selection,
+    )["ready"]
+    if case == "python/galileo-agent-demo":
+        assert engine["required_input_groups"](audit) == []
+        assert "ao_target" not in selection
+    assert audit_path.read_bytes() == original
+
+
 def test_audit_final_handoff_requires_only_browser_link() -> None:
     audit = _read(AUDIT_SKILL)
     normalized = " ".join(audit.split())

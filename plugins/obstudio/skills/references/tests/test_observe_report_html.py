@@ -92,11 +92,20 @@ const context = {
 vm.runInNewContext(payload.source + '\nrenderCards();', context);
 process.stdout.write(cards.innerHTML);
 """
-        for recommended_agent_stream in (False, True):
-            with self.subTest(recommended_agent_stream=recommended_agent_stream):
+        scenarios = (
+            (("required", "recommended"), ["OTEL-001", "OTEL-002", "AO-001", "AO-002"]),
+            (("required", "deferred"), ["OTEL-001", "OTEL-002", "AO-001", "AO-002"]),
+            (("recommended", "deferred"), ["OTEL-001", "OTEL-002", "AO-001", "AO-002"]),
+            (("required", "required"), ["OTEL-002", "OTEL-001", "AO-002", "AO-001"]),
+            (("recommended", "recommended"), ["OTEL-002", "OTEL-001", "AO-002", "AO-001"]),
+            (("deferred", "deferred"), ["OTEL-002", "OTEL-001", "AO-002", "AO-001"]),
+        )
+        for priorities, expected in scenarios:
+            with self.subTest(priorities=priorities):
                 data = sample_splunk_agent_observability_report()
-                if recommended_agent_stream:
-                    data["findings"][-1]["priority"] = "recommended"  # type: ignore[index]
+                for finding, priority in zip(data["findings"], priorities * 2):  # type: ignore[arg-type]
+                    finding["priority"] = priority
+                data["findings"].reverse()  # type: ignore[union-attr]
                 report = MODULE.normalize_audit_report(data)
                 html = MODULE.render_html(report, MODULE.empty_selection(report))
                 start = html.index("function renderCards() {")
@@ -116,7 +125,6 @@ process.stdout.write(cards.innerHTML);
                     check=True,
                 )
                 rendered = result.stdout
-                expected = ["OTEL-001", "OTEL-002", "AO-001", "AO-002"]
                 self.assertEqual(
                     re.findall(r'data-finding-id="([^"]+)"', rendered), expected
                 )
@@ -129,8 +137,8 @@ process.stdout.write(cards.innerHTML);
                 self.assertEqual(len(labels), len(set(labels)))
                 self.assertNotIn("OpenTelemetry findings", rendered)
                 ordinary, ao_section = rendered.split('<section class="finding-subsection"', 1)
-                self.assertEqual(re.findall(r'data-finding-id="([^"]+)"', ordinary), ["OTEL-001", "OTEL-002"])
-                self.assertEqual(re.findall(r'data-finding-id="([^"]+)"', ao_section), ["AO-001", "AO-002"])
+                self.assertEqual(re.findall(r'data-finding-id="([^"]+)"', ordinary), expected[:2])
+                self.assertEqual(re.findall(r'data-finding-id="([^"]+)"', ao_section), expected[2:])
 
     def test_display_groups_preserve_canonical_identity_and_selection(self) -> None:
         data = sample_splunk_agent_observability_report()

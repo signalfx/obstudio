@@ -1,0 +1,308 @@
+{
+  "schema_version": 2,
+  "kind": "otel-audit",
+  "meta": {
+    "audit_id": "python-model-directed-native-resource-input",
+    "service_name": "smashbot",
+    "commit": "fixture",
+    "language": "python",
+    "framework": "Flask and native OpenTelemetry",
+    "date": "2026-11-18",
+    "status": "Partial",
+    "genai_ownership_detected": true
+  },
+  "summary": [
+    "The actual model-directed chat/tool loop already creates native OTel workflow, chat and tool spans. Resource and trace-binding configuration is the only selected work.",
+    "The web startup owns one provider per signal and shutdown; the CLI has a distinct startup path. Runtime/export proof has not been executed for this supplied audit."
+  ],
+  "evidence": [
+    {
+      "check": "Manifest",
+      "finding": "OpenAI, Flask and native OTel dependencies; no splunk-ao dependency.",
+      "source": "requirements.txt"
+    },
+    {
+      "check": "Entry point",
+      "finding": "Web app loads .env then configures native OTel; CLI loads .env and starts the shared model-directed conversation loop.",
+      "source": "app.py:25-49; agent.py:22-65"
+    },
+    {
+      "check": "GenAI ownership",
+      "finding": "Yes",
+      "source": "chat_core.py:123-277"
+    },
+    {
+      "check": "Runtime/startup",
+      "finding": "Native HTTP exporters and shared Resource are created before providers are published; shutdown drains each owned signal.",
+      "source": "otel_setup.py:134-225"
+    },
+    {
+      "check": "Route source",
+      "finding": "GET /; POST /chat; POST /reset",
+      "source": "app.py:67-113"
+    },
+    {
+      "check": "Source-owned operations",
+      "finding": "run_turn repeatedly invokes the model and dispatches its selected tools, retaining app-owned spans and bounded token/call metrics.",
+      "source": "chat_core.py:123-277"
+    }
+  ],
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/"
+    },
+    {
+      "method": "POST",
+      "path": "/chat"
+    },
+    {
+      "method": "POST",
+      "path": "/reset"
+    }
+  ],
+  "signal_flow": {
+    "component_flow_map": "Web/CLI -> chat_core.run_turn [SOURCE-COVERED] -> model/tool loop [SOURCE-COVERED]; native Project [GAP: Native Project configuration] -> dedicated Agent Stream [GAP: Native Agent Stream configuration] -> loaded trace binding [GAP: Native runtime routing]"
+  },
+  "current_instrumentation": {
+    "spans": [
+      {
+        "name": "invoke_workflow smashbot_turn",
+        "source": "chat_core.py:209-277",
+        "type": "custom"
+      },
+      {
+        "name": "chat {model}",
+        "source": "chat_core.py:157-206",
+        "type": "custom"
+      },
+      {
+        "name": "execute_tool {name}",
+        "source": "chat_core.py:123-154",
+        "type": "custom"
+      }
+    ],
+    "metrics": [
+      {
+        "name": "gen_ai.client.token.usage",
+        "source": "chat_core.py:25-42",
+        "type": "custom"
+      },
+      {
+        "name": "assistant.llm.calls",
+        "source": "chat_core.py:25-42",
+        "type": "custom"
+      },
+      {
+        "name": "assistant.tool.calls",
+        "source": "chat_core.py:25-42",
+        "type": "custom"
+      }
+    ],
+    "logs": [
+      {
+        "integration": "Python logging bridge",
+        "source": "otel_setup.py:154-198; app.py:44-49",
+        "detail": "The web startup installs the existing native logging bridge after its console handler; emission is not runtime-proven by this audit."
+      }
+    ],
+    "incident_readiness": []
+  },
+  "genai_readiness": [
+    {
+      "surface": "Native Project configuration",
+      "status": "partial",
+      "evidence": "otel_setup.py:134-171; app.py:25-37; agent.py:22-33",
+      "required_signals": "Resolve model-directed-demo through supported SDK-free resource interfaces before the selected routed export; preserve native ownership.",
+      "owner": "App-owned: selected application configuration and native destination binding",
+      "acceptance_criteria": "Execute the actual written bootstrap against local fake resource boundaries for existing, missing, mixed and repeated targets. Treat IDs as lookup-only, check ownership and recover from duplicate or uncertain creation without duplicate resources.",
+      "impact": "The selected native destination identity and loaded runtime binding are not yet proven."
+    },
+    {
+      "surface": "Native Agent Stream configuration",
+      "status": "partial",
+      "evidence": "otel_setup.py:134-171; chat_core.py:209-277",
+      "required_signals": "Resolve model-directed-agent within the selected Project using supported SDK-free interfaces; verify association and reuse.",
+      "owner": "App-owned: selected application configuration and native destination binding",
+      "acceptance_criteria": "Reuse the exact stream in its project and prove ordered create/reuse and ownership with actual local API receipts. Failed lookup never becomes permission to create or a fabricated successful identity.",
+      "impact": "The selected native destination identity and loaded runtime binding are not yet proven."
+    },
+    {
+      "surface": "Native runtime routing",
+      "status": "partial",
+      "evidence": "otel_setup.py:134-171; otel_setup.py:180-225; app.py:25-37; agent.py:22-33",
+      "required_signals": "Load complete resolved IDs through the actual native trace-export configuration before export, preserving supported launch behavior and keeping routing/auth fields out of metrics and logs.",
+      "owner": "App-owned: selected application configuration and native destination binding",
+      "acceptance_criteria": "Capture native HTTP trace requests from the actual launcher with complete projectid/logstreamid, generic-fallback/trace-specific precedence and no metric/log leakage. Prove connected, running-disconnected503, unavailable and reconnected behavior, retained valid same-destination bindings, names-only automatic same-PID recovery, bounded retry work and business/shutdown continuation. Preserve exact endpoints, protocols, harmless inherited headers and other sinks; report receiver/cloud outcomes separately from local/native proof.",
+      "impact": "The selected native destination identity and loaded runtime binding are not yet proven."
+    }
+  ],
+  "findings": [
+    {
+      "id": "AO-001",
+      "title": "Resolve the selected native Project",
+      "severity": "high",
+      "priority": "required",
+      "effort": "medium",
+      "status": "proposed",
+      "area": "Native Project configuration",
+      "gap": "otel_setup.py constructs native providers/exporters without an app-owned Project resource bootstrap; neither startup path supplies a resolved Studio Project identity.",
+      "impact": "The selected native destination identity and loaded runtime binding are not yet proven.",
+      "product_outcome": "Resolve the selected native Project",
+      "required_fix": "Resolve model-directed-demo through supported SDK-free resource interfaces before the selected routed export; preserve native ownership.",
+      "instrument_mode": "default",
+      "verification_scenarios": [
+        "native.resources.local-proof"
+      ],
+      "dependencies": [],
+      "evidence": [
+        "otel_setup.py:134-171",
+        "app.py:25-37",
+        "agent.py:22-33"
+      ],
+      "acceptance_criteria": [
+        "Execute the actual written bootstrap against local fake resource boundaries for existing, missing, mixed and repeated targets.",
+        "Treat IDs as lookup-only, check ownership and recover from duplicate or uncertain creation without duplicate resources."
+      ],
+      "constraints": [
+        "Preserve existing app-owned producers, native providers/exporters, endpoint/protocol/nondefault-port and harmless operator settings; no splunk-ao dependency, second provider or duplicate destination.",
+        "Preserve app.py routes, conversation/error behavior, agent.py CLI behavior and the actual chat_core.py tool-dispatch loop. Other span/metric semantics remain unselected.",
+        "Source inspection is not installed-client, local-runtime, resource-existence or remote-delivery proof."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "configuration",
+          "name": "agent-observability.project-resource",
+          "attributes": [],
+          "product_view": "Selected native resource and runtime binding"
+        }
+      ],
+      "follow_up_actions": [
+        "Implement only this selected configuration scope and record actual local proof separately from unavailable remote proof."
+      ],
+      "finding_group": "splunk-agent-observability",
+      "ao_target_scope": "resource-routing"
+    },
+    {
+      "id": "AO-002",
+      "title": "Resolve the dedicated native Agent Stream",
+      "severity": "high",
+      "priority": "required",
+      "effort": "medium",
+      "status": "proposed",
+      "area": "Native Agent Stream configuration",
+      "gap": "The source has no dedicated Agent Stream lookup, project association or resolved stream binding.",
+      "impact": "The selected native destination identity and loaded runtime binding are not yet proven.",
+      "product_outcome": "Resolve the dedicated native Agent Stream",
+      "required_fix": "Resolve model-directed-agent within the selected Project using supported SDK-free interfaces; verify association and reuse.",
+      "instrument_mode": "default",
+      "verification_scenarios": [
+        "native.resources.local-proof"
+      ],
+      "dependencies": [
+        "AO-001"
+      ],
+      "evidence": [
+        "otel_setup.py:134-171",
+        "chat_core.py:209-277"
+      ],
+      "acceptance_criteria": [
+        "Reuse the exact stream in its project and prove ordered create/reuse and ownership with actual local API receipts.",
+        "Failed lookup never becomes permission to create or a fabricated successful identity."
+      ],
+      "constraints": [
+        "Preserve existing app-owned producers, native providers/exporters, endpoint/protocol/nondefault-port and harmless operator settings; no splunk-ao dependency, second provider or duplicate destination.",
+        "Preserve app.py routes, conversation/error behavior, agent.py CLI behavior and the actual chat_core.py tool-dispatch loop. Other span/metric semantics remain unselected.",
+        "Source inspection is not installed-client, local-runtime, resource-existence or remote-delivery proof."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "configuration",
+          "name": "agent-observability.agent-stream-resource",
+          "attributes": [],
+          "product_view": "Selected native resource and runtime binding"
+        }
+      ],
+      "follow_up_actions": [
+        "Implement only this selected configuration scope and record actual local proof separately from unavailable remote proof."
+      ],
+      "finding_group": "splunk-agent-observability",
+      "ao_target_scope": "resource-routing"
+    },
+    {
+      "id": "AO-003",
+      "title": "Load and retain native trace routing bindings",
+      "severity": "high",
+      "priority": "required",
+      "effort": "medium",
+      "status": "proposed",
+      "area": "Native runtime routing",
+      "gap": "OTLPSpanExporter is constructed during configure_opentelemetry without a preceding resource bootstrap. The web app loads .env before setup; the CLI loads .env but does not call that setup.",
+      "impact": "The selected native destination identity and loaded runtime binding are not yet proven.",
+      "product_outcome": "Load and retain native trace routing bindings",
+      "required_fix": "Load complete resolved IDs through the actual native trace-export configuration before export, preserving supported launch behavior and keeping routing/auth fields out of metrics and logs.",
+      "instrument_mode": "default",
+      "verification_scenarios": [
+        "native.resources.local-proof"
+      ],
+      "dependencies": [
+        "AO-001",
+        "AO-002"
+      ],
+      "evidence": [
+        "otel_setup.py:134-171",
+        "otel_setup.py:180-225",
+        "app.py:25-37",
+        "agent.py:22-33"
+      ],
+      "acceptance_criteria": [
+        "Capture native HTTP trace requests from the actual launcher with complete projectid/logstreamid, generic-fallback/trace-specific precedence and no metric/log leakage.",
+        "Prove connected, running-disconnected503, unavailable and reconnected behavior, retained valid same-destination bindings, names-only automatic same-PID recovery, bounded retry work and business/shutdown continuation.",
+        "Preserve exact endpoints, protocols, harmless inherited headers and other sinks; report receiver/cloud outcomes separately from local/native proof."
+      ],
+      "constraints": [
+        "Preserve existing app-owned producers, native providers/exporters, endpoint/protocol/nondefault-port and harmless operator settings; no splunk-ao dependency, second provider or duplicate destination.",
+        "Preserve app.py routes, conversation/error behavior, agent.py CLI behavior and the actual chat_core.py tool-dispatch loop. Other span/metric semantics remain unselected.",
+        "Source inspection is not installed-client, local-runtime, resource-existence or remote-delivery proof."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "configuration",
+          "name": "agent-observability.runtime-routing",
+          "attributes": [],
+          "product_view": "Selected native resource and runtime binding"
+        }
+      ],
+      "follow_up_actions": [
+        "Implement only this selected configuration scope and record actual local proof separately from unavailable remote proof."
+      ],
+      "finding_group": "splunk-agent-observability",
+      "ao_target_scope": "resource-routing"
+    }
+  ],
+  "verification": {
+    "environments": [
+      {
+        "id": "native.local",
+        "surface": "Actual application entrypoint, installed native SDK and isolated local resource/export boundaries",
+        "config_evidence": "app.py:25-37; agent.py:22-33; otel_setup.py:134-225; requirements.txt",
+        "runner": "Prepare a compatible isolated environment and exercise the actual written bootstrap and application launch against local fake boundaries.",
+        "scope": "Selected native resource/configuration work only; keep existing business behavior and producers.",
+        "prerequisites": "Declared compatible native dependencies, synthetic local configuration and test-owned resource/export boundaries. No installed-client, runtime or remote result is supplied."
+      }
+    ],
+    "scenarios": [
+      {
+        "id": "native.resources.local-proof",
+        "trigger": "Exercise the selected resource lookup/create/reuse, failure isolation and native runtime-binding acceptance without live external services.",
+        "entrypoint": "app.py:25-37; agent.py:22-33; otel_setup.py:134-225",
+        "expected_signals": "Selected native resource and runtime binding",
+        "proof_level": "full runtime",
+        "acceptance_criteria": "Prove the selected findings against their acceptance criteria with actual installed native clients and application/export receipts; report every unrun requirement as Not proven.",
+        "environments": [
+          "native.local"
+        ]
+      }
+    ]
+  }
+}

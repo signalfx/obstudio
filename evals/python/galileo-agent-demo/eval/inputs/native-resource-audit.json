@@ -1,0 +1,293 @@
+{
+  "schema_version": 2,
+  "kind": "otel-audit",
+  "meta": {
+    "audit_id": "python-galileo-native-resource-input",
+    "service_name": "galileo-agent-demo",
+    "commit": "fixture",
+    "language": "python",
+    "framework": "FastAPI and Galileo native OTel",
+    "date": "2026-11-18",
+    "status": "Partial",
+    "genai_ownership_detected": true
+  },
+  "summary": [
+    "The source already installs a Galileo processor on its native OTel provider. The supplied scenario selects Galileo-native project, production stream and consumed runtime binding only.",
+    "The operator profile disagrees with Make dev’s project override. No installed-client, local-runtime, resource-existence or remote-delivery proof has run for this supplied audit."
+  ],
+  "evidence": [
+    {
+      "check": "Manifest",
+      "finding": "Galileo2.7-to-before3 and native OTel dependencies are declared.",
+      "source": "pyproject.toml"
+    },
+    {
+      "check": "Entry point",
+      "finding": "app.py creates the provider and Galileo processor; agent.py reuses that provider for model-directed replay and drains it.",
+      "source": "app.py:23-40; agent.py:19-66"
+    },
+    {
+      "check": "GenAI ownership",
+      "finding": "Yes",
+      "source": "app.py:62-96; agent.py:19-42"
+    },
+    {
+      "check": "Runtime/startup",
+      "finding": "GALILEO_PROJECT is passed to the processor; the supplied original profile names existing-vendor-project and production while Make dev forces another project.",
+      "source": "app.py:27-33; Makefile:6-7; eval/inputs/galileo-native-profile.env"
+    },
+    {
+      "check": "Route source",
+      "finding": "GET /health; POST /v1/chat/stream",
+      "source": "app.py:47-96"
+    },
+    {
+      "check": "Source-owned operations",
+      "finding": "Streaming workflow/chat/tool operations and a separate replay agent/model/tool loop are source-owned.",
+      "source": "app.py:62-96; agent.py:19-42"
+    }
+  ],
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/health"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/chat/stream"
+    }
+  ],
+  "signal_flow": {
+    "component_flow_map": "Original operator profile [SOURCE-COVERED] -> Galileo Project [GAP: Galileo Project binding] -> production stream [GAP: Galileo stream binding] -> native provider/processor/export [SOURCE-COVERED] -> consumed launch binding [GAP: Galileo runtime binding]"
+  },
+  "current_instrumentation": {
+    "spans": [
+      {
+        "name": "invoke_workflow support_turn",
+        "source": "app.py:62-96",
+        "type": "custom"
+      },
+      {
+        "name": "chat gpt-4o-mini",
+        "source": "app.py:80-92",
+        "type": "custom"
+      },
+      {
+        "name": "execute_tool search_docs",
+        "source": "app.py:72-80; agent.py:34-40",
+        "type": "custom"
+      },
+      {
+        "name": "invoke_agent support-agent",
+        "source": "agent.py:19-42",
+        "type": "custom"
+      },
+      {
+        "name": "chat replay-model",
+        "source": "agent.py:25-30",
+        "type": "custom"
+      }
+    ],
+    "metrics": [],
+    "logs": [],
+    "incident_readiness": []
+  },
+  "genai_readiness": [
+    {
+      "surface": "Galileo Project binding",
+      "status": "partial",
+      "evidence": "app.py:23-36; galileo_compat.py:26-36; Makefile:6-7; eval/inputs/galileo-native-profile.env",
+      "required_signals": "Preserve the original inherited existing-vendor-project across the supported launch/profile and use actual supported Galileo resource clients for any required binding repair.",
+      "owner": "App-owned: selected application configuration and native destination binding",
+      "acceptance_criteria": "Compare the original entrypoint under its original inherited profile with the modified launcher against identical local native API/export boundaries. Use actual installed native client behavior to prove existing/missing/repeat and ownership/lookup/create failure handling; do not replace vendor clients with an AO helper.",
+      "impact": "The selected native destination identity and loaded runtime binding are not yet proven."
+    },
+    {
+      "surface": "Galileo stream binding",
+      "status": "partial",
+      "evidence": "eval/inputs/galileo-native-profile.env; Makefile:6-7; app.py:27-35; galileo_compat.py:26-36",
+      "required_signals": "Preserve production in the existing Galileo Project through consumed native profile/constructor configuration, with ordered lookup/reuse/create only where the actual supported native path requires it.",
+      "owner": "App-owned: selected application configuration and native destination binding",
+      "acceptance_criteria": "Prove the effective production stream and project association with actual local native client/export receipts. Both-existing repeated launches create no resources; lookup/create failures do not silently switch the original destination.",
+      "impact": "The selected native destination identity and loaded runtime binding are not yet proven."
+    },
+    {
+      "surface": "Galileo runtime binding",
+      "status": "partial",
+      "evidence": "app.py:23-40; agent.py:19-42; agent.py:57-66; galileo_compat.py:8-36; eval/inputs/galileo-native-profile.env",
+      "required_signals": "Bind native resolved resources through the actual Galileo launch/client/export path; preserve original project, production stream, API/console/auth settings and unrelated operator state.",
+      "owner": "App-owned: selected application configuration and native destination binding",
+      "acceptance_criteria": "Retain the original source/profile hashes and compare original versus modified real entrypoint/native-export receipts with the same synthetic endpoint and auth marker. Run actual model-directed agent replay with one agent and real model/tool children; leave the separate streaming workflow unchanged. Freeze the selected audit before implementation; keep unsupported resource/runtime/remote evidence incomplete rather than rewriting acceptance.",
+      "impact": "The selected native destination identity and loaded runtime binding are not yet proven."
+    }
+  ],
+  "findings": [
+    {
+      "id": "OTEL-001",
+      "title": "Retain the configured Galileo Project",
+      "severity": "high",
+      "priority": "required",
+      "effort": "medium",
+      "status": "proposed",
+      "area": "Galileo Project binding",
+      "gap": "app.py passes GALILEO_PROJECT to the Galileo processor, but Make dev overrides it to galileo-agent-demo instead of the supplied existing-vendor-project. Local source does not establish native resource existence or lookup/create behavior.",
+      "impact": "The selected native destination identity and loaded runtime binding are not yet proven.",
+      "product_outcome": "Retain the configured Galileo Project",
+      "required_fix": "Preserve the original inherited existing-vendor-project across the supported launch/profile and use actual supported Galileo resource clients for any required binding repair.",
+      "instrument_mode": "default",
+      "verification_scenarios": [
+        "native.resources.local-proof"
+      ],
+      "dependencies": [],
+      "evidence": [
+        "app.py:23-36",
+        "galileo_compat.py:26-36",
+        "Makefile:6-7",
+        "eval/inputs/galileo-native-profile.env"
+      ],
+      "acceptance_criteria": [
+        "Compare the original entrypoint under its original inherited profile with the modified launcher against identical local native API/export boundaries.",
+        "Use actual installed native client behavior to prove existing/missing/repeat and ownership/lookup/create failure handling; do not replace vendor clients with an AO helper."
+      ],
+      "constraints": [
+        "Keep Galileo-native resource clients/configuration and existing span creators, TracerProvider and GalileoSpanProcessor/export session. Do not install splunk-ao, add a Studio destination or require Studio projectid/logstreamid headers or AO trace Resources.",
+        "Retain existing-vendor-project/production and APPLICATION_KEEP_SETTING=preserve-me from the supplied operator profile; do not use the conflicting Make dev project as the preservation baseline.",
+        "Keep the streaming workflow separate and preserve actual agent.py model-directed replay and its model/tool children; unselected telemetry changes remain out of scope.",
+        "Use actual installed Galileo APIs with isolated local API/export boundaries and synthetic credentials. No installed-package edits or fabricated SDK/runtime/cloud proof."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "configuration",
+          "name": "galileo.project-resource",
+          "attributes": [],
+          "product_view": "Selected native resource and runtime binding"
+        }
+      ],
+      "follow_up_actions": [
+        "Implement only this selected configuration scope and record actual local proof separately from unavailable remote proof."
+      ]
+    },
+    {
+      "id": "OTEL-002",
+      "title": "Retain the production Galileo stream",
+      "severity": "high",
+      "priority": "required",
+      "effort": "medium",
+      "status": "proposed",
+      "area": "Galileo stream binding",
+      "gap": "The operator profile and Make dev name production. App source delegates stream behavior to the installed Galileo processor and does not itself prove the resolved stream association or effective native export setting.",
+      "impact": "The selected native destination identity and loaded runtime binding are not yet proven.",
+      "product_outcome": "Retain the production Galileo stream",
+      "required_fix": "Preserve production in the existing Galileo Project through consumed native profile/constructor configuration, with ordered lookup/reuse/create only where the actual supported native path requires it.",
+      "instrument_mode": "default",
+      "verification_scenarios": [
+        "native.resources.local-proof"
+      ],
+      "dependencies": [
+        "OTEL-001"
+      ],
+      "evidence": [
+        "eval/inputs/galileo-native-profile.env",
+        "Makefile:6-7",
+        "app.py:27-35",
+        "galileo_compat.py:26-36"
+      ],
+      "acceptance_criteria": [
+        "Prove the effective production stream and project association with actual local native client/export receipts.",
+        "Both-existing repeated launches create no resources; lookup/create failures do not silently switch the original destination."
+      ],
+      "constraints": [
+        "Keep Galileo-native resource clients/configuration and existing span creators, TracerProvider and GalileoSpanProcessor/export session. Do not install splunk-ao, add a Studio destination or require Studio projectid/logstreamid headers or AO trace Resources.",
+        "Retain existing-vendor-project/production and APPLICATION_KEEP_SETTING=preserve-me from the supplied operator profile; do not use the conflicting Make dev project as the preservation baseline.",
+        "Keep the streaming workflow separate and preserve actual agent.py model-directed replay and its model/tool children; unselected telemetry changes remain out of scope.",
+        "Use actual installed Galileo APIs with isolated local API/export boundaries and synthetic credentials. No installed-package edits or fabricated SDK/runtime/cloud proof."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "configuration",
+          "name": "galileo.log-stream-resource",
+          "attributes": [],
+          "product_view": "Selected native resource and runtime binding"
+        }
+      ],
+      "follow_up_actions": [
+        "Implement only this selected configuration scope and record actual local proof separately from unavailable remote proof."
+      ]
+    },
+    {
+      "id": "OTEL-003",
+      "title": "Bind both native Galileo entrypoints without replacing producers",
+      "severity": "high",
+      "priority": "required",
+      "effort": "medium",
+      "status": "proposed",
+      "area": "Galileo runtime binding",
+      "gap": "app.py owns the native provider/processor; agent.py reuses that provider and flushes/shuts it down. No checked-in application profile proves the supplied operator settings survive a changed launcher and resource lifecycle.",
+      "impact": "The selected native destination identity and loaded runtime binding are not yet proven.",
+      "product_outcome": "Bind both native Galileo entrypoints without replacing producers",
+      "required_fix": "Bind native resolved resources through the actual Galileo launch/client/export path; preserve original project, production stream, API/console/auth settings and unrelated operator state.",
+      "instrument_mode": "default",
+      "verification_scenarios": [
+        "native.resources.local-proof"
+      ],
+      "dependencies": [
+        "OTEL-001",
+        "OTEL-002"
+      ],
+      "evidence": [
+        "app.py:23-40",
+        "agent.py:19-42",
+        "agent.py:57-66",
+        "galileo_compat.py:8-36",
+        "eval/inputs/galileo-native-profile.env"
+      ],
+      "acceptance_criteria": [
+        "Retain the original source/profile hashes and compare original versus modified real entrypoint/native-export receipts with the same synthetic endpoint and auth marker.",
+        "Run actual model-directed agent replay with one agent and real model/tool children; leave the separate streaming workflow unchanged.",
+        "Freeze the selected audit before implementation; keep unsupported resource/runtime/remote evidence incomplete rather than rewriting acceptance."
+      ],
+      "constraints": [
+        "Keep Galileo-native resource clients/configuration and existing span creators, TracerProvider and GalileoSpanProcessor/export session. Do not install splunk-ao, add a Studio destination or require Studio projectid/logstreamid headers or AO trace Resources.",
+        "Retain existing-vendor-project/production and APPLICATION_KEEP_SETTING=preserve-me from the supplied operator profile; do not use the conflicting Make dev project as the preservation baseline.",
+        "Keep the streaming workflow separate and preserve actual agent.py model-directed replay and its model/tool children; unselected telemetry changes remain out of scope.",
+        "Use actual installed Galileo APIs with isolated local API/export boundaries and synthetic credentials. No installed-package edits or fabricated SDK/runtime/cloud proof."
+      ],
+      "expected_telemetry": [
+        {
+          "type": "configuration",
+          "name": "galileo.runtime-binding",
+          "attributes": [],
+          "product_view": "Selected native resource and runtime binding"
+        }
+      ],
+      "follow_up_actions": [
+        "Implement only this selected configuration scope and record actual local proof separately from unavailable remote proof."
+      ]
+    }
+  ],
+  "verification": {
+    "environments": [
+      {
+        "id": "native.local",
+        "surface": "Actual application entrypoint, installed native SDK and isolated local resource/export boundaries",
+        "config_evidence": "app.py:23-40; agent.py:57-66; galileo_compat.py:26-36; pyproject.toml; eval/inputs/galileo-native-profile.env",
+        "runner": "Prepare a compatible isolated environment and exercise the actual written bootstrap and application launch against local fake boundaries.",
+        "scope": "Selected native resource/configuration work only; keep existing business behavior and producers.",
+        "prerequisites": "Declared compatible native dependencies, synthetic local configuration and test-owned resource/export boundaries. No installed-client, runtime or remote result is supplied."
+      }
+    ],
+    "scenarios": [
+      {
+        "id": "native.resources.local-proof",
+        "trigger": "Exercise the selected resource lookup/create/reuse, failure isolation and native runtime-binding acceptance without live external services.",
+        "entrypoint": "app.py:23-40; agent.py:57-66; galileo_compat.py:26-36",
+        "expected_signals": "Selected native resource and runtime binding",
+        "proof_level": "full runtime",
+        "acceptance_criteria": "Prove the selected findings against their acceptance criteria with actual installed native clients and application/export receipts; report every unrun requirement as Not proven.",
+        "environments": [
+          "native.local"
+        ]
+      }
+    ]
+  }
+}
