@@ -1,10 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { FilterBar, type FilterClause, type FilterDefinition } from "../FilterBar";
+import { useScopedClauses } from "../workspace";
 import { TelemetryEmptyState, type EmptyStateSkeleton } from "../components/EmptyState";
 import { fetchServiceStats, type ServiceStats } from "../api/client";
 import { formatDurationMs } from "../format";
 
 interface ServicesTabProps {
+  /** service.name of the selected repo; pre-fills a removable Service filter. */
+  scopeService?: string | null;
   serviceNames: string[];
 }
 
@@ -58,11 +61,11 @@ function matchesClauses(row: ServiceStats, clauses: FilterClause[]): boolean {
   return true;
 }
 
-export function ServicesTab({ serviceNames }: ServicesTabProps): React.ReactElement {
+export function ServicesTab({ serviceNames, scopeService }: ServicesTabProps): React.ReactElement {
   const [rows, setRows] = useState<ServiceStats[]>([]);
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
-  const [clauses, setClauses] = useState<FilterClause[]>([]);
+  const [clauses, setClauses] = useScopedClauses(scopeService);
   const serviceNamesKey = serviceNames.join("\0");
 
   useEffect(() => {

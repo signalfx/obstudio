@@ -2635,7 +2635,7 @@ async function performCloudBridgeActionExclusive(
 		case 'open-audit-report': {
 			// Keep external navigation in the host so the Splunk Observability Studio webview remains
 			// open and cannot choose an arbitrary destination.
-			const url = auditReportUrl(observerBaseUrl);
+			const url = auditReportUrl(observerBaseUrl, request.payload?.workspace);
 			if (url === undefined) {
 				throw new Error('Splunk Observability Studio is not running, so the audit report cannot be opened.');
 			}

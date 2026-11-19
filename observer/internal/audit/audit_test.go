@@ -773,3 +773,28 @@ func TestFreshnessWalkDoesNotFollowSymlinksOut(t *testing.T) {
 		t.Errorf("Stale = true (%q) from a file outside the workspace", got.StaleReason)
 	}
 }
+
+func TestServiceNameReadsMetaAndFollowsRewrites(t *testing.T) {
+	root := writeAudit(t, coveredAudit)
+	r := NewResolver(Config{WorkspaceRoot: root})
+	if got := r.ServiceName(); got != "checkout" {
+		t.Fatalf("ServiceName() = %q, want checkout", got)
+	}
+
+	rewritten := strings.Replace(coveredAudit, `"checkout"`, `"payments-api"`, 1)
+	if err := os.WriteFile(filepath.Join(root, ".observe", "otel-audit.json"), []byte(rewritten), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.ServiceName(); got != "payments-api" {
+		t.Fatalf("ServiceName() after re-audit = %q, want payments-api", got)
+	}
+}
+
+func TestServiceNameIsEmptyWithoutAUsableAudit(t *testing.T) {
+	if got := NewResolver(Config{WorkspaceRoot: t.TempDir()}).ServiceName(); got != "" {
+		t.Fatalf("ServiceName() without an audit = %q, want empty", got)
+	}
+	if got := NewResolver(Config{WorkspaceRoot: writeAudit(t, "{not json")}).ServiceName(); got != "" {
+		t.Fatalf("ServiceName() for malformed JSON = %q, want empty", got)
+	}
+}

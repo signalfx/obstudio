@@ -659,9 +659,15 @@ test('IDE host transport restricts HTTP paths, cancellation, and telemetry comma
 		'/api/splunk/export',
 		'/api/splunk/logs',
 		'/api/workspace',
+		'/api/workspace?workspace=checkout-api',
+		'/api/workspaces',
+		'/api/dashboards/preview?workspace=checkout-api',
+		'/api/audit/score?workspace=checkout-api',
 	]) {
 		assert.equal(isAllowedObserverHostHTTPPath('GET', path), true, path);
 	}
+	// The repo switcher reads the registry but cannot register a repo.
+	assert.equal(isAllowedObserverHostHTTPPath('POST', '/api/workspaces'), false);
 	// The webview may read the workspace name but must never repoint it.
 	assert.equal(isAllowedObserverHostHTTPPath('POST', '/api/workspace'), false);
 	assert.equal(isAllowedObserverHostHTTPPath('POST', '/api/validation/run'), true);
@@ -2686,6 +2692,37 @@ test('IDE host accepts the audit report action without a payload', () => {
 		requestId: 'request-123',
 		type: 'obstudio.host.request',
 	}), false);
+});
+
+test('IDE host accepts a registered repo name for the audit report and nothing else', () => {
+	const envelope = (payload: unknown) => ({
+		request: { action: 'open-audit-report', kind: 'cloud', payload },
+		requestId: 'request-123',
+		type: 'obstudio.host.request',
+	});
+	for (const workspace of ['checkout-api', 'api (2)', 'café']) {
+		assert.equal(isObserverHostRequestEnvelope(envelope({ workspace })), true, workspace);
+	}
+	for (const workspace of ['', '   ', '.', '..', '../etc', 'a/b', 'a\\b', 'tab\there', 'x'.repeat(257), 42]) {
+		assert.equal(isObserverHostRequestEnvelope(envelope({ workspace })), false, String(workspace));
+	}
+	assert.equal(isObserverHostRequestEnvelope(envelope({ workspace: 'checkout-api', url: 'https://evil.example.com' })), false);
+});
+
+test('audit report URL for a named repo stays on the scoped report route', () => {
+	assert.equal(
+		auditReportUrl('http://127.0.0.1:17900', 'checkout-api'),
+		'http://127.0.0.1:17900/api/workspaces/checkout-api/audit/report',
+	);
+	assert.equal(
+		auditReportUrl('http://127.0.0.1:17900/ui/', 'api (2)'),
+		'http://127.0.0.1:17900/api/workspaces/api%20(2)/audit/report',
+	);
+	// Characters that would otherwise start a query or fragment are encoded.
+	assert.equal(
+		auditReportUrl('http://127.0.0.1:17900', 'a?b#c'),
+		'http://127.0.0.1:17900/api/workspaces/a%3Fb%23c/audit/report',
+	);
 });
 
 test('audit report URL is built from the observer base URL alone', () => {

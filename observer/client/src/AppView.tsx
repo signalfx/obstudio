@@ -14,12 +14,16 @@ import { KeyboardHelp } from "./components/KeyboardHelp";
 import { FindingsTab } from "./components/FindingsTab";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { buildValidationIndex, buildValidationIssues } from "./validation/utils";
+import { RepoSwitcher, reposSharingService, resolveRepoService, useRepoSelection } from "./workspace";
 
 interface AppViewProps {
   telemetry: TelemetryHandle;
 }
 
 type AppTab = "overview" | "services" | "metrics" | "traces" | "logs" | "validation" | "dashboards" | "cloud" | "config";
+
+/** Tabs whose telemetry the selected repo's service scopes. */
+const REPO_SCOPED_TABS: ReadonlySet<AppTab> = new Set(["services", "metrics", "traces", "logs"]);
 
 const TAB_ORDER: readonly AppTab[] = ["overview", "metrics", "traces", "logs", "services", "validation", "dashboards", "cloud", "config"];
 
@@ -51,6 +55,21 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
   const hasTelemetry = state.stats
     ? state.stats.spanCount + state.stats.dataPointCount + state.stats.logCount > 0
     : undefined;
+  const repos = useRepoSelection();
+  const telemetryServices = state.stats?.serviceNames ?? [];
+  // One repo leaves nothing to switch or scope, so the Explorer keeps showing
+  // everything exactly as it did before a second repo registered.
+  const multiRepo = repos.workspaces.length > 1 && repos.selected !== null;
+  const repoService = multiRepo && repos.selected ? resolveRepoService(repos.selected, telemetryServices) : null;
+  const scopeService = repoService?.service ?? null;
+  const sharedWith = multiRepo && repos.selected
+    ? reposSharingService(repos.selected, scopeService, repos.workspaces, telemetryServices)
+    : [];
+  const repoNote = !multiRepo || !repos.selected ? null
+    : repoService?.source === "none" ? `No audit for ${repos.selected.name} yet, so all services are shown.`
+    : sharedWith.length > 0 ? `${sharedWith.join(", ")} also ${sharedWith.length === 1 ? "reports" : "report"} service ${scopeService}, so this view can include ${sharedWith.length === 1 ? "its" : "their"} telemetry too.`
+    : null;
+  const selectedWorkspace = repos.selected?.name ?? null;
   const validationIndex = useMemo(() => buildValidationIndex(validationFindings), [validationFindings]);
   const validationIssues = useMemo(
     () => (backendValidationIssues.length > 0 || validationFindings.length === 0
@@ -307,6 +326,9 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
 
           <div className="tab-bar__actions">
             {activeTab !== "cloud" && activeTab !== "config" ? (
+              <RepoSwitcher workspaces={repos.workspaces} selected={repos.selected} onSelect={repos.select} />
+            ) : null}
+            {activeTab !== "cloud" && activeTab !== "config" ? (
               <>
                 <span
                   role="status"
@@ -382,6 +404,9 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
           </div>
         </div>
 
+        {multiRepo && REPO_SCOPED_TABS.has(activeTab) ? (
+          <p className="repo-scope-note" role="status">{repoNote}</p>
+        ) : null}
         {activeTab === "overview" ? (
           <OverviewTab
             onOpenCloud={() => switchTab("cloud")}
@@ -391,17 +416,20 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
             traces={state.traces}
             onOpenServices={() => switchTab("services")}
             onOpenLogs={() => switchTab("logs")}
+            workspace={selectedWorkspace}
           />
         ) : null}
         {activeTab === "services" ? (
           <ServicesTab
-            serviceNames={state.stats?.serviceNames ?? []}
+            serviceNames={telemetryServices}
+            scopeService={scopeService}
           />
         ) : null}
         {activeTab === "metrics" ? (
           <MetricsTab
             metrics={state.metrics ?? []}
             telemetryError={state.error}
+            scopeService={scopeService}
           />
         ) : null}
         {activeTab === "traces" ? (
@@ -410,11 +438,13 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
             traces={state.traces ?? []}
             validationFindings={validationFindings}
             validationIndex={validationIndex}
+            scopeService={scopeService}
           />
         ) : null}
         {activeTab === "logs" ? (
           <LogsTab
             logs={state.logs ?? []}
+            scopeService={scopeService}
           />
         ) : null}
         {activeTab === "validation" ? (
@@ -424,7 +454,7 @@ export function AppView({ telemetry }: AppViewProps): React.ReactElement {
           />
         ) : null}
         {activeTab === "dashboards" ? (
-          <DashboardsTab telemetryError={state.error} paused={paused} />
+          <DashboardsTab telemetryError={state.error} paused={paused} workspace={selectedWorkspace} />
         ) : null}
         {activeTab === "cloud" ? <CloudTab onConnectionChange={setCloudConnectionState} /> : null}
         {configManager && activeTab === "config" ? <ConfigTab status={configStatus} /> : null}

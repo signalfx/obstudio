@@ -13,13 +13,14 @@ interface UseDashboardPreview {
   refresh: () => void;
 }
 
-export function useDashboardPreview(paused = false): UseDashboardPreview {
+export function useDashboardPreview(paused = false, selectedWorkspace: string | null = null): UseDashboardPreview {
   const [data, setData] = useState<PreviewResponse | null>(null);
   const [workspace, setWorkspace] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
   const fetchingRef = useRef(false);
+  const shownWorkspaceRef = useRef(selectedWorkspace);
 
   const refresh = useCallback(() => setNonce((n) => n + 1), []);
 
@@ -28,9 +29,17 @@ export function useDashboardPreview(paused = false): UseDashboardPreview {
     let active = true;
     fetchingRef.current = true;
 
+    // A different repo's preview must not stay on screen as if it were this
+    // one's, so switching repos starts over from the loading state.
+    const switchedRepo = shownWorkspaceRef.current !== selectedWorkspace;
+    shownWorkspaceRef.current = selectedWorkspace;
+    if (switchedRepo) {
+      setData(null);
+      setWorkspace(null);
+    }
     // Only show loading spinner on the initial fetch (no data yet). On
     // auto-refresh ticks we keep showing existing data without a loading flash.
-    if (data === null) {
+    if (data === null || switchedRepo) {
       setLoading(true);
     }
     // Clear any prior error at the start of each fetch/refresh so a stale
@@ -40,7 +49,7 @@ export function useDashboardPreview(paused = false): UseDashboardPreview {
 
     // The workspace name is context only: a failure leaves the label out
     // without affecting the preview itself.
-    fetchWorkspace(controller.signal)
+    fetchWorkspace(controller.signal, selectedWorkspace)
       .then((info) => {
         if (active) setWorkspace(info.name || null);
       })
@@ -48,7 +57,7 @@ export function useDashboardPreview(paused = false): UseDashboardPreview {
         if (active && !controller.signal.aborted) setWorkspace(null);
       });
 
-    fetchDashboardPreview(controller.signal)
+    fetchDashboardPreview(controller.signal, selectedWorkspace)
       .then((resp) => {
         if (active) {
           setData(resp);
@@ -76,7 +85,7 @@ export function useDashboardPreview(paused = false): UseDashboardPreview {
       fetchingRef.current = false;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nonce]);
+  }, [nonce, selectedWorkspace]);
 
   // Auto-refresh when live (not paused).
   useEffect(() => {

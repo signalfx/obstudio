@@ -171,8 +171,16 @@ export async function fetchLogFilterValues(field: string, prefix: string, query:
  * PreviewResponse, including the available:false case (the caller renders an
  * actionable empty state from `message`).
  */
-export async function fetchDashboardPreview(signal?: AbortSignal): Promise<PreviewResponse> {
-  return fetchJSON<PreviewResponse>("/api/dashboards/preview", { signal });
+export async function fetchDashboardPreview(signal?: AbortSignal, workspace?: string | null): Promise<PreviewResponse> {
+  return fetchJSON<PreviewResponse>(withWorkspace("/api/dashboards/preview", workspace), { signal });
+}
+
+/**
+ * Adds the repo switcher's choice to an artifact request. Without one the
+ * server reads the active (most recently registered) workspace.
+ */
+export function withWorkspace(path: string, workspace?: string | null): string {
+  return workspace ? `${path}?workspace=${encodeURIComponent(workspace)}` : path;
 }
 
 /** Name (basename only) of the repo whose .observe artifacts are being read. */
@@ -180,8 +188,37 @@ export interface WorkspaceInfo {
   name: string;
 }
 
-export async function fetchWorkspace(signal?: AbortSignal): Promise<WorkspaceInfo> {
-  return fetchJSON<WorkspaceInfo>("/api/workspace", { signal });
+export async function fetchWorkspace(signal?: AbortSignal, workspace?: string | null): Promise<WorkspaceInfo> {
+  return fetchJSON<WorkspaceInfo>(withWorkspace("/api/workspace", workspace), { signal });
+}
+
+/** One repo a local launch registered with this instance (GET /api/workspaces). */
+export interface RegisteredWorkspace {
+  /** Unique display name; a repeated folder name gets a " (2)" suffix. */
+  name: string;
+  /** The repo folder's own name, used to guess its service without an audit. */
+  folder: string;
+  /** meta.service_name from the repo's otel-audit.json, absent without an audit. */
+  service?: string;
+}
+
+export interface WorkspaceList {
+  /** The workspace a request that names none reads. */
+  active: string;
+  workspaces: RegisteredWorkspace[];
+}
+
+export async function fetchWorkspaces(signal?: AbortSignal): Promise<WorkspaceList> {
+  const data = await fetchJSON<Partial<WorkspaceList> | null>("/api/workspaces", { signal });
+  return {
+    active: typeof data?.active === "string" ? data.active : "",
+    workspaces: Array.isArray(data?.workspaces) ? data.workspaces : [],
+  };
+}
+
+/** Where one repo's audit report lives; the report's relative links resolve under it. */
+export function auditReportPath(workspace?: string | null): string {
+  return workspace ? `/api/workspaces/${encodeURIComponent(workspace)}/audit/report` : "/api/audit/report";
 }
 
 /** Fetch secret-free Splunk Observability Cloud export status. */
@@ -540,6 +577,6 @@ export interface InstrumentationScore {
 }
 
 /** Fetch the instrumentation score derived from the latest $otel-audit report. */
-export async function fetchInstrumentationScore(signal?: AbortSignal): Promise<InstrumentationScore> {
-  return fetchJSON<InstrumentationScore>("/api/audit/score", { signal });
+export async function fetchInstrumentationScore(signal?: AbortSignal, workspace?: string | null): Promise<InstrumentationScore> {
+  return fetchJSON<InstrumentationScore>(withWorkspace("/api/audit/score", workspace), { signal });
 }

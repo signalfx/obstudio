@@ -58,6 +58,35 @@ describe("DashboardsTab", () => {
     expect(screen.queryByText(/Failed to load preview/i)).toBeNull();
   });
 
+  it("drops the previous repo's preview while the newly picked repo loads", async () => {
+    let releaseRepoB: (payload: unknown) => void = () => {};
+    vi.stubGlobal("fetch", vi.fn((url: string) => {
+      const path = String(url);
+      const reply = (payload: unknown) => ({ ok: true, status: 200, statusText: "OK", json: async () => payload });
+      if (path.startsWith("/api/workspace")) {
+        return Promise.resolve(reply({ name: path.includes("repoB") ? "repoB" : "repoA" }));
+      }
+      if (path.includes("workspace=repoB")) {
+        return new Promise((resolve) => {
+          releaseRepoB = (payload) => resolve(reply(payload));
+        });
+      }
+      return Promise.resolve(reply(makePreviewResponse()));
+    }));
+
+    const view = render(<DashboardsTab workspace="repoA" />);
+    await waitFor(() => expect(screen.getByText("Checkout RED")).toBeTruthy());
+
+    view.rerender(<DashboardsTab workspace="repoB" />);
+    await waitFor(() => expect(screen.queryByText("Checkout RED")).toBeNull());
+    expect(vi.mocked(fetch).mock.calls.map(([path]) => String(path))).toContain("/api/dashboards/preview?workspace=repoB");
+
+    await act(async () => {
+      releaseRepoB(makePreviewResponse({ available: false, groups: [], message: "No dashboard preview found." }));
+    });
+    await waitFor(() => expect(screen.getByText(/Reading from the repoB workspace\./)).toBeTruthy());
+  });
+
   it("uses the app's sans-serif font for the toolbar hints and time window picker", () => {
     const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
     for (const selector of ["dashboards-tab__hint", "dashboards-tab__hint--live", "dashboards-tab__window-select"]) {

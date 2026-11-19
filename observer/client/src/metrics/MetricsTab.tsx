@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback, useRef } from "react"
 import { TelemetryEmptyState, type EmptyStateSkeleton } from "../components/EmptyState";
 import { fetchMetricFilterValues, fetchMetrics, type MetricsQuery } from "../api/client";
 import { FilterBar, type FilterClause, type FilterDefinition } from "../FilterBar";
+import { useScopedClauses } from "../workspace";
 import { TimeSeriesChart } from "./TimeSeriesChart";
 import { useMetricTimeSeries, type MetricSeries } from "./useMetricTimeSeries";
 import type { MetricGroup } from "../api/types";
@@ -10,6 +11,8 @@ import { KVTable } from "../components/KVTable";
 import { TELEMETRY_SERIES_COLORS } from "../palette";
 
 interface MetricsTabProps {
+  /** service.name of the selected repo; pre-fills a removable Service filter. */
+  scopeService?: string | null;
   metrics: MetricGroup[];
   telemetryError: string | null;
   onInteract?: () => void;
@@ -57,8 +60,8 @@ function buildMetricsQuery(clauses: FilterClause[]): MetricsQuery {
 }
 
 /** Metrics tab with list view and a right-side detail panel for the selected metric. */
-export function MetricsTab({ metrics, telemetryError, onInteract }: MetricsTabProps): React.ReactElement {
-  const [clauses, setClauses] = useState<FilterClause[]>([]);
+export function MetricsTab({ metrics, telemetryError, onInteract, scopeService }: MetricsTabProps): React.ReactElement {
+  const [clauses, setClauses] = useScopedClauses(scopeService);
   const [serverMetrics, setServerMetrics] = useState<MetricGroup[]>([]);
   const [hasResolvedFilteredMetrics, setHasResolvedFilteredMetrics] = useState(false);
   const [isFiltering, setIsFiltering] = useState(false);
