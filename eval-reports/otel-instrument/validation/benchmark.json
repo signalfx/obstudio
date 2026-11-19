@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-instrument",
-    "run_id": "20261119T002014056647Z",
+    "run_id": "20261119T011731115152Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-6-luna",
     "judge_model": "",
@@ -380,22 +380,6 @@
       "skill_path": "skills/otel-instrument",
       "sanity_check_count": 0,
       "rubric_check_count": 5,
-      "runtime_check_count": 0
-    },
-    {
-      "id": "python/ai-assistant-demo/qual/ao-name-inputs-instrument",
-      "case": "python/ai-assistant-demo",
-      "language": "python",
-      "service": "ai-assistant-demo",
-      "prompt_count": 1,
-      "prompts": [
-        "ao-name-inputs-instrument"
-      ],
-      "definition_path": "evals/python/ai-assistant-demo/eval/qual/ao-name-inputs-instrument.json",
-      "eval_dir": "evals/python/ai-assistant-demo",
-      "skill_path": "skills/otel-instrument",
-      "sanity_check_count": 0,
-      "rubric_check_count": 6,
       "runtime_check_count": 0
     },
     {
@@ -977,16 +961,16 @@
     }
   ],
   "summary": {
-    "eval_count": 58,
-    "case_count": 84,
-    "prompt_count": 84,
+    "eval_count": 57,
+    "case_count": 83,
+    "prompt_count": 83,
     "sanity_check_count": 0,
-    "rubric_check_count": 512,
+    "rubric_check_count": 506,
     "runtime_check_count": 9
   },
   "source": {
     "digest_version": 4,
-    "digest": "adbf7cc48c7c1ad6353f3ca36eebb590ced8def8b1609e408d3540586e2e9395",
+    "digest": "9b5cf137cfa89cd7450aab0a2711e731e270e9d0a4fe3830126c9c73fd7d921a",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -1028,11 +1012,11 @@
       "skills/references/splunk-agent-observability.md": "819faa9e9f27d2b1b41c13980809801fa242c9b6309eb4eae854688a538f4bf4",
       "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
       "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
-      "skills/references/tests/observe_report_fixtures.py": "58440bbebb543612a46b7dd63b7a35db7c530e6ea5cb20eb8bda109a3dfe08ed",
+      "skills/references/tests/observe_report_fixtures.py": "979ad773cac94d5f824a9b5632770071ba72a74df2dc9ce87bdb9ac0ee1698fb",
       "skills/references/tests/test_observe_report.py": "cf79f1a74e4b2260d8010145ce2ff0c6122554e6c7eb19984941b6a89418c2c0",
       "skills/references/tests/test_observe_report_flow.py": "a895ca4165a196ff8ab0ffb73a1c6dcf859d27cf59cd5f335ce4fe1c9ca7392e",
       "skills/references/tests/test_observe_report_html.py": "32183996d90eb073b9ece7bcd05613ea3552512af7f6f8acfc7171d45eaf2382",
-      "skills/references/tests/test_observe_report_selection.py": "c2a441002d8392b9ea5cfdb52cee7e0b75000542334c2a3eb3bc8cff48a0d7c7",
+      "skills/references/tests/test_observe_report_selection.py": "e9e27a744f0da9408d5221038aaa4deaa7c1278ccc85eaf1f9014b3e43afa1af",
       "evals/go/chi-basic/eval/qual/instrument-decision-gated.json": "1604ebf6626a7ebc97406d3bc8299a7bf44003d6f2eb6f9bda6f89b408d934df",
       "evals/go/chi-basic/eval/qual/instrument.json": "fc36dddc0501df8c89eaee182822df2e5fee21d17e6c37c3d8d6dd312d7561f1",
       "docs/examples.md": "894a8483b2099588d32bd389164df1d4aa528486b35205bd08120a122243e819",
@@ -1461,12 +1445,11 @@
       "evals/python/ai-assistant-demo/Makefile": "3603e3404f82d150e09de40be763c2213a05185cd302c7d2426eee61f44260b1",
       "evals/python/ai-assistant-demo/README.md": "eebd4711ef5b6d9325e15d0488b43da6b3fde8bc48ffff91fa44841fd1dfaf0e",
       "evals/python/ai-assistant-demo/app.py": "fa5e1ef6707b71d0faec679ba88c81052382b85b42e895ee484454fbfd056f1e",
-      "evals/python/ai-assistant-demo/eval/qual/ao-name-inputs-instrument.json": "c1c2aa25b51768aa2b9bc850c90d3bb2dd0ee907668d134d477c04b87164d1b6",
+      "evals/python/ai-assistant-demo/eval/inputs/ao-root-compatibility-evidence.json": "335ce70f9753091154b9fcc22c8fc3134ef266faa797b86e31141ef2665c44a6",
+      "evals/python/ai-assistant-demo/eval/qual/ao-root-compatibility-instrument.json": "56b73b8b731dbdab8eb4d090be13b344f6aa6fcf64350f5cf22435ae765d227e",
       "evals/python/ai-assistant-demo/eval_runner.py": "6b685cf5472871a9b227e652e47fd23a68b5ffe38021d4b6f3802236be65e2c8",
       "evals/python/ai-assistant-demo/load_demo.py": "a33aef8a368b24c3351f46722f2caab5ecf4b2791a998b058d7c4a458ff8f2e0",
       "evals/python/ai-assistant-demo/pyproject.toml": "90be0bda1c6147fc324325b0f8a65a82499d65840df190a76b633c992e511f00",
-      "evals/python/ai-assistant-demo/eval/inputs/ao-root-compatibility-evidence.json": "335ce70f9753091154b9fcc22c8fc3134ef266faa797b86e31141ef2665c44a6",
-      "evals/python/ai-assistant-demo/eval/qual/ao-root-compatibility-instrument.json": "56b73b8b731dbdab8eb4d090be13b344f6aa6fcf64350f5cf22435ae765d227e",
       "evals/python/ai-assistant-demo/eval/inputs/ao-target-handoff-validator-snapshot.json": "6e605a622e4b4f16658e3b62918a77a32f1481feec8eeb95f1055ac1bfe8e60d",
       "evals/python/ai-assistant-demo/eval/inputs/finding-group-snapshot.json": "4d8ecff766c242dac8b4e48409681b6aa0b87487b62740128afe39ed2f41e5d6",
       "evals/python/ai-assistant-demo/eval/qual/ao-target-handoff-instrument.json": "6e0de9906afff9f18a7e5446fc2eafee2d339b86881612f83c1da53087cc7447",
@@ -1864,13 +1847,6 @@
         "eval_inputs": [
           "eval/inputs/otel-audit.json"
         ]
-      },
-      {
-        "definition_path": "evals/python/ai-assistant-demo/eval/qual/ao-name-inputs-instrument.json",
-        "fixture_dir": "evals/python/ai-assistant-demo",
-        "prompt_id": "ao-name-inputs-instrument",
-        "eval_kind": "rubric",
-        "eval_inputs": []
       },
       {
         "definition_path": "evals/python/ai-assistant-demo/eval/qual/ao-root-compatibility-instrument.json",

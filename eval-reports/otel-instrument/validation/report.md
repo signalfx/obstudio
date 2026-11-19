@@ -9,7 +9,7 @@ This report validates eval JSON, eval directory availability, and skill source a
 | Mode | validation |
 | Eval kind | validation |
 | Skill | otel-instrument |
-| Run ID | 20261119T002014056647Z |
+| Run ID | 20261119T011731115152Z |
 | Workers | 1 |
 | Config | evals/codex-evals.validation.toml |
 
@@ -39,7 +39,6 @@ This report validates eval JSON, eval directory availability, and skill source a
 | node/express-basic/qual/instrument | node/express-basic | 2 | evals/node/express-basic/eval/qual/instrument.json | 0 | 10 | 0 |
 | node/express-basic/runtime/instrument | node/express-basic | 1 | evals/node/express-basic/eval/runtime/instrument.json | 0 | 0 | 2 |
 | python/agent-connection-demo/qual/instrument | python/agent-connection-demo | 1 | evals/python/agent-connection-demo/eval/qual/instrument.json | 0 | 5 | 0 |
-| python/ai-assistant-demo/qual/ao-name-inputs-instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/ao-name-inputs-instrument.json | 0 | 6 | 0 |
 | python/ai-assistant-demo/qual/ao-root-compatibility-instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/ao-root-compatibility-instrument.json | 0 | 8 | 0 |
 | python/ai-assistant-demo/qual/ao-target-handoff-instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/ao-target-handoff-instrument.json | 0 | 4 | 0 |
 | python/ai-assistant-demo/qual/content-coverage-instrument | python/ai-assistant-demo | 1 | evals/python/ai-assistant-demo/eval/qual/content-coverage-instrument.json | 0 | 6 | 0 |

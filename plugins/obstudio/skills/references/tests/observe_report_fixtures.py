@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import copy
 import importlib.util
+import json
+import subprocess
 from pathlib import Path
 
 
@@ -10,6 +12,66 @@ SPEC = importlib.util.spec_from_file_location("observe_report", SCRIPT)
 assert SPEC is not None and SPEC.loader is not None
 MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
+
+
+_REPORT_SELECTION_DOM = r"""
+const input = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
+const REPORT = input.report;
+const DATA = input.data;
+const selected = new Set(input.selected_ids ?? DATA.selection.requested_ids);
+const decisionAnswers = new Map();
+const nodes = {};
+for (const id of ["ao-project-value", "ao-agent_stream-value", "ao-target-error", "ao-target-controls", "tray", "instrumentCommand"]) {
+  nodes[id] = {
+    value: "", textContent: "", hidden: true, required: false, inert: false, attributes: {},
+    setAttribute(name, value) {this.attributes[name] = String(value);},
+    toggleAttribute(name, enabled) {
+      this[name] = enabled;
+      if (enabled) this.attributes[name] = "";
+      else delete this.attributes[name];
+    },
+    querySelectorAll() {return [];},
+  };
+}
+nodes["ao-target-controls"].querySelectorAll = selector => selector === "input[data-ao-value]"
+  ? [nodes["ao-project-value"], nodes["ao-agent_stream-value"]] : [];
+const document = {getElementById(id) {return nodes[id];}};
+function orderedRequested() {return REPORT.findings.map(finding => finding.id).filter(id => selected.has(id));}
+function orderedDecisionAnswers() {return [];}
+function assert(condition, message) {if (!condition) throw new Error(message);}
+function invalid(resource) {return nodes[`ao-${resource}-value`].attributes["aria-invalid"] === "true";}
+let result = {};
+"""
+
+
+def run_report_javascript(
+    report: dict[str, object],
+    rendered: str,
+    scenario: str,
+    *,
+    service_root: str = ".",
+    selected_ids: list[str] | None = None,
+    values: dict[str, str] | None = None,
+) -> dict[str, object]:
+    payload = json.loads(rendered.split("const DATA = ", 1)[1].split(";\nconst REPORT", 1)[0])
+    payload["service_root"] = service_root
+    functions = rendered[
+        rendered.index("function shellQuote(value)"):rendered.index("function syncDependencyClosure()")
+    ]
+    script = "\n".join([
+        _REPORT_SELECTION_DOM, functions, scenario,
+        "process.stdout.write(JSON.stringify(result));",
+    ])
+    completed = subprocess.run(
+        ["node", "-e", script],
+        input=json.dumps({
+            "report": report, "data": payload, "selected_ids": selected_ids, "values": values,
+        }),
+        capture_output=True, text=True, timeout=10, check=False,
+    )
+    if completed.returncode:
+        raise AssertionError(completed.stderr)
+    return json.loads(completed.stdout)
 
 
 def sample_report() -> dict[str, object]:
