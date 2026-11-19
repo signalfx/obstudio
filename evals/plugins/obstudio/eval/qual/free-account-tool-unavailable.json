@@ -5,7 +5,7 @@
   "prompts": [
     {
       "id": "observer-required",
-      "task": "Offline behavior evaluation only: do not invoke tools, access the network, or create an account. Use $create-splunk-free-account for this hypothetical interaction. The user provided a first name, last name, and email, plus public region label United States (tool value us), explicitly accepted the linked Free Edition terms, and asks to submit, but observer_splunk_free_account_create is unavailable in the current environment. Respond to the user."
+      "task": "Offline behavior evaluation only. You may read local skill files. Do not call Studio tools, access the network, or create an account. Use $create-splunk-free-account for this hypothetical interaction. The user provided a first name, last name, and email, plus public region label United States (tool value us), explicitly accepted the linked Free Edition terms, and asks to submit, but observer_splunk_free_account_create is unavailable in the current environment. Respond to the user."
     }
   ],
   "judge_inputs": [
