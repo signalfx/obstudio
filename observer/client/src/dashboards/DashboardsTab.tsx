@@ -35,7 +35,7 @@ interface DashboardsTabProps {
 }
 
 export function DashboardsTab({ telemetryError, paused = false }: DashboardsTabProps): React.ReactElement {
-  const { data, loading, error, refresh } = useDashboardPreview(paused);
+  const { data, workspace, loading, error, refresh } = useDashboardPreview(paused);
   const otlpEndpoint = useOtlpEndpoint();
   const [expandedId, setExpandedId] = useState<PanelId | null>(null);
   const expandedPanel = expandedId ? resolvePanel(data, expandedId) : null;
@@ -107,6 +107,7 @@ export function DashboardsTab({ telemetryError, paused = false }: DashboardsTabP
           Approximate · local-data preview
         </span>
         <div className="dashboards-tab__bar-actions">
+          {workspace ? <span className="dashboards-tab__hint">from {workspace}</span> : null}
           {data?.generatedAt ? (
             <span className="dashboards-tab__hint">generated {data.generatedAt}</span>
           ) : null}
@@ -131,7 +132,7 @@ export function DashboardsTab({ telemetryError, paused = false }: DashboardsTabP
 
       {telemetryError ? <div className="pill pill--error">{telemetryError}</div> : null}
 
-      {renderState({ data, loading, error, windowMs, onExpand: setExpandedId })}
+      {renderState({ data, workspace, loading, error, windowMs, onExpand: setExpandedId })}
 
       {expandedPanel ? (
         <div className="dashboard-expand-overlay" onClick={() => setExpandedId(null)}>
@@ -172,12 +173,14 @@ export function DashboardsTab({ telemetryError, paused = false }: DashboardsTabP
 
 function renderState({
   data,
+  workspace,
   loading,
   error,
   windowMs,
   onExpand,
 }: {
   data: ReturnType<typeof useDashboardPreview>["data"];
+  workspace: string | null;
   loading: boolean;
   error: string | null;
   windowMs: number;
@@ -194,10 +197,11 @@ function renderState({
     return <div className="dashboards-tab__message dashboards-tab__message--error">Failed to load preview: {error}</div>;
   }
   if (!data || !data.available) {
+    const hint = data?.message ?? "Run $splunk-dashboard to generate .observe/dashboards.preview.json.";
     return (
       <EmptyState
         title="No dashboard preview yet."
-        hint={data?.message ?? "Run $splunk-dashboard to generate .observe/dashboards.preview.json."}
+        hint={workspace ? `${hint} Reading from the ${workspace} workspace.` : hint}
         actions={<CommandChip text="$splunk-dashboard" label="$splunk-dashboard command" />}
       />
     );

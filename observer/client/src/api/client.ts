@@ -175,6 +175,15 @@ export async function fetchDashboardPreview(signal?: AbortSignal): Promise<Previ
   return fetchJSON<PreviewResponse>("/api/dashboards/preview", { signal });
 }
 
+/** Name (basename only) of the repo whose .observe artifacts are being read. */
+export interface WorkspaceInfo {
+  name: string;
+}
+
+export async function fetchWorkspace(signal?: AbortSignal): Promise<WorkspaceInfo> {
+  return fetchJSON<WorkspaceInfo>("/api/workspace", { signal });
+}
+
 /** Fetch secret-free Splunk Observability Cloud export status. */
 export async function fetchSplunkExportStatus(signal?: AbortSignal): Promise<SplunkExportStatus> {
   return fetchJSON<SplunkExportStatus>("/api/splunk/export", { signal });

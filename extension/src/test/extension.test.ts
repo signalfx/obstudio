@@ -1,6 +1,7 @@
 import * as assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
+import * as http from 'node:http';
 import * as net from 'node:net';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -63,6 +64,9 @@ import { ObserverWebviewTelemetry, webSocketURL } from '../observer-webview-tele
 import {
 	LoopbackPortReservations,
 	loopbackPortsAreSimultaneouslyAvailable,
+	createTrailingDebounce,
+	observerWorkspacePath,
+	registerObserverWorkspace,
 } from '../observer-port-handoff';
 
 const extensionRoot = path.resolve(__dirname, '..', '..');
@@ -654,9 +658,12 @@ test('IDE host transport restricts HTTP paths, cancellation, and telemetry comma
 		'/api/query/traces/0123456789abcdef0123456789abcdef',
 		'/api/splunk/export',
 		'/api/splunk/logs',
+		'/api/workspace',
 	]) {
 		assert.equal(isAllowedObserverHostHTTPPath('GET', path), true, path);
 	}
+	// The webview may read the workspace name but must never repoint it.
+	assert.equal(isAllowedObserverHostHTTPPath('POST', '/api/workspace'), false);
 	assert.equal(isAllowedObserverHostHTTPPath('POST', '/api/validation/run'), true);
 	assert.equal(isAllowedObserverHostHTTPPath('GET', '/api/config'), true);
 	assert.equal(isAllowedObserverHostHTTPPath('POST', '/api/config'), true);
@@ -2749,4 +2756,99 @@ test('IDE connection edits accept explicit reuse flags without accepting destina
   assert.equal(isObserverHostRequestEnvelope(request(action, { destination: 'https://example.test' })), false);
   assert.equal(cloudBridgeActionRequiresLifecycleSerialization(action), false);
  }
+});
+
+async function withWorkspaceServer(
+	respond: (body: string, request: http.IncomingMessage, response: http.ServerResponse) => void,
+	run: (baseUrl: string) => Promise<void>,
+): Promise<void> {
+	const server = http.createServer((request, response) => {
+		let body = '';
+		request.setEncoding('utf8');
+		request.on('data', (chunk: string) => { body += chunk; });
+		request.on('end', () => respond(body, request, response));
+	});
+	await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+	const { port } = server.address() as net.AddressInfo;
+	try {
+		await run(`http://127.0.0.1:${port}`);
+	} finally {
+		await new Promise<void>((resolve) => server.close(() => resolve()));
+	}
+}
+
+test('registerObserverWorkspace posts the window workspace root as a native request', async () => {
+	const seen: Array<{ method?: string; url?: string; origin?: string; body: string }> = [];
+	await withWorkspaceServer((body, request, response) => {
+		seen.push({ method: request.method, url: request.url, origin: request.headers.origin, body });
+		response.writeHead(200, { 'Content-Type': 'application/json' });
+		response.end(JSON.stringify({ name: 'repoB' }));
+	}, async (baseUrl) => {
+		const result = await registerObserverWorkspace(baseUrl, '/work/repoB', 2_000, 1234);
+		assert.deepEqual(result, { status: 'registered', name: 'repoB' });
+	});
+	assert.equal(seen.length, 1);
+	assert.equal(seen[0].method, 'POST');
+	assert.equal(seen[0].url, observerWorkspacePath);
+	assert.equal(seen[0].origin, undefined);
+	assert.deepEqual(JSON.parse(seen[0].body), { root: '/work/repoB', at: 1234 });
+});
+
+test('registerObserverWorkspace reports a rejected or unreachable observer without throwing', async () => {
+	await withWorkspaceServer((_body, _request, response) => {
+		response.writeHead(403);
+		response.end('{"error":"forbidden"}');
+	}, async (baseUrl) => {
+		const result = await registerObserverWorkspace(baseUrl, '/work/repoB');
+		assert.equal(result.status, 'failed');
+		assert.match(result.status === 'failed' ? result.reason : '', /403/);
+	});
+
+	const closed = net.createServer();
+	await new Promise<void>((resolve) => closed.listen(0, '127.0.0.1', resolve));
+	const { port } = closed.address() as net.AddressInfo;
+	await new Promise<void>((resolve) => closed.close(() => resolve()));
+	const unreachable = await registerObserverWorkspace(`http://127.0.0.1:${port}`, '/work/repoB', 500);
+	assert.equal(unreachable.status, 'failed');
+});
+
+test('registerObserverWorkspace skips remote observers and windows without a folder', async () => {
+	assert.equal((await registerObserverWorkspace('http://observer.example:17900', '/work/repoB')).status, 'skipped');
+	assert.equal((await registerObserverWorkspace('https://127.0.0.1:17900', '/work/repoB')).status, 'skipped');
+	assert.equal((await registerObserverWorkspace('http://127.0.0.1:17900', undefined)).status, 'skipped');
+	assert.equal((await registerObserverWorkspace(undefined, '/work/repoB')).status, 'skipped');
+});
+
+test('registerObserverWorkspace stamps each registration with the current time by default', async () => {
+	let sent = 0;
+	await withWorkspaceServer((body, _request, response) => {
+		sent = (JSON.parse(body) as { at: number }).at;
+		response.writeHead(200, { 'Content-Type': 'application/json' });
+		response.end('{"name":"repoB","applied":true}');
+	}, async (baseUrl) => {
+		const before = Date.now();
+		await registerObserverWorkspace(baseUrl, '/work/repoB');
+		assert.ok(sent >= before && sent <= Date.now(), `at=${sent} should be a current epoch ms timestamp`);
+	});
+});
+
+test('createTrailingDebounce runs once after the last schedule and not after cancel', async () => {
+	const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+	let runs = 0;
+	const debounce = createTrailingDebounce(() => { runs += 1; }, 30);
+
+	debounce.schedule();
+	debounce.schedule();
+	debounce.schedule();
+	await sleep(80);
+	assert.equal(runs, 1, 'rapid schedules collapse into one run');
+
+	debounce.schedule();
+	debounce.cancel();
+	await sleep(80);
+	assert.equal(runs, 1, 'a cancelled schedule never runs');
+
+	debounce.schedule();
+	await sleep(80);
+	assert.equal(runs, 2, 'it can be used again after a cancel');
 });

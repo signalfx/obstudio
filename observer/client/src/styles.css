@@ -6667,6 +6667,7 @@ code {
 .dashboards-tab__bar-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -6684,6 +6685,7 @@ code {
 .dashboards-tab__hint {
   color: var(--text-soft);
   font-size: var(--font-meta);
+  white-space: nowrap;
 }
 
 .dashboards-tab__message {

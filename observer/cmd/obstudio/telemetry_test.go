@@ -19,15 +19,12 @@ type telemetryRun struct {
 	err            error
 }
 
-// telemetryHome gives the test a fresh home and turns the Config Manager gate
-// on through the process environment, so the telemetry group is registered
-// and no env file is read. The gate tests turn it off again.
+// telemetryHome gives the test a fresh home.
 func telemetryHome(t *testing.T) (home, path string) {
 	t.Helper()
 	home = t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
-	t.Setenv(configManagerGateEnv, "1")
 	return home, filepath.Join(home, ".obstudio", "config.yaml")
 }
 
@@ -315,7 +312,6 @@ func TestTelemetryUnresolvableHome(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix only")
 	}
-	t.Setenv(configManagerGateEnv, "1")
 	cwd := t.TempDir()
 	t.Chdir(cwd)
 	for _, home := range []string{"", "relative/dir"} {
@@ -448,90 +444,5 @@ func TestTelemetryNoSideChannels(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(home, name)); err == nil {
 			t.Errorf("%s created", name)
 		}
-	}
-}
-
-func TestTelemetryGateOff(t *testing.T) {
-	for _, tc := range []struct {
-		name    string
-		setGate func(t *testing.T, home string)
-	}{
-		{"absent", func(t *testing.T, _ string) { unsetEnv(t, configManagerGateEnv) }},
-		{"zero", func(t *testing.T, _ string) { t.Setenv(configManagerGateEnv, "0") }},
-		{"empty-shell-wins", func(t *testing.T, home string) {
-			t.Setenv(configManagerGateEnv, "")
-			writeGateEnvFile(t, filepath.Join(home, ".obstudio", "env"), "OBSTUDIO_CONFIG_MANAGER=true\n")
-		}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			home, path := telemetryHome(t)
-			unsetEnv(t, "OBSTUDIO_ENV_FILE")
-			tc.setGate(t, home)
-
-			for _, args := range [][]string{
-				{"telemetry"}, {"telemetry", "disable"}, {"telemetry", "status"}, {"telemetry", "--help"},
-			} {
-				r := runTelemetry(args...)
-				if r.err == nil || !strings.Contains(r.err.Error(), `unknown command "telemetry" for "obstudio"`) {
-					t.Errorf("unknown: %v: err = %v", args, r.err)
-				}
-				if strings.Contains(r.stdout, "Pseudonymous usage data") || strings.Contains(r.stdout, "Config:") {
-					t.Errorf("unknown: %v: stdout %q", args, r.stdout)
-				}
-			}
-			for _, c := range newRootCmd(&runConfig{}).Commands() {
-				if c.Name() == "telemetry" {
-					t.Error("not-registered: root has a telemetry command")
-				}
-			}
-			r := runTelemetry("--help")
-			if r.err != nil {
-				t.Errorf("help: %v", r.err)
-			}
-			if !strings.Contains(r.stdout, "  token-telemetry ") {
-				t.Errorf("help: token-telemetry not listed:\n%s", r.stdout)
-			}
-			for _, line := range strings.Split(r.stdout, "\n") {
-				if strings.HasPrefix(strings.TrimLeft(line, " "), "telemetry ") {
-					t.Errorf("help: lists %q", line)
-				}
-			}
-			if _, err := os.Stat(path); err == nil {
-				t.Error("no-file: config.yaml exists")
-			}
-			if tc.name != "empty-shell-wins" {
-				if _, err := os.Stat(filepath.Join(home, ".obstudio")); err == nil {
-					t.Error("no-file: ~/.obstudio exists")
-				}
-			}
-		})
-	}
-}
-
-func TestTelemetryGateOn(t *testing.T) {
-	for _, tc := range []struct {
-		name    string
-		setGate func(t *testing.T, home string)
-	}{
-		{"shell", func(t *testing.T, _ string) { t.Setenv(configManagerGateEnv, "1") }},
-		{"env-file-reaches-cli", func(t *testing.T, home string) {
-			unsetEnv(t, configManagerGateEnv)
-			writeGateEnvFile(t, filepath.Join(home, ".obstudio", "env"), "OBSTUDIO_CONFIG_MANAGER=true\n")
-		}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			home, _ := telemetryHome(t)
-			unsetEnv(t, "OBSTUDIO_ENV_FILE")
-			tc.setGate(t, home)
-
-			r := runTelemetry("telemetry", "status")
-			if r.err != nil || firstLine(r.stdout) != "Pseudonymous usage data: enabled" {
-				t.Errorf("registered: status %+v", r)
-			}
-			r = runTelemetry("--help")
-			if !strings.Contains(r.stdout, "  telemetry ") || !strings.Contains(r.stdout, "  token-telemetry ") {
-				t.Errorf("registered: root help does not list both groups:\n%s", r.stdout)
-			}
-		})
 	}
 }
