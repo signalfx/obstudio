@@ -864,9 +864,18 @@ class ObserveReportTest(unittest.TestCase):
         reports = [callback, MODULE.normalize_audit_report(sample_splunk_agent_observability_report())]
         for report in reports:
             rendered = MODULE.render_html(report, MODULE.empty_selection(report))
+            self.assertIn('id="ao-target-controls"', rendered)
             run_report_javascript(report, rendered, """
-selected.add(DATA.required_input_groups[0].finding_ids[0]);
-assert(hasSelectedAoConfiguration(), "agent scope requires destination");
+const agentIds = REPORT.findings
+  .filter(finding => finding.finding_group === "splunk-agent-observability")
+  .map(finding => finding.id);
+assert(JSON.stringify(DATA.required_input_groups[0].finding_ids) === JSON.stringify(agentIds),
+  "only Agent Observability findings require destination inputs");
+for (const id of agentIds) {
+  selected.clear();
+  selected.add(id);
+  assert(hasSelectedAoConfiguration(), "agent scope requires destination");
+}
 """, selected_ids=[])
 
     def test_required_input_status_is_generic_and_never_mutates_scope(self) -> None:

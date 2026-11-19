@@ -21,19 +21,11 @@ type userConfigWiring struct {
 	status  *configstatus.Builder
 }
 
-// buildUserConfig returns the Config Manager wiring when the Config Manager
-// gate is on, and the zero wiring (no Manager, no file, no watcher, no config
-// routes) when it is off.
-func buildUserConfig(enabled bool) userConfigWiring {
-	if !enabled {
-		return userConfigWiring{}
-	}
-	return openUserConfig()
-}
-
 // openUserConfig builds the config Manager for ~/.obstudio/config.yaml and
 // connects file-state changes to the UI's live config signal. The caller closes the
-// Manager; Close also ends the subscription.
+// Manager; Close also ends the subscription. If the Manager cannot be built it
+// logs the reason and returns the zero wiring (no Manager, no watcher, no
+// config routes), and Splunk Observability Studio runs without it.
 func openUserConfig() userConfigWiring {
 	path, err := userConfigYAMLPath()
 	if err != nil {

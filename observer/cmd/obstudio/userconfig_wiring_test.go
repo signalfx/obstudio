@@ -91,11 +91,11 @@ func TestUserConfigWiringWithoutHome(t *testing.T) {
 	}
 }
 
-// gateWiringMux builds the wiring for the given gate value and registers it on
-// an API mux the way run() does.
-func gateWiringMux(t *testing.T, enabled bool) (userConfigWiring, *http.ServeMux, *atomic.Int32) {
+// wiringMux builds the wiring for a process whose home directory is home ("" is
+// unresolvable, so the Manager cannot be built) and registers it on an API mux
+// the way run() does.
+func wiringMux(t *testing.T, home string) (userConfigWiring, *http.ServeMux, *atomic.Int32) {
 	t.Helper()
-	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	var notified atomic.Int32
@@ -103,12 +103,12 @@ func gateWiringMux(t *testing.T, enabled bool) (userConfigWiring, *http.ServeMux
 	notifyConfigChanged = func() { notified.Add(1) }
 	t.Cleanup(func() { notifyConfigChanged = prev })
 
-	w := buildUserConfig(enabled)
+	w := openUserConfig()
 	if w.manager != nil {
 		t.Cleanup(func() { _ = w.manager.Close() })
 	}
 	mux := http.NewServeMux()
-	api.Register(mux, store.New(), api.ServerInfo{Kind: "obstudio", APIVersion: "v1", ConfigManager: enabled}, w.api, w.status)
+	api.Register(mux, store.New(), api.ServerInfo{Kind: "obstudio", APIVersion: "v1", ConfigManager: w.manager != nil}, w.api, w.status)
 	return w, mux, &notified
 }
 
@@ -136,14 +136,12 @@ func assertHealthConfigManager(t *testing.T, mux *http.ServeMux, want bool) {
 	}
 }
 
-func TestUserConfigWiringGateOff(t *testing.T) {
-	w, mux, notified := gateWiringMux(t, false)
+// TestUserConfigWiringManagerUnavailable covers a Manager that could not be
+// built: no config routes, and /api/health tells the UI so.
+func TestUserConfigWiringManagerUnavailable(t *testing.T) {
+	w, mux, notified := wiringMux(t, "")
 	if w.manager != nil || w.api != nil || w.status != nil {
 		t.Errorf("no-manager: %+v", w)
-	}
-	home := os.Getenv("HOME")
-	if _, err := os.Stat(filepath.Join(home, ".obstudio", "config.yaml")); err == nil {
-		t.Error("no-file: config.yaml exists")
 	}
 	for _, rt := range []struct{ method, path string }{
 		{http.MethodGet, "/api/config"},
@@ -165,12 +163,15 @@ func TestUserConfigWiringGateOff(t *testing.T) {
 	}
 }
 
-func TestUserConfigWiringGateOn(t *testing.T) {
-	w, mux, _ := gateWiringMux(t, true)
+// TestUserConfigWiringManagerBuilt covers the normal start: the Manager exists,
+// a missing config.yaml is scaffolded, and the config routes are served.
+func TestUserConfigWiringManagerBuilt(t *testing.T) {
+	home := t.TempDir()
+	w, mux, _ := wiringMux(t, home)
 	if w.manager == nil || w.api == nil || w.status == nil {
 		t.Fatalf("manager: %+v", w)
 	}
-	got, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), ".obstudio", "config.yaml"))
+	got, err := os.ReadFile(filepath.Join(home, ".obstudio", "config.yaml"))
 	if err != nil || string(got) != userconfig.Scaffold() {
 		t.Errorf("scaffolded: %q, %v", got, err)
 	}

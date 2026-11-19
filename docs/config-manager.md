@@ -4,11 +4,12 @@ How `~/.obstudio/config.yaml` is read, edited, watched and shown. This page
 is for people changing the code. It does not cover what any setting means to
 a user.
 
-The Config Manager is off by default. See
-[CONTRIBUTING.md](../CONTRIBUTING.md#config-manager-off-by-default) for how to
-turn it on while developing. With it off, none of the pieces below run: no
-file is read or created, the routes are not registered, the `telemetry`
-command does not exist, and the webview hides the Config tab.
+The Config Manager always runs. If it cannot be built (for example, the home
+directory cannot be resolved), Splunk Observability Studio logs the reason and
+starts without it: no file is read or created, the config routes are not
+registered, and `/api/health` reports `configManager: false`, so the webview
+hides the Config tab. The `obstudio telemetry` command is always registered; it
+works on `config.yaml` directly.
 
 ## The idea
 
@@ -43,7 +44,7 @@ definitions.go (the table)
 | Websocket | `observer/internal/web/websocket.go` | `config-changed` message |
 | MCP | `observer/internal/mcp/handler.go` | `observer_status` gains `config` only when `problem` is true |
 | CLI | `observer/cmd/obstudio/telemetry.go` | `obstudio telemetry enable \| disable \| status` |
-| Wiring and gate | `observer/cmd/obstudio/userconfig_wiring.go`, `config_manager_gate.go` | builds the Manager, reads the gate |
+| Wiring | `observer/cmd/obstudio/userconfig_wiring.go` | builds the Manager at startup |
 | Webview | `observer/client/src/config/` | Config tab, edit coalescing, status pill, capability probe |
 | Extension | `extension/src/observer-webview-host.ts`, `observer-webview-telemetry.ts` | host allowlist for the config routes, `config-changed` relay |
 
@@ -105,7 +106,7 @@ only when something calls `Get`.
 | `POST /api/config` | A JSON merge body such as `{"<section>":{"<name>":<value>}}`. Loopback only, and a browser request must be same-origin and send `X-Obstudio-Browser-Request: 1`; anything else gets 403. Bodies over 4 KiB, unknown keys and wrong types get 400 before anything is written. An unparseable file gets 409. Returns the effective settings |
 | `GET /api/config/definitions` | The declared sections and settings (title, description, type, default, fail-safe, apply mode). The Config tab renders from this |
 | `GET /api/config/status` | State, `problem`, a message, the line-numbered diagnostics, and every effective setting. `problem` is true when the state is `invalid` or `unparseable` |
-| `GET /api/health` | `configManager: true` only when the gate is on. The webview treats anything else as "off" |
+| `GET /api/health` | `configManager: true` only when the Manager was built at startup. The webview treats anything else as "off" |
 
 The routes are only registered when a Manager exists.
 
