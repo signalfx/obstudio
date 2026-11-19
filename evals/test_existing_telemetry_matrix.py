@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import importlib.util
 import json
 import os
@@ -8,6 +9,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 
@@ -944,7 +946,6 @@ def test_full_trace_contract_keeps_single_agent_scope_explicit(sdk_full_trace_co
 
 @pytest.fixture
 def recording_loopback_proxy():
-    import hashlib
     import threading
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -954,13 +955,23 @@ def recording_loopback_proxy():
         def log_message(self, *_args):
             pass
 
-        def do_POST(self):
+        def _record_request(self):
             body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
-            contacts.append({"target": self.path, "body_sha256": hashlib.sha256(body).hexdigest()})
-            self.send_response(200)
+            contacts.append({
+                "method": self.command,
+                "target": self.path,
+                "host": self.headers.get("Host"),
+                "x_exporter_owner": self.headers.get("x-exporter-owner"),
+                "body_sha256": hashlib.sha256(body).hexdigest(),
+                "proxy_form": self.command == "CONNECT" or urlsplit(self.path).scheme in {"http", "https"},
+            })
+            self.send_response(405 if self.command == "CONNECT" else 200)
             self.send_header("Content-Type", "application/x-protobuf")
             self.send_header("Content-Length", "0")
             self.end_headers()
+
+        do_POST = _record_request
+        do_CONNECT = _record_request
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Proxy)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -971,6 +982,73 @@ def recording_loopback_proxy():
         server.shutdown()
         server.server_close()
         thread.join()
+
+
+def _assert_no_proxy_forwarding(contacts) -> None:
+    assert [contact for contact in contacts if contact["proxy_form"]] == [], contacts
+
+
+def test_recording_proxy_distinguishes_direct_and_proxied_http_requests(recording_loopback_proxy) -> None:
+    import requests
+
+    origin, contacts = recording_loopback_proxy
+    direct_body = b"unrelated direct metrics"
+    proxied_body = b"owned proxied metrics"
+    destination = "http://capture-owned.invalid/v1/metrics"
+    with requests.Session() as session:
+        session.trust_env = False
+        response = session.post(
+            origin + "/v1/metrics", data=direct_body,
+            headers={"x-exporter-owner": "unrelated-direct-control"}, timeout=2,
+        )
+        assert response.status_code == 200
+        assert contacts == [{
+            "method": "POST", "target": "/v1/metrics", "host": urlsplit(origin).netloc,
+            "x_exporter_owner": "unrelated-direct-control",
+            "body_sha256": hashlib.sha256(direct_body).hexdigest(), "proxy_form": False,
+        }]
+        _assert_no_proxy_forwarding(contacts)
+
+        response = session.post(
+            destination, data=proxied_body, proxies={"http": origin},
+            headers={"x-exporter-owner": "owned-proxied-control"}, timeout=2,
+        )
+        assert response.status_code == 200
+
+    assert len(contacts) == 2
+    assert contacts[1] == {
+        "method": "POST", "target": destination, "host": "capture-owned.invalid",
+        "x_exporter_owner": "owned-proxied-control",
+        "body_sha256": hashlib.sha256(proxied_body).hexdigest(), "proxy_form": True,
+    }
+    with pytest.raises(AssertionError):
+        _assert_no_proxy_forwarding(contacts)
+
+
+def test_recording_proxy_records_and_rejects_connect(recording_loopback_proxy) -> None:
+    from http.client import HTTPConnection
+
+    origin, contacts = recording_loopback_proxy
+    endpoint = urlsplit(origin)
+    destination = "capture-owned.invalid:443"
+    connection = HTTPConnection(endpoint.hostname, endpoint.port, timeout=2)
+    try:
+        connection.request("CONNECT", destination, headers={
+            "Host": destination, "x-exporter-owner": "connect-control",
+        })
+        response = connection.getresponse()
+        assert response.status == 405
+        assert response.read() == b""
+    finally:
+        connection.close()
+
+    assert contacts == [{
+        "method": "CONNECT", "target": destination, "host": destination,
+        "x_exporter_owner": "connect-control",
+        "body_sha256": hashlib.sha256(b"").hexdigest(), "proxy_form": True,
+    }]
+    with pytest.raises(AssertionError):
+        _assert_no_proxy_forwarding(contacts)
 
 
 def _configure_ambient_proxy(monkeypatch, origin: str, no_proxy: str) -> None:
@@ -1019,7 +1097,7 @@ def test_capture_ignores_configured_proxy_and_restores_caller_environment(monkey
     caller_environment = dict(os.environ)
     receipt = probe.capture("generic")
     assert dict(os.environ) == caller_environment
-    assert proxy_contacts == []
+    _assert_no_proxy_forwarding(proxy_contacts)
     assert observed_proxy_keys == []
     assert receipt["setup_errors"] == []
     assert {signal: len(probe.records(receipt, signal)) for signal in ("traces", "metrics", "logs")} == {"traces": 6, "metrics": 4, "logs": 4}
@@ -1049,7 +1127,7 @@ def test_recovery_worker_ignores_configured_proxy_for_actual_native_exports(monk
         result = subprocess.run(command, env=environment, capture_output=True, text=True, timeout=20)
         assert result.returncode == 0, result.stderr
     assert dict(os.environ) == caller_environment
-    assert proxy_contacts == []
+    _assert_no_proxy_forwarding(proxy_contacts)
     assert not any(name.casefold() in {"http_proxy", "https_proxy", "all_proxy", "no_proxy"} for name in environment)
     assert environment["PROXY_TEST_UNRELATED"] == "keep-unrelated-setting"
     receipt = {"requests": receiver.requests}
