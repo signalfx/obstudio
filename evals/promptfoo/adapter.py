@@ -10,6 +10,7 @@ import subprocess
 import tempfile
 import time
 from datetime import datetime, timezone
+from contextlib import contextmanager
 from pathlib import Path
 
 from jsonschema import validate
@@ -70,11 +71,15 @@ def source_manifest() -> dict[str, str]:
               if path.is_file() and not any(part.startswith(".") for part in path.relative_to(ROOT / "pytest-codex-evals").parts)
               and path.suffix in {".py", ".json", ".toml", ".lock"}]
     sources.update({path.relative_to(ROOT).as_posix(): digest(path) for path in paths})
-    discovery = ROOT / ".agents/skills/otel-audit"
-    if not discovery.is_symlink():
-        raise ValueError("audit discovery must remain a relative canonical skill link")
-    sources[".agents/skills/otel-audit"] = hashlib.sha256(os.readlink(discovery).encode()).hexdigest()
+    sources[".agents/skills/otel-audit"] = discovery_digest(ROOT)
     return dict(sorted(sources.items()))
+
+
+def discovery_digest(root: Path) -> str:
+    discovery = root / ".agents/skills/otel-audit"
+    if not discovery.is_symlink() or os.readlink(discovery) != "../../skills/otel-audit":
+        raise ValueError("audit discovery must remain the relative canonical skill link")
+    return hashlib.sha256(os.readlink(discovery).encode()).hexdigest()
 
 
 def validate_home() -> str:
@@ -83,6 +88,28 @@ def validate_home() -> str:
     if not home or not (Path(home) / "config.toml").is_file() or (Path(home) / "config.toml").read_bytes() != template.read_bytes():
         raise ValueError("CODEX_EVAL_HOME must use the isolated eval config template and existing authorized login")
     return digest(Path(home) / "config.toml")
+
+
+@contextmanager
+def isolated_home():
+    # Seed only credentials and the reviewed config; reused-home instructions/plugins never enter either actor.
+    original = os.environ["CODEX_EVAL_HOME"]
+    with tempfile.TemporaryDirectory(prefix="promptfoo-home-") as temporary:
+        target = Path(temporary)
+        shutil.copy2(Path(original) / "auth.json", target / "auth.json")
+        shutil.copy2(ROOT / "evals/codex-eval-home.config.toml", target / "config.toml")
+        os.environ["CODEX_EVAL_HOME"] = temporary
+        try:
+            yield
+        finally:
+            os.environ["CODEX_EVAL_HOME"] = original
+
+
+def require_clean(sources: dict[str, str]) -> None:
+    if sources and subprocess.check_output(
+        ["git", "-C", str(ROOT), "status", "--porcelain=v1", "-z", "--", *sources], text=True
+    ).strip():
+        raise ValueError("commit evaluated source inputs before running the pilot")
 
 
 def gate(checks: list[dict], expected: list[str], guards: list[dict], errors: list[str]) -> list[str]:
@@ -107,10 +134,7 @@ def run(prompt: str, output: Path) -> dict:
     output.mkdir(parents=True, exist_ok=False)
     started = time.monotonic()
     sources = source_manifest()
-    if sources and subprocess.check_output(
-        ["git", "-C", str(ROOT), "status", "--porcelain=v1", "-z", "--", *sources], text=True
-    ).strip():
-        raise ValueError("commit evaluated source inputs before running the pilot")
+    require_clean(sources)
     evaluated_commit = subprocess.check_output(["git", "-C", str(ROOT), "rev-parse", "HEAD"], text=True).strip()
     settings = load_settings(CONFIG)
     if settings.agent_backend != "codex" or not settings.agent_model or not settings.judge_model:
@@ -130,13 +154,14 @@ def run(prompt: str, output: Path) -> dict:
         with tempfile.TemporaryDirectory(prefix="promptfoo-agent-") as temporary:
             execution = Path(temporary) / "with_skill"
             try:
-                agent_result = run_side(
-                    repo_root=ROOT, case=case, side="with_skill", exec_dir=execution,
-                    artifact_dir=side, prompt=effective_prompt, skill_dir=None,
-                    model=settings.agent_model, judge_model=None, rubric=False, runtime=False,
-                    eval_kind="rubric", backend=backend, agent_timeout=settings.agent_timeout,
-                    judge_timeout=settings.judge_timeout,
-                )
+                with isolated_home():
+                    agent_result = run_side(
+                        repo_root=ROOT, case=case, side="with_skill", exec_dir=execution,
+                        artifact_dir=side, prompt=effective_prompt, skill_dir=None,
+                        model=settings.agent_model, judge_model=None, rubric=False, runtime=False,
+                        eval_kind="rubric", backend=backend, agent_timeout=settings.agent_timeout,
+                        judge_timeout=settings.judge_timeout,
+                    )
             finally:
                 # Preserve partial evidence even when the existing runner raises on timeout.
                 if execution.exists() and not side.exists():
@@ -194,9 +219,10 @@ For rubric-6 explain evidence for every clause; it is graded as one compound rul
                 else:
                     shutil.copy2(source, workspace / name)
             try:
-                result = backend.run_judge(prompt=judge_prompt, exec_dir=workspace,
-                                           schema_path=schema, model=settings.judge_model,
-                                           timeout=settings.judge_timeout)
+                with isolated_home():
+                    result = backend.run_judge(prompt=judge_prompt, exec_dir=workspace,
+                                               schema_path=schema, model=settings.judge_model,
+                                               timeout=settings.judge_timeout)
             except subprocess.TimeoutExpired as exc:
                 for name, content in (("rubric_trace.jsonl", exc.stdout), ("rubric_stderr.txt", exc.stderr)):
                     (workspace / name).write_text(content.decode(errors="replace") if isinstance(content, bytes) else content or "")
@@ -225,7 +251,7 @@ For rubric-6 explain evidence for every clause; it is graded as one compound rul
         "checks": checks, "guards": guards, "raw_grade": raw_grade,
         "source_files": sources, "agent_artifacts": artifacts,
         "evaluated_commit": evaluated_commit,
-        "isolation": {"active": True, "config_sha256": home_digest},
+        "isolation": {"active": True, "config_sha256": home_digest, "home_mode": "fresh-per-actor"},
         "requested_models": {"agent": settings.agent_model, "judge": settings.judge_model},
         "backend": "existing CodexBackend CLI", "codex_version": subprocess.check_output(["codex", "--version"], text=True).strip(),
         "duration_seconds": round(time.monotonic() - started, 3),

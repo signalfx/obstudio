@@ -28,6 +28,9 @@ The isolated eval home must contain existing authorized credentials and the mini
 `evals/codex-eval-home.config.toml`; see the parent eval README for authentication.
 Do not use a personal home with unrelated plugins or MCP servers.
 The adapter enforces the minimal template and records its non-secret configuration hash.
+Each agent and judge receives a separate fresh home seeded only with that template and
+the existing `auth.json`. Instructions, skills, plugins and caches from the source home
+are never copied; these temporary credential copies are removed when each call ends.
 
 ```sh
 npm ci --prefix evals/promptfoo --ignore-scripts

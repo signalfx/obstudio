@@ -16,7 +16,7 @@ DESTINATION = ROOT / "eval-reports/promptfoo-pilot"
 def verify(result: dict) -> None:
     if result.get("schema_version") != 1:
         raise ValueError("unknown or missing pilot schema")
-    if result.get("isolation") != {"active": True, "config_sha256": digest(ROOT / "evals/codex-eval-home.config.toml")}:
+    if result.get("isolation") != {"active": True, "config_sha256": digest(ROOT / "evals/codex-eval-home.config.toml"), "home_mode": "fresh-per-actor"}:
         raise ValueError("isolated evaluator configuration was not proven")
     validate(result["raw_grade"], JUDGE_SCHEMA)
     if result["raw_grade"]["checks"] != result["checks"]:

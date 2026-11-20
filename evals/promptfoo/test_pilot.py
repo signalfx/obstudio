@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from contextlib import nullcontext
 from pathlib import Path
 
 import pytest
@@ -156,7 +157,7 @@ def test_proof_fails_on_stale_sources(monkeypatch):
              "checks": [{"id": f"rubric-{i}", "status": "pass", "reason": "why", "evidence": "app.py:1"}
                         for i in range(1, len(rules) + 1)], "source_files": {"old": "hash"}}
     proof["raw_grade"] = {"checks": proof["checks"]}
-    proof["isolation"] = {"active": True, "config_sha256": report.digest(report.ROOT / "evals/codex-eval-home.config.toml")}
+    proof["isolation"] = {"active": True, "config_sha256": report.digest(report.ROOT / "evals/codex-eval-home.config.toml"), "home_mode": "fresh-per-actor"}
     monkeypatch.setattr(report, "source_manifest", lambda: {"new": "hash"})
     with pytest.raises(ValueError, match="stale"):
         report.verify(proof)
@@ -173,6 +174,7 @@ def test_adapter_preserves_partial_timeout_evidence_and_never_grades_it_pass(mon
         raise TimeoutError("agent timeout")
     monkeypatch.setattr(adapter, "run_side", timeout)
     monkeypatch.setattr(adapter, "validate_home", lambda: None)
+    monkeypatch.setattr(adapter, "isolated_home", nullcontext)
     monkeypatch.setattr(adapter, "source_manifest", lambda: {})
     monkeypatch.setattr(adapter.subprocess, "check_output", lambda *a, **k: "unit-test identity")
     result = adapter.run("$otel-audit", tmp_path / "evidence")
@@ -228,6 +230,7 @@ def test_judge_timeout_preserves_raw_output_in_separate_workspace(monkeypatch, t
     monkeypatch.setattr(adapter, "run_side", fake_side)
     monkeypatch.setattr(adapter, "CodexBackend", lambda **kwargs: TimeoutJudge())
     monkeypatch.setattr(adapter, "validate_home", lambda: None)
+    monkeypatch.setattr(adapter, "isolated_home", nullcontext)
     monkeypatch.setattr(adapter, "source_manifest", lambda: {})
     monkeypatch.setattr(adapter.subprocess, "run", lambda *a, **kw: subprocess.CompletedProcess(a, 0, 'valid', ''))
     monkeypatch.setattr(adapter.subprocess, "check_output", lambda *a, **k: "unit-test identity")
@@ -237,3 +240,47 @@ def test_judge_timeout_preserves_raw_output_in_separate_workspace(monkeypatch, t
     assert (tmp_path / "evidence/judge/rubric_trace.jsonl").read_text() == 'partial judge trace'
     assert (tmp_path / "evidence/judge/rubric_stderr.txt").read_text() == 'timeout stderr'
     assert (tmp_path / "evidence/agent/trace.jsonl").read_text() == 'unit evidence'
+
+
+def test_fresh_homes_exclude_ambient_instructions_and_restore_environment(monkeypatch, tmp_path):
+    import adapter
+    original = tmp_path / "source-home"
+    original.mkdir()
+    (original / "config.toml").write_bytes((adapter.ROOT / "evals/codex-eval-home.config.toml").read_bytes())
+    (original / "auth.json").write_text('{"unit":"not a credential"}')
+    (original / "AGENTS.md").write_text('ambient instructions must not be copied')
+    monkeypatch.setenv("CODEX_EVAL_HOME", str(original))
+    assert adapter.validate_home()
+    homes = []
+    for _ in range(2):
+        with adapter.isolated_home():
+            home = Path(adapter.os.environ["CODEX_EVAL_HOME"])
+            homes.append(home)
+            assert set(p.name for p in home.iterdir()) == {"config.toml", "auth.json"}
+            assert home != original
+        assert not home.exists()
+        assert adapter.os.environ["CODEX_EVAL_HOME"] == str(original)
+    assert homes[0] != homes[1]
+    (original / "config.toml").write_text('unreviewed config')
+    with pytest.raises(ValueError, match="isolated eval config"):
+        adapter.validate_home()
+
+
+def test_dirty_and_untracked_sources_are_refused(monkeypatch):
+    import adapter
+    for status in (' M input.py\0', '?? input.py\0'):
+        monkeypatch.setattr(adapter.subprocess, "check_output", lambda *a, **kw: status)
+        with pytest.raises(ValueError, match="commit evaluated source inputs"):
+            adapter.require_clean({"input.py": "hash"})
+
+
+def test_discovery_requires_exact_canonical_relative_target(tmp_path):
+    from adapter import discovery_digest
+    link = tmp_path / ".agents/skills/otel-audit"
+    link.parent.mkdir(parents=True)
+    link.symlink_to('/not/canonical')
+    with pytest.raises(ValueError, match="canonical skill link"):
+        discovery_digest(tmp_path)
+    link.unlink()
+    link.symlink_to('../../skills/otel-audit')
+    assert discovery_digest(tmp_path)
