@@ -5439,6 +5439,40 @@ def test_judge_wrapper_keeps_helpers_on_relative_or_empty_path_entries(tmp_path,
     assert os.environ["PATH"] == path
 
 
+@pytest.mark.parametrize("backend_class", [CodexBackend, CursorBackend, ClaudeBackend])
+@pytest.mark.parametrize("command_style", ["absolute", "relative"])
+def test_legacy_judge_keeps_workspace_relative_path_helpers(tmp_path, monkeypatch, backend_class, command_style):
+    invocation, working = tmp_path / "invocation", tmp_path / "task"
+    invocation.mkdir()
+    (working / "helpers").mkdir(parents=True)
+    helper = working / "helpers" / "agent-helper"
+    helper.write_text(
+        f"#!{sys.executable}\n"
+        "import json, pathlib, sys\n"
+        "if '--output-last-message' in sys.argv:\n"
+        "    pathlib.Path(sys.argv[sys.argv.index('--output-last-message') + 1]).write_text('{}')\n"
+        "print(json.dumps({'result': '{}'}))\n"
+    )
+    helper.chmod(0o755)
+    wrapper = invocation / "wrapper"
+    wrapper.write_text(
+        f"#!{sys.executable}\nimport os, subprocess, sys\n"
+        "if '--cd' in sys.argv: os.chdir(sys.argv[sys.argv.index('--cd') + 1])\n"
+        "subprocess.run(['agent-helper', *sys.argv[1:]], check=True)\n"
+    )
+    wrapper.chmod(0o755)
+    command = str(wrapper)
+    if command_style == "relative":
+        if backend_class is ClaudeBackend:
+            wrapper.rename(working / "wrapper")
+        command = "./wrapper"
+    monkeypatch.chdir(invocation)
+    monkeypatch.setenv("PATH", "helpers" + os.pathsep + os.environ.get("PATH", ""))
+    result = backend_class(command=command).run_judge(prompt="Grade.", exec_dir=working)
+    assert result.returncode == 0, result.stderr_path.read_text()
+    assert json.loads(result.final_message_path.read_text()) == {}
+
+
 @pytest.mark.parametrize("change", ["added", "modified", "removed", "directory"])
 def test_dimension_grading_discards_changed_evidence_and_stops_later_judges(tmp_path, change):
     import os

@@ -25,9 +25,9 @@ def _judge_command(command: str) -> str:
     return command
 
 
-def _judge_environment(env: dict[str, str] | None = None) -> dict[str, str]:
+def _judge_environment(env: dict[str, str] | None = None, *, isolated: bool) -> dict[str, str]:
     env = dict(os.environ if env is None else env)
-    if "PATH" in env:
+    if isolated and "PATH" in env:
         env["PATH"] = os.pathsep.join(
             entry if Path(entry).is_absolute() else str(Path(entry or ".").absolute())
             for entry in env["PATH"].split(os.pathsep)
@@ -410,7 +410,7 @@ class CodexBackend:
         stderr_path = (output_dir or exec_dir) / "rubric_stderr.txt"
 
         cmd = [
-            _judge_command(self.command),
+            _judge_command(self.command) if output_dir is not None else self.command,
             "exec",
             "--json",
             "--sandbox",
@@ -439,7 +439,9 @@ class CodexBackend:
             capture_output=True,
             text=True,
             timeout=timeout,
-            env=_judge_environment(_judge_subprocess_env(_codex_subprocess_env(exec_dir))),
+            env=_judge_environment(
+                _judge_subprocess_env(_codex_subprocess_env(exec_dir)), isolated=output_dir is not None,
+            ),
             cwd=exec_dir if output_dir is not None else None,
         )
         trace_path.write_text(completed.stdout, encoding="utf-8")
@@ -550,7 +552,7 @@ class CursorBackend:
         stderr_path = (output_dir or exec_dir) / "rubric_stderr.txt"
 
         cmd = [
-            _judge_command(self.command),
+            _judge_command(self.command) if output_dir is not None else self.command,
             "--cli",
             "agent",
             "--full-auto",
@@ -568,7 +570,7 @@ class CursorBackend:
         completed = subprocess.run(
             cmd, capture_output=True, text=True, timeout=timeout,
             cwd=exec_dir if output_dir is not None else None,
-            env=_judge_environment(),
+            env=_judge_environment(isolated=output_dir is not None),
         )
         trace_path.write_text(completed.stdout, encoding="utf-8")
         stderr_path.write_text(completed.stderr, encoding="utf-8")
@@ -684,7 +686,7 @@ class ClaudeBackend:
             )
 
         cmd = [
-            _judge_command(self.command),
+            _judge_command(self.command) if output_dir is not None else self.command,
             "-p",
             judge_prompt,
             "--output-format",
@@ -706,7 +708,9 @@ class ClaudeBackend:
             text=True,
             timeout=timeout,
             cwd=exec_dir,
-            env=_judge_environment(_judge_subprocess_env(_claude_subprocess_env(exec_dir), claude=True)),
+            env=_judge_environment(
+                _judge_subprocess_env(_claude_subprocess_env(exec_dir), claude=True), isolated=output_dir is not None,
+            ),
         )
         trace_path.write_text(completed.stdout, encoding="utf-8")
         stderr_path.write_text(completed.stderr, encoding="utf-8")
