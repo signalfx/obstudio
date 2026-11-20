@@ -1,0 +1,13 @@
+{
+  "name": "obstudio-promptfoo-pilot",
+  "private": true,
+  "scripts": {
+    "test": "node --test test_assertion.mjs && uv run --project .. --locked pytest test_pilot.py -q",
+    "eval": "node run.mjs",
+    "report": "uv run --project .. --locked python report.py --publish"
+  },
+  "engines": { "node": ">=22.22.0" },
+  "dependencies": {
+    "promptfoo": "0.126.0"
+  }
+}

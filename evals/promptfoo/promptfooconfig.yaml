@@ -1,0 +1,13 @@
+description: Bounded audit pilot using the existing Codex CLI harness
+prompts:
+  - $otel-audit
+providers:
+  - file://provider.mjs
+tests:
+  - description: Bare audit task on python/flask-basic (with the disclosed harness loading prefix)
+    assert:
+      - type: javascript
+        value: file://assertion.mjs
+evaluateOptions:
+  cache: false
+  maxConcurrency: 1
