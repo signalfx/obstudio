@@ -284,3 +284,16 @@ def test_discovery_requires_exact_canonical_relative_target(tmp_path):
     link.unlink()
     link.symlink_to('../../skills/otel-audit')
     assert discovery_digest(tmp_path)
+
+
+def test_native_record_packing_preserves_grade_and_checks_actual_output():
+    from report import pack_native_export
+    result = {"gate": False, "checks": [{"status": "not-applicable"}]}
+    native = {"evalId": "unit-eval", "results": {"results": [{"success": False,
+              "response": {"output": json.dumps(result)}, "gradingResult": {"pass": False}}]}}
+    packed = pack_native_export(native, result)
+    assert packed["template"]["results"]["results"][0]["response"]["output"] is None
+    assert packed["template"]["results"]["results"][0]["gradingResult"] == {"pass": False}
+    assert native["results"]["results"][0]["response"]["output"] == json.dumps(result)
+    with pytest.raises(ValueError, match="does not match"):
+        pack_native_export(native, {"gate": True})

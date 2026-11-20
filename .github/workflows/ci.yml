@@ -37,7 +37,26 @@ jobs:
       - name: Select changed suites and require fresh local proof when selected
         env:
           PILOT_BASE: ${{ github.event.pull_request.base.sha || (github.event_name == 'push' && github.event.before) || format('origin/{0}', github.event.repository.default_branch) }}
-        run: uv run --project evals --locked python evals/promptfoo/report.py --base "$PILOT_BASE"
+        run: uv run --project evals --locked python evals/promptfoo/report.py --base "$PILOT_BASE" --artifact-dir .workspace/promptfoo-review
+      - name: Attach portable browser report
+        id: promptfoo-report
+        uses: actions/upload-artifact@v4
+        with:
+          name: promptfoo-audit-browser-report
+          path: .workspace/promptfoo-review/
+          if-no-files-found: ignore
+          retention-days: 30
+      - name: Link browser report from the check summary
+        env:
+          REPORT_URL: ${{ steps.promptfoo-report.outputs.artifact-url }}
+        run: |
+          if [ -n "$REPORT_URL" ]; then
+            echo "### Promptfoo browser report" >> "$GITHUB_STEP_SUMMARY"
+            echo "[Download the browser report]($REPORT_URL), extract it, and open report.html locally." >> "$GITHUB_STEP_SUMMARY"
+            echo "This exports the verified local model run; CI makes no new model call." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Pilot not selected; no model report was generated." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
   agent-policy:
     name: Agent policy

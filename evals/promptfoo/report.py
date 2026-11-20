@@ -4,6 +4,8 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import hashlib
+import subprocess
 from pathlib import Path
 
 from adapter import JUDGE_SCHEMA, ROOT, digest, gate, source_manifest, tree
@@ -50,10 +52,23 @@ def block(text: str, language: str = "text") -> str:
     return f"{fence}{language}\n{text}\n{fence}"
 
 
+def pack_native_export(exported: dict, result: dict) -> dict:
+    # Keep the actual native record, without duplicating the large provider output already in this proof.
+    template = json.loads(json.dumps(exported))
+    rows = template["results"]["results"]
+    if len(rows) != 1 or json.loads(rows[0]["response"]["output"]) != result:
+        raise ValueError("native export does not match the original adapter result")
+    output = rows[0]["response"]["output"]
+    rows[0]["response"]["output"] = None
+    return {"output_sha256": hashlib.sha256(output.encode()).hexdigest(), "template": template}
+
+
 def publish(directory: Path) -> None:
     result, stats = load_run(directory)
     # Keep the automated statuses, reasons and evidence verbatim. Human notes belong elsewhere.
-    proof = {**result, "promptfoo_stats": stats, "promptfoo_version": "0.126.0"}
+    exported = json.loads((directory / "promptfoo.json").read_text())
+    proof = {**result, "promptfoo_stats": stats, "promptfoo_version": "0.126.0",
+             "promptfoo_export": pack_native_export(exported, result)}
     DESTINATION.mkdir(parents=True, exist_ok=True)
     (DESTINATION / "benchmark.json").write_text(json.dumps(proof, indent=2) + "\n")
     lines = ["# Promptfoo audit pilot — latest local proof", "",
@@ -90,6 +105,7 @@ if __name__ == "__main__":
     group.add_argument("--check-run", type=Path)
     group.add_argument("--publish", type=Path)
     group.add_argument("--base")
+    parser.add_argument("--artifact-dir", type=Path)
     args = parser.parse_args()
     if args.check_run:
         load_run(args.check_run)
@@ -102,3 +118,6 @@ if __name__ == "__main__":
         if selection["selected"]:
             verify(json.loads((DESTINATION / "benchmark.json").read_text()))
             print("Selected audit: fresh passing local model attestation (not a CI model run)")
+            if args.artifact_dir:
+                subprocess.run(["node", str(ROOT / "evals/promptfoo/bundle.mjs"),
+                                str(DESTINATION / "benchmark.json"), str(args.artifact_dir)], check=True)
