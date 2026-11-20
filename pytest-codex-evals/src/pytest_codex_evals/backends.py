@@ -25,6 +25,16 @@ def _judge_command(command: str) -> str:
     return command
 
 
+def _judge_environment(env: dict[str, str] | None = None) -> dict[str, str]:
+    env = dict(os.environ if env is None else env)
+    if "PATH" in env:
+        env["PATH"] = os.pathsep.join(
+            entry if Path(entry).is_absolute() else str(Path(entry or ".").absolute())
+            for entry in env["PATH"].split(os.pathsep)
+        )
+    return env
+
+
 @dataclass
 class AgentResult:
     returncode: int
@@ -429,7 +439,7 @@ class CodexBackend:
             capture_output=True,
             text=True,
             timeout=timeout,
-            env=_judge_subprocess_env(_codex_subprocess_env(exec_dir)),
+            env=_judge_environment(_judge_subprocess_env(_codex_subprocess_env(exec_dir))),
             cwd=exec_dir if output_dir is not None else None,
         )
         trace_path.write_text(completed.stdout, encoding="utf-8")
@@ -558,6 +568,7 @@ class CursorBackend:
         completed = subprocess.run(
             cmd, capture_output=True, text=True, timeout=timeout,
             cwd=exec_dir if output_dir is not None else None,
+            env=_judge_environment(),
         )
         trace_path.write_text(completed.stdout, encoding="utf-8")
         stderr_path.write_text(completed.stderr, encoding="utf-8")
@@ -695,7 +706,7 @@ class ClaudeBackend:
             text=True,
             timeout=timeout,
             cwd=exec_dir,
-            env=_judge_subprocess_env(_claude_subprocess_env(exec_dir), claude=True),
+            env=_judge_environment(_judge_subprocess_env(_claude_subprocess_env(exec_dir), claude=True)),
         )
         trace_path.write_text(completed.stdout, encoding="utf-8")
         stderr_path.write_text(completed.stderr, encoding="utf-8")

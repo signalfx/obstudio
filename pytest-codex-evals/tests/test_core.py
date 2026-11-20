@@ -5407,6 +5407,38 @@ def test_relative_agent_command_still_launches_actor_and_both_judge_modes(tmp_pa
     assert result.final_message_path.read_text() == "wrapper ran"
 
 
+@pytest.mark.parametrize("backend_class", [CodexBackend, CursorBackend, ClaudeBackend])
+@pytest.mark.parametrize("path_entry", ["tools", ""])
+def test_judge_wrapper_keeps_helpers_on_relative_or_empty_path_entries(tmp_path, monkeypatch, backend_class, path_entry):
+    invocation = tmp_path / "invocation"
+    (invocation / "tools").mkdir(parents=True)
+    helper = invocation / path_entry / "agent-helper"
+    helper.write_text(
+        f"#!{sys.executable}\n"
+        "import json, pathlib, sys\n"
+        "args = sys.argv\n"
+        "if '--output-last-message' in args:\n"
+        "    pathlib.Path(args[args.index('--output-last-message') + 1]).write_text('{}')\n"
+        "print(json.dumps({'result': '{}'}))\n"
+    )
+    helper.chmod(0o755)
+    wrapper = invocation / "tools" / "agent-wrapper"
+    wrapper.write_text(f"#!{sys.executable}\nimport subprocess, sys\nsubprocess.run(['agent-helper', *sys.argv[1:]], check=True)\n")
+    wrapper.chmod(0o755)
+    monkeypatch.chdir(invocation)
+    path = path_entry + os.pathsep + os.environ.get("PATH", "")
+    monkeypatch.setenv("PATH", path)
+    working, output = tmp_path / "judge", tmp_path / "output"
+    working.mkdir()
+    output.mkdir()
+    result = backend_class(command=str(wrapper)).run_judge(
+        prompt="Grade.", exec_dir=working, output_dir=output,
+    )
+    assert result.returncode == 0, result.stderr_path.read_text()
+    assert json.loads(result.final_message_path.read_text()) == {}
+    assert os.environ["PATH"] == path
+
+
 @pytest.mark.parametrize("change", ["added", "modified", "removed", "directory"])
 def test_dimension_grading_discards_changed_evidence_and_stops_later_judges(tmp_path, change):
     import os

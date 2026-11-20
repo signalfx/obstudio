@@ -165,8 +165,9 @@ exceed that deadline. Fresh judge working directories and prompts separate judge
 outputs from candidate evidence. Working directories use the system temporary
 location to avoid inheriting the consumer repository's instructions. Strict
 grading checks the physical temporary path, including symlink aliases, and
-refuses a location inside a Git repository. Relative executable overrides retain
-their original invocation location when the judge changes directory. Strict
+refuses a location inside a Git repository. Relative executable overrides and
+relative or empty `PATH` entries retain their original invocation location when
+the judge changes directory, including lookup by wrapper scripts. Strict
 Claude calls explicitly grant access to the task directory and exclude its
 project settings from discovery; explicit backend extra arguments still apply.
 Global and managed host instructions remain subject to the backend's behavior.
