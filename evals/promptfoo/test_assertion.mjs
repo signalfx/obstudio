@@ -107,12 +107,21 @@ test('portable native HTML/JSON export retains non-pass grading without model ca
     const output = template.results.results[0].response.output;
     assert.equal(output, JSON.stringify(evidence));
     template.results.results[0].response.output = null;
-    const proof = { ...evidence, promptfoo_stats: template.results.stats, promptfoo_version: '0.126.0',
+    const proof = { ...evidence, promptfoo_stats: structuredClone(template.results.stats), promptfoo_version: '0.126.0',
       promptfoo_export: { template, output_sha256: createHash('sha256').update(output).digest('hex') } };
     const restored = restoreNativeExport(proof);
     assert.equal(restored.results.results[0].response.output, output);
     assert.equal(restored.results.results[0].success, false);
     assert.throws(() => restoreNativeExport({ ...proof, gate: true }), /no longer matches/);
+    const changedResult = structuredClone(proof);
+    changedResult.promptfoo_export.template.results.results[0].success = true;
+    assert.throws(() => restoreNativeExport(changedResult), /disagrees/);
+    const changedGrade = structuredClone(proof);
+    changedGrade.promptfoo_export.template.results.results[0].gradingResult.pass = true;
+    assert.throws(() => restoreNativeExport(changedGrade), /disagrees/);
+    const changedStats = structuredClone(proof);
+    changedStats.promptfoo_export.template.results.stats.successes = 1;
+    assert.throws(() => restoreNativeExport(changedStats), /statistics/);
     writeFileSync(path.join(directory, 'benchmark.json'), JSON.stringify(proof));
     writeFileSync(path.join(directory, 'report.md'), 'Synthetic unit evidence, not an LLM evaluation.');
     createBundle(path.join(directory, 'benchmark.json'), path.join(directory, 'bundle'));

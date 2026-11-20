@@ -35,22 +35,26 @@ jobs:
       - name: Prove routing and grading failure paths
         run: npm test --prefix evals/promptfoo
       - name: Select changed suites and require fresh local proof when selected
+        id: promptfoo-select
         env:
           PILOT_BASE: ${{ github.event.pull_request.base.sha || (github.event_name == 'push' && github.event.before) || format('origin/{0}', github.event.repository.default_branch) }}
-        run: uv run --project evals --locked python evals/promptfoo/report.py --base "$PILOT_BASE" --artifact-dir .workspace/promptfoo-review
+        run: uv run --project evals --locked python evals/promptfoo/report.py --base "$PILOT_BASE" --artifact-dir "$RUNNER_TEMP/promptfoo-review"
       - name: Attach portable browser report
+        if: steps.promptfoo-select.outputs.selected == 'true'
         id: promptfoo-report
         uses: actions/upload-artifact@v4
         with:
           name: promptfoo-audit-browser-report
-          path: .workspace/promptfoo-review/
-          if-no-files-found: ignore
+          path: ${{ runner.temp }}/promptfoo-review/
+          if-no-files-found: error
           retention-days: 30
       - name: Link browser report from the check summary
         env:
           REPORT_URL: ${{ steps.promptfoo-report.outputs.artifact-url }}
+          PILOT_SELECTED: ${{ steps.promptfoo-select.outputs.selected }}
         run: |
-          if [ -n "$REPORT_URL" ]; then
+          if [ "$PILOT_SELECTED" = "true" ]; then
+            test -n "$REPORT_URL"
             echo "### Promptfoo browser report" >> "$GITHUB_STEP_SUMMARY"
             echo "[Download the browser report]($REPORT_URL), extract it, and open report.html locally." >> "$GITHUB_STEP_SUMMARY"
             echo "This exports the verified local model run; CI makes no new model call." >> "$GITHUB_STEP_SUMMARY"

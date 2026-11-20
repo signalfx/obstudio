@@ -18,6 +18,10 @@ export function restoreNativeExport(proof) {
   const record = structuredClone(packed.template);
   const rows = record.results.results;
   if (rows.length !== 1 || rows[0].response.output !== null) throw new Error('Expected one deduplicated native result');
+  deepStrictEqual(record.results.stats, promptfoo_stats, 'native report statistics must match the recorded proof');
+  if (rows[0].success !== proof.gate || rows[0].gradingResult?.pass !== proof.gate) {
+    throw new Error('Native report result disagrees with the original gate');
+  }
   if (!/^[A-Za-z0-9][A-Za-z0-9:._-]{1,199}$/.test(record.evalId)) throw new Error('Invalid native eval ID');
   rows[0].response.output = output;
   return record;

@@ -297,3 +297,12 @@ def test_native_record_packing_preserves_grade_and_checks_actual_output():
     assert native["results"]["results"][0]["response"]["output"] == json.dumps(result)
     with pytest.raises(ValueError, match="does not match"):
         pack_native_export(native, {"gate": True})
+
+
+def test_ci_selection_output_distinguishes_skip_from_missing_artifact(monkeypatch, tmp_path):
+    from report import write_selection_output
+    output = tmp_path / "github-output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    write_selection_output({"selected": ["otel-audit"]})
+    write_selection_output({"selected": []})
+    assert output.read_text() == "selected=true\nselected=false\n"

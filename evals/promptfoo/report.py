@@ -5,6 +5,7 @@ import argparse
 import json
 import re
 import hashlib
+import os
 import subprocess
 from pathlib import Path
 
@@ -63,6 +64,12 @@ def pack_native_export(exported: dict, result: dict) -> dict:
     return {"output_sha256": hashlib.sha256(output.encode()).hexdigest(), "template": template}
 
 
+def write_selection_output(selection: dict) -> None:
+    if output := os.environ.get("GITHUB_OUTPUT"):
+        with Path(output).open("a") as stream:
+            stream.write(f"selected={'true' if selection['selected'] else 'false'}\n")
+
+
 def publish(directory: Path) -> None:
     result, stats = load_run(directory)
     # Keep the automated statuses, reasons and evidence verbatim. Human notes belong elsewhere.
@@ -115,6 +122,7 @@ if __name__ == "__main__":
     else:
         selection = select(ROOT, args.base, "HEAD")
         print(json.dumps(selection, indent=2))
+        write_selection_output(selection)
         if selection["selected"]:
             verify(json.loads((DESTINATION / "benchmark.json").read_text()))
             print("Selected audit: fresh passing local model attestation (not a CI model run)")
