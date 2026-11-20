@@ -4,6 +4,11 @@ This additive pilot runs one existing Flask audit task through Promptfoo 0.126.0
 It keeps the existing suites, runner, skill-loading proof and canonical audit validator.
 It does not replace the pytest harness or measure the entire audit skill.
 
+**[Open the current native browser report](http://localhost:15500/eval/eval-2ac-2026-11-20T01:58:37)**
+on the pilot author's Mac. This live local instance requires no setup and is not a
+publicly hosted report. Other reviewers can start their own completed run using
+the command under “Find the evidence”; the portable proof remains in GitHub.
+
 | Changed file | Participating suite selected |
 | --- | --- |
 | `skills/otel-audit/**`, its discovery link, audit eval JSON | `otel-audit` |
@@ -72,8 +77,18 @@ Each local run also contains:
   service source and actual canonical `.observe/otel-audit.json`/`otel.html` artifacts.
 - `evidence/judge/`: raw read-only judge transcript, stderr and structured grade.
 
-For native Promptfoo inspection, set `PROMPTFOO_CONFIG_DIR` to that run's `viewer`
-directory and run the pinned `promptfoo view` command locally. No hosted report,
+To inspect a completed run in the **native Promptfoo browser UI**, use this one command
+from the repository root, substituting the run directory printed by `npm run eval`:
+
+```sh
+PROMPTFOO_CONFIG_DIR="/absolute/run-directory/viewer" ./evals/promptfoo/node_modules/.bin/promptfoo view --no
+```
+
+Then open [localhost:15500](http://localhost:15500/), choose the run, and click its
+result cell for the prompt, output and grading explanation. The current author-session
+instance is already running, bound to `127.0.0.1`; both completed passing runs are
+available, and the latest CI-compatible run is linked above. Browser opening is left
+to the user, so automated work continues without an unlocked screen. No hosted report,
 account, sharing command, or browser is required by automated runs. Viewer ratings
 cannot change the stored attestation; the raw export and judge grade remain authoritative.
 Bulk transcripts and viewer databases are ignored, not committed or uploaded.
@@ -126,9 +141,9 @@ Design references: [custom providers](https://www.promptfoo.dev/docs/providers/c
 
 ## Recorded pilot validation — November 19, 2026
 
-Evaluated source commit: `3a727d3169754c95d5f26c97de4b215fc285accd`.
+Evaluated source commit: `84044ca1ff556e53f7dde024d51698edeb625c79`.
 Local versions: Promptfoo **0.126.0**, Codex CLI **0.163.0**, Node **24.22.1**,
-npm **11.19.1**, uv **0.8.8**, Python **3.12.11**. Agent and judge both requested
+npm **11.19.1** for the local driver and **10.9.9** for lock generation/install, uv **0.8.8**, Python **3.12.11**. Agent and judge both requested
 the repository's existing `gpt-6.1-sol` model with high reasoning effort.
 
 The local private package indexes returned 403, so these commands used the public
@@ -137,13 +152,13 @@ The initial system Python 3.9 policy invocation was replaced by the supported Py
 3.12 environment shown below.
 
 ```sh
-npm ci --prefix evals/promptfoo --ignore-scripts --registry=https://registry.npmjs.org
+npm exec --yes --registry=https://registry.npmjs.org --package=npm@10.9.9 -- npm ci --prefix evals/promptfoo --ignore-scripts --registry=https://registry.npmjs.org
 UV_DEFAULT_INDEX=https://pypi.org/simple UV_NO_CONFIG=1 npm test --prefix evals/promptfoo
 UV_DEFAULT_INDEX=https://pypi.org/simple UV_NO_CONFIG=1 uv run --project evals --locked make agent-policy-check
 UV_DEFAULT_INDEX=https://pypi.org/simple UV_NO_CONFIG=1 make test-eval-harness
 UV_DEFAULT_INDEX=https://pypi.org/simple UV_NO_CONFIG=1 make test-pytest-plugin
 CODEX_EVAL_HOME="$PWD/.workspace/codex-evals/codex-home" UV_DEFAULT_INDEX=https://pypi.org/simple UV_NO_CONFIG=1 npm run eval --prefix evals/promptfoo -- --base origin/main
-UV_DEFAULT_INDEX=https://pypi.org/simple UV_NO_CONFIG=1 npm run report --prefix evals/promptfoo -- "$PWD/.workspace/promptfoo/798bcb4f-f9d8-4487-9c24-a2b67af6c30f"
+UV_DEFAULT_INDEX=https://pypi.org/simple UV_NO_CONFIG=1 npm run report --prefix evals/promptfoo -- "$PWD/.workspace/promptfoo/762f21c3-5d28-4529-8941-cbfcb79e468b"
 UV_DEFAULT_INDEX=https://pypi.org/simple UV_NO_CONFIG=1 uv run --project evals --locked python evals/promptfoo/report.py --base origin/main
 ```
 
@@ -155,7 +170,7 @@ UV_DEFAULT_INDEX=https://pypi.org/simple UV_NO_CONFIG=1 uv run --project evals -
 - Reusable plugin: **213 passed** in 3.94s.
 - Real evaluation: **1 Promptfoo case passed; 6/6 rubric criteria, 3/3 loading/response
   guards; canonical validator passed (3 findings, 22 planned verification scenarios)**.
-  No runtime telemetry execution is claimed. Wall time: **341.405s** (CLI: 5m42s).
+  No runtime telemetry execution is claimed. Wall time: **419.397s** (CLI: 7m00s).
 - The final published attestation passes the same selection/freshness command used by CI.
   An earlier real run with all six semantic checks passing was correctly rejected
   when adapter inputs changed during evaluation; it was never published as passing proof.
@@ -164,8 +179,8 @@ Reported cumulative CLI usage (cached input is a subset of input, not an additio
 
 | Actor | Input | Cached input | Output |
 | --- | ---: | ---: | ---: |
-| Audit agent | 967,063 | 876,928 | 10,626 |
-| Read-only judge | 339,482 | 286,336 | 3,286 |
+| Audit agent | 1,184,568 | 1,086,720 | 14,417 |
+| Read-only judge | 151,898 | 108,416 | 2,174 |
 
 Billing cost and resolved server model identifiers are unavailable. Promptfoo's native
 token counters are unreported by this custom provider; the usage above comes from
@@ -183,3 +198,10 @@ telemetry, forced outer-timeout cleanup, and OAuth refresh persistence. Temporar
 homes do not copy refreshed credentials back; an expired login may require the
 existing eval-home login command again. No service, UI, plugin or shipped skill
 content changed, so local Go/client/extension suites were left to existing CI.
+
+The initial GitHub install exposed npm 11/10 lockfile incompatibility. The final lock
+was generated and clean-installed with npm 10.9.9; the CI pilot pins Python 3.12 and
+uv 0.8.8. Fresh real grading after these dependency changes passed again. The native
+viewer HTML and result APIs were verified over loopback, including the current
+passing run and preserved prior run; no agent browser access or manual rating test
+was performed.
