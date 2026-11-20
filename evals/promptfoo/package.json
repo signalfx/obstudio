@@ -1,6 +1,7 @@
 {
   "name": "obstudio-promptfoo-pilot",
   "private": true,
+  "packageManager": "npm@10.9.9",
   "scripts": {
     "test": "node --test test_assertion.mjs && uv run --project .. --locked pytest test_pilot.py -q",
     "eval": "node run.mjs",
