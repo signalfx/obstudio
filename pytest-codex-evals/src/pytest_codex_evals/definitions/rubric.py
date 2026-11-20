@@ -5,6 +5,7 @@ from typing import Literal, Self
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .base import BaseEvalCase, BaseEvalDefinition
+from ..rubric_base import validate_rubric_dimensions
 
 
 class RubricDimension(BaseModel):
@@ -15,17 +16,7 @@ class RubricDimension(BaseModel):
 
 
 def _validate_dimensions(rubric: list[str], dimensions: list[RubricDimension], strict: bool) -> None:
-    if not dimensions:
-        return
-    if not strict:
-        raise ValueError("rubric_dimensions requires strict_rubric_output")
-    names = [dimension.id for dimension in dimensions]
-    if len(names) != len(set(names)):
-        raise ValueError("rubric_dimensions must have unique dimension ids")
-    assigned = [criterion for dimension in dimensions for criterion in dimension.criteria]
-    expected = {f"rubric-{index}" for index in range(1, len(rubric) + 1)}
-    if len(assigned) != len(expected) or set(assigned) != expected:
-        raise ValueError("rubric_dimensions must assign each rubric criterion exactly once")
+    validate_rubric_dimensions(rubric, [dimension.model_dump() for dimension in dimensions], strict)
 
 
 class RubricEvalDefinition(BaseEvalDefinition):

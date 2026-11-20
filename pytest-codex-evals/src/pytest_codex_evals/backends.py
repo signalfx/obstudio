@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
 import threading
 import time
@@ -12,6 +13,16 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from .trace import ActionEvent, CommandEvent, TraceSummary, parse_events, parse_trace
+
+
+def _judge_command(command: str) -> str:
+    """Keep relative executable overrides usable after changing the judge cwd."""
+    candidate = shutil.which(command)
+    if candidate is not None and not Path(candidate).is_absolute():
+        return str(Path(candidate).absolute())
+    if os.path.dirname(command) and not Path(command).is_absolute():
+        return str(Path(command).absolute())
+    return command
 
 
 @dataclass
@@ -389,7 +400,7 @@ class CodexBackend:
         stderr_path = (output_dir or exec_dir) / "rubric_stderr.txt"
 
         cmd = [
-            self.command,
+            _judge_command(self.command),
             "exec",
             "--json",
             "--sandbox",
@@ -529,7 +540,7 @@ class CursorBackend:
         stderr_path = (output_dir or exec_dir) / "rubric_stderr.txt"
 
         cmd = [
-            self.command,
+            _judge_command(self.command),
             "--cli",
             "agent",
             "--full-auto",
@@ -662,7 +673,7 @@ class ClaudeBackend:
             )
 
         cmd = [
-            self.command,
+            _judge_command(self.command),
             "-p",
             judge_prompt,
             "--output-format",

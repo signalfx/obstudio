@@ -425,6 +425,28 @@ def test_shared_rubric_extends_without_replacement_and_binds_source(tmp_path, se
     assert load_eval_definition(path).rubric[0] == "Changed common obligation."
 
 
+@pytest.mark.parametrize("overrides", [
+    {"judge_inputs": "not a list"}, {"judge_inputs": [42]},
+    {"strict_rubric_output": "true"}, {"rubric_dimensions": []},
+    {"rubric_dimensions": [{"id": "scope", "criteria": ["rubric-2"]}]},
+    {"rubric_dimensions": [{"id": "scope", "criteria": ["rubric-1", "rubric-1"]}]},
+])
+def test_loader_and_policy_composition_reject_the_same_invalid_base(tmp_path, overrides):
+    from pytest_codex_evals.rubric_base import resolve_rubric_base
+
+    directory = tmp_path / "evals/python/example/eval/qual"
+    directory.mkdir(parents=True)
+    path = directory / "shared.json"
+    leaf = {"skill": "sample-skill", "prompts": [{"id": "direct", "task": "Task."}],
+            "rubric_base": "../../../../common.json"}
+    common = {"rubric": ["Common rule."], "judge_inputs": [], "strict_rubric_output": True}
+    (tmp_path / "evals/common.json").write_text(json.dumps({**common, **overrides}))
+    path.write_text(json.dumps(leaf))
+    for resolve in (lambda: load_eval_definition(path), lambda: resolve_rubric_base(path, leaf)):
+        with pytest.raises((ValueError, JSONSchemaValidationError)):
+            resolve()
+
+
 @pytest.mark.parametrize("fault", ["missing", "escape", "absolute", "symlink", "directory_symlink", "nested", "unknown_id", "invalid_id",
                                     "replace_rubric", "replace_inputs", "replace_strict", "replace_prompt", "replace_dimensions", "invalid_base", "invalid_json", "inline_additions", "inside_fixture", "fixture_eval_input"])
 def test_shared_rubric_rejects_invalid_sources_and_common_overrides(tmp_path, fault):
@@ -5269,13 +5291,102 @@ def test_dimension_grading_uses_one_elapsed_budget(tmp_path, monkeypatch):
     path = run_rubric_dimensions(case=case, workspace_dir=workspace, output_dir=tmp_path / "grades",
                                  model=None, deadline=110.0, backend=backend)
     data = json.loads(path.read_text())
-    assert backend.judge_timeouts == [10, 7]
+    assert backend.judge_timeouts == [3, 3]
     assert now[0] == 109.5
     assert [row["status"] for row in data["dimensions"]] == ["graded", "graded", "not_run"]
     assert "budget exhausted" in data["dimensions"][2]["error"]
     assert data["score"] == 100
     assert data["overall_pass"] is None
     assert data["counts"]["ungraded"] == 1
+
+
+def test_dimension_grading_reserves_time_for_later_groups_and_rolls_forward_unused_time(tmp_path, monkeypatch):
+    import pytest_codex_evals.graders.rubric as module
+
+    workspace = tmp_path / "task"
+    workspace.mkdir()
+    now = [100.0]
+    monkeypatch.setattr(module.time, "monotonic", lambda: now[0])
+    def advance(index, kwargs, result):
+        now[0] += kwargs["timeout"] if index == 0 else 1
+    case = dimension_case(rubric_dimensions=[
+        {"id": f"group-{index}", "criteria": [f"rubric-{index}"]} for index in range(1, 4)
+    ])
+    backend = DimensionBackend([
+        subprocess.TimeoutExpired("judge", 3), dimension_grade("pass", start=2),
+        dimension_grade("pass", start=3),
+    ], advance)
+    path = run_rubric_dimensions(case=case, workspace_dir=workspace, output_dir=tmp_path / "grades",
+                                 model=None, deadline=110.0, backend=backend)
+    data = json.loads(path.read_text())
+    assert backend.judge_timeouts == [3, 3, 6]
+    assert [row["status"] for row in data["dimensions"]] == ["grader_error", "graded", "graded"]
+    assert data["acceptance"] == "incomplete"
+    assert data["overall_pass"] is None
+    assert data["counts"]["pass"] == 2
+    assert data["counts"]["ungraded"] == 1
+
+
+@pytest.mark.parametrize("change", ["rewrite", "replace"])
+def test_dimension_grading_detects_same_size_changes_with_restored_mtime_in_dependencies(tmp_path, change):
+    workspace = tmp_path / "task"
+    dependency = workspace / "node_modules" / "package.js"
+    dependency.parent.mkdir(parents=True)
+    dependency.write_text("before")
+    info = dependency.stat()
+    def mutate(index, kwargs, result):
+        if change == "replace":
+            replacement = dependency.with_suffix(".tmp")
+            replacement.write_text("after!")
+            os.utime(replacement, ns=(info.st_atime_ns, info.st_mtime_ns))
+            replacement.replace(dependency)
+        else:
+            dependency.write_text("after!")
+            os.utime(dependency, ns=(info.st_atime_ns, info.st_mtime_ns))
+        assert dependency.stat().st_size == info.st_size
+        assert dependency.stat().st_mtime_ns == info.st_mtime_ns
+    path = run_rubric_dimensions(
+        case=dimension_case(1), workspace_dir=workspace, output_dir=tmp_path / "grades",
+        model=None, deadline=time.monotonic() + 30,
+        backend=DimensionBackend([dimension_grade("pass")], mutate),
+    )
+    data = json.loads(path.read_text())
+    assert data["acceptance"] == "incomplete"
+    assert data["counts"]["pass"] == 0
+    assert "modified during grading" in data["dimensions"][0]["error"]
+
+
+@pytest.mark.parametrize("backend_class", [CodexBackend, CursorBackend])
+@pytest.mark.parametrize("command_style", ["relative", "relative-path-entry"])
+def test_relative_agent_command_still_launches_actor_and_both_judge_modes(tmp_path, monkeypatch, backend_class, command_style):
+    invocation = tmp_path / "invocation"
+    wrapper = invocation / "tools" / "agent-wrapper"
+    wrapper.parent.mkdir(parents=True)
+    wrapper.write_text(
+        f"#!{sys.executable}\n"
+        "import pathlib, sys\n"
+        "args = sys.argv\n"
+        "pathlib.Path(args[args.index('--output-last-message') + 1]).write_text('wrapper ran')\n"
+    )
+    wrapper.chmod(0o755)
+    monkeypatch.chdir(invocation)
+    if command_style == "relative-path-entry":
+        monkeypatch.setenv("PATH", "tools" + os.pathsep + os.environ.get("PATH", ""))
+        command = "agent-wrapper"
+    else:
+        command = "./tools/agent-wrapper"
+    backend = backend_class(command=command)
+    actor = tmp_path / "actor"
+    actor.mkdir()
+    assert backend.run_agent(prompt="Task.", exec_dir=actor).returncode == 0
+    assert backend.run_judge(prompt="Grade.", exec_dir=actor).returncode == 0
+    working = tmp_path / "isolated-judge"
+    output = tmp_path / "judge-output"
+    working.mkdir()
+    output.mkdir()
+    result = backend.run_judge(prompt="Grade.", exec_dir=working, output_dir=output)
+    assert result.returncode == 0
+    assert result.final_message_path.read_text() == "wrapper ran"
 
 
 @pytest.mark.parametrize("change", ["added", "modified", "removed", "directory"])
@@ -5293,7 +5404,7 @@ def test_dimension_grading_discards_changed_evidence_and_stops_later_judges(tmp_
         if not path.exists():
             return None
         info = path.lstat()
-        return {"st_mode": info.st_mode, "st_size": info.st_size, "st_mtime_ns": info.st_mtime_ns}
+        return {key: getattr(info, key) for key in ("st_mode", "st_size", "st_mtime_ns", "st_ino", "st_ctime_ns")}
     before = metadata(changed)
     def mutate(index, kwargs, result):
         if change == "removed":
@@ -5496,14 +5607,20 @@ def test_dimension_grading_rechecks_budget_after_preparing_prompt(tmp_path, monk
     assert "budget exhausted" in data["dimensions"][0]["error"]
 
 
-def test_dimension_grading_refuses_temporary_cwd_inside_a_repository(tmp_path, monkeypatch):
+@pytest.mark.parametrize("symlinked", [False, True])
+def test_dimension_grading_refuses_temporary_cwd_inside_a_repository(tmp_path, monkeypatch, symlinked):
     import tempfile
 
     repository = tmp_path / "consumer"
     (repository / ".git").mkdir(parents=True)
     temporary = repository / "tmp"
     temporary.mkdir()
-    monkeypatch.setattr(tempfile, "tempdir", str(temporary))
+    if symlinked:
+        alias = tmp_path / "tmp-alias"
+        alias.symlink_to(temporary, target_is_directory=True)
+        monkeypatch.setattr(tempfile, "tempdir", str(alias))
+    else:
+        monkeypatch.setattr(tempfile, "tempdir", str(temporary))
     workspace = tmp_path / "task"
     workspace.mkdir()
     backend = DimensionBackend([])

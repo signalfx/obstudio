@@ -20,6 +20,7 @@ from scripts.check_agent_policy import (
     _git_changed_files,
     _make_references,
     _markdown_snippets,
+    _resolve_rubric_for_policy,
     check_repository,
 )
 
@@ -1005,6 +1006,55 @@ make -C evals --directory=. verify
                 errors = []
                 _check_skill_eval_diff(self.root, [("M", Path("skills/example/SKILL.md")), ("M", path)], errors)
                 self.assertTrue(any("cannot resolve rubric base" in error for error in errors))
+
+    def test_shared_rubric_policy_rejects_invalid_base_types_and_partitions(self) -> None:
+        path = Path("evals/go/example/eval/qual/audit.json")
+        common = {"rubric": ["Common rule."], "judge_inputs": [], "strict_rubric_output": True}
+        leaf = {"skill": "example", "prompts": [{"id": "direct", "task": "Task."}],
+                "rubric_base": "../../../../rubrics/common.json"}
+        invalid = [
+            {"judge_inputs": "not a list"}, {"judge_inputs": [42]},
+            {"strict_rubric_output": "true"}, {"rubric_dimensions": []},
+            {"rubric_dimensions": [{"id": "scope", "criteria": ["rubric-2"]}]},
+            {"rubric_dimensions": [{"id": "scope", "criteria": ["rubric-1", "rubric-1"]}]},
+        ]
+        for overrides in invalid:
+            with self.subTest(overrides=overrides):
+                self._write("evals/rubrics/common.json", json.dumps({**common, **overrides}))
+                errors = []
+                _resolve_rubric_for_policy(self.root, path, leaf, errors)
+                self.assertTrue(errors)
+
+    def test_shared_rubric_policy_rejects_symlinked_file_and_parent(self) -> None:
+        path = Path("evals/go/example/eval/qual/audit.json")
+        common = {"rubric": ["Common rule."], "judge_inputs": [], "strict_rubric_output": True}
+        leaf = {"rubric_base": "../../../../rubrics/common.json"}
+        self._write("evals/actual/common.json", json.dumps(common))
+        directory = self.root / "evals/rubrics"
+        directory.mkdir()
+        source = directory / "common.json"
+        source.symlink_to("../actual/common.json")
+        errors = []
+        _resolve_rubric_for_policy(self.root, path, leaf, errors)
+        self.assertTrue(any("symlink" in error for error in errors))
+        source.unlink()
+        directory.rmdir()
+        directory.symlink_to("actual", target_is_directory=True)
+        errors = []
+        _resolve_rubric_for_policy(self.root, path, leaf, errors)
+        self.assertTrue(any("symlink" in error for error in errors))
+
+    def test_shared_rubric_policy_checks_git_blob_mode_before_parsing(self) -> None:
+        path = Path("evals/go/example/eval/qual/audit.json")
+        common = {"rubric": ["Common rule."], "judge_inputs": [], "strict_rubric_output": True}
+        self._write("evals/rubrics/placeholder", "")
+        (self.root / "evals/rubrics/common.json").symlink_to(json.dumps(common))
+        self._init_git()
+        errors = []
+        _resolve_rubric_for_policy(
+            self.root, path, {"rubric_base": "../../../../rubrics/common.json"}, errors, "HEAD",
+        )
+        self.assertTrue(any("regular file" in error for error in errors))
 
     def test_extracting_legacy_rubric_preserves_default_strictness(self) -> None:
         path = "evals/go/example/eval/qual/audit.json"

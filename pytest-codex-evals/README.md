@@ -156,19 +156,25 @@ Direct callers use `run_rubric_dimensions` with separate task/output directories
 and a monotonic deadline; the caller must own and protect the output directory.
 The existing `run_rubric_grade` API and output schema serve non-strict callers.
 
-All groups share the existing `judge_timeout` budget; calls receive the remaining
-whole seconds, with no retries. Backend startup, cleanup and filesystem work can
+All groups share the existing `judge_timeout` budget. Each call receives an equal
+share of the remaining whole seconds across the groups still waiting (at least
+one second when time remains), with no retries. Unused time rolls forward to
+later groups. A group timeout leaves its checks ungraded; later groups can still
+run. Backend startup, cleanup and filesystem work can
 exceed that deadline. Fresh judge working directories and prompts separate judge
 outputs from candidate evidence. Working directories use the system temporary
 location to avoid inheriting the consumer repository's instructions. Strict
-grading refuses a temporary location inside a Git repository. Strict
+grading checks the physical temporary path, including symlink aliases, and
+refuses a location inside a Git repository. Relative executable overrides retain
+their original invocation location when the judge changes directory. Strict
 Claude calls explicitly grant access to the task directory and exclude its
 project settings from discovery; explicit backend extra arguments still apply.
 Global and managed host instructions remain subject to the backend's behavior.
-Stat checks detect ordinary local file changes,
+Stat checks cover the entire task tree, including dependency directories, and
+compare mode, size, modification time, inode and change time. They detect ordinary local file changes,
 discard the affected verdict and stop later judges. They do not detect reads,
-changes outside the task tree, changes behind symlinks, or edits that preserve
-size and timestamps. Actual read-only enforcement belongs to the backend.
+changes outside the task tree, changes behind symlinks, or changes invisible to
+the filesystem's metadata resolution. Actual read-only enforcement belongs to the backend.
 
 A strict custom `judge_prompt` can also use `{dimension}` and must describe the
 four-result response format; custom output schemas remain a non-strict feature.

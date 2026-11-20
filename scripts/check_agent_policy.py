@@ -13,6 +13,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "pytest-codex-evals" / "src"))
+from pytest_codex_evals.rubric_base import resolve_rubric_base, rubric_base_reference
+
 
 REQUIRED_HEADINGS = (
     "Coding Agent Definition of Done",
@@ -1583,20 +1586,20 @@ def _git_tree_paths(
     return paths
 
 
-def _rubric_base_reference(path: Path, definition: object) -> Path | None:
-    if not isinstance(definition, dict) or "rubric_base" not in definition:
-        return None
-    reference = definition["rubric_base"]
-    if (not isinstance(reference, str) or not reference.strip()
-            or "\\" in reference or Path(reference).is_absolute()):
-        raise ValueError("rubric_base must be a relative JSON file within evals")
-    source = Path(os.path.normpath(path.parent / reference))
-    if not source.is_relative_to(Path("evals")) or source.suffix != ".json":
-        raise ValueError("rubric_base must stay within evals and reference JSON")
-    fixture = path.parents[2]
-    if source.is_relative_to(fixture):
-        raise ValueError("rubric_base must not be staged in the actor fixture workspace")
-    return source
+def _git_rubric_source(root: Path, tree: str, source: Path, _eval_root: Path) -> str:
+    relative = source.relative_to(root)
+    result = subprocess.run(
+        ["git", "ls-tree", "-z", tree, "--", relative.as_posix()],
+        cwd=root, check=True, capture_output=True, timeout=30,
+    )
+    entries = result.stdout.rstrip(b"\0").split(b"\0")
+    if (len(entries) != 1 or b"\t" not in entries[0]
+            or entries[0].split(b" ", 1)[0] not in {b"100644", b"100755"}):
+        raise ValueError(f"rubric_base source must be a regular file: {relative}")
+    text = _git_file_text(root, tree, relative)
+    if text is None:
+        raise ValueError(f"cannot read rubric base {relative} at {tree}")
+    return text
 
 
 def _resolve_rubric_for_policy(
@@ -1604,38 +1607,13 @@ def _resolve_rubric_for_policy(
     errors: list[str], base_tree: str | None = None,
 ) -> object:
     try:
-        source = _rubric_base_reference(path, definition)
-        if source is None:
-            return definition
-        if any(key in definition for key in ("rubric", "judge_prompt", "judge_inputs", "strict_rubric_output", "rubric_dimensions")):
-            raise ValueError("rubric_base cannot be combined with overridden common fields")
-        text = _git_file_text(root, base_tree, source) if base_tree else _read(root / source, errors)
-        if text is None:
-            raise ValueError(f"cannot read rubric base {source}")
-        base = json.loads(text)
-        required = {"rubric", "judge_inputs", "strict_rubric_output"}
-        if (not isinstance(base, dict) or not required.issubset(base)
-                or set(base) - (required | {"rubric_dimensions"})
-                or not isinstance(base["rubric"], list) or not base["rubric"]
-                or any(not isinstance(item, str) or not item for item in base["rubric"])):
-            raise ValueError(f"invalid rubric base {source}")
-        resolved = {**base, **definition}
-        resolved.pop("rubric_base")
-        additions = resolved.pop("rubric_additions", {})
-        if not isinstance(additions, dict):
-            raise ValueError("rubric_additions must be an object")
-        rubric = list(base["rubric"])
-        for label, addition in additions.items():
-            if (not re.fullmatch(r"rubric-[1-9][0-9]*", label)
-                    or not isinstance(addition, str) or not addition):
-                raise ValueError("invalid rubric_additions entry")
-            index = int(label.removeprefix("rubric-")) - 1
-            if index >= len(rubric):
-                raise ValueError(f"unknown rubric criterion {label}")
-            rubric[index] += "\n\n" + addition
-        resolved["rubric"] = rubric
-        return resolved
-    except (ValueError, OSError) as exc:
+        if base_tree:
+            return resolve_rubric_base(
+                root / path, definition,
+                read_source=lambda source, eval_root: _git_rubric_source(root, base_tree, source, eval_root),
+            )
+        return resolve_rubric_base(root / path, definition)
+    except (ValueError, OSError, subprocess.SubprocessError) as exc:
         errors.append(f"{path}: cannot resolve rubric base: {exc}")
         return definition
 
@@ -1688,10 +1666,10 @@ def _changed_rubric_evals(
             if path in changed_paths:
                 continue
             try:
-                source = _rubric_base_reference(path, json.loads(absolute.read_text(encoding="utf-8")))
+                source = rubric_base_reference(root / path, json.loads(absolute.read_text(encoding="utf-8")))
             except (ValueError, OSError):
                 continue
-            if source in changed_paths:
+            if source is not None and source.relative_to(root) in changed_paths:
                 changes.append(("M", path))
     for status, path in changes:
         path_case = _eval_definition_case(path, RUBRIC_DIRECTORY_NAMES)

@@ -114,13 +114,15 @@ def _rubric_score(counts: dict[str, int]) -> int | None:
     return round(100 * counts["pass"] / applicable) if applicable else None
 
 
-def _evidence_snapshot(workspace: Path) -> dict[str, tuple[int, int, int]]:
+def _evidence_snapshot(workspace: Path) -> dict[str, tuple[int, ...]]:
     snapshot = {}
     pending = [workspace]
     while pending:
         path = pending.pop()
         info = path.lstat()
-        snapshot[path.relative_to(workspace).as_posix()] = (info.st_mode, info.st_size, info.st_mtime_ns)
+        snapshot[path.relative_to(workspace).as_posix()] = (
+            info.st_mode, info.st_size, info.st_mtime_ns, info.st_ino, info.st_ctime_ns,
+        )
         if stat.S_ISDIR(info.st_mode):
             pending.extend(path.iterdir())
     return snapshot
@@ -128,10 +130,10 @@ def _evidence_snapshot(workspace: Path) -> dict[str, tuple[int, int, int]]:
 
 def _record_evidence_changes(
     directory: Path,
-    before: dict[str, tuple[int, int, int]],
-    after: dict[str, tuple[int, int, int]],
+    before: dict[str, tuple[int, ...]],
+    after: dict[str, tuple[int, ...]],
 ) -> None:
-    fields = ("st_mode", "st_size", "st_mtime_ns")
+    fields = ("st_mode", "st_size", "st_mtime_ns", "st_ino", "st_ctime_ns")
     changes = [
         {
             "path": path,
@@ -286,16 +288,18 @@ def run_rubric_dimensions(
                 (directory / "prompt.txt").write_text(prompt, encoding="utf-8")
                 dimension["artifacts"]["prompt"] = f"dimension-{index}/prompt.txt"
                 with tempfile.TemporaryDirectory(prefix="codex-eval-judge-", ignore_cleanup_errors=True) as working:
-                    if any((parent / ".git").exists() for parent in Path(working).parents):
+                    working_dir = Path(working).resolve()
+                    if any((parent / ".git").exists() for parent in (working_dir, *working_dir.parents)):
                         raise ValueError("Judge working directory is inside a Git repository; configure a temporary location outside it")
                     remaining = int(deadline - time.monotonic())
                     if remaining < 1:
                         dimension["error"] = "Judge budget exhausted."
                         continue
-                    dimension["timeout_seconds"] = remaining
+                    timeout = max(1, remaining // (len(groups) - index + 1))
+                    dimension["timeout_seconds"] = timeout
                     result = backend.run_judge(
-                        prompt=prompt, exec_dir=Path(working), output_dir=directory,
-                        read_dirs=(workspace,), model=model, schema_path=schema, timeout=remaining,
+                        prompt=prompt, exec_dir=working_dir, output_dir=directory,
+                        read_dirs=(workspace,), model=model, schema_path=schema, timeout=timeout,
                     )
                 dimension["returncode"] = result.returncode
                 for label, source in (("output", result.final_message_path), ("trace", result.trace_path),
