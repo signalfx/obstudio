@@ -4,10 +4,16 @@ This additive pilot runs one existing Flask audit task through Promptfoo 0.126.0
 It keeps the existing suites, runner, skill-loading proof and canonical audit validator.
 It does not replace the pytest harness or measure the entire audit skill.
 
-**[Open the current native browser report](http://localhost:15500/eval/eval-2ac-2026-11-20T01:58:37)**
-on the pilot author's Mac. This live local instance requires no setup and is not a
-publicly hosted report. Other reviewers can start their own completed run using
-the command under “Find the evidence”; the portable proof remains in GitHub.
+**[Download the portable browser report from the PR checks](https://github.com/signalfx/obstudio/pull/407/checks)**:
+open “Promptfoo pilot - selection and evidence”, follow its report link, extract
+the ZIP, and open `report.html`. It needs no server, model login or Promptfoo account.
+GitHub requires sign-in to download artifacts; they expire after 30 days.
+This is the native HTML export, with the original output and automated grading.
+Full server Web UI features such as ratings and run comparisons remain separate.
+
+**[Open the current full local Web UI](http://localhost:15500/eval/eval-0w5-2026-11-20T02:33:00)**
+on the pilot author's Mac. Other reviewers can import the artifact's
+`promptfoo-eval.json` using the pinned CLI, then run `promptfoo view --no`.
 
 | Changed file | Participating suite selected |
 | --- | --- |
@@ -68,6 +74,18 @@ source/artifact SHA-256 values, judge evidence/reason, guards, model requests an
 The corresponding `npm run report` target is the only publisher of these latest files.
 Keep human review notes separate; never replace the raw automated grade.
 
+When audit is selected, CI attaches `promptfoo-audit-browser-report`, containing
+`report.html`, `promptfoo-eval.json`, `benchmark.json`, `evidence.md`, and instructions.
+It reconstructs the original native export from the attestation's deduplicated
+record and verifies the provider output hash, gate, grading and statistics before
+native import/export. A JSON round trip proves the output, grading and counts survive.
+Rendering makes no model call. Missing selected reports fail the job.
+To create the same bundle locally after publishing a completed run:
+
+```sh
+uv run --project evals --locked python evals/promptfoo/report.py --base origin/main --artifact-dir .workspace/promptfoo-review
+```
+
 Each local run also contains:
 
 - `promptfoo.json`: original native export with assertion reason and unchanged provider output.
@@ -86,8 +104,8 @@ PROMPTFOO_CONFIG_DIR="/absolute/run-directory/viewer" ./evals/promptfoo/node_mod
 
 Then open [localhost:15500](http://localhost:15500/), choose the run, and click its
 result cell for the prompt, output and grading explanation. The current author-session
-instance is already running, bound to `127.0.0.1`; both completed passing runs are
-available, and the latest CI-compatible run is linked above. Browser opening is left
+instance is already running, bound to `127.0.0.1`; prior completed passing runs are
+preserved, and the latest run is linked above. Browser opening is left
 to the user, so automated work continues without an unlocked screen. No hosted report,
 account, sharing command, or browser is required by automated runs. Viewer ratings
 cannot change the stored attestation; the raw export and judge grade remain authoritative.
@@ -141,7 +159,7 @@ Design references: [custom providers](https://www.promptfoo.dev/docs/providers/c
 
 ## Recorded pilot validation — November 19, 2026
 
-Evaluated source commit: `84044ca1ff556e53f7dde024d51698edeb625c79`.
+Evaluated source commit: `cb9d40b0c832289d145a643f2cc3cd171155ebd1`.
 Local versions: Promptfoo **0.126.0**, Codex CLI **0.163.0**, Node **24.22.1**,
 npm **11.19.1** for the local driver and **10.9.9** for lock generation/install, uv **0.8.8**, Python **3.12.11**. Agent and judge both requested
 the repository's existing `gpt-6.1-sol` model with high reasoning effort.
@@ -158,19 +176,21 @@ UV_DEFAULT_INDEX=https://pypi.org/simple UV_NO_CONFIG=1 uv run --project evals -
 UV_DEFAULT_INDEX=https://pypi.org/simple UV_NO_CONFIG=1 make test-eval-harness
 UV_DEFAULT_INDEX=https://pypi.org/simple UV_NO_CONFIG=1 make test-pytest-plugin
 CODEX_EVAL_HOME="$PWD/.workspace/codex-evals/codex-home" UV_DEFAULT_INDEX=https://pypi.org/simple UV_NO_CONFIG=1 npm run eval --prefix evals/promptfoo -- --base origin/main
-UV_DEFAULT_INDEX=https://pypi.org/simple UV_NO_CONFIG=1 npm run report --prefix evals/promptfoo -- "$PWD/.workspace/promptfoo/762f21c3-5d28-4529-8941-cbfcb79e468b"
-UV_DEFAULT_INDEX=https://pypi.org/simple UV_NO_CONFIG=1 uv run --project evals --locked python evals/promptfoo/report.py --base origin/main
+UV_DEFAULT_INDEX=https://pypi.org/simple UV_NO_CONFIG=1 npm run report --prefix evals/promptfoo -- "$PWD/.workspace/promptfoo/da1d72aa-d166-4e96-a857-d6171cf27294"
+UV_DEFAULT_INDEX=https://pypi.org/simple UV_NO_CONFIG=1 uv run --project evals --locked python evals/promptfoo/report.py --base origin/main --artifact-dir .workspace/promptfoo-review-final
 ```
 
-- Focused checks: **37 Python + 3 JavaScript passed**, including the installed CLI's
-  five-status negative control and actual adapter subprocess/EOF boundary.
+- Focused checks: **39 Python + 4 JavaScript passed**, including the installed CLI's
+  five-status negative control, actual adapter subprocess/EOF boundary, and portable
+  HTML/JSON export with a synthetic failing provider removed before rendering.
+  Export tests cover status/statistics tampering, HTML escaping and self-contained assets.
 - Policy: **49 unit tests, 8 guidance contracts, repository policy check passed**.
-- Full harness: **822 passed, 2 skipped** in 72.29s. Collection confirms the skips
+- Full harness: **824 passed, 2 skipped** in 74.14s. Collection confirms the skips
   are the optional Galileo fixture dependencies and absent `langchain_core`.
 - Reusable plugin: **213 passed** in 3.94s.
 - Real evaluation: **1 Promptfoo case passed; 6/6 rubric criteria, 3/3 loading/response
-  guards; canonical validator passed (3 findings, 22 planned verification scenarios)**.
-  No runtime telemetry execution is claimed. Wall time: **419.397s** (CLI: 7m00s).
+  guards; canonical validator passed (3 findings, 28 planned verification scenarios)**.
+  No runtime telemetry execution is claimed. Wall time: **442.382s** (CLI: 7m23s).
 - The final published attestation passes the same selection/freshness command used by CI.
   An earlier real run with all six semantic checks passing was correctly rejected
   when adapter inputs changed during evaluation; it was never published as passing proof.
@@ -179,8 +199,8 @@ Reported cumulative CLI usage (cached input is a subset of input, not an additio
 
 | Actor | Input | Cached input | Output |
 | --- | ---: | ---: | ---: |
-| Audit agent | 1,184,568 | 1,086,720 | 14,417 |
-| Read-only judge | 151,898 | 108,416 | 2,174 |
+| Audit agent | 929,073 | 839,552 | 10,851 |
+| Read-only judge | 228,501 | 183,296 | 2,106 |
 
 Billing cost and resolved server model identifiers are unavailable. Promptfoo's native
 token counters are unreported by this custom provider; the usage above comes from
@@ -189,7 +209,8 @@ the preserved CLI traces. No free/zero-cost result is claimed.
 Claude Desktop provided the design critique, independent source review and fix
 verification with **Opus 5.5 selected**. The Desktop's opaque Bedrock profile could
 not independently confirm the resolved model. Verified routing/isolation/provenance
-findings were fixed and tested. The review was bounded and static, with partial
+findings and portable-report delivery findings were fixed and tested. The final
+source review found no remaining verified actionable issues. The review was bounded and static, with partial
 instruction-document coverage; the primary agent read the applicable instructions
 and verified the real run separately. It did not review the final live grading.
 
@@ -202,6 +223,7 @@ content changed, so local Go/client/extension suites were left to existing CI.
 The initial GitHub install exposed npm 11/10 lockfile incompatibility. The final lock
 was generated and clean-installed with npm 10.9.9; the CI pilot pins Python 3.12 and
 uv 0.8.8. Fresh real grading after these dependency changes passed again. The native
-viewer HTML and result APIs were verified over loopback, including the current
-passing run and preserved prior run; no agent browser access or manual rating test
-was performed.
+viewer HTML and result APIs were verified over loopback, including completed passing
+runs and preserved prior records. The latest native HTML/JSON bundle passed exact
+output/grade/count round-trip checks. No agent browser access, visual inspection or
+manual rating test was performed, following the task's no-browser constraint.
