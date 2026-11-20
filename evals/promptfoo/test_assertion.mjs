@@ -2,10 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import assertion from './assertion.mjs';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, rmSync, chmodSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import HarnessProvider from './provider.mjs';
 
 test('Promptfoo boundary is conservative; statuses remain in the raw output/reason', () => {
   const result = { schema_version: 1, gate: true, errors: [], checks: [] };
@@ -50,4 +51,31 @@ test('installed Promptfoo CLI preserves all five statuses and exits red on incom
       assert.ok(row.gradingResult.reason.includes(raw.checks[0].status));
     }
   } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('provider sends EOF to the adapter subprocess and passes the original task as one argument', async () => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), 'promptfoo-provider-'));
+  const oldPath = process.env.PATH;
+  const oldOutput = process.env.PILOT_RUN_DIR;
+  try {
+    const executable = path.join(directory, 'uv');
+    writeFileSync(executable, `#!${process.execPath}\n
+const timer = setTimeout(() => process.exit(42), 3000);
+process.stdin.resume();
+process.stdin.on('end', () => { clearTimeout(timer); console.log(JSON.stringify({
+  schema_version: 1, gate: false, errors: [], checks: [], arguments: process.argv.slice(2)
+})); });\n`);
+    chmodSync(executable, 0o755);
+    process.env.PATH = `${directory}${path.delimiter}${oldPath}`;
+    process.env.PILOT_RUN_DIR = path.join(directory, 'evidence');
+    const result = JSON.parse((await new HarnessProvider().callApi('$otel-audit')).output);
+    assert.ok(result.arguments.includes('$otel-audit'));
+    assert.ok(result.arguments.includes('--locked'));
+    assert.equal(result.gate, false);
+  } finally {
+    process.env.PATH = oldPath;
+    if (oldOutput === undefined) delete process.env.PILOT_RUN_DIR;
+    else process.env.PILOT_RUN_DIR = oldOutput;
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
