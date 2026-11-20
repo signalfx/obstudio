@@ -8,7 +8,7 @@
     "eval_kind": "validation",
     "ab_enabled": false,
     "skill": "otel-audit",
-    "run_id": "20261120T042754065527Z",
+    "run_id": "20261120T200308786262Z",
     "config_path": "evals/codex-evals.validation.toml",
     "agent_model": "gpt-6-luna",
     "judge_model": "",
@@ -639,7 +639,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "b30c119f477a1d5551229646f1efca69e9814921d33f9ecb4cbe08805b6e6cf1",
+    "digest": "8f4f4007f11383bce8932ed42c99be4c3f741e07e5f99b26c91949de3ad619e9",
     "eval_kinds": [
       "rubric",
       "sanity"
@@ -682,7 +682,7 @@
       "evals/go/kvstore/Makefile": "557b16aa60d316634e43c3650f02c06305ddcc006e07ded16bee7452cabe9fa7",
       "evals/go/kvstore/README.md": "c2a26d0c47d09fd3a3c1c0bce2bea508429a58df8788048724619621dcb15ac2",
       "evals/go/kvstore/cmd/kvstore-server/main.go": "1596386f423b0b52f043025469fa182d95db9bc4ddeb0c6f1c64e1c6c85c4524",
-      "evals/go/kvstore/eval/qual/audit.json": "997a3322b1ce7911bfc50815f4c831a91aedb1aa3ec1467bc6dc9bad5f5f5321",
+      "evals/go/kvstore/eval/qual/audit.json": "9eeb43059cb921a5a48e233d0ee68de632dd29ee810cea95d5d08d36b6f632a3",
       "evals/go/kvstore/go.mod": "c1c4cd5d7467d1ac3c999f0a424f6b7d38bfa368f826f77ff5b1d1836c935d3e",
       "evals/go/kvstore/kvstore/http.go": "697458d084a0ed413c78c75f7dfcbd3fa13d13704a78e9d7dd609cf817bd9f5c",
       "evals/go/kvstore/kvstore/http_test.go": "a12102b9726850b60830d36f924446b2c0044b893319e6d184d1daf25355ac3d",

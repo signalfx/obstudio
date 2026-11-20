@@ -33,10 +33,13 @@ def grade_runtime(
     *,
     runtime_enabled: bool = False,
     repo_root: Path | None = None,
+    native_skill_invocation: bool = False,
+    comparison: bool = False,
 ) -> GradeResult:
     service_dir = run_dir / "service"
     eval_dir = case.definition_path.parent if case.definition_path else None
-    results = guard_checks(run_dir, final_message, trace, side, case.skill)
+    results = guard_checks(run_dir, final_message, trace, side, case.skill,
+                           native_skill_invocation=native_skill_invocation, comparison=comparison)
     for check in case.checks:
         if check.applies_to not in ("both", side):
             continue

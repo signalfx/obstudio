@@ -9,9 +9,11 @@ from pytest_codex_evals.trace import TraceSummary
 from .shared import contains, guard_checks, missing_values
 
 
-def grade_sanity(case: SanityEvalCase, run_dir: Path, final_message: str, trace: TraceSummary, side: str) -> GradeResult:
+def grade_sanity(case: SanityEvalCase, run_dir: Path, final_message: str, trace: TraceSummary, side: str,
+                 *, native_skill_invocation: bool = False, comparison: bool = False) -> GradeResult:
     service_dir = run_dir / "service"
-    results = guard_checks(run_dir, final_message, trace, side, case.skill)
+    results = guard_checks(run_dir, final_message, trace, side, case.skill,
+                           native_skill_invocation=native_skill_invocation, comparison=comparison)
     for check in case.checks:
         if check.applies_to not in ("both", side):
             continue

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -111,6 +113,188 @@ def test_eval_json_files_validate_without_running_codex(pytester: pytest.Pyteste
     assert payload["metadata"]["validation_scope"] == "full"
     assert len(payload["results"]) == 2
     assert not (pytester.path / "eval-reports" / "sample-skill" / "validation" / "report.md").exists()
+
+
+@pytest.fixture
+def recorded_eval_repo(pytester: pytest.Pytester) -> Path:
+    import pytest_codex_evals.report as report_module
+
+    write_eval_repo(pytester)
+    bare = pytester.path / "evals/sample/service/eval/sanity/native.json"
+    bare.parent.mkdir()
+    bare.write_text(json.dumps({
+        "skill": "sample-skill",
+        "prompts": [{"id": "native", "task": "$sample-skill ./service"}],
+        "checks": [],
+    }), encoding="utf-8")
+    package = pytester.path / "pytest-codex-evals/src/pytest_codex_evals"
+    shutil.copytree(Path(report_module.__file__).parent, package,
+                    ignore=shutil.ignore_patterns("__pycache__"))
+    (package.parent.parent / "pyproject.toml").write_text(
+        '[project]\nname = "pytest-codex-evals"\nversion = "0.2.0"\n', encoding="utf-8",
+    )
+    home = pytester.path / "codex-home"
+    home.mkdir()
+    calls = pytester.path / "actor-calls.jsonl"
+    pytester.makeconftest(f'''
+        import json
+        import pytest
+        from pathlib import Path
+        from pytest_codex_evals import backends, codex_home, report
+
+        def controlled_process(command, *, stdout_path, stderr_path, **kwargs):
+            workspace = Path(command[command.index("--cd") + 1])
+            prompt = command[-1]
+            skills = sorted(path.parent.name for path in workspace.glob(".agents/skills/*/SKILL.md"))
+            with Path({str(calls)!r}).open("a", encoding="utf-8") as output:
+                output.write(json.dumps({{"prompt": prompt, "skills": skills, "side": workspace.name}}) + "\\n")
+            read_skill = (prompt in {{"$sample-skill", "$sample-skill ./service"}}
+                          and not Path({str(pytester.path / "omit-skill-read")!r}).exists())
+            relative = ".agents/skills/sample-skill/SKILL.md" if read_skill else "service/app.py"
+            trace = json.dumps({{"type": "item.completed", "item": {{
+                "id": "first-action", "type": "command_execution", "status": "completed", "exit_code": 0,
+                "command": "cat " + relative, "aggregated_output": (workspace / relative).read_text(),
+            }}}}) + "\\n"
+            stdout_path.write_text(trace, encoding="utf-8")
+            stderr_path.write_text("", encoding="utf-8")
+            Path(command[command.index("--output-last-message") + 1]).write_text("Done.", encoding="utf-8")
+            return backends.StreamedCommandResult(0, trace, "")
+
+        @pytest.hookimpl(trylast=True)
+        def pytest_configure(config):
+            patch = pytest.MonkeyPatch()
+            config.add_cleanup(patch.undo)
+            patch.setenv("CODEX_EVAL_HOME", {str(home)!r})
+            patch.setattr(codex_home, "_temporary_directories", lambda: {{Path({str(pytester.path / "actor-tmp")!r})}})
+            patch.setattr(report, "__file__", {str(package / "report.py")!r})
+            patch.setattr(backends, "_prepare_eval_python_dependencies", lambda _: None)
+            patch.setattr(backends, "run_streamed_command", controlled_process)
+    ''')
+    return calls
+
+
+def test_collected_ab_uses_identical_tasks_and_isolated_skill_availability(
+    pytester: pytest.Pytester, recorded_eval_repo: Path,
+):
+    definition = pytester.path / "evals/sample/service/eval/qual/sample.json"
+    payload = json.loads(definition.read_text(encoding="utf-8"))
+    payload["prompts"][0]["task"] = "Scan the service.\nKeep café output intact."
+    definition.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = pytester.runpytest("--ab", "--no-rubric", "--skill",
+                               str(pytester.path / "skills/sample-skill"), "-q", "-rs")
+
+    result.assert_outcomes(passed=2, skipped=1)
+    assert "Bare skill invocation checks run only in with_skill mode" in result.stdout.str()
+    calls = [json.loads(line) for line in recorded_eval_repo.read_text(encoding="utf-8").splitlines()]
+    assert [(call["prompt"].encode("utf-8"), call["skills"], call["side"]) for call in calls] == [
+        (prompt["task"].encode("utf-8"), skills, side)
+        for prompt in payload["prompts"]
+        for skills, side in [(["sample-skill"], "with_skill"), ([], "baseline")]
+    ]
+    run = next(pytester.path.glob(".workspace/codex-evals/sample-skill/*/runs/standard-ab.json"))
+    actual = json.loads(run.read_text(encoding="utf-8"))
+    assert actual["metadata"]["comparison_prompt"] == "shared_task"
+    assert actual["metadata"]["ab_enabled"] is True
+    assert len(actual["results"]) == 2
+    for item in actual["results"]:
+        loaded = {check["id"]: check for check in item["with_skill"]["grade"]["checks"]}
+        baseline = {check["id"]: check for check in item["baseline"]["grade"]["checks"]}
+        assert loaded["skills-loaded"]["passed"] and not loaded["skills-loaded"]["skipped"]
+        assert loaded["skill-instructions-read"]["skipped"]
+        assert all(baseline[key]["passed"] and not baseline[key]["skipped"]
+                   for key in ("skills-not-loaded", "baseline-skill-isolation", "final-message-present"))
+        assert item["with_skill"]["errors"] == item["baseline"]["errors"] == []
+    provenance = json.loads((run.parent / "validation.json").read_text(encoding="utf-8"))
+    assert [item["prompt_id"] for item in provenance["results"]] == ["direct", "runtime-preserving"]
+    assert provenance["metadata"]["comparison_prompt"] == "shared_task"
+    for item in provenance["results"]:
+        assert item["definition_path"] == str(definition)
+        for source in ("ab.py", "runner.py", "graders/shared.py", "plugin.py"):
+            relative = "pytest-codex-evals/src/pytest_codex_evals/" + source
+            assert item["source_files"][relative] == hashlib.sha256((pytester.path / relative).read_bytes()).hexdigest()
+
+
+    from pytest_codex_evals.report import render_reports_for_run_root, verify_published_report_sources
+    destination = pytester.path / "eval-reports"
+    _, benchmark = render_reports_for_run_root(run.parent.parent, "validation", output_dir=destination)
+    assert json.loads(benchmark.read_text())["metadata"]["comparison_prompt"] == "shared_task"
+    import pytest_codex_evals.report as report_module
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(report_module, "__file__", str(
+            pytester.path / "pytest-codex-evals/src/pytest_codex_evals/report.py"
+        ))
+        assert verify_published_report_sources(pytester.path) == [destination / "sample-skill/validation/benchmark.json"]
+
+
+def test_collected_baseline_skips_bare_loading_case(
+    pytester: pytest.Pytester, recorded_eval_repo: Path,
+):
+    (pytester.path / "codex-evals.toml").write_text(
+        '[run]\nmode = "with_baseline"\neval_kind = "standard"\n', encoding="utf-8",
+    )
+
+    result = pytester.runpytest("--no-rubric", "--skill", str(pytester.path / "skills/sample-skill"), "-q", "-rs")
+
+    result.assert_outcomes(passed=2, skipped=1)
+    assert "Bare skill invocation checks run only in with_skill mode" in result.stdout.str()
+    calls = [json.loads(line) for line in recorded_eval_repo.read_text(encoding="utf-8").splitlines()]
+    assert calls == [
+        {"prompt": task, "skills": [], "side": "baseline"}
+        for task in ("Scan the service.", "Keep the runtime shape.")
+    ]
+    run = next(pytester.path.glob(".workspace/codex-evals/sample-skill/*/runs/standard-with_baseline.json"))
+    provenance = json.loads((run.parent / "validation.json").read_text(encoding="utf-8"))
+    assert [item["prompt_id"] for item in provenance["results"]] == ["direct", "runtime-preserving"]
+
+
+def test_collected_validation_includes_separate_bare_loading_case(
+    pytester: pytest.Pytester, recorded_eval_repo: Path,
+):
+    result = pytester.runpytest("--skill", str(pytester.path / "skills/sample-skill"), "-q")
+
+    result.assert_outcomes(passed=3)
+    assert not recorded_eval_repo.exists()
+    run = next(pytester.path.glob(".workspace/codex-evals/sample-skill/*/runs/validation.json"))
+    provenance = json.loads(run.read_text(encoding="utf-8"))
+    assert {item["prompt_id"] for item in provenance["results"]} == {"direct", "runtime-preserving", "native"}
+    for item in provenance["results"]:
+        harness_inputs = [path for path in item["source_files"] if path.startswith("pytest-codex-evals/src/")]
+        assert bool(harness_inputs) is (item["prompt_id"] == "native")
+
+
+@pytest.mark.parametrize("task", ["$sample-skill", "$sample-skill ./service"])
+@pytest.mark.parametrize("complete_read", [True, False])
+def test_collected_standalone_bare_loading_keeps_required_guards(
+    pytester: pytest.Pytester, recorded_eval_repo: Path, task: str, complete_read: bool,
+):
+    bare = pytester.path / "evals/sample/service/eval/sanity/native.json"
+    definition = json.loads(bare.read_text(encoding="utf-8"))
+    definition["prompts"][0]["task"] = task
+    bare.write_text(json.dumps(definition), encoding="utf-8")
+    if not complete_read:
+        (pytester.path / "omit-skill-read").touch()
+
+    result = pytester.runpytest("--codex-eval-kind", "sanity", "--skill",
+                               str(pytester.path / "skills/sample-skill"), "-q")
+
+    result.assert_outcomes(**{"passed" if complete_read else "failed": 1})
+    assert [json.loads(line) for line in recorded_eval_repo.read_text(encoding="utf-8").splitlines()] == [
+        {"prompt": task, "skills": ["sample-skill"], "side": "with_skill"},
+    ]
+    run = next(pytester.path.glob(".workspace/codex-evals/sample-skill/*/runs/sanity-with_skill.json"))
+    actual = json.loads(run.read_text(encoding="utf-8"))
+    assert "comparison_prompt" not in actual["metadata"]
+    assert len(actual["results"]) == 1
+    side = actual["results"][0]
+    assert side["baseline"] is None
+    checks = {check["id"]: check for check in side["with_skill"]["grade"]["checks"]}
+    assert set(checks) == {"skills-loaded", "skill-instructions-read", "skill-source-unchanged", "final-message-present"}
+    assert all(not check["skipped"] for check in checks.values())
+    assert checks["skill-instructions-read"]["passed"] is complete_read
+    assert all(checks[key]["passed"] for key in ("skills-loaded", "skill-source-unchanged", "final-message-present"))
+    if not complete_read:
+        assert "with_skill guard failed: skill-instructions-read" in result.stdout.str()
 
 
 @pytest.mark.parametrize(

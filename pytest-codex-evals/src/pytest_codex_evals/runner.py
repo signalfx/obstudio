@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
+import stat
 import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .ab import side_prompt
+from .ab import is_bare_skill_task, side_prompt
 from .backends import AgentBackend, CodexBackend
-from .definitions import CaseResult, EvalCase, RubricEvalCase, SideResult, TokenUsage, resolve_skill_source
+from .codex_home import validate_native_sandbox
+from .definitions import CaseResult, EvalCase, GradeCheckResult, GradeResult, RubricEvalCase, SideResult, TokenUsage, resolve_skill_source
 from .eval_files import (
     fixture_eval_input_sources,
     fixture_workspace_ignore,
@@ -20,7 +23,7 @@ from .eval_files import (
 )
 from .graders import grade_side
 from .graders.rubric import run_rubric_dimensions, run_rubric_grade
-from .trace import TraceUsage, UsageProvider
+from .trace import TraceSummary, TraceUsage, UsageProvider, parse_events
 
 
 def new_run_id() -> str:
@@ -50,6 +53,9 @@ def run_case(
 ) -> CaseResult:
     if backend is None:
         backend = CodexBackend()
+    comparison = {"with_skill", "baseline"}.issubset(sides)
+    if "baseline" in sides and is_bare_skill_task(case.task, case.skill):
+        raise ValueError("Bare skill invocation checks require sides=('with_skill',); use a descriptive task for A/B")
     case_root = run_root / "cases" / case.language / case.service / case.prompt_id
     exec_case_root = Path(tempfile.mkdtemp(prefix=f"codex-eval-{case.skill}-{case.language}-{case.service}-{case.prompt_id}-"))
     try:
@@ -62,7 +68,11 @@ def run_case(
                 side="with_skill",
                 exec_dir=exec_case_root / "with_skill",
                 artifact_dir=case_root / "with_skill",
-                prompt=side_prompt(case, "with_skill"),
+                prompt=side_prompt(
+                    case, "with_skill", comparison=comparison, native_skill_invocation=(
+                        type(backend) is CodexBackend and bool(os.environ.get("CODEX_EVAL_HOME", "").strip())
+                    ),
+                ),
                 skill_dir=skill_dir,
                 model=model,
                 judge_model=judge_model,
@@ -72,6 +82,7 @@ def run_case(
                 backend=backend,
                 agent_timeout=agent_timeout,
                 judge_timeout=judge_timeout,
+                comparison=comparison,
             )
         if "baseline" in sides:
             baseline = run_side(
@@ -80,7 +91,7 @@ def run_case(
                 side="baseline",
                 exec_dir=exec_case_root / "baseline",
                 artifact_dir=case_root / "baseline",
-                prompt=side_prompt(case, "baseline"),
+                prompt=side_prompt(case, "baseline", comparison=comparison),
                 skill_dir=skill_dir,
                 model=model,
                 judge_model=judge_model,
@@ -90,6 +101,7 @@ def run_case(
                 backend=backend,
                 agent_timeout=agent_timeout,
                 judge_timeout=judge_timeout,
+                comparison=comparison,
             )
         return CaseResult(
             id=case.id,
@@ -122,9 +134,15 @@ def run_side(
     backend: AgentBackend,
     agent_timeout: int,
     judge_timeout: int,
+    comparison: bool = False,
 ) -> SideResult:
     side_start = time.monotonic()
     prepare_side_workspace(repo_root, case, side, exec_dir, skill_dir)
+    source_path = exec_dir / ".agents" / "skills" / case.skill / "SKILL.md"
+    native_source = None
+    if side == "with_skill" and type(backend) is CodexBackend and is_bare_skill_task(prompt, case.skill):
+        validate_native_sandbox(exec_dir, backend.extra_args)
+        native_source = source_path.resolve(), source_path.read_bytes()
 
     agent_start = time.monotonic()
     agent_result = backend.run_agent(
@@ -135,19 +153,47 @@ def run_side(
     )
     agent_duration_seconds = time.monotonic() - agent_start
 
-    trace = backend.parse_trace(agent_result.trace_path)
+    captured_trace = agent_result.trace_text if native_source is not None else None
+    if native_source is not None and captured_trace is None:
+        raise ValueError("Native skill-loading evidence requires captured Codex process output")
+    if captured_trace is not None:
+        trace = TraceSummary(parse_events(captured_trace), captured_trace, provider="codex")
+    else:
+        trace = backend.parse_trace(agent_result.trace_path)
     agent_usage = token_usage_from_trace_usage(trace.usage)
     agent_tokens = flat_token_total(agent_usage)
     final_message = agent_result.final_message_path.read_text(encoding="utf-8", errors="replace")
-    grade = grade_side(
-        case=case,
-        run_dir=exec_dir,
-        final_message=final_message,
-        trace=trace,
-        side=side,
-        runtime_enabled=runtime,
-        repo_root=repo_root,
-    )
+    source_check = None
+    if native_source is not None:
+        try:
+            unchanged = (stat.S_ISREG(source_path.lstat().st_mode)
+                         and source_path.resolve() == native_source[0]
+                         and source_path.read_bytes() == native_source[1])
+        except (OSError, RuntimeError):
+            unchanged = False
+        source_check = GradeCheckResult(
+            id="skill-source-unchanged",
+            description="The skill instructions match the source staged before the task.",
+            passed=unchanged,
+            evidence="Staged SKILL.md is unchanged" if unchanged else "Staged SKILL.md was changed, removed or redirected during the task",
+            category="sanity",
+        )
+    if source_check is not None and not source_check.passed:
+        grade = GradeResult(checks=[source_check])
+    else:
+        grade = grade_side(
+            case=case,
+            run_dir=exec_dir,
+            final_message=final_message,
+            trace=trace,
+            side=side,
+            runtime_enabled=runtime,
+            repo_root=repo_root,
+            native_skill_invocation=native_source is not None,
+            comparison=comparison,
+        )
+        if source_check is not None:
+            grade.checks.append(source_check)
     grade_path = exec_dir / "grade.json"
     grade_path.write_text(grade.model_dump_json(indent=2), encoding="utf-8")
 
@@ -164,9 +210,11 @@ def run_side(
     if agent_result.returncode != 0:
         result.errors.append(f"{backend.name} exited with {agent_result.returncode}")
     if strict:
-        retain_side_workspace(exec_dir, artifact_dir)
+        omitted = retain_side_workspace(exec_dir, artifact_dir, trace_text=captured_trace)
+        if omitted:
+            result.errors.append("Non-regular artifacts were not copied: " + ", ".join(omitted))
         (artifact_dir / "summary.json").write_text(result.model_dump_json(indent=2), encoding="utf-8")
-    if rubric and isinstance(case, RubricEvalCase) and case.rubric:
+    if rubric and isinstance(case, RubricEvalCase) and case.rubric and (source_check is None or source_check.passed):
         rubric_start = time.monotonic()
         output_dir = artifact_dir.with_name(artifact_dir.name + ".rubric")
         try:
@@ -212,17 +260,40 @@ def run_side(
                     result.errors.append(f"rubric trace parsing failed: {exc}")
 
     if not strict:
-        retain_side_workspace(exec_dir, artifact_dir)
+        omitted = retain_side_workspace(exec_dir, artifact_dir, trace_text=captured_trace)
+        if omitted:
+            result.errors.append("Non-regular artifacts were not copied: " + ", ".join(omitted))
     result.tokens = agent_tokens + result.rubric_tokens
     result.duration_seconds = round(time.monotonic() - side_start, 3)
     (artifact_dir / "summary.json").write_text(result.model_dump_json(indent=2), encoding="utf-8")
     return result
 
 
-def retain_side_workspace(exec_dir: Path, artifact_dir: Path) -> None:
+def retain_side_workspace(exec_dir: Path, artifact_dir: Path, *, trace_text: str | None = None) -> list[str]:
+    omitted = []
+
+    def ignore_special_files(directory: str, names: list[str]) -> list[str]:
+        ignored = []
+        for name in names:
+            path = Path(directory) / name
+            mode = path.lstat().st_mode
+            if not (stat.S_ISREG(mode) or stat.S_ISDIR(mode) or stat.S_ISLNK(mode)):
+                ignored.append(name)
+                omitted.append(path.relative_to(exec_dir).as_posix())
+        return ignored
+
     if artifact_dir.exists():
         shutil.rmtree(artifact_dir)
-    shutil.copytree(exec_dir, artifact_dir, symlinks=True)
+    shutil.copytree(exec_dir, artifact_dir, symlinks=True, ignore=ignore_special_files)
+    if trace_text is not None:
+        trace_path = artifact_dir / "trace.jsonl"
+        if trace_path.is_dir() and not trace_path.is_symlink():
+            shutil.rmtree(trace_path)
+        else:
+            trace_path.unlink(missing_ok=True)
+        with trace_path.open("x", encoding="utf-8") as stream:
+            stream.write(trace_text)
+    return omitted
 
 
 def dimension_usage(data: dict, backend: AgentBackend) -> tuple[TokenUsage | None, int]:
