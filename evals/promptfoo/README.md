@@ -123,3 +123,63 @@ must not be treated as stable proof. The completeness gate rejects such runs.
 Design references: [custom providers](https://www.promptfoo.dev/docs/providers/custom-api/),
 [JavaScript assertion results](https://www.promptfoo.dev/docs/configuration/expected-outputs/javascript/),
 [GitHub integration](https://www.promptfoo.dev/docs/integrations/github-action/).
+
+## Recorded pilot validation — November 19, 2026
+
+Evaluated source commit: `3a727d3169754c95d5f26c97de4b215fc285accd`.
+Local versions: Promptfoo **0.126.0**, Codex CLI **0.163.0**, Node **24.22.1**,
+npm **11.19.1**, uv **0.8.8**, Python **3.12.11**. Agent and judge both requested
+the repository's existing `gpt-6.1-sol` model with high reasoning effort.
+
+The local private package indexes returned 403, so these commands used the public
+registries for this task only; no global registry or user configuration was changed.
+The initial system Python 3.9 policy invocation was replaced by the supported Python
+3.12 environment shown below.
+
+```sh
+npm ci --prefix evals/promptfoo --ignore-scripts --registry=https://registry.npmjs.org
+UV_DEFAULT_INDEX=https://pypi.org/simple UV_NO_CONFIG=1 npm test --prefix evals/promptfoo
+UV_DEFAULT_INDEX=https://pypi.org/simple UV_NO_CONFIG=1 uv run --project evals --locked make agent-policy-check
+UV_DEFAULT_INDEX=https://pypi.org/simple UV_NO_CONFIG=1 make test-eval-harness
+UV_DEFAULT_INDEX=https://pypi.org/simple UV_NO_CONFIG=1 make test-pytest-plugin
+CODEX_EVAL_HOME="$PWD/.workspace/codex-evals/codex-home" UV_DEFAULT_INDEX=https://pypi.org/simple UV_NO_CONFIG=1 npm run eval --prefix evals/promptfoo -- --base origin/main
+UV_DEFAULT_INDEX=https://pypi.org/simple UV_NO_CONFIG=1 npm run report --prefix evals/promptfoo -- "$PWD/.workspace/promptfoo/798bcb4f-f9d8-4487-9c24-a2b67af6c30f"
+UV_DEFAULT_INDEX=https://pypi.org/simple UV_NO_CONFIG=1 uv run --project evals --locked python evals/promptfoo/report.py --base origin/main
+```
+
+- Focused checks: **37 Python + 3 JavaScript passed**, including the installed CLI's
+  five-status negative control and actual adapter subprocess/EOF boundary.
+- Policy: **49 unit tests, 8 guidance contracts, repository policy check passed**.
+- Full harness: **822 passed, 2 skipped** in 72.29s. Collection confirms the skips
+  are the optional Galileo fixture dependencies and absent `langchain_core`.
+- Reusable plugin: **213 passed** in 3.94s.
+- Real evaluation: **1 Promptfoo case passed; 6/6 rubric criteria, 3/3 loading/response
+  guards; canonical validator passed (3 findings, 22 planned verification scenarios)**.
+  No runtime telemetry execution is claimed. Wall time: **341.405s** (CLI: 5m42s).
+- The final published attestation passes the same selection/freshness command used by CI.
+  An earlier real run with all six semantic checks passing was correctly rejected
+  when adapter inputs changed during evaluation; it was never published as passing proof.
+
+Reported cumulative CLI usage (cached input is a subset of input, not an additional total):
+
+| Actor | Input | Cached input | Output |
+| --- | ---: | ---: | ---: |
+| Audit agent | 967,063 | 876,928 | 10,626 |
+| Read-only judge | 339,482 | 286,336 | 3,286 |
+
+Billing cost and resolved server model identifiers are unavailable. Promptfoo's native
+token counters are unreported by this custom provider; the usage above comes from
+the preserved CLI traces. No free/zero-cost result is claimed.
+
+Claude Desktop provided the design critique, independent source review and fix
+verification with **Opus 5.5 selected**. The Desktop's opaque Bedrock profile could
+not independently confirm the resolved model. Verified routing/isolation/provenance
+findings were fixed and tested. The review was bounded and static, with partial
+instruction-document coverage; the primary agent read the applicable instructions
+and verified the real run separately. It did not review the final live grading.
+
+Unverified limits: other skills/fixtures, native viewer manual ratings, runtime
+telemetry, forced outer-timeout cleanup, and OAuth refresh persistence. Temporary
+homes do not copy refreshed credentials back; an expired login may require the
+existing eval-home login command again. No service, UI, plugin or shipped skill
+content changed, so local Go/client/extension suites were left to existing CI.

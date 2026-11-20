@@ -1,0 +1,427 @@
+{
+  "schema_version": 1,
+  "gate": true,
+  "reasons": [],
+  "errors": [],
+  "evaluated_at_utc": "2026-11-20T01:53:08.865972+00:00",
+  "original_prompt": "$otel-audit",
+  "effective_prompt": "Use the $otel-audit skill. Before doing or saying anything else, run exactly this one read-only command and wait for it to complete: cat .agents/skills/otel-audit/SKILL.md. Do not combine that read with pwd or any other command, and do not emit commentary before or during the read. Then follow the skill. $otel-audit",
+  "rules": [
+    {
+      "id": "rubric-1",
+      "rule": "Identifies app.py and pyproject.toml as the relevant entrypoint and dependency files."
+    },
+    {
+      "id": "rubric-2",
+      "rule": "Enumerates the Flask task CRUD routes and health route."
+    },
+    {
+      "id": "rubric-3",
+      "rule": "Reports no opentelemetry packages and no SDK initialization."
+    },
+    {
+      "id": "rubric-4",
+      "rule": "Mentions opentelemetry-instrumentation-flask as the auto-instrumentation gap."
+    },
+    {
+      "id": "rubric-5",
+      "rule": "Calls out request duration, rate, errors, and OTLP exporter configuration."
+    },
+    {
+      "id": "rubric-6",
+      "rule": "Classifies the missing supported stdlib application-log bridge and local Splunk Observability Studio exporter as a required default gap, while preserving explicit opt-out/operator ownership and keeping cloud forwarding limited to traces and metrics. Resolves the current local OTLP endpoint from configuration or advertised receiver state before using the 4317/4318 fallbacks, preserves a configured non-default port, and does not require application startup to query Obstudio."
+    }
+  ],
+  "checks": [
+    {
+      "id": "rubric-1",
+      "status": "pass",
+      "reason": "The audit correctly identifies app.py as the Flask entrypoint and pyproject.toml as the dependency manifest.",
+      "evidence": "service/app.py: \"app = Flask(__name__)\"; service/pyproject.toml: \"dependencies = [\\n    \\\"flask>=3.1\\\",\\n]\". service/.observe/otel-audit.json, Entry point: \"Flask CLI auto-discovers app.py:app\"; Manifest cites \"pyproject.toml:1-11\"."
+    },
+    {
+      "id": "rubric-2",
+      "status": "pass",
+      "reason": "The audit enumerates all six declared routes, covering task CRUD and health.",
+      "evidence": "service/app.py declares @app.get(\"/health\"), @app.get(\"/tasks\"), @app.get(\"/tasks/<int:task_id>\"), @app.post(\"/tasks\"), @app.patch(\"/tasks/<int:task_id>\"), and @app.delete(\"/tasks/<int:task_id>\"). service/.observe/otel-audit.json, Route source: \"GET /health; GET /tasks; GET /tasks/<int:task_id>; POST /tasks; PATCH /tasks/<int:task_id>; DELETE /tasks/<int:task_id>\"."
+    },
+    {
+      "id": "rubric-3",
+      "status": "pass",
+      "reason": "The audit accurately reports no declared OpenTelemetry packages or SDK initialization in the inspected service.",
+      "evidence": "service/pyproject.toml lists only \"flask>=3.1\"; service/app.py imports \"atexit\", \"signal\", and \"Flask, jsonify, request\" without OTel setup. service/.observe/otel-audit.json states \"No OTel declared\" and \"no provider: no TracerProvider, registration, exporter, lazy helper or external bootstrap configured\". trace.jsonl, item_13, reports \"provider_construction\": [] and \"provider_registration\": []."
+    },
+    {
+      "id": "rubric-4",
+      "status": "pass",
+      "reason": "The audit explicitly identifies the missing Flask auto-instrumentation package and proposes its integration.",
+      "evidence": "service/pyproject.toml declares only \"flask>=3.1\". service/.observe/otel-audit.json, OTEL-002: \"opentelemetry-instrumentation-flask is absent\"; required_fix: \"Add opentelemetry-instrumentation-flask and call FlaskInstrumentor().instrument_app(app) once\"."
+    },
+    {
+      "id": "rubric-5",
+      "status": "pass",
+      "reason": "The findings cover request duration, request rate, errors, and OTLP exporter configuration.",
+      "evidence": "service/app.py includes error responses such as \"return {\\\"error\\\": \\\"not found\\\"}, 404\" without telemetry. service/.observe/otel-audit.json names \"http.server.request.duration\" and explains \"histogram count provides request rate and status-based error rate\". OTEL-001 requires \"OTLP/HTTP batching/readers\" and lists \"OTEL_EXPORTER_OTLP_ENDPOINT\", \"OTEL_EXPORTER_OTLP_PROTOCOL\", and trace/metric endpoint overrides."
+    },
+    {
+      "id": "rubric-6",
+      "status": "pass",
+      "reason": "The audit treats the supported stdlib logging bridge and local Studio export as a required default gap. It preserves explicit opt-out and other operator exporter ownership, restricts cloud configuration to traces and metrics, and requires endpoint discovery before fallback. Available repository configuration was inspected without finding a receiver; the fallback is explicitly conditional rather than presented as discovered. The plan preserves non-default ports and excludes Studio queries from application startup.",
+      "evidence": "service/app.py emits app.logger.warning(\"runtime request completed\") and app.logger.warning(\"runtime shutdown completed\") without a bridge. service/.observe/otel-audit.json, OTEL-003, has \"priority\": \"required\" and \"instrument_mode\": \"default\"; its fix requires \"opentelemetry-instrumentation-logging LoggingInstrumentor bridge\", \"current bridge-owned handler rather than the deprecated SDK LoggingHandler\", and a normal profile setting \"OTEL_LOGS_EXPORTER=otlp\". It says \"honor none and other operator exporter branches without supplementing them\"; logs.disabled adds \"An explicit other exporter stays operator-owned\". Cloud boundary: \"Do not add cloud log endpoints, tokens, headers, exporters or forwarding flags\" and move generic headers to \"trace/metric variables\". Local receiver evidence states \"No Studio status tool was available; no receiver endpoint/protocol in checked-in files\" and permits fallback \"only after higher-precedence configuration discovery is exhausted\". trace.jsonl, item_5, records reading \"service/app.py service/pyproject.toml service/Makefile\"; item_13 reports \"runtime_configuration\": []. The runtime.receiver.nondefault scenario requires \"http://127.0.0.1:14318/v1/traces, /v1/metrics and /v1/logs\", \"no hardcoded 4318 override\", and \"Application startup makes no Studio status/discovery or route-registration calls\"."
+    }
+  ],
+  "guards": [
+    {
+      "id": "final-message-present",
+      "description": "Run produced a non-empty final response.",
+      "passed": true,
+      "evidence": "Final message present",
+      "category": "sanity",
+      "skipped": false
+    },
+    {
+      "id": "skills-loaded",
+      "description": "Loaded side exposes repo skill entries through .agents/skills.",
+      "passed": true,
+      "evidence": "Loaded skills: otel-audit",
+      "category": "sanity",
+      "skipped": false
+    },
+    {
+      "id": "skill-instructions-read",
+      "description": "Loaded side completely reads the target SKILL.md before any other task action.",
+      "passed": true,
+      "evidence": "Initial actions completely read otel-audit/SKILL.md",
+      "category": "sanity",
+      "skipped": false
+    }
+  ],
+  "raw_grade": {
+    "checks": [
+      {
+        "id": "rubric-1",
+        "status": "pass",
+        "reason": "The audit correctly identifies app.py as the Flask entrypoint and pyproject.toml as the dependency manifest.",
+        "evidence": "service/app.py: \"app = Flask(__name__)\"; service/pyproject.toml: \"dependencies = [\\n    \\\"flask>=3.1\\\",\\n]\". service/.observe/otel-audit.json, Entry point: \"Flask CLI auto-discovers app.py:app\"; Manifest cites \"pyproject.toml:1-11\"."
+      },
+      {
+        "id": "rubric-2",
+        "status": "pass",
+        "reason": "The audit enumerates all six declared routes, covering task CRUD and health.",
+        "evidence": "service/app.py declares @app.get(\"/health\"), @app.get(\"/tasks\"), @app.get(\"/tasks/<int:task_id>\"), @app.post(\"/tasks\"), @app.patch(\"/tasks/<int:task_id>\"), and @app.delete(\"/tasks/<int:task_id>\"). service/.observe/otel-audit.json, Route source: \"GET /health; GET /tasks; GET /tasks/<int:task_id>; POST /tasks; PATCH /tasks/<int:task_id>; DELETE /tasks/<int:task_id>\"."
+      },
+      {
+        "id": "rubric-3",
+        "status": "pass",
+        "reason": "The audit accurately reports no declared OpenTelemetry packages or SDK initialization in the inspected service.",
+        "evidence": "service/pyproject.toml lists only \"flask>=3.1\"; service/app.py imports \"atexit\", \"signal\", and \"Flask, jsonify, request\" without OTel setup. service/.observe/otel-audit.json states \"No OTel declared\" and \"no provider: no TracerProvider, registration, exporter, lazy helper or external bootstrap configured\". trace.jsonl, item_13, reports \"provider_construction\": [] and \"provider_registration\": []."
+      },
+      {
+        "id": "rubric-4",
+        "status": "pass",
+        "reason": "The audit explicitly identifies the missing Flask auto-instrumentation package and proposes its integration.",
+        "evidence": "service/pyproject.toml declares only \"flask>=3.1\". service/.observe/otel-audit.json, OTEL-002: \"opentelemetry-instrumentation-flask is absent\"; required_fix: \"Add opentelemetry-instrumentation-flask and call FlaskInstrumentor().instrument_app(app) once\"."
+      },
+      {
+        "id": "rubric-5",
+        "status": "pass",
+        "reason": "The findings cover request duration, request rate, errors, and OTLP exporter configuration.",
+        "evidence": "service/app.py includes error responses such as \"return {\\\"error\\\": \\\"not found\\\"}, 404\" without telemetry. service/.observe/otel-audit.json names \"http.server.request.duration\" and explains \"histogram count provides request rate and status-based error rate\". OTEL-001 requires \"OTLP/HTTP batching/readers\" and lists \"OTEL_EXPORTER_OTLP_ENDPOINT\", \"OTEL_EXPORTER_OTLP_PROTOCOL\", and trace/metric endpoint overrides."
+      },
+      {
+        "id": "rubric-6",
+        "status": "pass",
+        "reason": "The audit treats the supported stdlib logging bridge and local Studio export as a required default gap. It preserves explicit opt-out and other operator exporter ownership, restricts cloud configuration to traces and metrics, and requires endpoint discovery before fallback. Available repository configuration was inspected without finding a receiver; the fallback is explicitly conditional rather than presented as discovered. The plan preserves non-default ports and excludes Studio queries from application startup.",
+        "evidence": "service/app.py emits app.logger.warning(\"runtime request completed\") and app.logger.warning(\"runtime shutdown completed\") without a bridge. service/.observe/otel-audit.json, OTEL-003, has \"priority\": \"required\" and \"instrument_mode\": \"default\"; its fix requires \"opentelemetry-instrumentation-logging LoggingInstrumentor bridge\", \"current bridge-owned handler rather than the deprecated SDK LoggingHandler\", and a normal profile setting \"OTEL_LOGS_EXPORTER=otlp\". It says \"honor none and other operator exporter branches without supplementing them\"; logs.disabled adds \"An explicit other exporter stays operator-owned\". Cloud boundary: \"Do not add cloud log endpoints, tokens, headers, exporters or forwarding flags\" and move generic headers to \"trace/metric variables\". Local receiver evidence states \"No Studio status tool was available; no receiver endpoint/protocol in checked-in files\" and permits fallback \"only after higher-precedence configuration discovery is exhausted\". trace.jsonl, item_5, records reading \"service/app.py service/pyproject.toml service/Makefile\"; item_13 reports \"runtime_configuration\": []. The runtime.receiver.nondefault scenario requires \"http://127.0.0.1:14318/v1/traces, /v1/metrics and /v1/logs\", \"no hardcoded 4318 override\", and \"Application startup makes no Studio status/discovery or route-registration calls\"."
+      }
+    ]
+  },
+  "source_files": {
+    ".agents/skills/otel-audit": "3c662d06cbe80f0f02355a6eec5a96f3683a62e062d8ce734294b3c29098b601",
+    ".github/workflows/ci.yml": "e37065b2b459dc803c77e588c3e8b9036e59a5bcaa1e1b2b037b6b17d44a46ae",
+    "AGENTS.md": "b903e0db8a10b3d3c6a420317dc3bb712a1555393b1601980a8edfd8e4bc9d25",
+    "CONTRIBUTING.md": "0ce0a597264899c911230ece27ab3277b3acd78a0bef1aa22921cea306622dcb",
+    "evals/AGENTS.md": "3fa79e75aa0825b6c82bec5dcb847dec0349cdba441227d1f69dca756f81aa51",
+    "evals/Makefile": "b40c292f802d9e0ed848ce21f3ea37ad60eceb007c813424bba17b154b79c31d",
+    "evals/codex-eval-home.config.toml": "5d9cc164846cd0b1b99c27af99a01525b46ca2d5a600c90dd16b42cae9a8eb3e",
+    "evals/codex-evals.ab.toml": "50aa392fdfeb9b4f6bd574d950bdf71ebcf93c114a48c394cac894d72322dcca",
+    "evals/codex-evals.agent-role.toml": "e0a95517bd694640d5110184f24b7f530c369ef33d877f1efc8943df34d5e372",
+    "evals/codex-evals.baseline.toml": "3ff1baf832030d2575d99c8219cd31e684b563a0c45d7626821c8ec1ef12406b",
+    "evals/codex-evals.local-http.toml": "b81f3989f6416848e1fa5353089588a0e74b84b434b9a5e50f5f94246fa9dbc9",
+    "evals/codex-evals.model-override.toml": "c7970ebc775726a79f5263ebfcbc51a22c3ef4122083d2554d47db96064e30af",
+    "evals/codex-evals.toml": "d89dac81794f47361a312db0b9e303f37a0e5ff60a075e2924ff3c9589ee472b",
+    "evals/codex-evals.validation.toml": "503794fa37e80a742e98969f1d4bbdd17d1f9cfe7d6607c4012498c43905b53e",
+    "evals/evaluator-semantics.toml": "0b0dccbc416040fc4060052c4df3a68a3a187f7cc6f10b52bbaf21aa36dc8a7a",
+    "evals/go/chi-basic/eval/qual/audit.json": "e255cfa18954eeec98430cbba25f03b51be5622750a91bf50f5673023845a8aa",
+    "evals/go/chi-partial/eval/qual/audit.json": "f3ee529239047e5771c74fdf99feba0b1b3cdcc8a4a815bc8123dfd60b9476d9",
+    "evals/go/kvstore/eval/qual/audit.json": "519ee1c2782df51d8745b96f48143c181a77abe0046cd22a8b3e369f3d90d603",
+    "evals/go/native-genai-demo/eval/qual/audit.json": "b6dbe0bb4550f01db642827740014f442f91aa68f7249937224a058ea9b1447d",
+    "evals/java/kafka-batch-consumer/eval/qual/audit.json": "5a7c64397ae995c6f021b49a5cb20ff8927b79dd41e2eb2f2183917ce8dca48c",
+    "evals/java/kafka-listener-container/eval/qual/audit.json": "a22d9fac08b575e620a5b9fd27e8b6637d6649bacc16c28ae49232eba219c494",
+    "evals/java/kafka-producer-consumer/eval/qual/audit.json": "2bcad85b89aadcff688785e793da454a0753abe65132a16ea04267285ccb273d",
+    "evals/java/kafka-streams/eval/qual/audit.json": "b9ffa5d6023dced6caa4510f7ba1110825f055dc93d1db172f25b3780f1e59ab",
+    "evals/java/springboot-basic/eval/qual/audit.json": "b09739f420ec7ee1b82f069339caba33bf9a21e1809dde14235213d385651962",
+    "evals/node/express-basic/eval/qual/audit.json": "11fd51385d462669745f57fe10f070186605ec6a498348b54813f92181c2c77e",
+    "evals/promptfoo/adapter.py": "af4a9fea7c038dd9ad5aa7842d57e6d4f07871e264d44edd7ee2e88a982eda87",
+    "evals/promptfoo/assertion.mjs": "74afcd9086ec7ce0d3191cdab1234f047763394de422777212210da2aa5c02e0",
+    "evals/promptfoo/package-lock.json": "cb051917ef87e69b22a56db6c1479f9558268b433ec730104a365b05f0a9b6cd",
+    "evals/promptfoo/package.json": "11b4e53e1401bf56d9b716e7a7200105499c16a984523e9e788d4afe673ddf13",
+    "evals/promptfoo/promptfooconfig.yaml": "3696cbd7277768afcc7b5f9e08fdc4dd7024532ba2a66ea94bd485578a10c02f",
+    "evals/promptfoo/provider.mjs": "2ce62b2274f65b7b85a4bae3af73481492147b3921aaa0c5a7153b28b94c77fd",
+    "evals/promptfoo/report.py": "f75fb931bbc6c35850f5615edc653ec7696da6015e7f94e4bcacd0150b38ce2d",
+    "evals/promptfoo/routing.py": "9e7f91b2daceafbbf08de46cfb65ef3491b7b8e80d97671ebb6ef501f28a09e8",
+    "evals/promptfoo/run.mjs": "aa0cf07b14c4d7b9875302828734d485ec779a852d1151a16fd1dd662d797ad4",
+    "evals/promptfoo/test_assertion.mjs": "ef3d32b0316654d8a3e21cedce5c864333e18d47bffcc9ffad5de11656a83a4b",
+    "evals/promptfoo/test_pilot.py": "c302a4e3b4e172dc1771bc68ff8d554b3affdc6995fede4139bd273b6278204c",
+    "evals/pyproject.toml": "c8be29ccc7375141b56bde43a13d31148974febec8de76204364398b6f70433a",
+    "evals/python/ai-assistant-demo/eval/qual/ao-name-inputs-audit.json": "f0937a6a23d7a75c66f3fd75ec98acadb6db93386bf5aebbced3431943503d77",
+    "evals/python/ai-assistant-demo/eval/qual/ao-root-compatibility-audit.json": "de07843addf49ef65dfbdffc8827206adeec01780b54d90126dd9fea7348d6fe",
+    "evals/python/ai-assistant-demo/eval/qual/ao-target-handoff-audit.json": "e421dc92e771203801606c062fc920cf2c0cfedcd250a349d46dc0d915ee43db",
+    "evals/python/ai-assistant-demo/eval/qual/audit-focused-decorator-logs.json": "8f1015406d832f2e1e1c3d120f32c31019a11e03020f0a45cb53d3f253f43228",
+    "evals/python/ai-assistant-demo/eval/qual/audit-focused-metadata.json": "b304b84bfe791a2ea3afd1b84fcc550d2dd597ae658fba4a5c967de88d2ab523",
+    "evals/python/ai-assistant-demo/eval/qual/audit.json": "0e3776a61e36b8fe5508d7154a98d060d4b10265589e2d2e800feee0ad82cc4b",
+    "evals/python/ai-assistant-demo/eval/qual/content-coverage-audit.json": "74461bcbb6962e170a3007ed1e9fc5f0a87b6b937724bc458737cf5f6edbd5c5",
+    "evals/python/ai-assistant-demo/eval/qual/env-resource-plan.json": "aa54f3166b930c13eb94840e3d765839fba6db2691eae9ce76d0291a62b2ec9b",
+    "evals/python/ai-assistant-demo/eval/qual/finding-group-audit.json": "ba3ab0d4ab99f4b165a9dd48c9a2cb71dd860dc85b45365de4551c26ea2bc3d7",
+    "evals/python/ai-assistant-demo/eval/qual/gateway-env-plan.json": "38db6b44caed397a788fcc435d23cd4bd43b36b3fe1e90c0e281f5928b31b05b",
+    "evals/python/ai-assistant-demo/eval/qual/genai-sdk-default-audit.json": "e83d3961ec1548ba161ab0d2cbf7791474df178017622f4a53abc4b5d63168e8",
+    "evals/python/ai-assistant-demo/eval/qual/per-function-decorator-audit.json": "ca45a84c11d0d5885fda4b7bbea4463c53049b03600eb996e50e8569449cd5c0",
+    "evals/python/ai-assistant-demo/eval/qual/resource-selector-length-audit.json": "5350468996bb2de3250007101cbaa233476a54ed844a498396a765c33a4b799f",
+    "evals/python/ai-assistant-demo/eval/qual/tool-message-mapping-audit.json": "fac0c9ed5c0a0e56af65a9837b16f7d1bfa49231ac48badb0386f6eff73ac839",
+    "evals/python/assistant-v3-framework-bridge-demo/eval/qual/audit.json": "e42ca7a6bdca9c0b12fcc6ffbf70332b53b7e70bbaa2ad943b0b268976c49d32",
+    "evals/python/checkout-red-demo/eval/qual/audit.json": "2984a8927fc6c8c53dd530074ca06c667f7ab42721aa9be9675ce32958d72c71",
+    "evals/python/existing-otel-agent-demo/eval/qual/audit.json": "fac868c9ea4a9ada1dabec2ff8461e77471af6d651d18b6b6d46cd9d14bc7509",
+    "evals/python/existing-otel-agent-demo/eval/qual/route-recovery-audit.json": "8698248fac57fb93ad1c5a71152ddbcd943efe1ac9683b550d9a6eb0b3e45512",
+    "evals/python/fastapi-celery/eval/qual/audit.json": "5c7fd1196b7ea5afe030c6e0e6d1f1719a2189a65c36c32546e9e2a3c8111cf3",
+    "evals/python/flask-basic/Makefile": "9638ea37751505b6f4a4018a30477ad3c69633c7669796322e1738d7b75a0bbe",
+    "evals/python/flask-basic/app.py": "5fcca84aacb85fb64cceec468d669718b163566742c5a7343bd65316923e840c",
+    "evals/python/flask-basic/eval/qual/audit.json": "0c0251332a39010a7b9231589ecfe6186700c030180212860b8798a2d3c25080",
+    "evals/python/flask-basic/pyproject.toml": "3b624f5c0a1c9766603fc0e591341e7fe8cd44af5386521970f30673d34e6c8f",
+    "evals/python/galileo-agent-demo/eval/qual/audit.json": "4e94c535de6283553a6c7345b2ed9ed26271f96ca2cf80007e5f236de442bda3",
+    "evals/python/mcp-ai-tool-demo/eval/qual/audit.json": "59431a4ce48c1d680d3259c85356a9f755516e417da94381f5a85435601411c7",
+    "evals/python/model-directed-agent/eval/qual/audit.json": "492caa234f35abf70d4a16bcc538844e9ee033dfdf8e23025719f185899859ca",
+    "evals/python/model-directed-agent/eval/qual/connection-modes-audit.json": "7f4b4e9dbda4b8d8144dd77b0a2906f8d5953a269f05cc59c255889c558a5768",
+    "evals/python/model-directed-agent/eval/qual/resource-table-audit.json": "a02291d9af8f8fb1e2d04b4bbc72d2c25542f7fc8c5b766674787d75fb804c74",
+    "evals/python/splunk-ao-integration-demo/eval/qual/audit.json": "b0131ecd6235022f8276935e6cc777e27036d3b8c06e91cad9f142ffa0f88600",
+    "evals/python/splunk-ao-langchain-demo/eval/qual/audit.json": "12dbf29728093a3a47ebaa40b16330e1ce372a1ef9b55820ada41ef89a5b0159",
+    "evals/sanity/skill-smoke/eval/sanity/audit.json": "c4cff2ee3e25984e1a0ffb60052dce0a2cf3c44fd9b3d1d06fb49851d4abd44b",
+    "evals/uv.lock": "9a75a29c1a3c5c12459f8c26106fb3a7118bb6bcdf9bd2a25d7aaf998c95571d",
+    "pytest-codex-evals/pyproject.toml": "e356e980db8086d731a14dee7b6f508b60e43652ecf86d051b1a6faece0339db",
+    "pytest-codex-evals/src/pytest_codex_evals/__init__.py": "b7a1a6542146ea0c4d860cbaacaba484b18b7556b04b11787e472bd051235d4f",
+    "pytest-codex-evals/src/pytest_codex_evals/__main__.py": "307299fda7b77d22c64cb51430ec75e5f59d78e9c948786afb3b2544fe45e4b7",
+    "pytest-codex-evals/src/pytest_codex_evals/ab.py": "316754af9db1b8b01ca95226e11e550d5f8e5545736127ccecce970da0ab4b9a",
+    "pytest-codex-evals/src/pytest_codex_evals/backends.py": "fb0e6f1bdbaf763b40be19eb8cb8085fc6351c8396b6ff5823ca6e3a04fa5eee",
+    "pytest-codex-evals/src/pytest_codex_evals/cli.py": "4b13fa56a5a9f9a9676bd1e4ebc1ee5ed73574109ae6951b3e35392baa9b70ae",
+    "pytest-codex-evals/src/pytest_codex_evals/config.py": "44034f807c6e95fb85558eec0669e47e0cb1f5fa4e1fe1a0951aaf5747fce926",
+    "pytest-codex-evals/src/pytest_codex_evals/definitions/__init__.py": "fde160bf0ba46e9555037f2a61d24edd7b6dff5d81ccc9126c3c5e3b86d0eb66",
+    "pytest-codex-evals/src/pytest_codex_evals/definitions/base.py": "e1617a9e509ad4dae4e179c5ac816acb449312864da72bcc5e31566b1280cd55",
+    "pytest-codex-evals/src/pytest_codex_evals/definitions/rubric.py": "a3a2ec1ee6deb8612ae2a6df555bc9e0a6af542ce0ff6d576c7f4e7adc205ebc",
+    "pytest-codex-evals/src/pytest_codex_evals/definitions/runtime.py": "781dd1a111536fa41c6d6cd043c69ad8de1df3098f761e3a9ae97679f3809b88",
+    "pytest-codex-evals/src/pytest_codex_evals/definitions/sanity.py": "70cd43a102a6e07a63612848a032925b058c849d4e2c9383bec7e0bfd8ade1dd",
+    "pytest-codex-evals/src/pytest_codex_evals/discovery.py": "5ffba5a570876d9bc12eae3b9a007699d1bda15de67dce504c17690b3c3f8813",
+    "pytest-codex-evals/src/pytest_codex_evals/eval_files.py": "728fdafdfe976d5bf905ee8eebc60c87ec9046aa9b247deca2ca647d8e5b02a9",
+    "pytest-codex-evals/src/pytest_codex_evals/graders/__init__.py": "338deff99946bf90b35c6ebd93d946b5297abd5c48bd50b132f0134b77c772a0",
+    "pytest-codex-evals/src/pytest_codex_evals/graders/rubric.py": "f28a4f8dce95d6384801787b194766f47a86f5b1bc2a9bb16f7ca81dc7e30247",
+    "pytest-codex-evals/src/pytest_codex_evals/graders/runtime.py": "4071d1bb5cd0e99ea580192435b043c0f09bcbb8d6099bd03a31a94b5b1c3233",
+    "pytest-codex-evals/src/pytest_codex_evals/graders/sanity.py": "78a96be10b9745ce8e7c4812fa757c91c0e2066aafa120c3345b622a359333d2",
+    "pytest-codex-evals/src/pytest_codex_evals/graders/shared.py": "c49074bd8ce03acc61fb8fbade669193a6497d70bbe29c1f1361868b10b59e79",
+    "pytest-codex-evals/src/pytest_codex_evals/plugin.py": "b9fd1dc1b74f04bb50ed2696e14fa1fdb7481a5a3868e7746a8bafb0e5eb7d1f",
+    "pytest-codex-evals/src/pytest_codex_evals/report.py": "3cb95c47d07297c0e18d8c5601e529280ae7defe162822a21fa104795f6a56a8",
+    "pytest-codex-evals/src/pytest_codex_evals/reports/__init__.py": "5cc2742d160817be1afd199ec8c92df25690d169e1a89e34fbc86510c43a6622",
+    "pytest-codex-evals/src/pytest_codex_evals/reports/templates.py": "f73db35e6587630e49862e3c77e3c87e00e6e3e68ca421cd36ccb4fac73c44d7",
+    "pytest-codex-evals/src/pytest_codex_evals/runner.py": "07ca60c02101b25b74bebd2442999e80cf867b68cd7f22adfa1e2bd13d803763",
+    "pytest-codex-evals/src/pytest_codex_evals/schema_resources.py": "3664b9cdde07f3b67080336056dbf70faf175fe50f572e8cab5fd23889e81e45",
+    "pytest-codex-evals/src/pytest_codex_evals/schemas/common.schema.json": "7f70f8a7a9c529ec5c7c106748124e61b8527386f1827822d779838dd33ce9a0",
+    "pytest-codex-evals/src/pytest_codex_evals/schemas/rubric.schema.json": "980d224a523ec0803d1608dd2c518a7297be62ec5db4f8451ea1210f1f1af9ec",
+    "pytest-codex-evals/src/pytest_codex_evals/schemas/rubric_grade.schema.json": "b52866ddd773e31a17dd6c74a6162b3b9db377637777792045973695487293c8",
+    "pytest-codex-evals/src/pytest_codex_evals/schemas/runtime.schema.json": "b186c2109a73e48c1fdb5808426ee98a67324ff3b4aa2b2371f523034e44e1d4",
+    "pytest-codex-evals/src/pytest_codex_evals/schemas/sanity.schema.json": "598666c521c62290a60a2b1f0e67eb8526ad80ebaa12f81e006c51454e7ddc8b",
+    "pytest-codex-evals/src/pytest_codex_evals/trace.py": "facfd05c543b902bdee997516fbb4f6eab7542e37b633638038afb80c80fb80b",
+    "pytest-codex-evals/tests/fixtures/token_usage/claude-cumulative.json": "1ad5d985e82e2befa77681292faeee9a9c1ffec9e4df16bac2835425da136efa",
+    "pytest-codex-evals/tests/test_collection.py": "7552c578af598fb871efb7eb923130f389acf82cc337370eb76a9e4340c1acd3",
+    "pytest-codex-evals/tests/test_core.py": "214778fe2c009a202754904f3b04ae005fedf7e6ad32778d9bf6ef3bea2907d6",
+    "pytest-codex-evals/tests/test_python_dependency_preparation.py": "8669973080726099f1effbb847e53d4f34fff31c99f339e6dc4c628165419323",
+    "pytest-codex-evals/uv.lock": "4474921439df5db6da255d3b69b0ce1b0630c57b359146c4e8b03eefcecbd65e",
+    "skills/AGENTS.md": "131f2fc8113343662e8b2f189e58171045c2930369fed36d4be282a766bdf8ba",
+    "skills/otel-audit/SKILL.md": "fef834d77d8d6d0230228a4d8f52f277850cb8e6e9b56fd0b46c156ee3c9fa40",
+    "skills/otel-audit/scripts/observe_report.py": "b9f2ff513850d2b6405f47000cd0b6fe8697fd35d47a15e9adaee5fa10094f4d",
+    "skills/otel-audit/scripts/scan_python_otel_topology.py": "dc16553cdd3f89052bd4f8ececeaaacdce398c93dad3d6914cfa05f5d64f0fc0",
+    "skills/otel-audit/tests/test_scan_python_otel_topology.py": "cf430e62143ef17b693555383cafef06f056c582f9c586ab23b9a4bf401a073e",
+    "skills/references/consumers.json": "ffb910be59c07a0a555b7e0cbedea36c183298e686b404bd3c28fafa9ec46f71",
+    "skills/references/coverage-decision-tree.md": "f1b071d4d8365a98d0c21b1192a1f474d0b2944755a4b5cb51b3b5c102573ead",
+    "skills/references/full-runtime-acceptance.md": "585f42079d71460bbf7c68e4320ceabab6fcc1ba7c711948806c78c9d46736c5",
+    "skills/references/genai-readiness.md": "b06758e80805b09ab485d81c3cc6284acf5e2d18c2af1c0359644f61b80deff4",
+    "skills/references/incident-readiness.md": "787fb441106abcb148f541befd403e5f7889a2234c6cbe590d0c6bce48a3b59a",
+    "skills/references/ledger-template.md": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc",
+    "skills/references/local-otlp-receiver.md": "6f58148de9ef2fd3e617ddc2622ee09ba785b202100b91261a727af6e3dc7cec",
+    "skills/references/report-flow-contract.md": "d00ca857d4a875dcdb8a699cbf82eda612f42a4f88152ff7a83b4a74eb1b4d0f",
+    "skills/references/scripts/observe_report.py": "3c1dc1386357e2cc9dc4f2d0f183cc8f4d0c7f45bb064de15196d071212be8cc",
+    "skills/references/scripts/observe_report_core.py": "88419036c5c1a1096361b10da730dc5bbae931f2c890d6dba2c7791cd78b96c4",
+    "skills/references/scripts/observe_report_html.py": "88862e521c30897c8cc0f0ede33cdac92857cfdfb8d1ed846b85a1c74fa1be53",
+    "skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
+    "skills/references/splunk-agent-observability.md": "819faa9e9f27d2b1b41c13980809801fa242c9b6309eb4eae854688a538f4bf4",
+    "skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
+    "skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
+    "skills/references/tests/observe_report_fixtures.py": "58440bbebb543612a46b7dd63b7a35db7c530e6ea5cb20eb8bda109a3dfe08ed",
+    "skills/references/tests/test_observe_report.py": "cf79f1a74e4b2260d8010145ce2ff0c6122554e6c7eb19984941b6a89418c2c0",
+    "skills/references/tests/test_observe_report_flow.py": "a895ca4165a196ff8ab0ffb73a1c6dcf859d27cf59cd5f335ce4fe1c9ca7392e",
+    "skills/references/tests/test_observe_report_html.py": "32183996d90eb073b9ece7bcd05613ea3552512af7f6f8acfc7171d45eaf2382",
+    "skills/references/tests/test_observe_report_selection.py": "c2a441002d8392b9ea5cfdb52cee7e0b75000542334c2a3eb3bc8cff48a0d7c7"
+  },
+  "agent_artifacts": {
+    ".agents/skills/otel-audit/SKILL.md": "fef834d77d8d6d0230228a4d8f52f277850cb8e6e9b56fd0b46c156ee3c9fa40",
+    ".agents/skills/otel-audit/scripts/observe_report.py": "b9f2ff513850d2b6405f47000cd0b6fe8697fd35d47a15e9adaee5fa10094f4d",
+    ".agents/skills/otel-audit/scripts/scan_python_otel_topology.py": "dc16553cdd3f89052bd4f8ececeaaacdce398c93dad3d6914cfa05f5d64f0fc0",
+    ".agents/skills/otel-audit/tests/test_scan_python_otel_topology.py": "cf430e62143ef17b693555383cafef06f056c582f9c586ab23b9a4bf401a073e",
+    ".agents/skills/references/consumers.json": "ffb910be59c07a0a555b7e0cbedea36c183298e686b404bd3c28fafa9ec46f71",
+    ".agents/skills/references/coverage-decision-tree.md": "f1b071d4d8365a98d0c21b1192a1f474d0b2944755a4b5cb51b3b5c102573ead",
+    ".agents/skills/references/full-runtime-acceptance.md": "585f42079d71460bbf7c68e4320ceabab6fcc1ba7c711948806c78c9d46736c5",
+    ".agents/skills/references/genai-readiness.md": "b06758e80805b09ab485d81c3cc6284acf5e2d18c2af1c0359644f61b80deff4",
+    ".agents/skills/references/incident-readiness.md": "787fb441106abcb148f541befd403e5f7889a2234c6cbe590d0c6bce48a3b59a",
+    ".agents/skills/references/ledger-template.md": "0db4852ae8e977c86eb65d9ec5fd3ee0373e89bbb94d2eb4e6e88ef3909b8cbc",
+    ".agents/skills/references/local-otlp-receiver.md": "6f58148de9ef2fd3e617ddc2622ee09ba785b202100b91261a727af6e3dc7cec",
+    ".agents/skills/references/report-flow-contract.md": "d00ca857d4a875dcdb8a699cbf82eda612f42a4f88152ff7a83b4a74eb1b4d0f",
+    ".agents/skills/references/scripts/observe_report.py": "3c1dc1386357e2cc9dc4f2d0f183cc8f4d0c7f45bb064de15196d071212be8cc",
+    ".agents/skills/references/scripts/observe_report_core.py": "88419036c5c1a1096361b10da730dc5bbae931f2c890d6dba2c7791cd78b96c4",
+    ".agents/skills/references/scripts/observe_report_html.py": "88862e521c30897c8cc0f0ede33cdac92857cfdfb8d1ed846b85a1c74fa1be53",
+    ".agents/skills/references/signalflow-patterns.md": "4f5c853de344e6873209e9ea05eadea6449704d0592df1e911c5f396cc6394e7",
+    ".agents/skills/references/splunk-agent-observability.md": "819faa9e9f27d2b1b41c13980809801fa242c9b6309eb4eae854688a538f4bf4",
+    ".agents/skills/references/splunk-api.md": "9e1c638466c7b7ec168f68c7700821a1311e89e0db15d87bf49322d95df010cb",
+    ".agents/skills/references/terraform-normalization.md": "4e15bad3475379891075e697907e328dcf4b1c875aa0a1b6d90838c8dbbfa92a",
+    ".agents/skills/references/tests/observe_report_fixtures.py": "58440bbebb543612a46b7dd63b7a35db7c530e6ea5cb20eb8bda109a3dfe08ed",
+    ".agents/skills/references/tests/test_observe_report.py": "cf79f1a74e4b2260d8010145ce2ff0c6122554e6c7eb19984941b6a89418c2c0",
+    ".agents/skills/references/tests/test_observe_report_flow.py": "a895ca4165a196ff8ab0ffb73a1c6dcf859d27cf59cd5f335ce4fe1c9ca7392e",
+    ".agents/skills/references/tests/test_observe_report_html.py": "32183996d90eb073b9ece7bcd05613ea3552512af7f6f8acfc7171d45eaf2382",
+    ".agents/skills/references/tests/test_observe_report_selection.py": "c2a441002d8392b9ea5cfdb52cee7e0b75000542334c2a3eb3bc8cff48a0d7c7",
+    "grade.json": "68123b8805863db8435af2309cd572fd0877c881e68b78ba0925258f31f29d65",
+    "last_message.md": "5c630a3f8a253cef44b6ca85060f7383d5a8f6d78e5d3fd7123f819444b74b7c",
+    "service/.observe/evidence/flask-source.txt": "f2c33758c4ee6e2d5c05bd9cfe53e45a937427c74c02aae029160b2e2d5d0952",
+    "service/.observe/evidence/opentelemetry-instrumentation-flask-source.txt": "b0b0a1c8250a016840cf23a8b72b66656d669a8a285dddbff21e34f3d129df5c",
+    "service/.observe/evidence/opentelemetry-instrumentation-logging-source.txt": "452794489a77632a16bf6b3b16b491d3f93a055eb8e967bc534d3556c4318b4c",
+    "service/.observe/evidence/package-metadata-20261119.json": "099e71f08879ffdc454ddbde4fb32c6391eff886cde0e99bbd48521067d521ca",
+    "service/.observe/evidence/python-otel-topology.json": "a5c0a4a991e01de5e26de21301e5c28b46a4ddada5ca77f8709d9652029fcfa1",
+    "service/.observe/evidence/source-snapshot.json": "b81ad40354af6adb9a0b5bc9713cfbc52dd4640826a9dcf11279f34ceeb6ee49",
+    "service/.observe/otel-audit.json": "298f12acda1533683d5d38c2eea68dc649cff4d3404350ea0046632ae06cce37",
+    "service/.observe/otel.html": "00c55091a687d89ef1a9e4be56e106b768ba70584027cda696a86f3efb012bed",
+    "service/Makefile": "9638ea37751505b6f4a4018a30477ad3c69633c7669796322e1738d7b75a0bbe",
+    "service/app.py": "5fcca84aacb85fb64cceec468d669718b163566742c5a7343bd65316923e840c",
+    "service/pyproject.toml": "3b624f5c0a1c9766603fc0e591341e7fe8cd44af5386521970f30673d34e6c8f",
+    "stderr.txt": "ef7c5831dd106a67c4c783084bb82ad2ec3d622e209309268fea25342d0cb7ed",
+    "summary.json": "ce5e992fb942ad6ca7ff6893139d367fae78fe59ccd4b01ed78b61e0def32f42",
+    "trace.jsonl": "e29d6c272e4caab1942c4fba41287d85f0d9cc1c93b29b0e7adb084c3929ec8b"
+  },
+  "evaluated_commit": "3a727d3169754c95d5f26c97de4b215fc285accd",
+  "isolation": {
+    "active": true,
+    "config_sha256": "5d9cc164846cd0b1b99c27af99a01525b46ca2d5a600c90dd16b42cae9a8eb3e",
+    "home_mode": "fresh-per-actor"
+  },
+  "requested_models": {
+    "agent": "gpt-6.1-sol",
+    "judge": "gpt-6.1-sol"
+  },
+  "backend": "existing CodexBackend CLI",
+  "codex_version": "codex-cli 0.163.0",
+  "duration_seconds": 341.405,
+  "agent_result": {
+    "side": "with_skill",
+    "exit_code": 0,
+    "trace_path": "/Users/tithumma/.codex/worktrees/promptfoo-audit-pilot/obstudio/.workspace/promptfoo/798bcb4f-f9d8-4487-9c24-a2b67af6c30f/evidence/agent/trace.jsonl",
+    "final_message_path": "/Users/tithumma/.codex/worktrees/promptfoo-audit-pilot/obstudio/.workspace/promptfoo/798bcb4f-f9d8-4487-9c24-a2b67af6c30f/evidence/agent/last_message.md",
+    "grade": {
+      "checks": [
+        {
+          "id": "final-message-present",
+          "description": "Run produced a non-empty final response.",
+          "passed": true,
+          "evidence": "Final message present",
+          "category": "sanity",
+          "skipped": false
+        },
+        {
+          "id": "skills-loaded",
+          "description": "Loaded side exposes repo skill entries through .agents/skills.",
+          "passed": true,
+          "evidence": "Loaded skills: otel-audit",
+          "category": "sanity",
+          "skipped": false
+        },
+        {
+          "id": "skill-instructions-read",
+          "description": "Loaded side completely reads the target SKILL.md before any other task action.",
+          "passed": true,
+          "evidence": "Initial actions completely read otel-audit/SKILL.md",
+          "category": "sanity",
+          "skipped": false
+        }
+      ]
+    },
+    "rubric_grade_path": null,
+    "rubric_trace_path": null,
+    "command_count": 29,
+    "duration_seconds": 250.268,
+    "agent_duration_seconds": 250.109,
+    "rubric_duration_seconds": 0.0,
+    "tokens": 977689,
+    "agent_tokens": 977689,
+    "rubric_tokens": 0,
+    "agent_usage": {
+      "provider": "codex",
+      "source": "cumulative",
+      "observed": true,
+      "usage_record_count": 1,
+      "selected_record_count": 1,
+      "input_tokens": 967063,
+      "cached_input_tokens": 876928,
+      "cache_creation_input_tokens": 0,
+      "output_tokens": 10626,
+      "reasoning_output_tokens": 1504,
+      "provider_total_tokens": null,
+      "derived_total_tokens": 977689,
+      "effective_total_tokens": 977689
+    },
+    "rubric_usage": null,
+    "errors": []
+  },
+  "cost": null,
+  "cost_note": "CLI billing cost unavailable; no zero-cost claim",
+  "artifact_directory": "/Users/tithumma/.codex/worktrees/promptfoo-audit-pilot/obstudio/.workspace/promptfoo/798bcb4f-f9d8-4487-9c24-a2b67af6c30f/evidence",
+  "audit_excerpt": "{\n  \"schema_version\": 2,\n  \"kind\": \"otel-audit\",\n  \"meta\": {\n    \"audit_id\": \"python-flask-basic-20261119\",\n    \"service_name\": \"python-flask-basic\",\n    \"commit\": \"unavailable (workspace has no Git repository)\",\n    \"language\": \"python\",\n    \"framework\": \"Flask\",\n    \"date\": \"2026-11-19\",\n    \"status\": \"Partial\",\n    \"genai_ownership_detected\": false\n  },\n  \"summary\": [\n    \"Three findings cover the service telemetry setup, route traces and metrics, and local application logs.\",\n    \"Source shows six Flask task API routes, in-memory data and two application WARNING messages; no OpenTelemetry providers or instrumentation are configured.\",\n    \"Prioritize reliable startup/export/shutdown, then route latency/error views and logs correlated with their request traces.\",\n    \"No service-owner decision or external prerequisite blocks this source-backed plan. GenAI and Agent Observability resource work are outside this non-agent service scope.\",\n    \"Select findings below and copy the generated $otel-instrument command to implement the chosen scope.\"\n  ],\n  \"flow\": \"audit -> select -> instrument -> verify -> configure/dashboard -> publish\",\n  \"evidence\": [\n    {\n      \"check\": \"Manifest\",\n      \"finding\": \"Python >=3.11; Flask >=3.1 only; project python-flask-basic 0.1.0. No OTel declared, no lockfile or installed-runtime evidence.\",\n      \"source\": \"pyproject.toml:1-11\"\n    },\n    {\n      \"check\": \"Entry point\",\n      \"finding\": \"Flask CLI auto-discovers app.py:app; project console script also targets flask:run. No app.run or production server is declared.\",\n      \"source\": \"app.py:6; pyproject.toml:10-11; Makefile:7\"\n    },\n    {\n      \"check\": \"Route source\",\n      \"finding\": \"GET /health; GET /tasks; GET /tasks/<int:task_id>; POST /tasks; PATCH /tasks/<int:task_id>; DELETE /tasks/<int:task_id>. Flask also supplies implicit HEAD for GET and OPTIONS dispatch; no application handler for those methods.\",\n      \"source\": \"app.py:32-80\"\n    },\n    {\n      \"check\": \"Runtime/startup\",\n      \"finding\": \"make dev runs uv sync then uv run flask run --port 8000 --reload. No Docker/CI/wrappers/toolchain pins/tests/test runner config found. Audit did not run make, sync or app code.\",\n      \"source\": \"Makefile:3-10; pyproject.toml:5-11\"\n    },\n    {\n      \"check\": \"GenAI ownership\",\n      \"finding\": \"No\",\n      \"source\": \"app.py:1-80; pyproject.toml:1-11\"\n    },\n    {\n      \"check\": \"Trace provider topology\",\n      \"finding\": \"no provider: no TracerProvider, registration, exporter, lazy helper or external bootstrap configured on the selected Flask entrypoint.\",\n      \"source\": \"Makefile:7; app.py:1-80; .observe/evidence/python-otel-topology.json\"\n    },\n    {\n      \"check\": \"Metric provider topology\",\n      \"finding\": \"no provider: no MeterProvider, instruments, reader or exporter reachable.\",\n      \"source\": \"app.py:1-80; .observe/evidence/python-otel-topology.json\"\n    },\n    {\n      \"check\": \"Log provider topology\",\n      \"finding\": \"no provider; classification not configured. Fixed WARNING calls exist, no OTel bridge/context injection. LoggerProvider/exporter/flush absent.\",\n      \"source\": \"app.py:22-29,50-58; .observe/evidence/python-otel-topology.json\"\n    },\n    {\n      \"check\": \"Resource precedence\",\n      \"finding\": \"No standard OTel config, resource construction, hardcoded override or stability opt-in is checked in. Operator process environment not inspected; current effective runtime tuple is unverified.\",\n      \"source\": \"app.py:1-80; Makefile:1-10\"\n    },\n    {\n      \"check\": \"Local receiver\",\n      \"finding\": \"No Studio status tool was available; no receiver endpoint/protocol in checked-in files. Availability unverified. Proposed HTTP/protobuf fallback is http://127.0.0.1:4318 with one /v1/<signal> leaf only after higher-precedence configuration discovery is exhausted; this is not a discovered running endpoint.\",\n      \"source\": \"Makefile:1-10; pyproject.toml:1-11\"\n    },\n    {\n      \"check\": \"Log sinks and final formatting\",\n      \"finding\": \"No custom formatter/filter/adapter/handler is source configured. Flask default StreamHandler uses wsgi.errors/sys.stderr, timestamp/level/module/message formatter; exceptions can append text/tracebacks. Werkzeug CLI access/error logging is a separate category reachable through root bridging. Neither current OTel pipeline nor runtime sink emission was proved.\",\n      \"source\": \"app.py:24,57; .observe/evidence/flask-source.txt\"\n    },\n    {\n      \"check\": \"Shutdown ownership\",\n      \"finding\": \"request_shutdown sets shutdown_requested and raises SystemExit; log_completed_shutdown atexit emits final WARNING only when flag set. CLI/reloader can affect signal ownership. No current telemetry teardown exists. Future logging flush must follow any emitted final callback record.\",\n      \"source\": \"app.py:13-29; Makefile:7\"\n    },\n    {\n      \"check\": \"Compatible package proposal\",\n      \"finding\": \"Metadata inspected 2026-11-19: API/SDK/HTTP exporter 1.45.2 and Flask/logging instrumentors 0.66b2 align semantic-conventions/instrumentation constraints at 0.66b2, require Python >=3.10, and Flask instrumentor supports Flask >=1.0. Python 3.11 satisfies all inspected runtime minima and Flask 3.1.3 satisfies >=3.1. Latest mutually aligned metadata candidate selected; mixed release trains and deprecated SDK logging handler rejected. Full resolver/lock and installation are future implementation gates, not audit proof. No installed versions claimed.\",\n      \"source\": \"https://pypi.org/pypi/opentelemetry-sdk/json; https://pypi.org/pypi/opentelemetry-instrumentation-flask/json; https://pypi.org/pypi/opentelemetry-instrumentation-logging/json; .observe/evidence/package-metadata-20261119.json\"\n    },\n    {\n      \"check\": \"Official Flask instrumentation\",\n      \"finding\": \"Current docs and inspected matching wheel support FlaskInstrumentor.instrument_app, method+rule span names, stable route duration and active-request instruments. Opt-in must precede import/creation; no current spans/metrics exist to migrate.\",\n      \"source\": \"https://opentelemetry-python-contrib.readthedocs.io/en/latest/instrumentation/flask/flask.html; .observe/evidence/opentelemetry-instrumentation-flask-source.txt\"\n    },\n    {\n      \"check\": \"Official logging bridge\",\n      \"finding\": \"Current official logging package owns handler installation by default and accepts enable_log_auto_instrumentation control; deprecated SDK handler toggle can prevent the new handler. Proposal uses one current bridge and must explicitly honor OTEL_LOGS_EXPORTER=none rather than assuming instrumentation is disabled by exporter selection alone.\",\n      \"source\": \"https://opentelemetry.io/docs/zero-code/python/configuration/; https://opentelemetry-python-contrib.readthedocs.io/en/latest/instrumentation/logging/logging.html; .observe/evidence/opentelemetry-instrumentation-logging-source.txt\"\n    },\n    {\n      \"check\": \"Incident scope\",\n      \"finding\": \"In-memory task CRUD API only: no database/client dependency calls, worker/queue, cadence/freshness contract, auth, owned canary, capacity policy, or deployment/release machinery. HTTP metrics can improve first-impact rate/latency/error detection; spans/logs localize individual failures. Infrastructure CPU/memory/instance and production traffic health remain deployment-operator context; no blocking external prerequisite found. /health remains existing static health behavior.\",\n      \"source\": \"app.py:8-80; Makefile:1-10\"\n    },\n    {\n      \"check\": \"Source revision\",\n      \"finding\": \"No Git repository/revision available. SHA-256 snapshots captured for all three service source/config files. No prior audit or selection was present under the discovered service root.\",\n      \"source\": \".observe/evidence/source-snapshot.json\"\n    }\n  ],\n  \"routes\": [\n    {\n      \"method\": \"GET\",\n      \"path\": \"/health\"\n    },\n    {\n      \"method\": \"GET\",\n      \"path\": \"/tasks\"\n    },\n    {\n      \"method\": \"GET\",\n      \"path\": \"/tasks/<int:task_id>\"\n    },\n    {\n      \"method\": \"POST\",\n      \"path\": \"/tasks\"\n    },\n    {\n      \"method\": \"PATCH\",\n      \"path\": \"/tasks/<int:task_id>\"\n    },\n    {\n      \"method\": \"DELETE\",\n      \"path\": \"/tasks/<int:task_id>\"\n    }\n  ],\n  \"signal_flow\": {\n    \"component_flow_map\": \"Makefile -> Flask CLI -> app.py:app [SOURCE-COVERED]\\napp.py:app -> native OTel providers/resource/export lifecycle [GAP: Provider, resource and export lifecycle]\\nFlask routes -> in-memory tasks [SOURCE-COVERED] -> route spans/HTTP instruments [GAP: HTTP route traces and metrics]\\napp.logger + Flask/Werkzeug error records -> existing stderr [SOURCE-COVERED] -> local OTLP logs [GAP: Local application log pipeline]\"\n  },\n  \"current_instrumentation\": {\n    \"spans\": [],\n    \"metrics\": [],\n    \"logs\": [\n      {\n        \"integration\": \"Flask application logging (stdlib; no OTLP bridge)\",\n        \"source\": \"app.py:24,57\",\n        \"detail\": \"runtime request completed and runtime shutdown completed at WARNING; default stderr behavior, no source-configured trace correlation or OTel provider/exporter. Classification: not configured for OTLP.\"\n      }\n    ],\n    \"incident_readiness\": [\n      {\n        \"area\": \"Provider, resource and export lifecycle\",\n        \"status\": \"missing\",\n        \"evidence\": \"pyproject.toml:1-11; Makefile:3-7; app.py:1-29\",\n        \"required_signals\": \"Native OTel providers and OTLP/HTTP lifecycle; Shared service Resource\",\n        \"impact\": \"Request signals cannot reach a receiver or be attributed to a service, environment or release.\"\n      },\n      {\n        \"area\": \"HTTP route traces and metrics\",\n        \"status\": \"missing\",\n        \"evidence\": \"app.py:6-80; pyproject.toml:6-8; Makefile:7\",\n        \"required_signals\": \"GET /health; GET /tasks; GET /tasks/<int:task_id>; POST /tasks; PATCH /tasks/<int:task_id>; DELETE /tasks/<int:task_id>; http.server.request.duration; http.server.active_requests\",\n        \"impact\": \"Operators cannot compare task API latency, request rate, server errors or in-flight load by stable route.\"\n      },\n      {\n        \"area\": \"Local application log pipeline\",\n        \"status\": \"missing\",\n        \"evidence\": \"app.py:22-29; app.py:50-58; Makefile:7\",\n        \"required_signals\": \"runtime request completed; runtime shutdown completed; Flask application exception; Local-only logs pipeline\",\n        \"impact\": \"Request and shutdown logs cannot be joined to traces or inspected in the local log explorer, and final log batches could be lost if provider shutdown runs first.\"\n      }\n    ]\n  },\n  \"genai_readiness\": [],\n  \"findings\": [\n    {\n      \"id\": \"OTEL-001\",\n      \"title\": \"Establish telemetry setup and reliable shutdown\",\n      \"area\": \"Provider, resource and export lifecycle\",\n      \"gap\": \"The Flask CLI starts app.py directly; no trace, metric or log provider, exporter, resource configuration or telemetry shutdown is reachable. The application has its own signal and atexit path, so future provider teardown must respect the final application log.\",\n      \"impact\": \"Request signals cannot reach a receiver or be attributed to a service, environment or release.\",\n      \"product_outcome\": \"Operators should be able to filter received telemetry by service and release and retain completed data at shutdown.\",\n      \"required_fix\": \"Add one explicit app-owned native OTel bootstrap per process, loaded from the real Flask CLI entrypoint before serving. Create TracerProvider and MeterProvider with OTLP/HTTP batching/readers and a shared Resource; the dependent logs finding owns LoggerProvider and bridge. Honor standard endpoint/protocol precedence and operator resource overrides; default service.name=python-flask-basic and service.version=0.1.0, and use deployment.environment.name only when configured. Provide a repository-native named telemetry launch profile consumed by Makefile/Flask before SDK imports; normal profile includes local logs otlp settings when OTEL-003 is selected. Use the compatible proposal in the dated package receipt, resol",
+  "audit_excerpt_note": "First 12,000 characters; full artifact hash is in agent_artifacts.",
+  "promptfoo_stats": {
+    "successes": 1,
+    "failures": 0,
+    "errors": 0,
+    "tokenUsage": {
+      "prompt": 0,
+      "completion": 0,
+      "cached": 0,
+      "total": 0,
+      "numRequests": 1,
+      "completionDetails": {
+        "reasoning": 0,
+        "acceptedPrediction": 0,
+        "rejectedPrediction": 0,
+        "cacheReadInputTokens": 0,
+        "cacheCreationInputTokens": 0
+      },
+      "assertions": {
+        "total": 0,
+        "prompt": 0,
+        "completion": 0,
+        "cached": 0,
+        "numRequests": 0,
+        "completionDetails": {
+          "reasoning": 0,
+          "acceptedPrediction": 0,
+          "rejectedPrediction": 0,
+          "cacheReadInputTokens": 0,
+          "cacheCreationInputTokens": 0
+        }
+      }
+    },
+    "durationMs": 341746,
+    "evaluationDurationMs": 341746
+  },
+  "promptfoo_version": "0.126.0"
+}
