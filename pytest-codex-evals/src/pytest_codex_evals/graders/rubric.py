@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import stat
 import subprocess
 import tempfile
@@ -114,17 +115,23 @@ def _rubric_score(counts: dict[str, int]) -> int | None:
     return round(100 * counts["pass"] / applicable) if applicable else None
 
 
+def _evidence_metadata(info: os.stat_result) -> tuple[int, ...]:
+    return info.st_mode, info.st_size, info.st_mtime_ns, info.st_ino, info.st_ctime_ns
+
+
 def _evidence_snapshot(workspace: Path) -> dict[str, tuple[int, ...]]:
-    snapshot = {}
-    pending = [workspace]
+    info = workspace.lstat()
+    snapshot = {".": _evidence_metadata(info)}
+    pending = [(str(workspace), "")] if stat.S_ISDIR(info.st_mode) else []
     while pending:
-        path = pending.pop()
-        info = path.lstat()
-        snapshot[path.relative_to(workspace).as_posix()] = (
-            info.st_mode, info.st_size, info.st_mtime_ns, info.st_ino, info.st_ctime_ns,
-        )
-        if stat.S_ISDIR(info.st_mode):
-            pending.extend(path.iterdir())
+        directory, relative = pending.pop()
+        with os.scandir(directory) as entries:
+            for entry in entries:
+                info = entry.stat(follow_symlinks=False)
+                key = f"{relative}/{entry.name}" if relative else entry.name
+                snapshot[key] = _evidence_metadata(info)
+                if stat.S_ISDIR(info.st_mode):
+                    pending.append((entry.path, key))
     return snapshot
 
 

@@ -5356,6 +5356,24 @@ def test_dimension_grading_detects_same_size_changes_with_restored_mtime_in_depe
     assert "modified during grading" in data["dimensions"][0]["error"]
 
 
+def test_evidence_snapshot_keeps_dependency_and_empty_directories_without_following_links(tmp_path):
+    from pytest_codex_evals.graders.rubric import _evidence_snapshot
+
+    workspace = tmp_path / "task"
+    (workspace / "empty").mkdir(parents=True)
+    (workspace / "node_modules").mkdir()
+    (workspace / "node_modules" / "résumé.js").write_text("evidence")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret").write_text("not task evidence")
+    (workspace / "linked").symlink_to(outside, target_is_directory=True)
+    (workspace / "dangling").symlink_to(tmp_path / "missing")
+    snapshot = _evidence_snapshot(workspace)
+    assert set(snapshot) == {".", "empty", "node_modules", "node_modules/résumé.js", "linked", "dangling"}
+    (outside / "secret").write_text("outside changes stay outside the snapshot")
+    assert _evidence_snapshot(workspace) == snapshot
+
+
 @pytest.mark.parametrize("backend_class", [CodexBackend, CursorBackend])
 @pytest.mark.parametrize("command_style", ["relative", "relative-path-entry"])
 def test_relative_agent_command_still_launches_actor_and_both_judge_modes(tmp_path, monkeypatch, backend_class, command_style):
@@ -5570,15 +5588,15 @@ def test_dimension_grading_distinguishes_missing_usage_from_missing_verdict(tmp_
 def test_dimension_grading_stops_if_evidence_cannot_be_inspected(tmp_path, monkeypatch, when):
     workspace = tmp_path / "task"
     workspace.mkdir()
-    original = Path.iterdir
+    original = os.scandir
     inspections = []
     def inspect(path):
-        if path == workspace.resolve():
+        if Path(path) == workspace.resolve():
             inspections.append(path)
             if when == "before" or len(inspections) > 1:
                 raise PermissionError("task evidence is unreadable")
         return original(path)
-    monkeypatch.setattr(Path, "iterdir", inspect)
+    monkeypatch.setattr(os, "scandir", inspect)
     case = dimension_case(2, rubric_dimensions=[
         {"id": "first", "criteria": ["rubric-1"]}, {"id": "second", "criteria": ["rubric-2"]},
     ])
