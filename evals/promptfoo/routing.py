@@ -9,6 +9,18 @@ from pathlib import Path
 PARTICIPANTS = {"otel-audit"}
 CONSUMERS = "skills/references/consumers.json"
 FIXTURE = "evals/python/flask-basic/"
+INFRASTRUCTURE = {
+    "AGENTS.md", "CONTRIBUTING.md", "skills/AGENTS.md", "evals/AGENTS.md",
+    "evals/Makefile", "evals/pyproject.toml", "evals/uv.lock",
+    "evals/evaluator-semantics.toml", "evals/codex-eval-home.config.toml",
+    ".github/workflows/ci.yml", CONSUMERS,
+}
+
+
+def is_definition(path: str) -> bool:
+    parts = Path(path).parts
+    return (path.startswith("evals/") and path.endswith(".json") and len(parts) >= 3
+            and parts[-3] == "eval" and parts[-2] in {"qual", "rubric", "sanity", "runtime"})
 
 
 def git(root: Path, *args: str) -> str:
@@ -17,7 +29,7 @@ def git(root: Path, *args: str) -> str:
 
 def at(root: Path, revision: str, path: str) -> dict | None:
     # Missing paths are normal for additions/deletions. Other Git errors are fatal.
-    if path not in git(root, "ls-tree", "--name-only", revision, "--", path).splitlines():
+    if path not in git(root, "ls-tree", "-z", "--name-only", revision, "--", path).split("\0"):
         return None
     return json.loads(git(root, "show", f"{revision}:{path}"))
 
@@ -35,6 +47,10 @@ def changed_paths(raw: str) -> list[str]:
 
 
 def owners(path: str, maps: list[dict], definitions: list[dict | None]) -> set[str]:
+    if path in INFRASTRUCTURE or path.startswith(("evals/promptfoo/", "pytest-codex-evals/")) or (
+        path.startswith("evals/codex-evals") and path.endswith(".toml")
+    ):
+        return PARTICIPANTS
     if path.startswith("skills/references/"):
         key = path.removeprefix("skills/references/")
         declared = set().union(*(set(mapping.get(key, [])) for mapping in maps))
@@ -42,16 +58,9 @@ def owners(path: str, maps: list[dict], definitions: list[dict | None]) -> set[s
     for prefix in ("skills/", ".agents/skills/"):
         if path.startswith(prefix):
             return {path.removeprefix(prefix).split("/")[0]}
-    if path.startswith("evals/") and "/eval/" in path and path.endswith(".json"):
+    if is_definition(path):
         return {item["skill"] for item in definitions if item and "skill" in item} or PARTICIPANTS
-    if path.startswith(FIXTURE):
-        return PARTICIPANTS
-    if path.startswith(("evals/promptfoo/", "pytest-codex-evals/")) or path in {
-        "AGENTS.md", "CONTRIBUTING.md", "skills/AGENTS.md", "evals/AGENTS.md",
-        "evals/Makefile", "evals/pyproject.toml", "evals/uv.lock",
-        "evals/evaluator-semantics.toml", "evals/codex-eval-home.config.toml",
-        ".github/workflows/ci.yml",
-    } or (path.startswith("evals/codex-evals") and path.endswith(".toml")):
+    if path.startswith(FIXTURE) and "/eval/" not in path:
         return PARTICIPANTS
     return set()
 
@@ -62,9 +71,7 @@ def select(root: Path, base: str, head: str) -> dict:
     raw = git(root, "diff", "--name-status", "-z", "--find-renames", merge_base, head, "--")
     reasons = {}
     for path in changed_paths(raw):
-        definitions = [at(root, ref, path) for ref in (merge_base, head)] if (
-            path.startswith("evals/") and "/eval/" in path and path.endswith(".json")
-        ) else []
+        definitions = [at(root, ref, path) for ref in (merge_base, head)] if is_definition(path) else []
         affected = owners(path, maps, definitions)
         if path == CONSUMERS:
             affected = PARTICIPANTS

@@ -11,7 +11,7 @@ It does not replace the pytest harness or measure the entire audit skill.
 | Unrelated application/documentation | None |
 | Shared guide/script | Intersection of base/head `skills/references/consumers.json` owners with participating suites |
 | Consumer metadata, new unmapped shared guide | All participating suites (currently audit) |
-| Flask source/inputs, harness, eval model/config/lock, pilot provider/grader/config/lock, CI workflow | Audit |
+| Flask source, harness, eval model/config/lock, pilot provider/grader/config/lock, CI workflow | Audit |
 
 The selector compares **merge base to HEAD**, including deleted paths and both sides of
 renames. Invalid refs, invalid metadata and incomplete diffs fail rather than skip.
@@ -19,6 +19,7 @@ It reads both revisions' eval `skill` fields and shared consumer metadata; Promp
 does not discover these relationships automatically. Only audit participates. The
 second-participant test is a deterministic routing control, not an instrumentation eval.
 Changing an audit eval selects this representative pilot, not that file's full suite.
+This bare case declares no seed inputs; unused `eval/inputs` and runtime assets do not select it.
 
 ## Run locally
 
@@ -26,6 +27,7 @@ Use Node >=22.22.0, npm, uv, Git and the existing authenticated Codex CLI.
 The isolated eval home must contain existing authorized credentials and the minimal
 `evals/codex-eval-home.config.toml`; see the parent eval README for authentication.
 Do not use a personal home with unrelated plugins or MCP servers.
+The adapter enforces the minimal template and records its non-secret configuration hash.
 
 ```sh
 npm ci --prefix evals/promptfoo --ignore-scripts
@@ -36,7 +38,7 @@ CODEX_EVAL_HOME="$PWD/.workspace/codex-evals/codex-home" npm run eval --prefix e
 npm run report --prefix evals/promptfoo -- /absolute/path/to/.workspace/promptfoo/RUN-ID
 ```
 
-Commit source changes before selecting them: Git comparison excludes uncommitted
+Commit source changes before selecting them (the adapter refuses dirty input files): Git comparison excludes uncommitted
 changes. For example, a commit changing `skills/otel-audit/SKILL.md` selects audit;
 an instrumentation-only commit exits with `skipped: not affected`, without model calls.
 The package and Python locks are enforced. A private local registry returning 403 can
@@ -112,6 +114,8 @@ read-only judge → Promptfoo assertion path. It does not test Promptfoo's Codex
 provider or built-in heuristic `skill-used` assertion, broad model quality, runtime
 telemetry, manual rating behavior, or other skills/fixtures. Requested model names are
 recorded; resolved server model identity and billing cost may be absent from CLI output.
+A forcibly interrupted or outer-timeout run can leave child processes; its partial directory
+must not be treated as stable proof. The completeness gate rejects such runs.
 
 Design references: [custom providers](https://www.promptfoo.dev/docs/providers/custom-api/),
 [JavaScript assertion results](https://www.promptfoo.dev/docs/configuration/expected-outputs/javascript/),

@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -15,6 +16,7 @@ from jsonschema import validate
 from pytest_codex_evals.ab import side_prompt
 from pytest_codex_evals.backends import CodexBackend
 from pytest_codex_evals.config import load_settings
+from pytest_codex_evals.eval_files import iter_eval_files, staged_fixture_source_files
 from pytest_codex_evals.plugin import case_from_definition, load_eval_definition
 from pytest_codex_evals.report import source_input_digests
 from pytest_codex_evals.runner import run_side
@@ -54,6 +56,10 @@ def source_manifest() -> dict[str, str]:
     )
     paths = list(HERE.glob("*.py")) + list(HERE.glob("*.mjs")) + list(HERE.glob("*.json"))
     paths += list(HERE.glob("*.yaml"))
+    paths += list((ROOT / "evals").glob("codex-evals*.toml"))
+    # All audit eval definitions route to this representative case, so edits require fresh proof.
+    paths += [path for path in iter_eval_files(ROOT / "evals")
+              if json.loads(path.read_text()).get("skill") == "otel-audit"]
     paths += [ROOT / item for item in (
         "AGENTS.md", "CONTRIBUTING.md", "skills/AGENTS.md", "evals/AGENTS.md",
         "evals/Makefile", "evals/pyproject.toml", "evals/uv.lock",
@@ -64,7 +70,19 @@ def source_manifest() -> dict[str, str]:
               if path.is_file() and not any(part.startswith(".") for part in path.relative_to(ROOT / "pytest-codex-evals").parts)
               and path.suffix in {".py", ".json", ".toml", ".lock"}]
     sources.update({path.relative_to(ROOT).as_posix(): digest(path) for path in paths})
+    discovery = ROOT / ".agents/skills/otel-audit"
+    if not discovery.is_symlink():
+        raise ValueError("audit discovery must remain a relative canonical skill link")
+    sources[".agents/skills/otel-audit"] = hashlib.sha256(os.readlink(discovery).encode()).hexdigest()
     return dict(sorted(sources.items()))
+
+
+def validate_home() -> str:
+    home = os.environ.get("CODEX_EVAL_HOME")
+    template = ROOT / "evals/codex-eval-home.config.toml"
+    if not home or not (Path(home) / "config.toml").is_file() or (Path(home) / "config.toml").read_bytes() != template.read_bytes():
+        raise ValueError("CODEX_EVAL_HOME must use the isolated eval config template and existing authorized login")
+    return digest(Path(home) / "config.toml")
 
 
 def gate(checks: list[dict], expected: list[str], guards: list[dict], errors: list[str]) -> list[str]:
@@ -85,9 +103,15 @@ def gate(checks: list[dict], expected: list[str], guards: list[dict], errors: li
 def run(prompt: str, output: Path) -> dict:
     if prompt != "$otel-audit":
         raise ValueError("this bounded pilot accepts only the original $otel-audit task")
+    home_digest = validate_home()
     output.mkdir(parents=True, exist_ok=False)
     started = time.monotonic()
     sources = source_manifest()
+    if sources and subprocess.check_output(
+        ["git", "-C", str(ROOT), "status", "--porcelain=v1", "-z", "--", *sources], text=True
+    ).strip():
+        raise ValueError("commit evaluated source inputs before running the pilot")
+    evaluated_commit = subprocess.check_output(["git", "-C", str(ROOT), "rev-parse", "HEAD"], text=True).strip()
     settings = load_settings(CONFIG)
     if settings.agent_backend != "codex" or not settings.agent_model or not settings.judge_model:
         raise ValueError("pilot requires the pinned Codex agent and judge models")
@@ -121,7 +145,6 @@ def run(prompt: str, output: Path) -> dict:
         errors.extend(agent_result.errors)
         artifacts = tree(side)
         # The audit is read-only outside .observe; compare all staged fixture source bytes.
-        from pytest_codex_evals.eval_files import staged_fixture_source_files
         before = {p.relative_to(case.fixture_dir).as_posix(): digest(p)
                   for p in staged_fixture_source_files(case.fixture_dir)}
         after = {p.relative_to(side / "service").as_posix(): digest(p)
@@ -170,13 +193,19 @@ For rubric-6 explain evidence for every clause; it is graded as one compound rul
                     shutil.copytree(source, workspace / name)
                 else:
                     shutil.copy2(source, workspace / name)
-            result = backend.run_judge(prompt=judge_prompt, exec_dir=workspace,
-                                       schema_path=schema, model=settings.judge_model,
-                                       timeout=settings.judge_timeout)
-            judge_dir = output / "judge"
-            judge_dir.mkdir()
-            for path in workspace.glob("rubric*"):
-                shutil.copy2(path, judge_dir / path.name)
+            try:
+                result = backend.run_judge(prompt=judge_prompt, exec_dir=workspace,
+                                           schema_path=schema, model=settings.judge_model,
+                                           timeout=settings.judge_timeout)
+            except subprocess.TimeoutExpired as exc:
+                for name, content in (("rubric_trace.jsonl", exc.stdout), ("rubric_stderr.txt", exc.stderr)):
+                    (workspace / name).write_text(content.decode(errors="replace") if isinstance(content, bytes) else content or "")
+                raise
+            finally:
+                judge_dir = output / "judge"
+                judge_dir.mkdir()
+                for path in workspace.glob("rubric*"):
+                    shutil.copy2(path, judge_dir / path.name)
             if result.returncode:
                 errors.append(f"judge exited with {result.returncode}")
             raw_grade = json.loads(result.final_message_path.read_text())
@@ -195,7 +224,8 @@ For rubric-6 explain evidence for every clause; it is graded as one compound rul
         "original_prompt": prompt, "effective_prompt": effective_prompt, "rules": rules,
         "checks": checks, "guards": guards, "raw_grade": raw_grade,
         "source_files": sources, "agent_artifacts": artifacts,
-        "evaluated_commit": subprocess.check_output(["git", "-C", str(ROOT), "rev-parse", "HEAD"], text=True).strip(),
+        "evaluated_commit": evaluated_commit,
+        "isolation": {"active": True, "config_sha256": home_digest},
         "requested_models": {"agent": settings.agent_model, "judge": settings.judge_model},
         "backend": "existing CodexBackend CLI", "codex_version": subprocess.check_output(["codex", "--version"], text=True).strip(),
         "duration_seconds": round(time.monotonic() - started, 3),

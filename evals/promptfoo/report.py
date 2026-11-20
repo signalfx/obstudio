@@ -6,7 +6,7 @@ import json
 import re
 from pathlib import Path
 
-from adapter import JUDGE_SCHEMA, ROOT, gate, source_manifest, tree
+from adapter import JUDGE_SCHEMA, ROOT, digest, gate, source_manifest, tree
 from jsonschema import validate
 from routing import select
 
@@ -16,6 +16,8 @@ DESTINATION = ROOT / "eval-reports/promptfoo-pilot"
 def verify(result: dict) -> None:
     if result.get("schema_version") != 1:
         raise ValueError("unknown or missing pilot schema")
+    if result.get("isolation") != {"active": True, "config_sha256": digest(ROOT / "evals/codex-eval-home.config.toml")}:
+        raise ValueError("isolated evaluator configuration was not proven")
     validate(result["raw_grade"], JUDGE_SCHEMA)
     if result["raw_grade"]["checks"] != result["checks"]:
         raise ValueError("raw automated grade was altered")

@@ -24,6 +24,10 @@ from routing import changed_paths, owners, select
     ("pytest-codex-evals/src/pytest_codex_evals/runner.py", {"otel-audit"}),
     ("evals/codex-evals.toml", {"otel-audit"}),
     (".github/workflows/ci.yml", {"otel-audit"}),
+    ("skills/AGENTS.md", {"otel-audit"}),
+    ("skills/references/consumers.json", {"otel-audit"}),
+    ("evals/go/kvstore/eval/inputs/instrumentation-seed.json", set()),
+    ("evals/python/flask-basic/eval/inputs/instrumentation-seed.json", set()),
 ])
 def test_ownership(path, expected):
     assert owners(path, [{"local-otlp-receiver.md": ["otel-audit", "otel-instrument"]}],
@@ -91,6 +95,17 @@ def test_instrument_and_unrelated_only_do_not_run_audit(tmp_path):
     assert select(tmp_path, base, head)["selected"] == []
 
 
+def test_real_git_reads_unicode_newline_eval_definition_ownership(tmp_path):
+    command(tmp_path, "init", "-q")
+    command(tmp_path, "config", "user.name", "Pilot Test")
+    command(tmp_path, "config", "user.email", "pilot@example.invalid")
+    base = commit(tmp_path, "README.md", "base")
+    head = commit(tmp_path, "evals/python/flask-basic/eval/qual/instrument\nλ.json", '{"skill":"otel-instrument"}')
+    result = select(tmp_path, base, head)
+    assert result["selected"] == []
+    assert result["outside_pilot"] == ["otel-instrument"]
+
+
 def test_all_affected_participants_are_selected(monkeypatch, tmp_path):
     import routing
     monkeypatch.setattr(routing, "PARTICIPANTS", {"otel-audit", "otel-instrument"})
@@ -107,8 +122,9 @@ def test_all_affected_participants_are_selected(monkeypatch, tmp_path):
 
 @pytest.mark.parametrize("status", ["fail", "not-proven", "not-applicable", "ungraded", None])
 def test_nonpass_never_becomes_pass(status):
-    assert gate([{"id": "rubric-1", "status": status, "reason": "why", "evidence": "app.py:1 source"}],
-                ["rubric-1"], [{"passed": True}], [])
+    reasons = gate([{"id": "rubric-1", "status": status, "reason": "why", "evidence": "app.py:1 source"}],
+                   ["rubric-1"], [{"id": name, "passed": True} for name in GUARD_IDS], [])
+    assert len(reasons) == 1 and f"rubric-1: {status}" in reasons[0]
 
 
 def test_gate_requires_complete_evidence_guards_and_clean_execution():
@@ -140,6 +156,7 @@ def test_proof_fails_on_stale_sources(monkeypatch):
              "checks": [{"id": f"rubric-{i}", "status": "pass", "reason": "why", "evidence": "app.py:1"}
                         for i in range(1, len(rules) + 1)], "source_files": {"old": "hash"}}
     proof["raw_grade"] = {"checks": proof["checks"]}
+    proof["isolation"] = {"active": True, "config_sha256": report.digest(report.ROOT / "evals/codex-eval-home.config.toml")}
     monkeypatch.setattr(report, "source_manifest", lambda: {"new": "hash"})
     with pytest.raises(ValueError, match="stale"):
         report.verify(proof)
@@ -155,6 +172,7 @@ def test_adapter_preserves_partial_timeout_evidence_and_never_grades_it_pass(mon
         (workspace / "trace.jsonl").write_text('{"partial":true}\n')
         raise TimeoutError("agent timeout")
     monkeypatch.setattr(adapter, "run_side", timeout)
+    monkeypatch.setattr(adapter, "validate_home", lambda: None)
     monkeypatch.setattr(adapter, "source_manifest", lambda: {})
     monkeypatch.setattr(adapter.subprocess, "check_output", lambda *a, **k: "unit-test identity")
     result = adapter.run("$otel-audit", tmp_path / "evidence")
@@ -174,3 +192,48 @@ def test_renderer_fences_untrusted_evidence():
     rendered = block(text)
     assert rendered.startswith('````text\n')
     assert rendered.endswith('\n````')
+
+
+def test_personal_or_missing_eval_home_is_rejected(monkeypatch):
+    from adapter import validate_home
+    monkeypatch.delenv("CODEX_EVAL_HOME", raising=False)
+    with pytest.raises(ValueError, match="isolated eval config"):
+        validate_home()
+
+
+def test_judge_timeout_preserves_raw_output_in_separate_workspace(monkeypatch, tmp_path):
+    import adapter
+    from pytest_codex_evals.definitions import GradeResult, SideResult
+    from pytest_codex_evals.runner import prepare_side_workspace
+
+    def fake_side(**kwargs):
+        side = kwargs["artifact_dir"]
+        prepare_side_workspace(adapter.ROOT, kwargs["case"], "with_skill", side)
+        (side / "service/.observe").mkdir()
+        (side / "service/.observe/otel-audit.json").write_text('{"unit":"fixture"}')
+        (side / "service/.observe/otel.html").write_text('unit fixture')
+        for name in ("trace.jsonl", "last_message.md", "grade.json"):
+            (side / name).write_text('unit evidence')
+        return SideResult(side="with_skill", exit_code=0, trace_path=str(side / "trace.jsonl"),
+                          final_message_path=str(side / "last_message.md"),
+                          grade=GradeResult(checks=[{"id": name, "description": "unit guard", "passed": True}
+                                                   for name in GUARD_IDS]))
+
+    class TimeoutJudge:
+        def run_judge(self, **kwargs):
+            assert not kwargs["exec_dir"].is_relative_to(adapter.ROOT)
+            assert not (kwargs["exec_dir"] / ".agents").exists()
+            raise subprocess.TimeoutExpired("unit judge", 1, output=b'partial judge trace', stderr=b'timeout stderr')
+
+    monkeypatch.setattr(adapter, "run_side", fake_side)
+    monkeypatch.setattr(adapter, "CodexBackend", lambda **kwargs: TimeoutJudge())
+    monkeypatch.setattr(adapter, "validate_home", lambda: None)
+    monkeypatch.setattr(adapter, "source_manifest", lambda: {})
+    monkeypatch.setattr(adapter.subprocess, "run", lambda *a, **kw: subprocess.CompletedProcess(a, 0, 'valid', ''))
+    monkeypatch.setattr(adapter.subprocess, "check_output", lambda *a, **k: "unit-test identity")
+    result = adapter.run("$otel-audit", tmp_path / "evidence")
+    assert result["gate"] is False
+    assert "TimeoutExpired" in result["errors"][0]
+    assert (tmp_path / "evidence/judge/rubric_trace.jsonl").read_text() == 'partial judge trace'
+    assert (tmp_path / "evidence/judge/rubric_stderr.txt").read_text() == 'timeout stderr'
+    assert (tmp_path / "evidence/agent/trace.jsonl").read_text() == 'unit evidence'
