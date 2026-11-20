@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import fnmatch
+import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
 
 from .definitions.base import validate_eval_input_paths
+from .schema_resources import schema_validator
+from .rubric_base import resolve_rubric_base, rubric_base_reference, validate_rubric_source
 
 
 EVAL_ROLE_DIRS = {
@@ -195,6 +198,23 @@ def regular_source_file(path: Path) -> Path | None:
             f"eval source input must be a regular file, not a symlink: {path}"
         )
     return path if path.is_file() else None
+
+
+def rubric_base_source(definition_path: Path, data: dict) -> Path | None:
+    source = rubric_base_reference(definition_path, data)
+    if source is not None:
+        validate_rubric_source(source, definition_path.absolute().parents[2].parent.parent)
+    return source
+
+
+def resolve_rubric_definition(definition_path: Path, data: dict) -> dict:
+    if rubric_base_reference(definition_path, data) is None:
+        return data
+    validator = schema_validator("rubric.schema.json")
+    validator.validate(data)
+    resolved = resolve_rubric_base(definition_path, data)
+    validator.validate(resolved)
+    return resolved
 
 
 def runtime_repository_source_files(repo_root: Path) -> list[Path]:

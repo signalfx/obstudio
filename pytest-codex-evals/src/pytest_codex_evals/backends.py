@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
 import threading
 import time
@@ -12,6 +13,26 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from .trace import ActionEvent, CommandEvent, TraceSummary, parse_events, parse_trace
+
+
+def _judge_command(command: str) -> str:
+    """Keep relative executable overrides usable after changing the judge cwd."""
+    candidate = shutil.which(command)
+    if candidate is not None and not Path(candidate).is_absolute():
+        return str(Path(candidate).absolute())
+    if os.path.dirname(command) and not Path(command).is_absolute():
+        return str(Path(command).absolute())
+    return command
+
+
+def _judge_environment(env: dict[str, str] | None = None, *, isolated: bool) -> dict[str, str]:
+    env = dict(os.environ if env is None else env)
+    if isolated and "PATH" in env:
+        env["PATH"] = os.pathsep.join(
+            entry if Path(entry).is_absolute() else str(Path(entry or ".").absolute())
+            for entry in env["PATH"].split(os.pathsep)
+        )
+    return env
 
 
 @dataclass
@@ -45,6 +66,8 @@ class AgentBackend(Protocol):
         model: str | None = None,
         schema_path: Path | None = None,
         timeout: int = 900,
+        output_dir: Path | None = None,
+        read_dirs: tuple[Path, ...] = (),
     ) -> AgentResult: ...
 
     def parse_trace(self, trace_path: Path) -> TraceSummary: ...
@@ -379,13 +402,15 @@ class CodexBackend:
         model: str | None = None,
         schema_path: Path | None = None,
         timeout: int = 900,
+        output_dir: Path | None = None,
+        read_dirs: tuple[Path, ...] = (),
     ) -> AgentResult:
-        output_path = exec_dir / "rubric_grade.json"
-        trace_path = exec_dir / "rubric_trace.jsonl"
-        stderr_path = exec_dir / "rubric_stderr.txt"
+        output_path = (output_dir or exec_dir) / "rubric_grade.json"
+        trace_path = (output_dir or exec_dir) / "rubric_trace.jsonl"
+        stderr_path = (output_dir or exec_dir) / "rubric_stderr.txt"
 
         cmd = [
-            self.command,
+            _judge_command(self.command) if output_dir is not None else self.command,
             "exec",
             "--json",
             "--sandbox",
@@ -414,7 +439,10 @@ class CodexBackend:
             capture_output=True,
             text=True,
             timeout=timeout,
-            env=_judge_subprocess_env(_codex_subprocess_env(exec_dir)),
+            env=_judge_environment(
+                _judge_subprocess_env(_codex_subprocess_env(exec_dir)), isolated=output_dir is not None,
+            ),
+            cwd=exec_dir if output_dir is not None else None,
         )
         trace_path.write_text(completed.stdout, encoding="utf-8")
         stderr_path.write_text(completed.stderr, encoding="utf-8")
@@ -516,13 +544,15 @@ class CursorBackend:
         model: str | None = None,
         schema_path: Path | None = None,
         timeout: int = 900,
+        output_dir: Path | None = None,
+        read_dirs: tuple[Path, ...] = (),
     ) -> AgentResult:
-        output_path = exec_dir / "rubric_grade.json"
-        trace_path = exec_dir / "rubric_trace.jsonl"
-        stderr_path = exec_dir / "rubric_stderr.txt"
+        output_path = (output_dir or exec_dir) / "rubric_grade.json"
+        trace_path = (output_dir or exec_dir) / "rubric_trace.jsonl"
+        stderr_path = (output_dir or exec_dir) / "rubric_stderr.txt"
 
         cmd = [
-            self.command,
+            _judge_command(self.command) if output_dir is not None else self.command,
             "--cli",
             "agent",
             "--full-auto",
@@ -537,7 +567,11 @@ class CursorBackend:
             cmd.extend(["--model", model])
         cmd.append(prompt)
 
-        completed = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        completed = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=timeout,
+            cwd=exec_dir if output_dir is not None else None,
+            env=_judge_environment(isolated=output_dir is not None),
+        )
         trace_path.write_text(completed.stdout, encoding="utf-8")
         stderr_path.write_text(completed.stderr, encoding="utf-8")
 
@@ -637,10 +671,12 @@ class ClaudeBackend:
         model: str | None = None,
         schema_path: Path | None = None,
         timeout: int = 900,
+        output_dir: Path | None = None,
+        read_dirs: tuple[Path, ...] = (),
     ) -> AgentResult:
-        output_path = exec_dir / "rubric_grade.json"
-        trace_path = exec_dir / "rubric_trace.jsonl"
-        stderr_path = exec_dir / "rubric_stderr.txt"
+        output_path = (output_dir or exec_dir) / "rubric_grade.json"
+        trace_path = (output_dir or exec_dir) / "rubric_trace.jsonl"
+        stderr_path = (output_dir or exec_dir) / "rubric_stderr.txt"
 
         judge_prompt = prompt
         if schema_path:
@@ -650,15 +686,19 @@ class ClaudeBackend:
             )
 
         cmd = [
-            self.command,
+            _judge_command(self.command) if output_dir is not None else self.command,
             "-p",
             judge_prompt,
             "--output-format",
             "json",
             "--max-turns",
             "5",
-            *self.extra_args,
         ]
+        if read_dirs:
+            cmd.extend(["--setting-sources", "user"])
+            for directory in read_dirs:
+                cmd.extend(["--add-dir", str(directory)])
+        cmd.extend(self.extra_args)
         if model:
             cmd.extend(["--model", model])
 
@@ -668,7 +708,9 @@ class ClaudeBackend:
             text=True,
             timeout=timeout,
             cwd=exec_dir,
-            env=_judge_subprocess_env(_claude_subprocess_env(exec_dir), claude=True),
+            env=_judge_environment(
+                _judge_subprocess_env(_claude_subprocess_env(exec_dir), claude=True), isolated=output_dir is not None,
+            ),
         )
         trace_path.write_text(completed.stdout, encoding="utf-8")
         stderr_path.write_text(completed.stderr, encoding="utf-8")

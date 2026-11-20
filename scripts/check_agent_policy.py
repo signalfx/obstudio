@@ -13,6 +13,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "pytest-codex-evals" / "src"))
+from pytest_codex_evals.rubric_base import resolve_rubric_base, rubric_base_reference
+
 
 REQUIRED_HEADINGS = (
     "Coding Agent Definition of Done",
@@ -1503,9 +1506,11 @@ def _effective_rubric_definition(
 
     normalized = dict(definition)
     normalized.pop("id", None)
+    normalized.pop("rubric_dimensions", None)
     normalized["language"] = path.parts[1]
     normalized["service"] = path.parts[2]
     normalized.setdefault("judge_prompt", None)
+    normalized.setdefault("strict_rubric_output", False)
     if not normalized.get("judge_inputs"):
         normalized["judge_inputs"] = []
 
@@ -1581,6 +1586,38 @@ def _git_tree_paths(
     return paths
 
 
+def _git_rubric_source(root: Path, tree: str, source: Path, _eval_root: Path) -> str:
+    relative = source.relative_to(root)
+    result = subprocess.run(
+        ["git", "ls-tree", "-z", tree, "--", relative.as_posix()],
+        cwd=root, check=True, capture_output=True, timeout=30,
+    )
+    entries = result.stdout.rstrip(b"\0").split(b"\0")
+    if (len(entries) != 1 or b"\t" not in entries[0]
+            or entries[0].split(b" ", 1)[0] not in {b"100644", b"100755"}):
+        raise ValueError(f"rubric_base source must be a regular file: {relative}")
+    text = _git_file_text(root, tree, relative)
+    if text is None:
+        raise ValueError(f"cannot read rubric base {relative} at {tree}")
+    return text
+
+
+def _resolve_rubric_for_policy(
+    root: Path, path: Path, definition: object,
+    errors: list[str], base_tree: str | None = None,
+) -> object:
+    try:
+        if base_tree:
+            return resolve_rubric_base(
+                root / path, definition,
+                read_source=lambda source, eval_root: _git_rubric_source(root, base_tree, source, eval_root),
+            )
+        return resolve_rubric_base(root / path, definition)
+    except (ValueError, OSError, subprocess.SubprocessError) as exc:
+        errors.append(f"{path}: cannot resolve rubric base: {exc}")
+        return definition
+
+
 def _base_rubric_definitions(
     root: Path, base_tree: str, errors: list[str]
 ) -> dict[str, list[object]] | None:
@@ -1602,6 +1639,7 @@ def _base_rubric_definitions(
         except json.JSONDecodeError as exc:
             errors.append(f"{path} at base tree {base_tree}: invalid JSON: {exc}")
             return None
+        definition = _resolve_rubric_for_policy(root, path, definition, errors, base_tree)
         definition, case = _effective_rubric_definition(
             definition, path, path_case
         )
@@ -1620,6 +1658,19 @@ def _changed_rubric_evals(
 ]:
     by_skill: dict[str, list[tuple[Path, str]]] = {}
     candidates: list[tuple[Path, str, str, object]] = []
+    changes = list(changes)
+    changed_paths = {path for _, path in changes}
+    for role in RUBRIC_DIRECTORY_NAMES:
+        for absolute in sorted((root / "evals").glob(f"*/*/eval/{role}/*.json")):
+            path = absolute.relative_to(root)
+            if path in changed_paths:
+                continue
+            try:
+                source = rubric_base_reference(root / path, json.loads(absolute.read_text(encoding="utf-8")))
+            except (ValueError, OSError):
+                continue
+            if source is not None and source.relative_to(root) in changed_paths:
+                changes.append(("M", path))
     for status, path in changes:
         path_case = _eval_definition_case(path, RUBRIC_DIRECTORY_NAMES)
         if path_case is None:
@@ -1636,6 +1687,7 @@ def _changed_rubric_evals(
         if not isinstance(skill, str) or not skill.strip():
             errors.append(f"{path}: changed rubric eval must have a non-empty top-level skill")
             continue
+        definition = _resolve_rubric_for_policy(root, path, definition, errors)
         definition, case = _effective_rubric_definition(
             definition, path, path_case
         )
