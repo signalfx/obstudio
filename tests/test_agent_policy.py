@@ -955,6 +955,195 @@ make -C evals --directory=. verify
         self._write(base_path, json.dumps(common))
         self.assertEqual(check_repository(self.root, "main"), [])
 
+    def test_extracting_shared_additions_is_not_semantic_coverage(self) -> None:
+        path = "evals/go/example/eval/qual/audit.json"
+        leaf = {
+            "skill": "example", "prompts": [{"id": "direct", "task": "Task."}],
+            "rubric_base": "../../../../rubrics/common.json",
+            "rubric_additions": {"rubric-1": "Selected obligation."},
+        }
+        self._write(path, json.dumps(leaf))
+        self._write("evals/rubrics/common.json", json.dumps({
+            "rubric": ["Common rule."], "judge_inputs": [], "strict_rubric_output": True,
+        }))
+        self._init_git()
+        self._write("skills/example/SKILL.md", "---\nname: example\n---\nChanged behavior.\n")
+        self._write("evals/rubrics/additions.json", json.dumps({"rubric_additions": leaf.pop("rubric_additions")}))
+        leaf["rubric_additions_source"] = "../../../../rubrics/additions.json"
+        self._write(path, json.dumps(leaf))
+
+        errors = check_repository(self.root, "main")
+
+        self.assertTrue(any("effectively equivalent to the base tree" in error for error in errors))
+
+    def test_shared_additions_changes_are_compared_for_unchanged_leaves(self) -> None:
+        path = "evals/go/example/eval/qual/audit.json"
+        self._write(path, json.dumps({
+            "skill": "example", "prompts": [{"id": "direct", "task": "Task."}],
+            "rubric_base": "../../../../rubrics/common.json",
+            "rubric_additions_source": "../../../../rubrics/additions.json",
+        }))
+        self._write("evals/rubrics/common.json", json.dumps({
+            "rubric": ["Common rule."], "judge_inputs": [], "strict_rubric_output": True,
+        }))
+        additions = {"rubric_additions": {"rubric-1": "Selected obligation."}}
+        self._write("evals/rubrics/additions.json", json.dumps(additions))
+        self._init_git()
+        self._write("skills/example/SKILL.md", "---\nname: example\n---\nChanged behavior.\n")
+        self._write("evals/rubrics/additions.json", json.dumps(additions, indent=4))
+        errors = check_repository(self.root, "main")
+        self.assertTrue(any("effectively equivalent to the base tree" in error for error in errors))
+
+        additions["rubric_additions"]["rubric-1"] = "New required behavior."
+        self._write("evals/rubrics/additions.json", json.dumps(additions))
+
+        self.assertEqual(check_repository(self.root, "main"), [])
+
+    def test_shared_additions_reject_symlink_in_base_tree(self) -> None:
+        self._write("evals/go/example/eval/qual/audit.json", json.dumps({
+            "skill": "example", "prompts": [{"id": "direct", "task": "Task."}],
+            "rubric_base": "../../../../rubrics/common.json",
+            "rubric_additions_source": "../../../../rubrics/additions.json",
+        }))
+        self._write("evals/rubrics/common.json", json.dumps({
+            "rubric": ["Common rule."], "judge_inputs": [], "strict_rubric_output": True,
+        }))
+        shared = json.dumps({"rubric_additions": {"rubric-1": "Selected obligation."}})
+        source = self.root / "evals/rubrics/additions.json"
+        # A JSON-shaped link target must not be mistaken for the source contents.
+        source.symlink_to(shared)
+        self._init_git()
+        source.unlink()
+        source.write_text(shared, encoding="utf-8")
+        self._write("skills/example/SKILL.md", "---\nname: example\n---\nChanged behavior.\n")
+
+        errors = check_repository(self.root, "main")
+
+        self.assertTrue(any("rubric source must be a regular file" in error for error in errors), errors)
+
+    def test_changed_source_rechecks_unchanged_leaf_with_another_invalid_reference(self) -> None:
+        path = Path("evals/go/example/eval/qual/audit.json")
+        common_path = Path("evals/rubrics/common.json")
+        additions_path = Path("evals/rubrics/additions.json")
+        for invalid_field, changed_source in (
+            ("rubric_base", additions_path),
+            ("rubric_additions_source", common_path),
+        ):
+            with self.subTest(invalid_field=invalid_field):
+                leaf = {
+                    "skill": "example", "prompts": [{"id": "direct", "task": "Task."}],
+                    "rubric_base": "../../../../rubrics/common.json",
+                    "rubric_additions_source": "../../../../rubrics/additions.json",
+                }
+                leaf[invalid_field] = 17
+                self._write(path.as_posix(), json.dumps(leaf))
+                self._write(common_path.as_posix(), json.dumps({
+                    "rubric": ["Common rule."], "judge_inputs": [], "strict_rubric_output": True,
+                }))
+                self._write(additions_path.as_posix(), json.dumps({
+                    "rubric_additions": {"rubric-1": "Shared obligation."},
+                }))
+                self._init_git()
+                original_leaf = (self.root / path).read_bytes()
+                if changed_source == additions_path:
+                    updated = {"rubric_additions": {"rubric-1": "Changed obligation."}}
+                else:
+                    updated = {"rubric": ["Changed common rule."], "judge_inputs": [], "strict_rubric_output": True}
+                self._write(changed_source.as_posix(), json.dumps(updated))
+
+                errors = check_repository(self.root, "main")
+
+                self.assertEqual((self.root / path).read_bytes(), original_leaf)
+                self.assertTrue(any(str(path) in error and invalid_field in error for error in errors), errors)
+
+    def test_deleted_or_renamed_shared_sources_recheck_unchanged_leaves(self) -> None:
+        path = Path("evals/go/example/eval/qual/audit.json")
+        self._write(path.as_posix(), json.dumps({
+            "skill": "example", "prompts": [{"id": "direct", "task": "Task."}],
+            "rubric_base": "../../../../rubrics/common.json",
+            "rubric_additions_source": "../../../../rubrics/additions.json",
+        }))
+        contents = {
+            Path("evals/rubrics/common.json"): json.dumps({
+                "rubric": ["Common rule."], "judge_inputs": [], "strict_rubric_output": True,
+            }),
+            Path("evals/rubrics/additions.json"): json.dumps({
+                "rubric_additions": {"rubric-1": "Shared obligation."},
+            }),
+        }
+        for source, text in contents.items():
+            self._write(source.as_posix(), text)
+        self._init_git()
+        original_leaf = (self.root / path).read_bytes()
+        for source, text in contents.items():
+            for operation in ("delete", "rename"):
+                with self.subTest(source=source, operation=operation):
+                    destination = source.with_name("renamed-" + source.name)
+                    if operation == "delete":
+                        (self.root / source).unlink()
+                    else:
+                        (self.root / source).rename(self.root / destination)
+                    subprocess.run(["git", "add", "-A"], cwd=self.root, check=True, capture_output=True)
+                    try:
+                        if operation == "rename":
+                            raw_diff = subprocess.run(
+                                ["git", "diff", "--cached", "--find-renames", "--name-status"],
+                                cwd=self.root, check=True, capture_output=True, text=True,
+                            ).stdout
+                            self.assertIn(f"R100\t{source}\t{destination}", raw_diff)
+                        diff_errors: list[str] = []
+                        changes, _ = _git_changed_files(self.root, "main", diff_errors)
+                        self.assertEqual(diff_errors, [])
+                        self.assertIn(("D", source), changes)
+                        if operation == "rename":
+                            self.assertIn(("A", destination), changes)
+                        self.assertFalse(any(changed == path for _, changed in changes))
+
+                        errors = check_repository(self.root, "main")
+
+                        self.assertEqual((self.root / path).read_bytes(), original_leaf)
+                        self.assertTrue(any(str(path) in error and "cannot resolve rubric base" in error for error in errors), errors)
+                    finally:
+                        (self.root / destination).unlink(missing_ok=True)
+                        self._write(source.as_posix(), text)
+                        subprocess.run(["git", "add", "-A"], cwd=self.root, check=True, capture_output=True)
+
+    def test_invalid_shared_additions_cannot_supply_skill_coverage(self) -> None:
+        path = Path("evals/go/example/eval/qual/audit.json")
+        self._write("evals/rubrics/common.json", json.dumps({
+            "rubric": ["Common rule."], "judge_inputs": [], "strict_rubric_output": True,
+        }))
+        source = "evals/rubrics/additions.json"
+        self._write(source, json.dumps({"rubric_additions": {"rubric-1": "Extra."}}))
+        for fault in ("escape", "inside_fixture", "symlink", "overlap", "nested", "unknown_id"):
+            with self.subTest(fault=fault):
+                leaf = {
+                    "skill": "example", "rubric_base": "../../../../rubrics/common.json",
+                    "rubric_additions_source": "../../../../rubrics/additions.json",
+                }
+                shared = {"rubric_additions": {"rubric-1": "Extra."}}
+                actual = self.root / source
+                actual.unlink(missing_ok=True)
+                if fault == "escape":
+                    leaf["rubric_additions_source"] = "../../../../../outside.json"
+                elif fault == "inside_fixture":
+                    leaf["rubric_additions_source"] = "../../additions.json"
+                elif fault == "overlap":
+                    leaf["rubric_additions"] = {"rubric-1": "Replacement."}
+                elif fault == "nested":
+                    shared["rubric_additions_source"] = "another.json"
+                elif fault == "unknown_id":
+                    shared["rubric_additions"] = {"rubric-2": "Extra."}
+                if fault == "symlink":
+                    self._write("evals/rubrics/actual.json", json.dumps(shared))
+                    actual.symlink_to("actual.json")
+                else:
+                    self._write(source, json.dumps(shared))
+                self._write(path.as_posix(), json.dumps(leaf))
+                errors = []
+                _check_skill_eval_diff(self.root, [("M", Path("skills/example/SKILL.md")), ("M", path)], errors)
+                self.assertTrue(any("cannot resolve rubric base" in error for error in errors), errors)
+
     def test_regrouping_rubric_dimensions_is_not_new_requirement_coverage(self) -> None:
         path = "evals/go/example/eval/qual/audit.json"
         base_path = "evals/rubrics/common.json"

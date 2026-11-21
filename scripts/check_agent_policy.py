@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "pytest-codex-evals" / "src"))
-from pytest_codex_evals.rubric_base import resolve_rubric_base, rubric_base_reference
+from pytest_codex_evals.rubric_base import resolve_rubric_base, rubric_source_reference
 
 
 REQUIRED_HEADINGS = (
@@ -1595,10 +1595,10 @@ def _git_rubric_source(root: Path, tree: str, source: Path, _eval_root: Path) ->
     entries = result.stdout.rstrip(b"\0").split(b"\0")
     if (len(entries) != 1 or b"\t" not in entries[0]
             or entries[0].split(b" ", 1)[0] not in {b"100644", b"100755"}):
-        raise ValueError(f"rubric_base source must be a regular file: {relative}")
+        raise ValueError(f"rubric source must be a regular file: {relative}")
     text = _git_file_text(root, tree, relative)
     if text is None:
-        raise ValueError(f"cannot read rubric base {relative} at {tree}")
+        raise ValueError(f"cannot read rubric source {relative} at {tree}")
     return text
 
 
@@ -1666,11 +1666,17 @@ def _changed_rubric_evals(
             if path in changed_paths:
                 continue
             try:
-                source = rubric_base_reference(root / path, json.loads(absolute.read_text(encoding="utf-8")))
+                data = json.loads(absolute.read_text(encoding="utf-8"))
             except (ValueError, OSError):
                 continue
-            if source is not None and source.relative_to(root) in changed_paths:
-                changes.append(("M", path))
+            for field in ("rubric_base", "rubric_additions_source"):
+                try:
+                    source = rubric_source_reference(root / path, data, field)
+                except ValueError:
+                    continue
+                if source is not None and source.relative_to(root) in changed_paths:
+                    changes.append(("M", path))
+                    break
     for status, path in changes:
         path_case = _eval_definition_case(path, RUBRIC_DIRECTORY_NAMES)
         if path_case is None:

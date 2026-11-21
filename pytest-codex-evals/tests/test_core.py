@@ -390,7 +390,8 @@ def test_source_manifest_rejects_symlinked_eval_config(tmp_path: Path):
 
 
 @pytest.mark.parametrize("selected", [False, True])
-def test_shared_rubric_extends_without_replacement_and_binds_source(tmp_path, selected):
+@pytest.mark.parametrize("shared_additions", [False, True])
+def test_shared_rubric_extends_without_replacement_and_binds_source(tmp_path, selected, shared_additions):
     skill = tmp_path / "skills/sample-skill"
     skill.mkdir(parents=True)
     (skill / "SKILL.md").write_text("name: sample-skill\n")
@@ -404,9 +405,15 @@ def test_shared_rubric_extends_without_replacement_and_binds_source(tmp_path, se
     path = directory / "shared.json"
     leaf = {"skill": "sample-skill", "prompts": [{"id": "direct", "task": "Assess the service.", "eval_inputs": []}],
             "rubric_base": "../../../../common.json", "rubric_additions": {"rubric-2": "Selected second obligation."}}
+    additions = tmp_path / "evals/additions.json"
+    if shared_additions:
+        additions.write_text(json.dumps({"rubric_additions": leaf.pop("rubric_additions")}))
+        leaf["rubric_additions_source"] = "../../../../additions.json"
+        leaf["rubric_additions"] = {"rubric-1": "Local first obligation."}
     path.write_text(json.dumps(leaf))
     definition = load_eval_definition(path)
-    assert definition.rubric == ["Common first.", "Common second.\n\nSelected second obligation."]
+    first_suffix = "\n\nLocal first obligation." if shared_additions else ""
+    assert definition.rubric == ["Common first." + first_suffix, "Common second.\n\nSelected second obligation."]
     assert definition.judge_inputs == common["judge_inputs"] and definition.strict_rubric_output
     assert "rubric_base" not in definition.model_dump()
     case = case_from_definition(definition, definition.prompts[0], path)
@@ -414,6 +421,7 @@ def test_shared_rubric_extends_without_replacement_and_binds_source(tmp_path, se
     prepare_side_workspace(tmp_path, case, "with_skill", workspace)
     assert not (workspace / "service/eval").exists()
     assert not (workspace / "common.json").exists()
+    assert not (workspace / "additions.json").exists()
 
     kwargs = {"definition_path": path, "fixture_dir": fixture, "prompt_id": "direct", "eval_inputs": []} if selected else {}
     before = source_input_digests(tmp_path, "sample-skill", "rubric", skill, **kwargs)
@@ -422,7 +430,105 @@ def test_shared_rubric_extends_without_replacement_and_binds_source(tmp_path, se
     base.write_text(json.dumps(common))
     after = source_input_digests(tmp_path, "sample-skill", "rubric", skill, **kwargs)
     assert before != after
-    assert load_eval_definition(path).rubric[0] == "Changed common obligation."
+    assert load_eval_definition(path).rubric[0] == "Changed common obligation." + first_suffix
+    if shared_additions:
+        assert "evals/additions.json" in before
+        additions.write_text(json.dumps({"rubric_additions": {"rubric-2": "Changed shared obligation."}}))
+        assert after != source_input_digests(tmp_path, "sample-skill", "rubric", skill, **kwargs)
+        assert load_eval_definition(path).rubric[1] == "Common second.\n\nChanged shared obligation."
+
+
+@pytest.mark.parametrize("fault", [
+    "missing", "escape", "absolute", "backslash", "symlink", "directory_symlink", "inside_fixture",
+    "extension", "directory", "unknown_id", "invalid_id", "blank_text", "overlap", "no_base",
+    "nested", "extra_key", "invalid_json", "invalid_shape",
+])
+def test_shared_rubric_additions_reject_invalid_sources(tmp_path, fault):
+    from pytest_codex_evals.rubric_base import resolve_rubric_base
+
+    directory = tmp_path / "evals/python/example/eval/qual"
+    directory.mkdir(parents=True)
+    (tmp_path / "evals/common.json").write_text(json.dumps({
+        "rubric": ["Common obligation."], "judge_inputs": [], "strict_rubric_output": True,
+    }))
+    source = tmp_path / "evals/additions.json"
+    shared = {"rubric_additions": {"rubric-1": "Shared obligation."}}
+    source.write_text(json.dumps(shared))
+    leaf = {
+        "skill": "sample-skill", "prompts": [{"id": "direct", "task": "Task."}],
+        "rubric_base": "../../../../common.json", "rubric_additions_source": "../../../../additions.json",
+    }
+    if fault == "missing":
+        source.unlink()
+    elif fault == "escape":
+        leaf["rubric_additions_source"] = "../../../../../outside.json"
+    elif fault == "absolute":
+        leaf["rubric_additions_source"] = str(source)
+    elif fault == "backslash":
+        leaf["rubric_additions_source"] = "..\\additions.json"
+    elif fault == "inside_fixture":
+        source.rename(directory.parents[1] / "additions.json")
+        leaf["rubric_additions_source"] = "../../additions.json"
+    elif fault == "extension":
+        source.rename(source.with_suffix(".txt"))
+        leaf["rubric_additions_source"] = "../../../../additions.txt"
+    elif fault == "directory":
+        source.unlink()
+        source.mkdir()
+    elif fault == "symlink":
+        source.rename(source.with_name("actual.json"))
+        source.symlink_to(source.with_name("actual.json"))
+    elif fault == "directory_symlink":
+        actual = tmp_path / "evals/actual"
+        actual.mkdir()
+        source.rename(actual / "additions.json")
+        (tmp_path / "evals/linked").symlink_to(actual, target_is_directory=True)
+        leaf["rubric_additions_source"] = "../../../../linked/additions.json"
+    elif fault in {"unknown_id", "invalid_id", "blank_text"}:
+        label = {"unknown_id": "rubric-2", "invalid_id": "rubric-0", "blank_text": "rubric-1"}[fault]
+        shared["rubric_additions"] = {label: "" if fault == "blank_text" else "Extra."}
+        source.write_text(json.dumps(shared))
+    elif fault == "overlap":
+        leaf["rubric_additions"] = {"rubric-1": "Local obligation."}
+    elif fault == "no_base":
+        leaf.pop("rubric_base")
+        leaf["rubric"] = ["Inline rule."]
+    elif fault in {"nested", "extra_key"}:
+        shared["rubric_additions_source" if fault == "nested" else "judge_inputs"] = "additions.json"
+        source.write_text(json.dumps(shared))
+    elif fault == "invalid_json":
+        source.write_text("invalid JSON")
+    elif fault == "invalid_shape":
+        source.write_text(json.dumps({"rubric_additions": []}))
+    path = directory / "shared.json"
+    path.write_text(json.dumps(leaf))
+    with pytest.raises((ValueError, JSONSchemaValidationError)):
+        load_eval_definition(path)
+    with pytest.raises(ValueError):
+        resolve_rubric_base(path, leaf)
+
+
+def test_reordering_shared_base_requires_retargeting_positional_additions(tmp_path):
+    directory = tmp_path / "evals/python/example/eval/qual"
+    directory.mkdir(parents=True)
+    base = tmp_path / "evals/common.json"
+    shared = tmp_path / "evals/additions.json"
+    common = {"rubric": ["First rule.", "Second rule."], "judge_inputs": [], "strict_rubric_output": True}
+    base.write_text(json.dumps(common))
+    shared.write_text(json.dumps({"rubric_additions": {"rubric-2": "Extra second-rule requirement."}}))
+    path = directory / "audit.json"
+    path.write_text(json.dumps({
+        "skill": "sample-skill", "prompts": [{"id": "direct", "task": "Task."}],
+        "rubric_base": "../../../../common.json", "rubric_additions_source": "../../../../additions.json",
+    }))
+    assert load_eval_definition(path).rubric == ["First rule.", "Second rule.\n\nExtra second-rule requirement."]
+
+    common["rubric"].reverse()
+    base.write_text(json.dumps(common))
+
+    assert load_eval_definition(path).rubric == ["Second rule.", "First rule.\n\nExtra second-rule requirement."]
+    shared.write_text(json.dumps({"rubric_additions": {"rubric-1": "Extra second-rule requirement."}}))
+    assert load_eval_definition(path).rubric == ["Second rule.\n\nExtra second-rule requirement.", "First rule."]
 
 
 @pytest.mark.parametrize("overrides", [

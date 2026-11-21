@@ -11,33 +11,37 @@ from pathlib import Path
 COMMON_FIELDS = {"rubric", "judge_inputs", "strict_rubric_output", "rubric_dimensions"}
 
 
-def rubric_base_reference(path: Path, data: object) -> Path | None:
-    if not isinstance(data, dict) or "rubric_base" not in data:
+def rubric_source_reference(path: Path, data: object, field: str) -> Path | None:
+    if not isinstance(data, dict) or field not in data:
         return None
     path = path.absolute()
     if path.parent.name not in {"qual", "rubric"} or path.parent.parent.name != "eval":
-        raise ValueError("rubric_base requires a nested rubric eval definition")
-    reference = data["rubric_base"]
+        raise ValueError(f"{field} requires a nested rubric eval definition")
+    reference = data[field]
     if (not isinstance(reference, str) or not reference.strip()
             or "\\" in reference or Path(reference).is_absolute()):
-        raise ValueError("rubric_base must be a relative JSON file within the eval root")
+        raise ValueError(f"{field} must be a relative JSON file within the eval root")
     source = Path(os.path.normpath(path.parent / reference))
     fixture = path.parents[2]
     if not source.is_relative_to(fixture.parent.parent):
-        raise ValueError("rubric_base must stay within the eval root")
+        raise ValueError(f"{field} must stay within the eval root")
     if source.is_relative_to(fixture):
-        raise ValueError("rubric_base must not be staged in the actor fixture workspace")
+        raise ValueError(f"{field} must not be staged in the actor fixture workspace")
     if source.suffix != ".json":
-        raise ValueError("rubric_base must reference a JSON file")
+        raise ValueError(f"{field} must reference a JSON file")
     return source
+
+
+def rubric_base_reference(path: Path, data: object) -> Path | None:
+    return rubric_source_reference(path, data, "rubric_base")
 
 
 def validate_rubric_source(source: Path, eval_root: Path) -> None:
     parents = (parent for parent in (source, *source.parents) if parent.is_relative_to(eval_root))
     if any(parent.is_symlink() for parent in parents):
-        raise ValueError("rubric_base source must not be a symlink")
+        raise ValueError("rubric source must not be a symlink")
     if not source.is_file():
-        raise ValueError(f"rubric_base source must be a regular file: {source}")
+        raise ValueError(f"rubric source must be a regular file: {source}")
 
 
 def read_rubric_source(source: Path, eval_root: Path) -> str:
@@ -76,6 +80,8 @@ def resolve_rubric_base(
     path = path.absolute()
     source = rubric_base_reference(path, data)
     if source is None:
+        if isinstance(data, dict) and "rubric_additions_source" in data:
+            raise ValueError("rubric_additions_source requires rubric_base")
         return data
     if any(key in data for key in COMMON_FIELDS | {"judge_prompt"}):
         raise ValueError("rubric_base cannot be combined with overridden common fields")
@@ -96,6 +102,16 @@ def resolve_rubric_base(
     additions = data.get("rubric_additions", {})
     if not isinstance(additions, dict):
         raise ValueError("rubric_additions must be an object")
+    additions_source = rubric_source_reference(path, data, "rubric_additions_source")
+    if additions_source is not None:
+        shared = json.loads(read_source(additions_source, path.parents[2].parent.parent))
+        if (not isinstance(shared, dict) or set(shared) != {"rubric_additions"}
+                or not isinstance(shared["rubric_additions"], dict)):
+            raise ValueError("invalid shared rubric_additions source")
+        shared_additions = shared["rubric_additions"]
+        if shared_additions.keys() & additions.keys():
+            raise ValueError("shared and inline rubric_additions must use different criterion IDs")
+        additions = {**shared_additions, **additions}
     rubric = list(base["rubric"])
     for label, addition in additions.items():
         if (not isinstance(label, str) or re.fullmatch(r"rubric-[1-9][0-9]*", label) is None
@@ -108,4 +124,5 @@ def resolve_rubric_base(
     resolved = {**base, **data, "rubric": rubric}
     resolved.pop("rubric_base")
     resolved.pop("rubric_additions", None)
+    resolved.pop("rubric_additions_source", None)
     return resolved
