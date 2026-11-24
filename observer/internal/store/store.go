@@ -206,24 +206,28 @@ type TraceSummaryFilter struct {
 	ExcludeRootSpanName string
 	ServiceName         string
 	ExcludeServiceName  string
-	Status              string
-	ExcludeStatus       string
-	SpanCount           *int
-	SpanCountGT         *int
-	SpanCountLT         *int
-	MinSpanCount        *int
-	MaxSpanCount        *int
-	DurationMs          *float64
-	DurationMsGT        *float64
-	DurationMsLT        *float64
-	TimeAfter           *time.Time
-	TimeBefore          *time.Time
-	MinDurationMs       *float64
-	MaxDurationMs       *float64
-	TimeFrom            *time.Time
-	TimeTo              *time.Time
-	Limit               int
-	SpanPreviewCap      int
+	// SpanServiceName matches a trace in which any span, not just the root,
+	// came from this service; ExcludeSpanServiceName drops those traces.
+	SpanServiceName        string
+	ExcludeSpanServiceName string
+	Status                 string
+	ExcludeStatus          string
+	SpanCount              *int
+	SpanCountGT            *int
+	SpanCountLT            *int
+	MinSpanCount           *int
+	MaxSpanCount           *int
+	DurationMs             *float64
+	DurationMsGT           *float64
+	DurationMsLT           *float64
+	TimeAfter              *time.Time
+	TimeBefore             *time.Time
+	MinDurationMs          *float64
+	MaxDurationMs          *float64
+	TimeFrom               *time.Time
+	TimeTo                 *time.Time
+	Limit                  int
+	SpanPreviewCap         int
 }
 
 // SpanPreview represents a preview of a span in a trace.
@@ -893,6 +897,9 @@ func (s *Store) QueryTraceSummariesFiltered(filter TraceSummaryFilter) []TraceSu
 	startTimes := make(map[string]time.Time, len(grouped))
 	results := make([]TraceSummary, 0, minInt(len(grouped), filter.Limit))
 	for traceID, spans := range grouped {
+		if !matchesTraceSpanServices(spans, filter) {
+			continue
+		}
 		startTime := getTraceStartTime(spans)
 		root := findRootSpan(spans)
 		dur := computeTraceDuration(spans)
@@ -1934,6 +1941,26 @@ func anySpanNameMatches(spans []Span, name string) bool {
 	return false
 }
 
+// matchesTraceSpanServices applies the any-span service filters, which need
+// every span rather than the summary's root service.
+func matchesTraceSpanServices(spans []Span, filter TraceSummaryFilter) bool {
+	if filter.SpanServiceName == "" && filter.ExcludeSpanServiceName == "" {
+		return true
+	}
+	has := func(name string) bool {
+		for _, span := range spans {
+			if strings.EqualFold(span.Resource.ServiceName, name) {
+				return true
+			}
+		}
+		return false
+	}
+	if filter.SpanServiceName != "" && !has(filter.SpanServiceName) {
+		return false
+	}
+	return filter.ExcludeSpanServiceName == "" || !has(filter.ExcludeSpanServiceName)
+}
+
 func matchesTraceSummaryFilter(summary TraceSummary, filter TraceSummaryFilter) bool {
 	if filter.Query != "" {
 		haystack := strings.ToLower(strings.Join([]string{
@@ -2239,6 +2266,9 @@ func clearTraceSummaryFieldFilter(filter TraceSummaryFilter, field string) Trace
 	case "serviceName":
 		filter.ServiceName = ""
 		filter.ExcludeServiceName = ""
+	case "spanServiceName":
+		filter.SpanServiceName = ""
+		filter.ExcludeSpanServiceName = ""
 	case "status":
 		filter.Status = ""
 		filter.ExcludeStatus = ""

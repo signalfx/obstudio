@@ -2,11 +2,16 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/signalfx/obstudio/observer/internal/audit"
@@ -214,6 +219,9 @@ func TestWorkspaceRegistrationIgnoresOlderTimestamps(t *testing.T) {
 	if got := getJSON[workspaceResponse](t, mux, WorkspacePath).Name; got != "repoB" {
 		t.Fatalf("workspace name = %q, want repoB after a stale registration", got)
 	}
+	if list := getJSON[workspaceListResponse](t, mux, WorkspacesPath).Workspaces; !slices.ContainsFunc(list, func(item workspaceListItem) bool { return item.Name == "repoA" }) {
+		t.Fatalf("workspace list = %+v, want the stale repo A still registered", list)
+	}
 
 	// A registration without a timestamp keeps the arrival-order behavior.
 	if _, resp := postWorkspaceAt(mux, repoA, 0); !resp.Applied || resp.Name != "repoA" {
@@ -246,5 +254,278 @@ func TestWorkspaceRegistrationForUnchangedRootKeepsResolvers(t *testing.T) {
 	}
 	if _, applied, _ := w.setRoot(other, 300); !applied || w.dashboards() == dash {
 		t.Fatal("newer registration for a different root should rebuild the resolvers")
+	}
+}
+
+func workspaceAudit(service string) string {
+	return `{"schema_version":2,"kind":"otel-audit","meta":{"service_name":"` + service + `","language":"go","status":"Pass"},` +
+		`"current_instrumentation":{"spans":[],"metrics":[],"logs":[]},"findings":[],"anti_patterns":[],"recommendation":[]}`
+}
+
+func mkdirRepo(t *testing.T, parts ...string) string {
+	t.Helper()
+	dir := filepath.Join(append([]string{t.TempDir()}, parts...)...)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func getStatus(mux *http.ServeMux, path string) (int, string) {
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+	return rec.Code, rec.Body.String()
+}
+
+func TestWorkspaceListKeepsEveryRegisteredRepo(t *testing.T) {
+	repoA := mkdirRepo(t, "repoA")
+	repoB := mkdirRepo(t, "repoB")
+	repoC := mkdirRepo(t, "repoC")
+	writeWorkspaceArtifact(t, repoA, audit.DefaultReportRelPath, workspaceAudit("checkout"))
+	writeWorkspaceArtifact(t, repoB, audit.DefaultReportRelPath, workspaceAudit("payments"))
+	mux := newWorkspaceTestMux(t, dashboards.Config{WorkspaceRoot: repoA}, audit.Config{WorkspaceRoot: repoA})
+
+	for _, root := range []string{repoC, repoB} {
+		if rec := postWorkspace(mux, root, nil); rec.Code != http.StatusOK {
+			t.Fatalf("register %s = %d %s", filepath.Base(root), rec.Code, rec.Body.String())
+		}
+	}
+
+	code, body := getStatus(mux, WorkspacesPath)
+	if code != http.StatusOK {
+		t.Fatalf("GET %s = %d %s", WorkspacesPath, code, body)
+	}
+	for _, root := range []string{repoA, repoB, repoC} {
+		if strings.Contains(body, filepath.Dir(root)) {
+			t.Fatalf("workspace list leaks a local path: %s", body)
+		}
+	}
+	got := getJSON[workspaceListResponse](t, mux, WorkspacesPath)
+	want := workspaceListResponse{Active: "repoB", Workspaces: []workspaceListItem{
+		{Name: "repoA", Folder: "repoA", Service: "checkout"},
+		{Name: "repoB", Folder: "repoB", Service: "payments"},
+		{Name: "repoC", Folder: "repoC"},
+	}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("workspace list = %+v, want %+v", got, want)
+	}
+}
+
+func TestWorkspaceQueryReadsTheNamedRepo(t *testing.T) {
+	repoA := mkdirRepo(t, "repoA")
+	repoB := mkdirRepo(t, "repoB")
+	writeWorkspaceArtifact(t, repoA, dashboards.DefaultSpecRelPath, workspaceTestSpec)
+	writeWorkspaceArtifact(t, repoA, audit.DefaultReportRelPath, workspaceAudit("checkout"))
+	mux := newWorkspaceTestMux(t, dashboards.Config{WorkspaceRoot: repoA}, audit.Config{WorkspaceRoot: repoA})
+	if rec := postWorkspace(mux, repoB, nil); rec.Code != http.StatusOK {
+		t.Fatalf("register repo B = %d", rec.Code)
+	}
+
+	// The active workspace stays the default for requests that name none.
+	if previewAvailable(t, mux) {
+		t.Fatal("repo B is active and has no preview, want unavailable")
+	}
+	if got := getJSON[audit.Report](t, mux, "/api/audit/score").Available; got {
+		t.Fatal("repo B is active and has no audit, want unavailable score")
+	}
+
+	if !getJSON[dashboards.PreviewResponse](t, mux, "/api/dashboards/preview?workspace=repoA").Available {
+		t.Fatal("want repo A's preview when the request names repo A")
+	}
+	if got := getJSON[audit.Report](t, mux, "/api/audit/score?workspace=repoA"); !got.Available || got.ServiceName != "checkout" {
+		t.Fatalf("score for repo A = %+v, want repo A's checkout audit", got)
+	}
+	if got := getJSON[workspaceResponse](t, mux, WorkspacePath+"?workspace=repoA").Name; got != "repoA" {
+		t.Fatalf("workspace name for ?workspace=repoA = %q", got)
+	}
+	// Choosing a repo for one request does not change the active one.
+	if got := getJSON[workspaceResponse](t, mux, WorkspacePath).Name; got != "repoB" {
+		t.Fatalf("active workspace = %q after a scoped read, want repoB", got)
+	}
+
+	for _, name := range []string{"nope", "..", repoA, url.QueryEscape("../repoA")} {
+		for _, path := range []string{"/api/dashboards/preview", "/api/audit/score", "/api/audit/report", WorkspacePath} {
+			if code, body := getStatus(mux, path+"?workspace="+url.QueryEscape(name)); code != http.StatusNotFound {
+				t.Fatalf("GET %s?workspace=%q = %d %s, want 404", path, name, code, body)
+			}
+		}
+	}
+}
+
+func TestWorkspaceScopedReportKeepsSiblingLinksInTheRepo(t *testing.T) {
+	repoA := mkdirRepo(t, "repoA")
+	repoB := mkdirRepo(t, "repoB")
+	writeWorkspaceArtifact(t, repoA, audit.DefaultHTMLRelPath, "<html>repo A report</html>")
+	writeWorkspaceArtifact(t, repoA, audit.DefaultReportRelPath, workspaceAudit("checkout"))
+	writeWorkspaceArtifact(t, repoB, audit.DefaultHTMLRelPath, "<html>repo B report</html>")
+	mux := newWorkspaceTestMux(t, dashboards.Config{WorkspaceRoot: repoA}, audit.Config{WorkspaceRoot: repoA})
+	if rec := postWorkspace(mux, repoB, nil); rec.Code != http.StatusOK {
+		t.Fatalf("register repo B = %d", rec.Code)
+	}
+
+	if code, body := getStatus(mux, "/api/audit/report"); code != http.StatusOK || !strings.Contains(body, "repo B") {
+		t.Fatalf("unscoped report = %d %q, want the active repo B", code, body)
+	}
+	code, body := getStatus(mux, "/api/workspaces/repoA/audit/report")
+	if code != http.StatusOK || !strings.Contains(body, "repo A") {
+		t.Fatalf("scoped report = %d %q, want repo A", code, body)
+	}
+	// The report links to otel-audit.json relatively, which resolves under the
+	// same scoped prefix.
+	if code, body := getStatus(mux, "/api/workspaces/repoA/audit/otel-audit.json"); code != http.StatusOK || !strings.Contains(body, "checkout") {
+		t.Fatalf("scoped sibling = %d %q, want repo A's audit", code, body)
+	}
+	if code, _ := getStatus(mux, "/api/workspaces/nope/audit/report"); code != http.StatusNotFound {
+		t.Fatalf("report for an unknown workspace = %d, want 404", code)
+	}
+}
+
+func TestWorkspaceReposSharingAFolderNameGetDistinctNames(t *testing.T) {
+	startup := mkdirRepo(t, "startup")
+	apiOne := mkdirRepo(t, "one", "api")
+	apiTwo := mkdirRepo(t, "two", "api")
+	writeWorkspaceArtifact(t, apiTwo, dashboards.DefaultSpecRelPath, workspaceTestSpec)
+	mux := newWorkspaceTestMux(t, dashboards.Config{WorkspaceRoot: startup}, audit.Config{WorkspaceRoot: startup})
+
+	_, first := postWorkspaceAt(mux, apiOne, 0)
+	_, second := postWorkspaceAt(mux, apiTwo, 0)
+	_, again := postWorkspaceAt(mux, apiOne, 0)
+	if first.Name != "api" || second.Name != "api (2)" || again.Name != "api" {
+		t.Fatalf("names = %q, %q, then %q; want api, api (2), api", first.Name, second.Name, again.Name)
+	}
+	if !getJSON[dashboards.PreviewResponse](t, mux, "/api/dashboards/preview?workspace="+url.QueryEscape("api (2)")).Available {
+		t.Fatal("want the second api repo's preview by its distinct name")
+	}
+	if code, _ := getStatus(mux, "/api/workspaces/"+url.PathEscape("api (2)")+"/audit/report"); code != http.StatusNotFound {
+		t.Fatalf("scoped report for a repo without one = %d, want 404 from the resolver", code)
+	}
+	list := getJSON[workspaceListResponse](t, mux, WorkspacesPath).Workspaces
+	if len(list) != 3 || list[0].Folder != "api" || list[1].Folder != "api" || list[1].Name != "api (2)" {
+		t.Fatalf("workspace list = %+v, want both api repos with folder api", list)
+	}
+}
+
+func TestWorkspaceRegistryForgetsTheLeastRecentlyRegisteredRepo(t *testing.T) {
+	startup := mkdirRepo(t, "startup")
+	w := newWorkspaceResolvers(store.New(), dashboards.Config{WorkspaceRoot: startup}, audit.Config{WorkspaceRoot: startup})
+	parent := t.TempDir()
+	register := func(name string, at int64) {
+		t.Helper()
+		root := filepath.Join(parent, name)
+		if err := os.MkdirAll(root, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := w.setRoot(root, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// A newer registration keeps "pinned" active while every later one is stale.
+	register("pinned", 1_000_000)
+	for i := range maxRegisteredWorkspaces + 4 {
+		register(fmt.Sprintf("repo%02d", i), int64(i+1))
+	}
+
+	if got := w.name(); got != "pinned" {
+		t.Fatalf("active = %q, want pinned to survive eviction", got)
+	}
+	names := map[string]bool{}
+	for _, item := range w.list().Workspaces {
+		names[item.Name] = true
+	}
+	if len(names) != maxRegisteredWorkspaces {
+		t.Fatalf("registry holds %d workspaces, want the cap %d", len(names), maxRegisteredWorkspaces)
+	}
+	for _, gone := range []string{"startup", "repo00", "repo01", "repo02", "repo03", "repo04"} {
+		if names[gone] {
+			t.Fatalf("%s should have been forgotten first: %v", gone, names)
+		}
+	}
+	if !names["pinned"] || !names["repo05"] || !names[fmt.Sprintf("repo%02d", maxRegisteredWorkspaces+3)] {
+		t.Fatalf("registry dropped the active or a recent workspace: %v", names)
+	}
+}
+
+func TestWorkspaceRegistryIsSafeUnderConcurrentUse(t *testing.T) {
+	startup := mkdirRepo(t, "startup")
+	w := newWorkspaceResolvers(store.New(), dashboards.Config{WorkspaceRoot: startup}, audit.Config{WorkspaceRoot: startup})
+	parent := t.TempDir()
+	roots := make([]string, maxRegisteredWorkspaces+8)
+	for i := range roots {
+		roots[i] = filepath.Join(parent, fmt.Sprintf("repo%02d", i))
+		if err := os.MkdirAll(roots[i], 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var wg sync.WaitGroup
+	for i, root := range roots {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			if _, _, err := w.setRoot(root, int64(i)); err != nil {
+				t.Error(err)
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			snapshot := w.list()
+			if !slices.ContainsFunc(snapshot.Workspaces, func(item workspaceListItem) bool { return item.Name == snapshot.Active }) {
+				t.Errorf("active workspace %q is missing from the same listing", snapshot.Active)
+			}
+			for _, item := range snapshot.Workspaces {
+				if _, ok := w.lookup(item.Name); !ok && item.Name == w.name() {
+					t.Errorf("active workspace %q is not resolvable", item.Name)
+				}
+			}
+		}()
+	}
+	wg.Wait()
+
+	if got := len(w.list().Workspaces); got != maxRegisteredWorkspaces {
+		t.Fatalf("registry holds %d workspaces after concurrent registration, want %d", got, maxRegisteredWorkspaces)
+	}
+	if _, ok := w.lookup(w.name()); !ok {
+		t.Fatal("active workspace must stay registered")
+	}
+}
+
+func TestWorkspaceStaleRegistrationDoesNotRefreshEvictionOrder(t *testing.T) {
+	startup := mkdirRepo(t, "startup")
+	w := newWorkspaceResolvers(store.New(), dashboards.Config{WorkspaceRoot: startup}, audit.Config{WorkspaceRoot: startup})
+	parent := t.TempDir()
+	register := func(name string, at int64) {
+		t.Helper()
+		root := filepath.Join(parent, name)
+		if err := os.MkdirAll(root, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := w.setRoot(root, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	register("stale", 1)
+	register("pinned", 1_000_000) // newest, so every later registration is stale
+	for i := range 10 {
+		register(fmt.Sprintf("repo%02d", i), int64(i+2))
+	}
+	register("stale", 50) // loses the race again, so it must not move up
+	for i := 10; i < maxRegisteredWorkspaces-1; i++ {
+		register(fmt.Sprintf("repo%02d", i), int64(i+2))
+	}
+
+	names := map[string]bool{}
+	for _, item := range w.list().Workspaces {
+		names[item.Name] = true
+	}
+	if len(names) != maxRegisteredWorkspaces {
+		t.Fatalf("registry holds %d workspaces, want %d", len(names), maxRegisteredWorkspaces)
+	}
+	if names["startup"] || names["stale"] {
+		t.Fatalf("startup and the repeatedly stale repo should be forgotten first: %v", names)
+	}
+	if !names["pinned"] || !names["repo00"] {
+		t.Fatalf("a stale re-registration pushed out an active or newer repo: %v", names)
 	}
 }

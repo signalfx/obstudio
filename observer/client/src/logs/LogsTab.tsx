@@ -4,11 +4,14 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import type { LogRecord } from "../api/types";
 import { fetchLogFilterValues, fetchLogs, type LogsQuery } from "../api/client";
 import { FilterBar, type FilterClause, type FilterDefinition } from "../FilterBar";
+import { useScopedClauses } from "../workspace";
 import { CopyTextButton, DetailPanel, ResizablePanel, useAnimatedPanel } from "../layout";
 import { KVTable } from "../components/KVTable";
 import { formatUtcTimestamp } from "../format";
 
 interface LogsTabProps {
+  /** service.name of the selected repo; pre-fills a removable Service filter. */
+  scopeService?: string | null;
   logs: LogRecord[];
   onInteract?: () => void;
 }
@@ -201,8 +204,8 @@ function JsonHighlight({ json }: { json: string }): React.ReactElement {
 }
 
 /** Logs tab with virtualized table and detail panel for selected log records. */
-export function LogsTab({ logs, onInteract }: LogsTabProps): React.ReactElement {
-  const [clauses, setClauses] = useState<FilterClause[]>([]);
+export function LogsTab({ logs, onInteract, scopeService }: LogsTabProps): React.ReactElement {
+  const [clauses, setClauses] = useScopedClauses(scopeService);
   const [serverLogs, setServerLogs] = useState<LogRecord[]>([]);
   const [isFiltering, setIsFiltering] = useState(false);
   const [filterError, setFilterError] = useState<string | null>(null);

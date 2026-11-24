@@ -159,13 +159,16 @@ func Register(mux *http.ServeMux, s *store.Store, params ...any) {
 	mux.HandleFunc("GET /api/query/logs/filter-values", queryLogFilterValues(s))
 	mux.HandleFunc("GET /api/query/stats", queryStats(s))
 	mux.HandleFunc("GET /api/query/stats/services", queryServiceStats(s))
-	mux.HandleFunc("GET /api/dashboards/preview", queryDashboardPreview(workspace.dashboards))
-	mux.HandleFunc("GET /api/audit/score", queryAuditScore(workspace.audit))
-	mux.HandleFunc("GET /api/audit/report", queryAuditReport(workspace.audit))
+	mux.HandleFunc("GET /api/dashboards/preview", workspace.scoped(queryDashboardPreview(workspace.dashboardsFor)))
+	mux.HandleFunc("GET /api/audit/score", workspace.scoped(queryAuditScore(workspace.auditFor)))
 	// The report links to its siblings relatively, so they must resolve under
-	// the same path prefix or those links 404.
-	for name := range audit.ReportArtifacts {
-		mux.HandleFunc("GET /api/audit/"+name, queryAuditArtifact(workspace.audit, name))
+	// the same path prefix or those links 404. A query parameter would not
+	// survive those links, so one workspace's report lives under its own path.
+	for _, prefix := range []string{"/api/audit/", WorkspaceScopedPrefix + "/audit/"} {
+		mux.HandleFunc("GET "+prefix+"report", workspace.scoped(queryAuditReport(workspace.auditFor)))
+		for name := range audit.ReportArtifacts {
+			mux.HandleFunc("GET "+prefix+name, workspace.scoped(queryAuditArtifact(workspace.auditFor, name)))
+		}
 	}
 	mux.HandleFunc("GET /api/query/validation/summary", queryValidationStatus(validationService))
 	mux.HandleFunc("GET /api/query/validation/status", queryValidationStatus(validationService))
@@ -217,18 +220,18 @@ func queryMetrics(s *store.Store) http.HandlerFunc {
 	}
 }
 
-func queryDashboardPreview(resolver func() *dashboards.Resolver) http.HandlerFunc {
+func queryDashboardPreview(resolver func(*http.Request) *dashboards.Resolver) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, resolver().Build())
+		writeJSON(w, resolver(r).Build())
 	}
 }
 
 // queryAuditScore returns the scored audit. Like queryAuditReport it carries
 // content derived from the developer's working tree — finding text and file
 // paths — so it omits the wildcard CORS header the telemetry routes use.
-func queryAuditScore(resolver func() *audit.Resolver) http.HandlerFunc {
+func queryAuditScore(resolver func(*http.Request) *audit.Resolver) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		writeSameOriginJSON(w, resolver().Build())
+		writeSameOriginJSON(w, resolver(r).Build())
 	}
 }
 
@@ -268,9 +271,9 @@ const auditReportCSP = "sandbox allow-scripts; default-src 'none'; style-src 'un
 // queryAuditArtifact serves one allowlisted file the report links to, so the
 // generated report's own relative links ("Canonical audit data (JSON)", the
 // audit/instrumentation cross-links) resolve instead of 404ing.
-func queryAuditArtifact(resolver func() *audit.Resolver, name string) http.HandlerFunc {
+func queryAuditArtifact(resolver func(*http.Request) *audit.Resolver, name string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		raw, contentType, err := resolver().ReadArtifact(name)
+		raw, contentType, err := resolver(r).ReadArtifact(name)
 		if err != nil {
 			status := http.StatusInternalServerError
 			if errors.Is(err, audit.ErrNoReport) {
@@ -307,9 +310,9 @@ func queryAuditArtifact(resolver func() *audit.Resolver, name string) http.Handl
 // Unlike the telemetry routes, this returns a file from the developer's working
 // tree, so it deliberately omits the wildcard CORS header: only the Splunk Observability Studio UI
 // itself, which is same-origin, needs to read it.
-func queryAuditReport(getResolver func() *audit.Resolver) http.HandlerFunc {
+func queryAuditReport(getResolver func(*http.Request) *audit.Resolver) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		resolver := getResolver()
+		resolver := getResolver(r)
 		raw, err := resolver.ReadHTML()
 		if err != nil {
 			status := http.StatusInternalServerError
@@ -551,10 +554,14 @@ func traceSummaryFilterFromRequest(r *http.Request) store.TraceSummaryFilter {
 		ExcludeRootSpanName: queryNeqString(q, "rootSpanName"),
 		ServiceName:         queryEqString(q, "serviceName", "serviceName"),
 		ExcludeServiceName:  queryNeqString(q, "serviceName"),
-		Status:              queryEqString(q, "status", "status"),
-		ExcludeStatus:       queryNeqString(q, "status"),
-		Limit:               queryInt(r, "limit", 100),
-		SpanPreviewCap:      8,
+		// Any span's service, so a repo whose service never starts a trace
+		// still finds the traces it takes part in.
+		SpanServiceName:        queryEqString(q, "spanServiceName"),
+		ExcludeSpanServiceName: queryNeqString(q, "spanServiceName"),
+		Status:                 queryEqString(q, "status", "status"),
+		ExcludeStatus:          queryNeqString(q, "status"),
+		Limit:                  queryInt(r, "limit", 100),
+		SpanPreviewCap:         8,
 	}
 	if n, ok := queryOptionalIntValues(q.Get("filter[spanCount][eq]"), q.Get("filter[spanCount]"), q.Get("spanCount")); ok {
 		filter.SpanCount = &n

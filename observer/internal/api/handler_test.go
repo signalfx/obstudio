@@ -2896,3 +2896,44 @@ func TestAuditScoreRouteNotShadowed(t *testing.T) {
 		t.Errorf("Content-Type = %q; the score route must not be shadowed", got)
 	}
 }
+
+func TestQueryTracesFiltersBySpanServiceName(t *testing.T) {
+	s := store.New()
+	now := time.Now()
+	span := func(traceID, spanID, parent, service string) store.Span {
+		return store.Span{
+			TraceID: traceID, SpanID: spanID, ParentSpanID: parent, Name: spanID, Kind: "server",
+			StartTime: now, EndTime: now.Add(10 * time.Millisecond), Status: store.SpanStatus{Code: "OK"},
+			Resource: store.Resource{ServiceName: service, Attributes: map[string]any{}}, Attributes: map[string]any{},
+		}
+	}
+	s.AddSpansForConnection("", []store.Span{
+		span("trace-pay", "root", "", "api-gateway"),
+		span("trace-pay", "charge", "root", "payment-service"),
+		span("trace-other", "root", "", "api-gateway"),
+	})
+	mux := http.NewServeMux()
+	Register(mux, s)
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	get := func(query url.Values) []store.TraceSummary {
+		t.Helper()
+		resp := mustGet(t, server.URL+"/api/query/traces?"+query.Encode())
+		defer resp.Body.Close()
+		var traces []store.TraceSummary
+		if err := json.NewDecoder(resp.Body).Decode(&traces); err != nil {
+			t.Fatal(err)
+		}
+		return traces
+	}
+	if got := get(url.Values{"filter[spanServiceName][eq]": {"payment-service"}}); len(got) != 1 || got[0].TraceID != "trace-pay" {
+		t.Fatalf("spanServiceName eq = %+v, want only trace-pay", got)
+	}
+	if got := get(url.Values{"filter[spanServiceName][neq]": {"payment-service"}}); len(got) != 1 || got[0].TraceID != "trace-other" {
+		t.Fatalf("spanServiceName neq = %+v, want only trace-other", got)
+	}
+	if got := get(url.Values{"filter[serviceName][eq]": {"payment-service"}}); len(got) != 0 {
+		t.Fatalf("serviceName still matches the root service only, got %+v", got)
+	}
+}

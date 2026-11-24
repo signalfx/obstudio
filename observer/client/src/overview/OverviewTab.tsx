@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+  auditReportPath,
   fetchInstrumentationScore,
   fetchServiceStats,
   fetchSplunkExportStatus,
@@ -63,6 +64,8 @@ interface OverviewTabProps {
   traces?: TraceSummary[];
   onOpenServices?: () => void;
   onOpenLogs?: () => void;
+  /** Registered repo chosen in the repo switcher; null reads the active one. */
+  workspace?: string | null;
 }
 
 // --- Stub data -------------------------------------------------------------
@@ -99,8 +102,8 @@ const CLOUD_SKILLS: OverviewChecklistItem[] = [
   { label: "Publish dashboards", skill: SPLUNK_DASHBOARD_PUBLISH_SKILL },
 ];
 
-/** Path the collector serves the skill's human-readable report from. */
-export const AUDIT_REPORT_URL = "/api/audit/report";
+/** Path the collector serves the active repo's human-readable report from. */
+export const AUDIT_REPORT_URL = auditReportPath();
 
 /**
  * Renders a score component to at most one decimal place.
@@ -435,6 +438,7 @@ export function OverviewTab({
   traces = [],
   onOpenServices,
   onOpenLogs,
+  workspace = null,
 }: OverviewTabProps): React.ReactElement {
   const { bridge, callBridge } = useCloudBridge();
   const [docsError, setDocsError] = useState<string | null>(null);
@@ -482,7 +486,7 @@ export function OverviewTab({
   useEffect(() => {
     const controller = new AbortController();
     setScoreState("loading");
-    fetchInstrumentationScore(controller.signal)
+    fetchInstrumentationScore(controller.signal, workspace)
       .then((report) => {
         if (controller.signal.aborted) return;
         setScoreReport(report);
@@ -494,7 +498,7 @@ export function OverviewTab({
         setScoreState("error");
       });
     return () => controller.abort();
-  }, [scoreReloads]);
+  }, [scoreReloads, workspace]);
 
   const refreshAll = () => {
     setScoreReloads((n) => n + 1);
@@ -550,7 +554,7 @@ export function OverviewTab({
     if (!bridge) return;
     event.preventDefault();
     setDocsError(null);
-    void callBridge("open-audit-report").catch((openError: unknown) => {
+    void callBridge("open-audit-report", workspace ? { workspace } : undefined).catch((openError: unknown) => {
       setDocsError(openError instanceof Error && openError.message.trim() !== ""
         ? openError.message
         : "Could not open the audit report.");
@@ -803,7 +807,7 @@ export function OverviewTab({
                     {scored.hasHtmlReport ? (
                       <a
                         className="overview-report__view"
-                        href={AUDIT_REPORT_URL}
+                        href={auditReportPath(workspace)}
                         rel="noopener noreferrer"
                         target="_blank"
                         title="Open the $otel-audit report"

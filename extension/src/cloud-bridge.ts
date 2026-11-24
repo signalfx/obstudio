@@ -168,8 +168,13 @@ export function freeAccountSubmissionFailureIsOutcomeUnknown(error: unknown): bo
  */
 export const auditReportPath = '/api/audit/report';
 
-/** Builds the audit report URL for a collector base URL, or undefined. */
-export function auditReportUrl(baseUrl: unknown): string | undefined {
+/**
+ * Builds the audit report URL for a collector base URL, or undefined. A
+ * registered repo name selects that repo's report, which the collector serves
+ * under its own path so the report's relative links stay in the same repo. The
+ * caller validates the name; it is encoded as a single path segment here.
+ */
+export function auditReportUrl(baseUrl: unknown, workspace?: string): string | undefined {
 	if (typeof baseUrl !== 'string' || baseUrl.trim() === '') {
 		return undefined;
 	}
@@ -183,7 +188,10 @@ export function auditReportUrl(baseUrl: unknown): string | undefined {
 		return undefined;
 	}
 
-	return new URL(auditReportPath, parsed).toString();
+	const path = workspace === undefined
+		? auditReportPath
+		: `/api/workspaces/${encodeURIComponent(workspace)}/audit/report`;
+	return new URL(path, parsed).toString();
 }
 
 /**
