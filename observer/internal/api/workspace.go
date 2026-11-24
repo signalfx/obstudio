@@ -149,8 +149,12 @@ func (w *workspaceResolvers) setRoot(root string, at int64) (string, bool, error
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	prev := w.current.Load()
-	entry := w.rememberLocked(root, prev.entry)
-	if at != 0 && at < prev.at {
+	stale := at != 0 && at < prev.at
+	// A stale registration still lists a new repo, but never refreshes an
+	// existing one's eviction order, so a launcher that keeps losing the race
+	// cannot keep its repo ahead of ones actually in use.
+	entry := w.rememberLocked(root, prev.entry, !stale)
+	if stale {
 		return prev.entry.name, false, nil
 	}
 	newest := max(at, prev.at)
@@ -160,13 +164,16 @@ func (w *workspaceResolvers) setRoot(root string, at int64) (string, bool, error
 	return entry.name, true, nil
 }
 
-// rememberLocked returns the registry entry for root, creating it when new,
-// and marks it most recently registered. When the registry is full the least
-// recently registered entry other than keep is forgotten. w.mu must be held.
-func (w *workspaceResolvers) rememberLocked(root string, keep *workspaceEntry) *workspaceEntry {
+// rememberLocked returns the registry entry for root, creating it when new.
+// A new entry, or an existing one when touch is set, becomes the most recently
+// registered. When the registry is full the least recently registered entry
+// other than keep is forgotten. w.mu must be held.
+func (w *workspaceResolvers) rememberLocked(root string, keep *workspaceEntry, touch bool) *workspaceEntry {
 	for i, entry := range w.known {
 		if entry.root == root {
-			w.known = append(append(w.known[:i:i], w.known[i+1:]...), entry)
+			if touch {
+				w.known = append(append(w.known[:i:i], w.known[i+1:]...), entry)
+			}
 			return entry
 		}
 	}
@@ -268,10 +275,13 @@ type workspaceListResponse struct {
 }
 
 func (w *workspaceResolvers) list() workspaceListResponse {
+	// One lock for both, so the active name is always one of the listed
+	// workspaces even while a registration lands.
 	w.mu.Lock()
 	entries := slices.Clone(w.known)
+	active := w.current.Load().entry.name
 	w.mu.Unlock()
-	resp := workspaceListResponse{Active: w.name(), Workspaces: make([]workspaceListItem, 0, len(entries))}
+	resp := workspaceListResponse{Active: active, Workspaces: make([]workspaceListItem, 0, len(entries))}
 	for _, entry := range entries {
 		resp.Workspaces = append(resp.Workspaces, workspaceListItem{
 			Name:    entry.name,

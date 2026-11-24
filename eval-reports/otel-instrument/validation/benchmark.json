@@ -986,7 +986,7 @@
   },
   "source": {
     "digest_version": 4,
-    "digest": "6ac8e51f6431836fc9f48a2715725318a70467eb1a76979e68ddc87ac3f8081e",
+    "digest": "af85950d72815b9c1cfc9db50160ecbe32c79d49f4d39144ae0063ced473ece7",
     "eval_kinds": [
       "rubric",
       "runtime",
@@ -1217,8 +1217,8 @@
       "observer/internal/api/splunk_logs_test.go": "f9100b039b9578e01f9e511e97be1dabbd73b64685e615235be127a58628ba12",
       "observer/internal/api/user_config.go": "6f9f3c174105b382ed2baa20b1c275f38a238be70ee60676f27188c5b30b8e0e",
       "observer/internal/api/user_config_test.go": "f843237e303ecaa7d27831f3800bc766d73fd7394e5f2cb5b7965670c86147ac",
-      "observer/internal/api/workspace.go": "30f98f6686c05a9115fecd1e7659b8dbed313ee5b1dc84cf04ddcbf3641f3720",
-      "observer/internal/api/workspace_test.go": "97ba6479f5dba45c3346e5fdd060c4394e525e55c9eb283134044378934f7b38",
+      "observer/internal/api/workspace.go": "2a713f2a84d28381f1d7399f4213cfea31dd44866003c6acf97f170dec0f42a1",
+      "observer/internal/api/workspace_test.go": "29a194da34c5c0ff7ac25c97b1bd497cacec22fb4dcc2864428cad2b83e5bfea",
       "observer/internal/audit/audit.go": "174a579c8c0a8957989adf9d36692cd731bd7cc154020892526b0dfe1e6e2b20",
       "observer/internal/audit/audit_test.go": "dcbe3773b3436763c2621994ec39d17e96237c71d87a2c3befe1723b4de75aee",
       "observer/internal/audit/freshness.go": "6cc8ced48b49ac54a7f2257ce17b6c2aae6b2741ee37c76b4f5db782bd232cb3",

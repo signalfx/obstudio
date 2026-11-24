@@ -469,7 +469,11 @@ func TestWorkspaceRegistryIsSafeUnderConcurrentUse(t *testing.T) {
 		}()
 		go func() {
 			defer wg.Done()
-			for _, item := range w.list().Workspaces {
+			snapshot := w.list()
+			if !slices.ContainsFunc(snapshot.Workspaces, func(item workspaceListItem) bool { return item.Name == snapshot.Active }) {
+				t.Errorf("active workspace %q is missing from the same listing", snapshot.Active)
+			}
+			for _, item := range snapshot.Workspaces {
 				if _, ok := w.lookup(item.Name); !ok && item.Name == w.name() {
 					t.Errorf("active workspace %q is not resolvable", item.Name)
 				}
@@ -483,5 +487,45 @@ func TestWorkspaceRegistryIsSafeUnderConcurrentUse(t *testing.T) {
 	}
 	if _, ok := w.lookup(w.name()); !ok {
 		t.Fatal("active workspace must stay registered")
+	}
+}
+
+func TestWorkspaceStaleRegistrationDoesNotRefreshEvictionOrder(t *testing.T) {
+	startup := mkdirRepo(t, "startup")
+	w := newWorkspaceResolvers(store.New(), dashboards.Config{WorkspaceRoot: startup}, audit.Config{WorkspaceRoot: startup})
+	parent := t.TempDir()
+	register := func(name string, at int64) {
+		t.Helper()
+		root := filepath.Join(parent, name)
+		if err := os.MkdirAll(root, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := w.setRoot(root, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	register("stale", 1)
+	register("pinned", 1_000_000) // newest, so every later registration is stale
+	for i := range 10 {
+		register(fmt.Sprintf("repo%02d", i), int64(i+2))
+	}
+	register("stale", 50) // loses the race again, so it must not move up
+	for i := 10; i < maxRegisteredWorkspaces-1; i++ {
+		register(fmt.Sprintf("repo%02d", i), int64(i+2))
+	}
+
+	names := map[string]bool{}
+	for _, item := range w.list().Workspaces {
+		names[item.Name] = true
+	}
+	if len(names) != maxRegisteredWorkspaces {
+		t.Fatalf("registry holds %d workspaces, want %d", len(names), maxRegisteredWorkspaces)
+	}
+	if names["startup"] || names["stale"] {
+		t.Fatalf("startup and the repeatedly stale repo should be forgotten first: %v", names)
+	}
+	if !names["pinned"] || !names["repo00"] {
+		t.Fatalf("a stale re-registration pushed out an active or newer repo: %v", names)
 	}
 }
